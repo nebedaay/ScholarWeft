@@ -309,16 +309,12 @@ def extract_template_layout(template_path):
                      if ('style:name="%s"' % _FIGCAPTION_STYLE).encode() in styles_bytes
                      else 'Caption')
 
-    # Chapter numbering: the list style that book.odt wraps its numbered chapter
-    # headings in ("Chapter N." via WWNum13). None for document/article — those
-    # templates don't auto-number chapters (matches the DOCX chapter_numid).
-    chapter_list_style = None
-    for lst in tmpl_root.iter(T('list')):
-        h = lst.find(T('list-item') + '/' + T('h'))
-        if h is not None and h.get(T('outline-level'), '') == '1' \
-                and lst.get(T('style-name')):
-            chapter_list_style = lst.get(T('style-name'))
-            break
+    # Chapter numbering: the {prefix, num_format, suffix} the template uses for
+    # its numbered chapters (book.odt: "Chapter " / "1" / "." from the list style
+    # bound to Heading 1, or a <text:list> wrapping a level-1 heading). None for
+    # document/article — they don't auto-number chapters (≈ DOCX chapter_numid).
+    chapter_number_format = _detect_chapter_number_format(
+        etree.fromstring(styles_bytes) if styles_bytes else None, tmpl_root)
 
     return {
         'title_block': title_block,
@@ -328,10 +324,52 @@ def extract_template_layout(template_path):
         'tof_element': tof_element,
         'has_alttext_style': has_alttext_style,
         'caption_style': caption_style,
-        'chapter_list_style': chapter_list_style,
+        'chapter_number_format': chapter_number_format,
         'content_bytes': content_bytes,
         'styles_bytes': styles_bytes,
     }
+
+
+def _detect_chapter_number_format(styles_root, tmpl_root):
+    """Find the {prefix, num_format, suffix} the template uses to number chapter
+    headings. Looks at the list style bound to Heading 1 (style:list-style-name)
+    and any list style wrapping a level-1 <text:h> in the template body.
+    Returns None when the template does not number its chapter headings."""
+    def _fmt(list_style_el):
+        lvl = list_style_el.find(T('list-level-style-number'))
+        if lvl is None:
+            return None
+        return {
+            'prefix': lvl.get(S('num-prefix')) or '',
+            'num_format': lvl.get(S('num-format')) or '1',
+            'suffix': lvl.get(S('num-suffix')) or '',
+            'num_list_format': lvl.get(
+                '{urn:org:documentfoundation:names:experimental:'
+                'office:xmlns:loext:1.0}num-list-format'),
+        }
+    # candidate list-style names
+    names = set()
+    for root in (styles_root, tmpl_root):
+        if root is None:
+            continue
+        for st in root.iter(S('style')):
+            if st.get(S('name')) in ('Heading_20_1', 'Heading') \
+                    and st.get(T('list-style-name')):
+                names.add(st.get(T('list-style-name')))
+    for lst in tmpl_root.iter(T('list')):
+        h = lst.find(T('list-item') + '/' + T('h'))
+        if h is not None and h.get(T('outline-level'), '') == '1' \
+                and lst.get(T('style-name')):
+            names.add(lst.get(T('style-name')))
+    for root in (styles_root, tmpl_root):
+        if root is None:
+            continue
+        for ls in root.iter(T('list-style')):
+            if ls.get(S('name')) in names:
+                f = _fmt(ls)
+                if f:
+                    return f
+    return None
 
 # ── title block fill ──────────────────────────────────────────────────────────
 
@@ -614,12 +652,47 @@ def apply_page_breaks(body_elements, tmpl_root):
             el.set(T('style-name'), _H1_PB_STYLE)
 
 
+_LOEXT = 'urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0'
+
+def _enable_chapter_outline_numbering(styles_root, fmt):
+    """Turn on ODF chapter numbering (<text:outline-style> level 1) with the
+    template's chapter format ({prefix, num_format, suffix}). This is what
+    <text:sequence text:display-outline-level="1"> on figure captions reads, so
+    enabling it is what makes ODT figures 'Figure C.N' like DOCX. Returns True
+    if it changed anything."""
+    if styles_root is None or not fmt:
+        return False
+    os_el = None
+    for e in styles_root.iter(T('outline-style')):
+        os_el = e
+        break
+    if os_el is None:
+        return False
+    lvl1 = None
+    for lvl in os_el.iter(T('outline-level-style')):
+        if lvl.get(T('level')) == '1':
+            lvl1 = lvl
+            break
+    if lvl1 is None:
+        lvl1 = etree.SubElement(os_el, T('outline-level-style'))
+        lvl1.set(T('level'), '1')
+    lvl1.set(S('num-format'), fmt['num_format'] or '1')
+    if fmt['prefix']:
+        lvl1.set(S('num-prefix'), fmt['prefix'])
+    if fmt['suffix']:
+        lvl1.set(S('num-suffix'), fmt['suffix'])
+    if fmt.get('num_list_format'):
+        lvl1.set('{%s}num-list-format' % _LOEXT, fmt['num_list_format'])
+    return True
+
+
 _CHAPTER_H_STYLE = 'SW_Chapter_Heading'
 
-def _ensure_chapter_heading_style(auto_styles, list_style_name, new_page):
-    """Inject SW_Chapter_Heading: inherits Heading 1, bound to the template's
-    chapter list style so LibreOffice renders 'Chapter N', + a page break when
-    per-heading page breaks are on."""
+def _ensure_chapter_heading_style(auto_styles, new_page):
+    """SW_Chapter_Heading: inherits Heading 1 but with list-style-name="" so the
+    template's paragraph-level chapter list does NOT also number it — only the
+    <text:outline-style> chapter numbering does. Page break when per-heading
+    page breaks are on."""
     for child in auto_styles:
         if child.get(S('name')) == _CHAPTER_H_STYLE:
             return
@@ -627,45 +700,39 @@ def _ensure_chapter_heading_style(auto_styles, list_style_name, new_page):
     se.set(S('name'),              _CHAPTER_H_STYLE)
     se.set(S('family'),            'paragraph')
     se.set(S('parent-style-name'), _H1_PARENT)
-    se.set(T('list-style-name'),   list_style_name)
+    se.set(T('list-style-name'),   '')
     if new_page:
         pp = etree.SubElement(se, S('paragraph-properties'))
         pp.set(F('break-before'), 'page')
 
-def apply_chapter_numbering_odt(body_elements, tmpl_root, list_style_name,
-                                new_page_headings):
-    """Wrap numbered-chapter Heading 1s ('Chapter 3: Title') in a <text:list>
-    bound to the template's chapter list style (book.odt's WWNum13 → 'Chapter
-    N.'), stripping the literal 'Chapter N:' prefix. This is the ODF equivalent
-    of the DOCX numPr — LibreOffice supplies the number, and it renumbers on
-    reorder. Non-numbered Heading 1s (Preface, Introduction, Conclusion) are
-    left as plain <text:h>. Mutates body_elements in place; returns True when
-    any chapter was wrapped.
+
+def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings):
+    """Strip the literal 'Chapter N:' prefix from numbered chapter Heading 1s so
+    ODF chapter numbering (the outline-style enabled by
+    _enable_chapter_outline_numbering) supplies 'Chapter N.'. Numbered chapters
+    get SW_Chapter_Heading (suppresses the template's paragraph-level chapter
+    list so it isn't double-numbered). Non-numbered Heading 1s (Preface,
+    Introduction, Conclusion, TOC, ToF, Bibliography) get
+    text:is-list-header="true" so they are excluded from the chapter count — a
+    figure in the Preface then numbers 'Figure 0.n' like DOCX's STYLEREF.
+    Run AFTER apply_page_breaks. Returns True when a numbered chapter was seen.
     """
     auto = tmpl_root.find('.//' + O('automatic-styles'))
-    out = []
-    wrapped = 0
+    numbered = 0
     for el in body_elements:
-        if el.tag == T('h') and el.get(T('outline-level'), '') == '1':
-            txt = _elem_text(el)
-            stripped = strip_chapter_prefix(txt)
-            if parse_chapter_number(txt) > 0 and stripped != txt:
-                if auto is not None:
-                    _ensure_chapter_heading_style(auto, list_style_name,
-                                                  new_page_headings)
-                _set_plain_text(el, stripped)
-                el.set(T('style-name'), _CHAPTER_H_STYLE)
-                lst = etree.Element(T('list'))
-                lst.set(T('style-name'), list_style_name)
-                if wrapped:
-                    lst.set(T('continue-numbering'), 'true')
-                etree.SubElement(lst, T('list-item')).append(el)
-                out.append(lst)
-                wrapped += 1
-                continue
-        out.append(el)
-    body_elements[:] = out
-    return wrapped > 0
+        if el.tag != T('h') or el.get(T('outline-level'), '') != '1':
+            continue
+        txt = _elem_text(el)
+        stripped = strip_chapter_prefix(txt)
+        if parse_chapter_number(txt) > 0 and stripped != txt:
+            if auto is not None:
+                _ensure_chapter_heading_style(auto, new_page_headings)
+            _set_plain_text(el, stripped)
+            el.set(T('style-name'), _CHAPTER_H_STYLE)
+            numbered += 1
+        else:
+            el.set(T('is-list-header'), 'true')
+    return numbered > 0
 
 # ── TOC page break ────────────────────────────────────────────────────────────
 
@@ -952,20 +1019,26 @@ def merge_odt(template_path, input_path, output_path,
     name_map = _merge_auto_styles(tmpl_root, pdc_root, styles_root)
     _rewrite_style_refs(body_elements, name_map)
 
-    # ── Chapter numbering ─────────────────────────────────────────────────
-    # Wrap numbered chapters in the template's chapter list style so
-    # LibreOffice supplies "Chapter N." (parallel to the DOCX numPr). Runs
-    # before apply_page_breaks so the wrapped headings carry SW_Chapter_Heading
-    # (which includes the page break) rather than SW_Heading1_Pagebreak.
-    _chaptered = False
-    if layout['chapter_list_style']:
-        _chaptered = apply_chapter_numbering_odt(
-            body_elements, tmpl_root, layout['chapter_list_style'],
-            new_page_headings)
-
     # ── Apply page breaks ──────────────────────────────────────────────────
     if new_page_headings:
         apply_page_breaks(body_elements, tmpl_root)
+
+    # ── Chapter numbering (ODF outline numbering) ──────────────────────────
+    # Strip the literal "Chapter N:" prefix; ODF chapter numbering supplies
+    # "Chapter N." (parallel to the DOCX numPr) and makes figure captions
+    # chapter-scoped. Runs AFTER apply_page_breaks so it can override the
+    # page-break style on numbered chapters. document/article templates carry
+    # no chapter_number_format → left untouched (≈ DOCX chapter_numid).
+    _chaptered = False
+    if layout['chapter_number_format']:
+        _chaptered = apply_chapter_numbering_odt(
+            body_elements, tmpl_root, new_page_headings)
+        if _chaptered and styles_root is not None:
+            _enable_chapter_outline_numbering(
+                styles_root, layout['chapter_number_format'])
+            z_data['styles.xml'] = etree.tostring(
+                styles_root, xml_declaration=True, encoding='UTF-8',
+                standalone=True)
 
     # ── Locate and clear template <office:text> ────────────────────────────
     tmpl_text = tmpl_root.find('.//' + O('text'))
@@ -1099,6 +1172,16 @@ def merge_odt(template_path, input_path, output_path,
                 _src)
         except Exception as e:
             print(f'WARNING: could not inject ToF styles: {e}')
+
+    # With ODF chapter numbering on, exclude every non-chapter level-1 heading
+    # (TOC, ToF, Bibliography, and the frontmatter headings marked earlier) from
+    # the chapter count so the first numbered chapter is "Chapter 1", not
+    # "Chapter 4".
+    if _chaptered:
+        for h in tmpl_text.iter(T('h')):
+            if h.get(T('outline-level'), '') == '1' \
+                    and _get_sn(h) != _CHAPTER_H_STYLE:
+                h.set(T('is-list-header'), 'true')
 
     # Cap images to template text area dimensions, preserving aspect ratio.
     n_scaled = resize_images(tmpl_root, 'odt', template_zip_data=z_data)
