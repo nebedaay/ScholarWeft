@@ -155,24 +155,31 @@ def extract_template_layout(template_path):
     # document/article don't, so we skip the "Alt-text." paragraph for those.
     has_alttext_style = 'w:styleId="caption-Alt-text"' in _styles_xml
 
-    # 1. Title block = children before the first sectPr-carrying paragraph.
+    # 1. Title block.
+    #    Structured (book-style) templates: everything before the first
+    #    sectPr-carrying paragraph.
+    #    Simple templates (document/article — no inline section breaks): just the
+    #    leading run of cover paragraphs (Title/Subtitle/Author/Date/abstract
+    #    placeholders), NOT the sample Heading 1/2/… that follow. This lets
+    #    document.docx fill its cover the same way document.odt does, instead of
+    #    falling back to pandoc's raw (unsplit, undated) frontmatter.
     first_sect_idx = None
     for i, c in enumerate(children):
         if _is_sect_para(c):
             first_sect_idx = i
             break
     has_section_breaks = first_sect_idx is not None
-    if first_sect_idx is None:
-        first_sect_idx = len(children)
-    # When the template has no inline section breaks (a simple reference-doc
-    # style, e.g. article.docx used just to carry styles) don't use the whole
-    # body as a "title block" — that would prepend the entire template content
-    # before the note.  Set title_block = [] and let the pandoc content's own
-    # Title/Author paragraphs through instead.
     if has_section_breaks:
         title_block = [copy.deepcopy(c) for c in children[:first_sect_idx]]
     else:
-        title_block = []
+        _COVER_STYLES = {'Title', 'Subtitle', 'Author', 'Date',
+                         _ABSTRACTKEYWORDS_STYLE_ID, 'Abstract'}
+        cover_end = 0
+        for c in children:
+            if c.tag != tag('p') or get_style(c) not in _COVER_STYLES:
+                break
+            cover_end += 1
+        title_block = [copy.deepcopy(c) for c in children[:cover_end]]
 
     # 2. Locate TOC/ToF headings and field paragraphs anywhere in the body.
     #    We keep the heading paras verbatim but build FRESH field paragraphs
@@ -297,6 +304,7 @@ def extract_template_layout(template_path):
         'final_sect': final_sect,
         'chapter_numid': chapter_numid,
         'has_alttext_style': has_alttext_style,
+        'has_section_breaks': has_section_breaks,
     }
 
 def make_field_paragraph(pstyle_val, instr_text, placeholder='Right-click to '
@@ -627,34 +635,30 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     """
     kinds = layout['kinds']
     final_sect = layout['final_sect']
+    # Structured = the template has inline section breaks (page-numbering
+    # sections); this drives section-break insertion and TOC/ToF placement.
+    # A simple template can still have a cover title_block to fill (document.docx).
+    structured = layout['has_section_breaks']
 
     # Clear the template body.
     for c in list(template_body):
         template_body.remove(c)
 
-    # 1. Title block + its own section closer.
-    # Only prepend when the template has structured sections (book-style).
-    # For simple reference-doc templates (no inline section breaks),
-    # title_block is [] and this section is skipped entirely.
+    # 1. Title block (cover). Prepend whenever the template gives us one; add a
+    #    section closer only for structured templates.
     if layout['title_block']:
         for p in layout['title_block']:
             template_body.append(p)
-        _brk = make_section_break(kinds['title'])
-        if not new_page_headings:
-            _set_continuous(_brk)
-        template_body.append(_brk)
+        if structured:
+            _brk = make_section_break(kinds['title'])
+            if not new_page_headings:
+                _set_continuous(_brk)
+            template_body.append(_brk)
 
-    # 2. TOC section — heading + fresh field (from the template's code),
-    #    then its closer. Only when the user wants a TOC; --no-toc removes
-    #    the template's TOC section entirely (the checkbox overrides the
-    #    template-aware default).
-    #
-    #    For structured (book-style) templates the TOC goes here, right after
-    #    the title block.  For simple reference-doc templates (title_block is
-    #    []) the pandoc Title/Author paragraphs arrive as frontmatter content
-    #    in step 4, so we defer the TOC and inject it just before the first
-    #    main section — after frontmatter but before body text.
-    if toc and layout['toc_instr'] and layout['title_block']:
+    # 2. TOC section. Structured templates emit it here, after the cover, with a
+    #    section closer. Simple templates defer it into the content stream (just
+    #    before the first content heading) so no spurious section break appears.
+    if toc and layout['toc_instr'] and structured:
         if layout['toc_heading'] is not None:
             template_body.append(layout['toc_heading'])
         template_body.append(make_field_paragraph('TOC1', layout['toc_instr']))
@@ -662,8 +666,7 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
         if not new_page_headings:
             _set_continuous(_brk)
         template_body.append(_brk)
-    # Flag for deferred TOC injection in the content loop (simple templates).
-    toc_deferred = toc and bool(layout['toc_instr']) and not layout['title_block']
+    toc_deferred = toc and bool(layout['toc_instr']) and not structured
 
     # The user asked for a table of figures AND the document has figures AND a
     # ToF heading + field code is available (from the template or the bundled
@@ -671,10 +674,10 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     # templates emit it in the deferred path alongside the TOC.
     want_tof = (tof and has_figures
                 and layout['tof_heading'] is not None and layout['tof_instr'])
-    tof_deferred = want_tof and not layout['title_block']
+    tof_deferred = want_tof and not structured
 
     # 3. ToF section — structured (book) templates.
-    if want_tof and layout['title_block']:
+    if want_tof and structured:
         template_body.append(layout['tof_heading'])
         template_body.append(make_field_paragraph('TableofFigures', layout['tof_instr']))
         _brk = make_section_break(kinds['tof'])
@@ -819,7 +822,7 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
                 template_body.append(_ep)
         if idx == len(content_sections) - 1:
             break  # final section closed by final_sect
-        has_template_sects = bool(layout['title_block'])
+        has_template_sects = structured
         if kind == 'frontmatter':
             if has_template_sects:
                 # Book template: use roman sectPr (lowerRoman page numbering).
@@ -865,7 +868,7 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     #    _strip_bibliography_from_sections so that a fresh Zotero field is used
     #    instead, giving consistent output regardless of template structure).
     if has_bibliography:
-        _has_template_sects = bool(layout['title_block'])
+        _has_template_sects = structured
         if _has_template_sects and kinds.get('continue'):
             _bbrk = make_section_break(kinds['continue'])
             if not new_page_headings:
@@ -1055,6 +1058,16 @@ def _fill_title_block(title_block, title, subtitle, author, date_val):
             else:
                 title_block.pop(i)   # remove the paragraph entirely
                 continue
+            i += 1
+        elif style == 'Author':
+            # Canonical Author style (document.odt/docx). book.docx instead uses
+            # a BodyText paragraph after the Subtitle (handled below).
+            _replace_text(p, author or '')
+            author_done = True
+            i += 1
+        elif style == 'Date':
+            _replace_text(p, date_val or '')
+            date_done = True
             i += 1
         elif style == 'BodyText' and after_subtitle:
             if not author_done and cur != 'Date':
