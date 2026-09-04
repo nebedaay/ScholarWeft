@@ -49,7 +49,8 @@ from sw_merge_helpers import (
     resize_images, STYLE_REMAP, resolve_cover, process_figures,
     title_case as _title_case, strip_markdown as _strip_markdown,
     is_main_start, is_toc_heading, is_tof_heading, strip_chapter_prefix,
-    bundled_template, ensure_docx_styles, append_extra_sections,
+    find_page_reset_index, bundled_template, ensure_docx_styles,
+    append_extra_sections,
 )
 
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
@@ -335,6 +336,28 @@ def make_field_paragraph(pstyle_val, instr_text, placeholder='Right-click to '
     fc.set(tag('fldCharType'), 'end')
     return p
 
+#: <w:sectPr> child order — <w:pgNumType> sits after these, before <w:cols> etc.
+_SECTPR_BEFORE_PGNUM = ('headerReference', 'footerReference', 'footnotePr',
+                        'endnotePr', 'type', 'pgSz', 'pgMar', 'paperSrc',
+                        'pgBorders', 'lnNumType')
+
+def _ensure_pgnumtype(sectpr):
+    """Return the <w:pgNumType> of a sectPr, creating it in a schema-valid
+    position (after pgMar / lnNumType) when absent."""
+    pg = sectpr.find(tag('pgNumType'))
+    if pg is not None:
+        return pg
+    pg = etree.Element(tag('pgNumType'))
+    anchor = None
+    for c in sectpr:
+        if c.tag.split('}')[-1] in _SECTPR_BEFORE_PGNUM:
+            anchor = c
+    if anchor is not None:
+        anchor.addnext(pg)
+    else:
+        sectpr.insert(0, pg)
+    return pg
+
 def make_section_break(sectpr_kind, rsid='00DE2936'):
     """Build a paragraph whose pPr carries the given sectPr — a section break.
     Ensures footnote numbering restarts per section (eachSect) so chapters
@@ -425,12 +448,14 @@ def parse_body(doc):
     body = doc.find(tag('body'))
     return body, list(body)
 
-def classify_blocks(children):
+def classify_blocks(children, reset_text=None):
     """
     Walk pandoc body children. Return list of (kind, blocks) where kind is
     'frontmatter' or 'main', splitting at Heading 1 boundaries:
       - a Heading 1 "Table of Contents"/"Table of Figures" stays frontmatter
-      - the first Heading 1 matching is_main_start begins 'main'
+      - `main` begins at the Heading 1 whose text == reset_text (the export
+        dialog's "Page 1 starts with" heading) when given, else at the first
+        Heading 1 matching is_main_start
       - subsequent Heading 1s also begin 'main' (new chapter section)
     """
     sections = []           # list of (kind, [blocks])
@@ -458,7 +483,8 @@ def classify_blocks(children):
             flush()
             if is_toc_heading(text) or is_tof_heading(text):
                 current_kind = 'frontmatter'
-            elif not in_main and is_main_start(text):
+            elif not in_main and (text == reset_text if reset_text
+                                  else is_main_start(text)):
                 current_kind = 'main'
                 in_main = True
             elif in_main:
@@ -899,7 +925,8 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
 def merge(template_path, input_path, output_path, title=None, author=None,
           subtitle=None, date_val=None, toc=False, tof=False, short_title=None,
           basename=None, abstract=None, extra_sections=None,
-          new_page_headings=True, restart_footnotes=True, generate_date=True):
+          new_page_headings=True, restart_footnotes=True, generate_date=True,
+          roman_frontmatter=False, page1_starts_with=''):
     with zipfile.ZipFile(template_path) as z:
         tmpl_doc = etree.fromstring(z.read('word/document.xml'))
     tmpl_body = tmpl_doc.find(tag('body'))
@@ -926,7 +953,37 @@ def merge(template_path, input_path, output_path, title=None, author=None,
         except Exception as e:
             print(f'WARNING: could not load fallback ToF from document.docx: {e}')
 
-    sections = classify_blocks(pdc_children)
+    # Roman-frontmatter page numbering: find the Heading 1 where page 1 (arabic)
+    # begins. When roman numbering is off, or no such heading exists, strip the
+    # roman/start page-number formatting from every section kind so the whole
+    # document is arabic.
+    _h1_texts = [_para_text(c) for c in pdc_children
+                 if c.tag == tag('p') and get_style(c) == 'Heading1']
+    _reset_idx = (find_page_reset_index(_h1_texts, page1_starts_with)
+                  if roman_frontmatter else None)
+    _apply_roman = roman_frontmatter and _reset_idx is not None
+    if not _apply_roman:
+        for _k in list(layout['kinds']):
+            _pg = layout['kinds'][_k].find(tag('pgNumType'))
+            if _pg is not None:
+                layout['kinds'][_k].remove(_pg)
+    else:
+        # Guarantee the roman/start formatting even for a template that doesn't
+        # carry it (e.g. document.docx used as a book).
+        for _k in ('title', 'toc', 'tof', 'roman'):
+            _pg = _ensure_pgnumtype(layout['kinds'][_k])
+            _pg.set(tag('fmt'), 'lowerRoman')
+            _pg.attrib.pop(tag('start'), None)
+        _pg = _ensure_pgnumtype(layout['kinds']['first_main'])
+        _pg.set(tag('start'), '1')
+        _pg.attrib.pop(tag('fmt'), None)
+        _cn = layout['kinds']['continue'].find(tag('pgNumType'))
+        if _cn is not None:
+            layout['kinds']['continue'].remove(_cn)
+
+    sections = classify_blocks(
+        pdc_children,
+        reset_text=(_h1_texts[_reset_idx] if _apply_roman else None))
 
     # Strip the bibliography section (pandoc plain-text entries) so the merge
     # can append a fresh Zotero field at the end instead.  This mirrors the ODT
@@ -1959,6 +2016,10 @@ def main():
     ap.add_argument('--no-generated-date', action='store_true',
                     dest='no_generated_date',
                     help="Don't insert today's date when the doc has no date property")
+    ap.add_argument('--roman-frontmatter', action='store_true', dest='roman_frontmatter',
+                    help='Roman-numeral frontmatter page numbers, arabic from the reset heading')
+    ap.add_argument('--page1-starts-with', default='', dest='page1_starts_with',
+                    help='Heading text that begins arabic page 1 (blank = auto)')
     args = ap.parse_args()
     extra_sections = None
     if args.extra_sections:
@@ -1975,7 +2036,9 @@ def main():
           args.basename, args.abstract, extra_sections,
           new_page_headings=new_page_headings,
           restart_footnotes=restart_footnotes,
-          generate_date=not args.no_generated_date)
+          generate_date=not args.no_generated_date,
+          roman_frontmatter=args.roman_frontmatter,
+          page1_starts_with=args.page1_starts_with)
     print(f'Merged: {args.output}')
 
 if __name__ == '__main__':

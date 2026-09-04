@@ -45,7 +45,8 @@ from sw_merge_helpers import (split_paragraphs, find_bibliography_range,
     strip_bibliography, ZOTERO_BIBL_INSTR, resize_images, STYLE_REMAP,
     resolve_cover, title_case as _title_case, strip_markdown as _strip_markdown,
     is_toc_heading, process_figures, bundled_template, ensure_odt_styles,
-    strip_chapter_prefix, parse_chapter_number, append_extra_sections)
+    strip_chapter_prefix, parse_chapter_number, append_extra_sections,
+    find_page_reset_index)
 
 # ── ODF namespace constants ───────────────────────────────────────────────────
 
@@ -734,6 +735,144 @@ def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings):
             el.set(T('is-list-header'), 'true')
     return numbered > 0
 
+# ── Roman-numeral frontmatter page numbering ──────────────────────────────────
+# Parallel to the DOCX section-break switch (sw_export_merge.merge, the
+# roman_frontmatter block). The shared decision — which heading is where arabic
+# "page 1" begins — is find_page_reset_index() in sw_merge_helpers, used by both
+# formats. Here we implement the switch the ODF way: assign a roman master page
+# to every level-1 heading before the reset heading, and an arabic master page
+# with style:page-number="1" to the reset heading itself.
+
+def _detect_page_masters(styles_root, tmpl_root):
+    """Return (roman_master, arabic_master) master-page names from the template,
+    or (None, None) when it has no roman/arabic master pages.
+
+    roman_master  — a master-page whose page-layout has style:num-format "i"/"I".
+    arabic_master — the master-page referenced by a paragraph style that carries
+                    style:page-number="1" (the template's own frontmatter→body
+                    switch point); falls back to any non-roman master, else
+                    'Standard'.
+    """
+    if styles_root is None:
+        return None, None
+    layfmt = {}
+    for pl in styles_root.iter(S('page-layout')):
+        pp = pl.find(S('page-layout-properties'))
+        layfmt[pl.get(S('name'))] = pp.get(S('num-format')) if pp is not None else None
+    roman = None
+    masters = {}
+    for mp in styles_root.iter(S('master-page')):
+        nm = mp.get(S('name'))
+        fmt = layfmt.get(mp.get(S('page-layout-name')))
+        masters[nm] = fmt
+        if roman is None and (fmt or '').lower() == 'i':
+            roman = nm
+    arabic = None
+    for root in (tmpl_root, styles_root):
+        if root is None:
+            continue
+        for st in root.iter(S('style')):
+            if st.get(S('family')) != 'paragraph':
+                continue
+            pp = st.find(S('paragraph-properties'))
+            if pp is not None and pp.get(S('page-number')) == '1' \
+                    and st.get(S('master-page-name')):
+                arabic = st.get(S('master-page-name'))
+                break
+        if arabic:
+            break
+    if arabic is None:
+        for nm, fmt in masters.items():
+            if (fmt or '1').lower() not in ('i',):
+                arabic = nm
+                break
+    return roman, arabic
+
+
+def _page_switch_variant(auto_styles, base_style_name, master, page_number):
+    """Return the name of a paragraph auto-style identical to base_style_name but
+    pinned to `master` (and, when page_number is given, restarting page numbers
+    at it). base_style_name is usually one of the SW_* heading auto-styles set
+    earlier in the merge (page break / TOC heading / chapter heading); we clone
+    it so the heading keeps its own appearance and only the page master changes.
+    A base that is a named style (e.g. 'Heading_20_1') yields a fresh child."""
+    suffix = '_PgReset' if page_number else '_Roman'
+    new_name = (base_style_name or _H1_PARENT) + suffix
+    for child in auto_styles:
+        if child.get(S('name')) == new_name:
+            return new_name
+    src = None
+    for child in auto_styles:
+        if child.get(S('name')) == base_style_name:
+            src = child
+            break
+    if src is not None:
+        se = copy.deepcopy(src)
+    else:
+        se = etree.Element(S('style'))
+        se.set(S('family'),            'paragraph')
+        se.set(S('parent-style-name'), base_style_name or _H1_PARENT)
+    se.set(S('name'), new_name)
+    se.set(S('master-page-name'), master)
+    if page_number:
+        pp = se.find(S('paragraph-properties'))
+        if pp is None:
+            pp = etree.SubElement(se, S('paragraph-properties'))
+        pp.set(S('page-number'), page_number)
+    auto_styles.append(se)
+    return new_name
+
+
+def apply_roman_frontmatter_odt(tmpl_text, tmpl_root, styles_root, reset_text,
+                                new_page_headings):
+    """Assign a roman master page to every level-1 heading before the reset
+    heading and an arabic-restart master (style:page-number="1") to the reset
+    heading — the ODF equivalent of the DOCX roman→arabic sectPr switch.
+
+    reset_text — plain text of the heading where arabic page 1 begins
+                 (from find_page_reset_index over the pandoc H1s).
+    Runs AFTER the is-list-header pass so it can restore chapter counting on a
+    numbered reset heading. Returns True when applied.
+    """
+    if not reset_text:
+        return False
+    roman_master, arabic_master = _detect_page_masters(styles_root, tmpl_root)
+    if not roman_master or not arabic_master:
+        print('WARNING: roman frontmatter requested but the template defines no '
+              'roman/arabic master pages — leaving page numbering unchanged')
+        return False
+    auto = tmpl_root.find('.//' + O('automatic-styles'))
+    if auto is None:
+        return False
+
+    h1s = [h for h in tmpl_text.iter(T('h'))
+           if h.get(T('outline-level'), '') == '1']
+    marker = strip_chapter_prefix(reset_text).strip().lower()
+    full   = reset_text.strip().lower()
+    reset_pos = None
+    for i, h in enumerate(h1s):
+        cand = {_elem_text(h).strip().lower(),
+                strip_chapter_prefix(_elem_text(h)).strip().lower()}
+        if full in cand or (marker and marker in cand):
+            reset_pos = i
+            break
+    if reset_pos is None:
+        return False
+
+    for h in h1s[:reset_pos]:
+        h.set(T('style-name'), _page_switch_variant(
+            auto, _get_sn(h), roman_master, None))
+        h.set(T('is-list-header'), 'true')
+    rh = h1s[reset_pos]
+    rh.set(T('style-name'), _page_switch_variant(
+        auto, _get_sn(rh), arabic_master, '1'))
+    if parse_chapter_number(reset_text) > 0:
+        rh.attrib.pop(T('is-list-header'), None)   # numbered chapter: keep count
+    else:
+        rh.set(T('is-list-header'), 'true')
+    return True
+
+
 # ── TOC page break ────────────────────────────────────────────────────────────
 
 _TOC_PB_STYLE   = 'SW_TOC_Pagebreak'
@@ -919,7 +1058,7 @@ def merge_odt(template_path, input_path, output_path,
               toc=False, tof=False, short_title=None, basename=None,
               abstract=None, extra_sections=None,
               new_page_headings=True, restart_footnotes=True,
-              generate_date=True):
+              generate_date=True, roman_frontmatter=False, page1_starts_with=''):
     """
     Merge pandoc ODT output into the ODT template.
 
@@ -995,6 +1134,20 @@ def merge_odt(template_path, input_path, output_path,
 
     # ── Classify pandoc body ───────────────────────────────────────────────
     body_elements = classify_pandoc_body(pdc_text)
+
+    # Roman-numeral frontmatter: locate the heading where arabic "page 1"
+    # begins, using the SAME shared decision as the DOCX merge. The switch
+    # itself is applied the ODF way (master pages) after assembly.
+    _reset_text = None
+    if roman_frontmatter:
+        _h1_texts = [_elem_text(el) for el in body_elements
+                     if el.tag == T('h') and el.get(T('outline-level'), '') == '1']
+        _ridx = find_page_reset_index(_h1_texts, page1_starts_with)
+        if _ridx is not None:
+            _reset_text = _h1_texts[_ridx]
+        else:
+            print('Roman frontmatter requested but no matching start heading '
+                  'found — exporting with arabic page numbering throughout')
 
     # ── Figure captions (shared walk with the DOCX merge) ──────────────────
     # Chapter-scoped numbering (Figure C.N) follows the footnote-restart
@@ -1183,6 +1336,14 @@ def merge_odt(template_path, input_path, output_path,
                     and _get_sn(h) != _CHAPTER_H_STYLE:
                 h.set(T('is-list-header'), 'true')
 
+    # Roman-numeral frontmatter page-numbering switch (ODF master pages).
+    # Runs last so it can restore chapter counting on a numbered reset heading
+    # after the is-list-header pass above.
+    if _reset_text:
+        if apply_roman_frontmatter_odt(tmpl_text, tmpl_root, styles_root,
+                                       _reset_text, new_page_headings):
+            print(f'ODT: roman frontmatter → arabic restart at "{_reset_text}"')
+
     # Cap images to template text area dimensions, preserving aspect ratio.
     n_scaled = resize_images(tmpl_root, 'odt', template_zip_data=z_data)
     if n_scaled:
@@ -1242,6 +1403,13 @@ def main():
     ap.add_argument('--no-generated-date', action='store_true',
                     dest='no_generated_date',
                     help="Don't insert today's date when the doc has no date property")
+    ap.add_argument('--roman-frontmatter', action='store_true',
+                    dest='roman_frontmatter',
+                    help='Roman-numeral page numbers for frontmatter, switching '
+                         'to arabic (page 1) at the first main-body heading')
+    ap.add_argument('--page1-starts-with', default='', dest='page1_starts_with',
+                    help='Heading text where arabic "page 1" begins (default: '
+                         'first Introduction/Chapter 1/numbered heading)')
     args = ap.parse_args()
 
     extra_sections = None
@@ -1266,6 +1434,8 @@ def main():
         new_page_headings=new_page_headings,
         restart_footnotes=restart_footnotes,
         generate_date=not args.no_generated_date,
+        roman_frontmatter=args.roman_frontmatter,
+        page1_starts_with=args.page1_starts_with,
     )
     print(f'Merged: {args.output}')
 

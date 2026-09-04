@@ -422,6 +422,31 @@ def strip_chapter_prefix(text):
     return text or ''
 
 
+def find_page_reset_index(h1_texts, marker=None):
+    """Given the Heading 1 texts of a document in order, return the index of the
+    heading where page numbering should switch from roman frontmatter to arabic
+    (page 1), or None when there is no such heading (→ caller keeps all-arabic).
+
+    marker : the export dialog's "Page 1 starts with" text. When given, the
+             first Heading 1 whose text starts with it (case-insensitive, after
+             stripping any 'Chapter N:' prefix or the marker's own). When blank,
+             the first Heading 1 that is a main-start (Introduction / Chapter N /
+             Part N / a leading number). Shared so DOCX and ODT switch at the
+             same heading.
+    """
+    marker = (marker or '').strip().lower()
+    for i, raw in enumerate(h1_texts):
+        t = (raw or '').strip()
+        if marker:
+            cand = {t.lower(), strip_chapter_prefix(t).lower()}
+            if any(c.startswith(marker) for c in cand):
+                return i
+        else:
+            if is_main_start(t) or re.match(r'^\s*\d', t):
+                return i
+    return None
+
+
 def process_figures(elements, *, get_style, get_text, set_body_style,
                     is_heading1, image_styles, caption_styles, body_styles,
                     make_caption, make_alttext, chapter_scoped, start_state=None):

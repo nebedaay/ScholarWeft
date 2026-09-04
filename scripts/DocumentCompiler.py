@@ -1587,7 +1587,8 @@ def _parse_yaml_metadata(text, stem):
 def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                     tof=False, template_dir=None, output_dir=None,
                     default_author=None, new_page_headings=True,
-                    restart_footnotes=True, mappings_data=None, generate_date=True):
+                    restart_footnotes=True, mappings_data=None, generate_date=True,
+                    roman_frontmatter=False, page1_starts_with=''):
     """Unified export pipeline for DOCX and ODT.
 
     Both formats share: YAML metadata parsing, citation conversion, markdown
@@ -1767,6 +1768,10 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         merge_cmd.append('--list-of-figures')
     if not generate_date:
         merge_cmd.append('--no-generated-date')
+    if roman_frontmatter:
+        merge_cmd.append('--roman-frontmatter')
+        if page1_starts_with:
+            merge_cmd += ['--page1-starts-with', page1_starts_with]
     print('Merging:', ' '.join(merge_cmd))
     subprocess.run(merge_cmd, check=True)
     clean_path.unlink(missing_ok=True)
@@ -1790,7 +1795,8 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
 def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                 tof=False, template_dir=None, output_dir=None, default_author=None,
                 new_page_headings=True, restart_footnotes=True,
-                mappings_data=None, generate_date=True):
+                mappings_data=None, generate_date=True,
+                roman_frontmatter=False, page1_starts_with=''):
     """Export compiled markdown to DOCX. Thin wrapper around export_document."""
     return export_document('docx', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -1799,7 +1805,9 @@ def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                            default_author=default_author,
                            new_page_headings=new_page_headings,
                            restart_footnotes=restart_footnotes,
-                           mappings_data=mappings_data, generate_date=generate_date)
+                           mappings_data=mappings_data, generate_date=generate_date,
+                           roman_frontmatter=roman_frontmatter,
+                           page1_starts_with=page1_starts_with)
 
 
 def _prep_reference_odt(ref_doc_path, style_names):
@@ -1903,7 +1911,8 @@ def _prep_reference_odt(ref_doc_path, style_names):
 def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                tof=False, template_dir=None, output_dir=None, default_author=None,
                new_page_headings=True, restart_footnotes=True,
-               mappings_data=None, generate_date=True):
+               mappings_data=None, generate_date=True,
+               roman_frontmatter=False, page1_starts_with=''):
     """Export compiled markdown to ODT. Thin wrapper around export_document."""
     return export_document('odt', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -1912,12 +1921,14 @@ def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                            default_author=default_author,
                            new_page_headings=new_page_headings,
                            restart_footnotes=restart_footnotes,
-                           mappings_data=mappings_data, generate_date=generate_date)
+                           mappings_data=mappings_data, generate_date=generate_date,
+                           roman_frontmatter=roman_frontmatter,
+                           page1_starts_with=page1_starts_with)
 
 
 
 def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False,
-               generate_date=True,
+               generate_date=True, roman_frontmatter=False, page1_starts_with='',
                template_dir=None, output_dir=None,
                new_page_headings=True, restart_footnotes=True,
                intermediate_format=None, keep_intermediate=False,
@@ -1963,7 +1974,8 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
             template_dir=template_dir, output_dir=str(tmp_dir),
             new_page_headings=new_page_headings,
             restart_footnotes=restart_footnotes,
-            mappings_data=mappings_data, generate_date=generate_date)
+            mappings_data=mappings_data, generate_date=generate_date,
+            roman_frontmatter=roman_frontmatter, page1_starts_with=page1_starts_with)
         if intermediate_format == 'docx':
             inter_path = Path(export_docx(compiled_md, **common_kwargs))
         else:
@@ -2033,6 +2045,13 @@ def main():
     parser.add_argument('--no-generated-date', action='store_true',
                        dest='no_generated_date',
                        help="Don't insert today's date when the doc has no date property")
+    parser.add_argument('--roman-frontmatter', action='store_true',
+                       dest='roman_frontmatter',
+                       help='Roman-numeral frontmatter page numbers, arabic from the reset heading (default for book*)')
+    parser.add_argument('--no-roman-frontmatter', action='store_true',
+                       dest='no_roman_frontmatter')
+    parser.add_argument('--page1-starts-with', default='', dest='page1_starts_with',
+                       help='Heading text that begins arabic page 1 (blank = auto)')
     parser.add_argument('--new-page-headings', action='store_true', default=True,
                        help='Start each heading section on a new page (default: on)')
     parser.add_argument('--no-new-page-headings', action='store_true',
@@ -2080,6 +2099,7 @@ def main():
     is_article = effective_tpl.startswith('article')
     use_toc = is_book
     use_tof = is_book
+    use_roman = is_book
     use_global = not is_book
     if args.toc:
         use_toc = True
@@ -2089,6 +2109,10 @@ def main():
         use_tof = True
     if args.no_list_of_figures:
         use_tof = False
+    if args.roman_frontmatter:
+        use_roman = True
+    if args.no_roman_frontmatter:
+        use_roman = False
     if args.global_footnotes:
         use_global = True
     if args.no_global_footnotes:
@@ -2115,7 +2139,9 @@ def main():
             new_page_headings=not args.no_new_page_headings,
             restart_footnotes=not use_global,
             mappings_data=active_mappings,
-            generate_date=not args.no_generated_date)
+            generate_date=not args.no_generated_date,
+            roman_frontmatter=use_roman,
+            page1_starts_with=args.page1_starts_with)
         if args.export_format == 'pdf':
             export_pdf(compiled, keep_intermediate=args.keep_intermediate, **_common)
         elif args.export_format == 'odt':

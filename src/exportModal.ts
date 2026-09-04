@@ -20,6 +20,10 @@ export interface ExportOptions {
   newPageHeadings: boolean;
   /** true = insert today's date on the cover when the note has no `date:` property. */
   generatedDate: boolean;
+  /** true = roman-numeral frontmatter page numbers, switching to arabic at the reset heading. */
+  romanFrontmatter: boolean;
+  /** Heading text that begins arabic 'page 1'. '' = auto (first Introduction / numbered chapter). */
+  romanStart: string;
   /** Absolute or vault-relative output folder; '' = same folder as source. */
   outputDir: string;
   /** Desired output filename (basename + extension). */
@@ -42,6 +46,8 @@ interface FileExportHistory {
   restartFootnotes: boolean;
   newPageHeadings: boolean;
   generatedDate: boolean;
+  romanFrontmatter: boolean;
+  romanStart: string;
   outputDir: string;
   outputFilename: string;
   keepIntermediate: boolean;
@@ -109,6 +115,9 @@ export class ExportModal extends Modal {
   private footnotesCb!: HTMLInputElement;
   private newPageCb!: HTMLInputElement;
   private generatedDateCb!: HTMLInputElement;
+  private romanFrontmatterCb!: HTMLInputElement;
+  private romanStartRow!: HTMLElement;
+  private romanStartInput!: HTMLInputElement;
   private keepIntermediateCb!: HTMLInputElement;
   private keepIntermediateRow!: HTMLElement;
   private pdfIntermediateSelect!: HTMLSelectElement;
@@ -310,6 +319,21 @@ export class ExportModal extends Modal {
       'Top-level headings start on a new page'
     );
 
+    this.romanFrontmatterCb = makeCheckRow(
+      'lc-export-roman',
+      'Roman-numeral frontmatter page numbering'
+    );
+    this.romanStartRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.romanStartRow.style.cssText = 'margin-left:22px';
+    this.romanStartInput = this.romanStartRow.createEl('input', {
+      type: 'text',
+      placeholder: 'Page 1 starts with (default: Introduction or Chapter 1)',
+    });
+    this.romanStartInput.style.cssText = 'width:100%';
+    this.romanFrontmatterCb.addEventListener('change', () => {
+      this.romanStartRow.style.display = this.romanFrontmatterCb.checked ? '' : 'none';
+    });
+
     // ── PDF-specific controls (hidden unless format = pdf) ────────────────
     this.keepIntermediateRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
     this.keepIntermediateCb = this.keepIntermediateRow.createEl('input', { type: 'checkbox' });
@@ -359,7 +383,8 @@ export class ExportModal extends Modal {
         if (r.checked) this.applyDocTypePreset(r.value as DocType);
       });
     });
-    [this.tocCb, this.tofCb, this.footnotesCb, this.newPageCb, this.generatedDateCb].forEach(cb => {
+    [this.tocCb, this.tofCb, this.footnotesCb, this.newPageCb, this.generatedDateCb,
+     this.romanFrontmatterCb].forEach(cb => {
       cb.addEventListener('change', () => {
         this.docTypeBook.checked    = false;
         this.docTypeArticle.checked = false;
@@ -454,6 +479,9 @@ export class ExportModal extends Modal {
     this.tofCb.disabled      = isMd;
     this.newPageCb.disabled  = isMd;
     this.generatedDateCb.disabled = isMd;
+    this.romanFrontmatterCb.disabled = isMd;
+    this.romanStartRow.style.display =
+      !isMd && this.romanFrontmatterCb.checked ? '' : 'none';
     // footnotesCb stays active — the compile step still uses it.
     // PDF-specific rows: show only when format is pdf.
     const pdfDisplay = isPdf ? '' : 'none';
@@ -547,12 +575,15 @@ export class ExportModal extends Modal {
       this.tofCb.checked       = true;
       this.footnotesCb.checked = true;
       this.newPageCb.checked   = true;
+      this.romanFrontmatterCb.checked = true;
     } else if (docType === 'article') {
       this.tocCb.checked       = false;
       this.tofCb.checked       = false;
       this.footnotesCb.checked = false;
       this.newPageCb.checked   = false;
+      this.romanFrontmatterCb.checked = false;
     }
+    this.romanStartRow.style.display = this.romanFrontmatterCb.checked ? '' : 'none';
   }
 
   /**
@@ -576,6 +607,9 @@ export class ExportModal extends Modal {
       this.footnotesCb.checked    = history.restartFootnotes;
       this.newPageCb.checked      = history.newPageHeadings;
       this.generatedDateCb.checked = history.generatedDate ?? true;
+      this.romanFrontmatterCb.checked = history.romanFrontmatter ?? false;
+      this.romanStartInput.value = history.romanStart ?? '';
+      this.romanStartRow.style.display = this.romanFrontmatterCb.checked ? '' : 'none';
     } else {
       // Derive document type from template name stem.
       const stem = this.templateSelect.value.replace(/\.(docx|odt)$/i, '');
@@ -663,6 +697,8 @@ export class ExportModal extends Modal {
       restartFootnotes: this.footnotesCb.checked,
       newPageHeadings: this.newPageCb.checked,
       generatedDate: this.generatedDateCb.checked,
+      romanFrontmatter: this.romanFrontmatterCb.checked,
+      romanStart: this.romanStartInput.value.trim(),
       outputDir: this.outputDirInput.value.trim(),
       outputFilename: this.filenameInput.value.trim(),
       keepIntermediate: this.keepIntermediateCb.checked,
@@ -691,6 +727,8 @@ export class ExportModal extends Modal {
       restartFootnotes: opts.restartFootnotes,
       newPageHeadings:  opts.newPageHeadings,
       generatedDate:    opts.generatedDate,
+      romanFrontmatter: opts.romanFrontmatter,
+      romanStart:       opts.romanStart,
       outputDir:        opts.outputDir,
       outputFilename:   opts.outputFilename,
       keepIntermediate: opts.keepIntermediate,

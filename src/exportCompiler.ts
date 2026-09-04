@@ -158,6 +158,10 @@ export interface CompilerOptions {
   newPageHeadings: boolean;
   /** true = insert today's date on the cover when the note has no `date:` property. */
   generatedDate: boolean;
+  /** true = roman frontmatter page numbers, switching to arabic at the reset heading. */
+  romanFrontmatter: boolean;
+  /** Heading text that begins arabic 'page 1'. '' = auto. */
+  romanStart: string;
   /** Output folder (vault-relative or absolute, ~ expanded); '' = same folder as source. */
   outputDir?: string;
   /** Desired output filename (basename.ext). When set and different from the
@@ -248,6 +252,10 @@ export async function runDocumentCompiler(
   args.push(opts.restartFootnotes ? '--no-global-footnotes' : '--global-footnotes');
   args.push(opts.newPageHeadings ? '--new-page-headings' : '--no-new-page-headings');
   if (!opts.generatedDate) args.push('--no-generated-date');
+  if (opts.romanFrontmatter) {
+    args.push('--roman-frontmatter');
+    if (opts.romanStart) args.push('--page1-starts-with', opts.romanStart);
+  }
 
   // Pass the Obsidian account display name as a fallback author so the
   // merge script can set dc:creator even when `author:` is absent from YAML.
