@@ -80597,30 +80597,39 @@ return {
 sw_export_merge.py \u2014 ScholarWeave export merge.
 
 Takes the clean docx produced by pandoc (via the sw-*.lua filters) and the
-target Export Template (book2/article2/document), and copies the pandoc body
-into the template's XML, RETAINING the template's frontmatter structure:
+target export template (book/article/document under templates/), and copies
+the pandoc body into the template's XML, RETAINING the template's frontmatter
+structure:
   - title block (Title/Subtitle/Author/Date/Abstract/Note) filled from YAML
-    with cover-value resolution (Title = before ':' \u2192 whole title \u2192 basename
-    before '-'/'\u2013' \u2192 full basename; Subtitle = after ':' \u2192 'subtitle' prop \u2192
-    none; Author = 'author' \u2192 "Joseph Hill"; Date = current date)
-  - the template's TOC section (heading + field para) is preserved
-  - the template's ToF section is preserved ONLY if the input has figures
-  - frontmatter content sections get lowerRoman page numbers; the first main
-    section (Introduction/Chapter 1) gets arabic start=1; later chapters
-    continue arabic; per-section footnote restart
+    with cover-value resolution (resolve_cover in sw_merge_helpers; Title =
+    whole title when a subtitle prop is given, else before ':' \u2192 whole title
+    \u2192 basename; Subtitle = 'subtitle' prop \u2192 after ':' \u2192 none; Author =
+    'author' \u2192 account name; Date = 'date' prop \u2192 today's date only when
+    generate_date is on, else the Date slot is dropped)
+  - the template's TOC section is preserved only when toc is requested
+  - the template's ToF section is preserved only when tof is requested AND the
+    input has figures
+  - roman/arabic page numbering (when roman_frontmatter is on): frontmatter
+    sections get lowerRoman page numbers and the reset heading picked by
+    sw_merge_helpers.find_page_reset_index gets arabic start=1; later chapters
+    continue arabic. When off, every section is arabic. Per-section footnote
+    restart either way.
   - numbered chapters ("Chapter N:" or "N." Heading 1) get Word numbering
     (numPr) instead of literal text, so Word assigns chapter numbers that
     figure-caption fields can reference
   - figure captions become "Figure {chapter}.{n}. Description" via
     STYLEREF/SEQ fields, with an Alt-text paragraph in "Caption - Alt-text"
+    (the figure walk itself is sw_merge_helpers.process_figures, shared with
+    the ODT merge)
   - headers/footers: first section defines them, rest are "same as previous"
 
-Reuses hardened helpers from iafr_template_pipeline.py (style mapping,
-cleanup, paraId minting) rather than reinventing them.
+Every substantive content/structure decision is shared with the ODT merge via
+sw_merge_helpers.py (see scripts/ARCHITECTURE.md). This script holds only the
+OOXML mechanics. Do not re-fork logic that sw_export_odt_merge.py also needs.
 
 Usage:
     python3 scripts/sw_export_merge.py \\
-        --template "Export Templates/book2.docx" \\
+        --template "templates/book.docx" \\
         --input "path/to/clean.docx" \\
         --output "path/to/final.docx" \\
         [--title "Title"] [--subtitle "Subtitle"] [--author "Name"]
