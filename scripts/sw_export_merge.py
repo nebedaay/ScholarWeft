@@ -899,7 +899,7 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
 def merge(template_path, input_path, output_path, title=None, author=None,
           subtitle=None, date_val=None, toc=False, tof=False, short_title=None,
           basename=None, abstract=None, extra_sections=None,
-          new_page_headings=True, restart_footnotes=True):
+          new_page_headings=True, restart_footnotes=True, generate_date=True):
     with zipfile.ZipFile(template_path) as z:
         tmpl_doc = etree.fromstring(z.read('word/document.xml'))
     tmpl_body = tmpl_doc.find(tag('body'))
@@ -944,7 +944,7 @@ def merge(template_path, input_path, output_path, title=None, author=None,
 
     # Cover values (Title/Subtitle/Author/Date resolution).
     title, subtitle, author, date_val = resolve_cover(
-        title, subtitle, author, date_val, basename)
+        title, subtitle, author, date_val, basename, generate_date=generate_date)
 
     # Fill title/subtitle/author/date into the template title block and DROP
     # its abstract/keywords placeholder slots. The abstract is then re-injected
@@ -1033,7 +1033,7 @@ def _fill_title_block(title_block, title, subtitle, author, date_val):
     """Replace placeholder text in the template title block (a list of deep
     copies used by build_body):
       - Title / Subtitle styles → resolved values
-      - Subtitle paragraph REMOVED when there is no subtitle
+      - Subtitle / Date paragraph REMOVED when there is no subtitle / date
       - first non-Date Body Text after Subtitle → author
       - Body Text 'Date' → date
       - every Abstract/keywords/Note placeholder slot is DROPPED; the abstract
@@ -1066,17 +1066,30 @@ def _fill_title_block(title_block, title, subtitle, author, date_val):
             author_done = True
             i += 1
         elif style == 'Date':
-            _replace_text(p, date_val or '')
-            date_done = True
-            i += 1
+            if date_val:
+                _replace_text(p, date_val)
+                date_done = True
+                i += 1
+            else:
+                title_block.pop(i)     # no date → drop the Date paragraph
+                continue
         elif style == 'BodyText' and after_subtitle:
             if not author_done and cur != 'Date':
                 _replace_text(p, author)
                 author_done = True
-            elif not date_done and cur == 'Date':
-                _replace_text(p, date_val)
-                date_done = True
-            i += 1
+                i += 1
+            elif cur == 'Date':
+                if date_val and not date_done:
+                    _replace_text(p, date_val)
+                    date_done = True
+                    i += 1
+                elif not date_val:
+                    title_block.pop(i)   # no date → drop the Date slot
+                    continue
+                else:
+                    i += 1
+            else:
+                i += 1
         elif style == 'Abstractkeywordsheading':
             # Abstract/keywords/note placeholder heading (article/book templates).
             # Always drop it and its following body paragraph(s); the real
@@ -1097,15 +1110,22 @@ def _fill_title_block(title_block, title, subtitle, author, date_val):
             i += 1
     # No subtitle in this template: fall back to the first empty/'Author' slot.
     if not after_subtitle:
-        for p in title_block:
+        i = 0
+        while i < len(title_block):
+            p = title_block[i]
             if get_style(p) == 'BodyText':
                 cur = _para_text(p)
                 if not author_done and (cur == '' or cur == 'Author'):
                     _replace_text(p, author)
                     author_done = True
-                elif not date_done and cur == 'Date':
-                    _replace_text(p, date_val)
-                    date_done = True
+                elif cur == 'Date':
+                    if date_val and not date_done:
+                        _replace_text(p, date_val)
+                        date_done = True
+                    elif not date_val:
+                        title_block.pop(i)
+                        continue
+            i += 1
 
 def _strip_bibliography_from_sections(sections):
     """Remove the section whose first block is a Heading1 'Bibliography' paragraph.
@@ -1936,6 +1956,9 @@ def main():
     ap.add_argument('--global-footnotes', action='store_true',
                     dest='global_footnotes',
                     help='Continuous footnote numbering across the whole document')
+    ap.add_argument('--no-generated-date', action='store_true',
+                    dest='no_generated_date',
+                    help="Don't insert today's date when the doc has no date property")
     args = ap.parse_args()
     extra_sections = None
     if args.extra_sections:
@@ -1951,7 +1974,8 @@ def main():
           args.subtitle, args.date_val, args.toc, args.tof, args.shorttitle,
           args.basename, args.abstract, extra_sections,
           new_page_headings=new_page_headings,
-          restart_footnotes=restart_footnotes)
+          restart_footnotes=restart_footnotes,
+          generate_date=not args.no_generated_date)
     print(f'Merged: {args.output}')
 
 if __name__ == '__main__':

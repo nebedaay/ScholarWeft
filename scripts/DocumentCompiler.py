@@ -1587,7 +1587,7 @@ def _parse_yaml_metadata(text, stem):
 def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                     tof=False, template_dir=None, output_dir=None,
                     default_author=None, new_page_headings=True,
-                    restart_footnotes=True, mappings_data=None):
+                    restart_footnotes=True, mappings_data=None, generate_date=True):
     """Unified export pipeline for DOCX and ODT.
 
     Both formats share: YAML metadata parsing, citation conversion, markdown
@@ -1765,6 +1765,8 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         merge_cmd.append('--toc')
     if tof:
         merge_cmd.append('--list-of-figures')
+    if not generate_date:
+        merge_cmd.append('--no-generated-date')
     print('Merging:', ' '.join(merge_cmd))
     subprocess.run(merge_cmd, check=True)
     clean_path.unlink(missing_ok=True)
@@ -1788,7 +1790,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
 def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                 tof=False, template_dir=None, output_dir=None, default_author=None,
                 new_page_headings=True, restart_footnotes=True,
-                mappings_data=None):
+                mappings_data=None, generate_date=True):
     """Export compiled markdown to DOCX. Thin wrapper around export_document."""
     return export_document('docx', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -1797,7 +1799,7 @@ def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                            default_author=default_author,
                            new_page_headings=new_page_headings,
                            restart_footnotes=restart_footnotes,
-                           mappings_data=mappings_data)
+                           mappings_data=mappings_data, generate_date=generate_date)
 
 
 def _prep_reference_odt(ref_doc_path, style_names):
@@ -1901,7 +1903,7 @@ def _prep_reference_odt(ref_doc_path, style_names):
 def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                tof=False, template_dir=None, output_dir=None, default_author=None,
                new_page_headings=True, restart_footnotes=True,
-               mappings_data=None):
+               mappings_data=None, generate_date=True):
     """Export compiled markdown to ODT. Thin wrapper around export_document."""
     return export_document('odt', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -1910,11 +1912,12 @@ def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                            default_author=default_author,
                            new_page_headings=new_page_headings,
                            restart_footnotes=restart_footnotes,
-                           mappings_data=mappings_data)
+                           mappings_data=mappings_data, generate_date=generate_date)
 
 
 
 def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False,
+               generate_date=True,
                template_dir=None, output_dir=None,
                new_page_headings=True, restart_footnotes=True,
                intermediate_format=None, keep_intermediate=False,
@@ -1960,7 +1963,7 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
             template_dir=template_dir, output_dir=str(tmp_dir),
             new_page_headings=new_page_headings,
             restart_footnotes=restart_footnotes,
-            mappings_data=mappings_data)
+            mappings_data=mappings_data, generate_date=generate_date)
         if intermediate_format == 'docx':
             inter_path = Path(export_docx(compiled_md, **common_kwargs))
         else:
@@ -2027,6 +2030,9 @@ def main():
     parser.add_argument('--no-list-of-figures', action='store_true',
                        dest='no_list_of_figures',
                        help='Omit the table of figures')
+    parser.add_argument('--no-generated-date', action='store_true',
+                       dest='no_generated_date',
+                       help="Don't insert today's date when the doc has no date property")
     parser.add_argument('--new-page-headings', action='store_true', default=True,
                        help='Start each heading section on a new page (default: on)')
     parser.add_argument('--no-new-page-headings', action='store_true',
@@ -2108,7 +2114,8 @@ def main():
             template_dir=args.templates_dir, output_dir=args.output_dir,
             new_page_headings=not args.no_new_page_headings,
             restart_footnotes=not use_global,
-            mappings_data=active_mappings)
+            mappings_data=active_mappings,
+            generate_date=not args.no_generated_date)
         if args.export_format == 'pdf':
             export_pdf(compiled, keep_intermediate=args.keep_intermediate, **_common)
         elif args.export_format == 'odt':

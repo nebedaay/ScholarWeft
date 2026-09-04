@@ -156,6 +156,8 @@ export interface CompilerOptions {
   restartFootnotes: boolean;
   /** true = top-level headings start on a new page. */
   newPageHeadings: boolean;
+  /** true = insert today's date on the cover when the note has no `date:` property. */
+  generatedDate: boolean;
   /** Output folder (vault-relative or absolute, ~ expanded); '' = same folder as source. */
   outputDir?: string;
   /** Desired output filename (basename.ext). When set and different from the
@@ -245,6 +247,7 @@ export async function runDocumentCompiler(
   args.push(opts.tof ? '--list-of-figures' : '--no-list-of-figures');
   args.push(opts.restartFootnotes ? '--no-global-footnotes' : '--global-footnotes');
   args.push(opts.newPageHeadings ? '--new-page-headings' : '--no-new-page-headings');
+  if (!opts.generatedDate) args.push('--no-generated-date');
 
   // Pass the Obsidian account display name as a fallback author so the
   // merge script can set dc:creator even when `author:` is absent from YAML.

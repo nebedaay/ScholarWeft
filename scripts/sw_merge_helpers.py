@@ -187,7 +187,7 @@ def is_tof_heading(text):
     return text.strip().lower() == 'table of figures'
 
 
-def resolve_cover(title, subtitle, author, date_val, basename):
+def resolve_cover(title, subtitle, author, date_val, basename, generate_date=True):
     """Resolve cover values per spec, identically for DOCX and ODT:
       Title    = whole 'title' property when a 'subtitle' property is given
                  (e.g. "Title: A Study of Important Things" stays whole, so the
@@ -196,7 +196,8 @@ def resolve_cover(title, subtitle, author, date_val, basename):
                  basename before '-'/'–' → full basename
       Subtitle = 'subtitle' property → (else) after ':' of title → none
       Author   = 'author' property → "Joseph Hill"
-      Date     = current date "Month DD, YYYY"
+      Date     = 'date' property → (when generate_date) current date
+                 "Month DD, YYYY" → None (the merge then drops the Date slot)
     """
     if title:
         if subtitle is not None:
@@ -213,10 +214,10 @@ def resolve_cover(title, subtitle, author, date_val, basename):
         m = re.split(r'\s*[-–]\s*', base, maxsplit=1)
         title = (m[0].strip() if m and m[0].strip() else base)
     author = author or 'Joseph Hill'
-    if not date_val:
+    if not date_val and generate_date:
         today = datetime.date.today()
         date_val = f"{today.strftime('%B')} {today.day}, {today.year}"
-    return title, subtitle, author, date_val
+    return title, subtitle, author, date_val or None
 
 
 # ── format-agnostic helpers ───────────────────────────────────────────────────

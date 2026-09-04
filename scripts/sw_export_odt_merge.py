@@ -379,9 +379,11 @@ def _fill_title_block(title_block, title, subtitle, author, date_val):
             author_done = True
 
         elif sn == _DATE_STYLE:
-            _set_plain_text(el, date_val or '')
-            out.append(el)
-            date_done = True
+            if date_val:
+                _set_plain_text(el, date_val)
+                out.append(el)
+                date_done = True
+            # else: drop the Date paragraph when there is no date
 
         # ── AKH (Abstract & keywords heading) ───────────────────────────────
         # Always drop ALL AKH headings and their following body paragraphs from
@@ -421,9 +423,11 @@ def _fill_title_block(title_block, title, subtitle, author, date_val):
                 author_done = True
             elif sn == 'P2' and author_done and not date_done:
                 # Second P2 = date slot.
-                _set_plain_text(el, date_val or '')
-                out.append(el)
-                date_done = True
+                if date_val:
+                    _set_plain_text(el, date_val)
+                    out.append(el)
+                    date_done = True
+                # else: drop the date P2 when there is no date
             else:
                 # P3 spacer, P4-type extra — keep.
                 out.append(el)
@@ -847,7 +851,8 @@ def merge_odt(template_path, input_path, output_path,
               title=None, author=None, subtitle=None, date_val=None,
               toc=False, tof=False, short_title=None, basename=None,
               abstract=None, extra_sections=None,
-              new_page_headings=True, restart_footnotes=True):
+              new_page_headings=True, restart_footnotes=True,
+              generate_date=True):
     """
     Merge pandoc ODT output into the ODT template.
 
@@ -886,7 +891,7 @@ def merge_odt(template_path, input_path, output_path,
 
     # ── Resolve cover values ───────────────────────────────────────────────
     title, subtitle, author, date_val = resolve_cover(
-        title, subtitle, author, date_val, basename)
+        title, subtitle, author, date_val, basename, generate_date=generate_date)
 
     # ── Extract template layout ────────────────────────────────────────────
     layout = extract_template_layout(template_path)
@@ -1151,6 +1156,9 @@ def main():
                     help='Restart footnote numbering per chapter')
     ap.add_argument('--global-footnotes', action='store_true',
                     dest='global_footnotes')
+    ap.add_argument('--no-generated-date', action='store_true',
+                    dest='no_generated_date',
+                    help="Don't insert today's date when the doc has no date property")
     args = ap.parse_args()
 
     extra_sections = None
@@ -1174,6 +1182,7 @@ def main():
         extra_sections=extra_sections,
         new_page_headings=new_page_headings,
         restart_footnotes=restart_footnotes,
+        generate_date=not args.no_generated_date,
     )
     print(f'Merged: {args.output}')
 

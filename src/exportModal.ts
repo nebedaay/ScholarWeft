@@ -18,6 +18,8 @@ export interface ExportOptions {
   restartFootnotes: boolean;
   /** true = each top-level heading starts on a new page. */
   newPageHeadings: boolean;
+  /** true = insert today's date on the cover when the note has no `date:` property. */
+  generatedDate: boolean;
   /** Absolute or vault-relative output folder; '' = same folder as source. */
   outputDir: string;
   /** Desired output filename (basename + extension). */
@@ -39,6 +41,7 @@ interface FileExportHistory {
   tof: boolean;
   restartFootnotes: boolean;
   newPageHeadings: boolean;
+  generatedDate: boolean;
   outputDir: string;
   outputFilename: string;
   keepIntermediate: boolean;
@@ -105,6 +108,7 @@ export class ExportModal extends Modal {
   private tofCb!: HTMLInputElement;
   private footnotesCb!: HTMLInputElement;
   private newPageCb!: HTMLInputElement;
+  private generatedDateCb!: HTMLInputElement;
   private keepIntermediateCb!: HTMLInputElement;
   private keepIntermediateRow!: HTMLElement;
   private pdfIntermediateSelect!: HTMLSelectElement;
@@ -296,6 +300,11 @@ export class ExportModal extends Modal {
       'lc-export-fn',
       'Restart footnote and figure numbering per chapter'
     );
+    this.generatedDateCb = makeCheckRow(
+      'lc-export-gendate',
+      "Use today's date if the note has no date property"
+    );
+    this.generatedDateCb.checked = true;
     this.newPageCb = makeCheckRow(
       'lc-export-np',
       'Top-level headings start on a new page'
@@ -350,7 +359,7 @@ export class ExportModal extends Modal {
         if (r.checked) this.applyDocTypePreset(r.value as DocType);
       });
     });
-    [this.tocCb, this.tofCb, this.footnotesCb, this.newPageCb].forEach(cb => {
+    [this.tocCb, this.tofCb, this.footnotesCb, this.newPageCb, this.generatedDateCb].forEach(cb => {
       cb.addEventListener('change', () => {
         this.docTypeBook.checked    = false;
         this.docTypeArticle.checked = false;
@@ -444,6 +453,7 @@ export class ExportModal extends Modal {
     this.tocCb.disabled      = isMd;
     this.tofCb.disabled      = isMd;
     this.newPageCb.disabled  = isMd;
+    this.generatedDateCb.disabled = isMd;
     // footnotesCb stays active — the compile step still uses it.
     // PDF-specific rows: show only when format is pdf.
     const pdfDisplay = isPdf ? '' : 'none';
@@ -565,6 +575,7 @@ export class ExportModal extends Modal {
       this.tofCb.checked          = history.tof ?? false;
       this.footnotesCb.checked    = history.restartFootnotes;
       this.newPageCb.checked      = history.newPageHeadings;
+      this.generatedDateCb.checked = history.generatedDate ?? true;
     } else {
       // Derive document type from template name stem.
       const stem = this.templateSelect.value.replace(/\.(docx|odt)$/i, '');
@@ -651,6 +662,7 @@ export class ExportModal extends Modal {
       tof: this.tofCb.checked,
       restartFootnotes: this.footnotesCb.checked,
       newPageHeadings: this.newPageCb.checked,
+      generatedDate: this.generatedDateCb.checked,
       outputDir: this.outputDirInput.value.trim(),
       outputFilename: this.filenameInput.value.trim(),
       keepIntermediate: this.keepIntermediateCb.checked,
@@ -678,6 +690,7 @@ export class ExportModal extends Modal {
       tof:              opts.tof,
       restartFootnotes: opts.restartFootnotes,
       newPageHeadings:  opts.newPageHeadings,
+      generatedDate:    opts.generatedDate,
       outputDir:        opts.outputDir,
       outputFilename:   opts.outputFilename,
       keepIntermediate: opts.keepIntermediate,
