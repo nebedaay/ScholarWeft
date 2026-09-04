@@ -35,6 +35,7 @@
 import json
 import re
 import os
+import sys
 from pathlib import Path
 from collections import defaultdict
 import argparse
@@ -1736,8 +1737,6 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
             import shutil as _sh2
             _sh2.rmtree(_tmp_ref_dir, ignore_errors=True)
 
-    import shutil
-    shutil.copy(str(citations_md), str(citations_md.parent / 'DEBUG_citations.md'))
     citations_md.unlink(missing_ok=True)
 
     # ── Merge step (format-specific script; identical CLI interface) ───────────
@@ -2030,6 +2029,12 @@ def main():
                        help='Export format when --export is set: docx (default), odt, or pdf')
     parser.add_argument('--keep-intermediate', action='store_true',
                        help='Keep the intermediate docx/odt when exporting to PDF')
+    parser.add_argument('--keep-compiled-md', action='store_true',
+                       dest='keep_compiled_md',
+                       help='Keep the compiled markdown file after a docx/odt/pdf '
+                            'export (default: delete it once the export is done; '
+                            'has no effect for an already-compiled input file or '
+                            'when --export is not given)')
     parser.add_argument('--template', default=None,
                        help='Override the template (default: read "template" YAML from the master file)')
     parser.add_argument('--toc', action='store_true',
@@ -2148,6 +2153,17 @@ def main():
             export_odt(compiled, **_common)
         else:
             export_docx(compiled, default_author=args.default_author, **_common)
+
+        # The compiled markdown is a throwaway intermediate once it's been
+        # exported — delete it unless the user asked to keep it. Never touch
+        # an already-compiled file the user handed us directly (is_outline
+        # False, `compiled is master_file`): that's their own source note.
+        if is_outline and not args.keep_compiled_md:
+            try:
+                Path(compiled).unlink(missing_ok=True)
+            except OSError as e:
+                print(f'WARNING: could not remove compiled markdown: {e}',
+                      file=sys.stderr)
 
 if __name__ == "__main__":
     import sys

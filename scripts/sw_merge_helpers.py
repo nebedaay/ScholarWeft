@@ -100,16 +100,76 @@ def ensure_odt_styles(styles_bytes, needed_names, source_styles_bytes):
 #: live here side by side rather than being reinvented in each script.
 STYLE_REMAP = {
     'docx': {
-        'Blockquote':     'BlockText',
         'FirstParagraph': 'BodyText',
     },
     'odt': {
         'First_20_paragraph':            'Text_20_body',
         'Default_20_Paragraph_20_Style': 'Text_20_body',
         'Default Paragraph Style':       'Text_20_body',
-        'Block_20_Text':                 'Quotations',
     },
 }
+
+# Semantic-role style ALIASES — distinct from STYLE_REMAP above because the
+# right-hand side isn't a fixed name, it's found by searching the ACTIVE
+# template's own defined styles. pandoc emits a FIXED style id for some
+# constructs regardless of --reference-doc (verified: always 'BlockText' for
+# a DOCX blockquote, always 'Quotations' for an ODT one — a template CANNOT
+# make pandoc emit anything else). A template that doesn't define that exact
+# id under its own name — book.docx/book.odt instead define their own "Block
+# quote" style, converted from the docx original — would otherwise reference
+# an undefined style, which Word silently renders as "Normal" (LibreOffice is
+# more forgiving: 'Quotations' is also one of its built-in style names, so it
+# resolves even when a template's styles.xml never defines it explicitly).
+# resolve_style_alias() searches the destination template's own styles for a
+# name matching one of these candidates (most-preferred first) before falling
+# back to the bundled document.docx/document.odt style.
+STYLE_ALIASES = {
+    'docx': {
+        'BlockText': (['Block Text', 'Blockquote', 'Block quote',
+                        'Block Quotation'], 'BlockText'),
+    },
+    'odt': {
+        'Quotations': (['Quotations', 'Block Quotation', 'Blockquote',
+                         'Block quote'], 'Quotations'),
+    },
+}
+
+
+def _normalize_style_key(s):
+    return re.sub(r'[^a-z0-9]', '', (s or '').lower())
+
+
+def resolve_style_alias(defined, candidates, fallback):
+    """Find the identifier of a template's OWN style that best matches a
+    semantic role (e.g. "the blockquote style"), so pandoc's fixed output
+    style for that role can be remapped onto whatever name the ACTIVE
+    template happens to use, rather than one name hard-coded for a single
+    canonical template. See STYLE_ALIASES above for the motivating case.
+
+    defined: iterable of (identifier, display_name) pairs for every style the
+        destination template defines. `identifier` is what the caller will
+        actually set as the paragraph's style (DOCX styleId, ODT
+        style:name); `display_name` is the human-readable name (DOCX w:name,
+        ODT style:display-name — pass `identifier` again when a format has no
+        separate display name).
+    candidates: names to try, most-preferred first (e.g. ["Block Text",
+        "Blockquote", "Block quote", "Block Quotation"]). Matched against
+        both identifier and display_name after stripping everything but
+        letters/digits and lowercasing, so 'BlockText', 'Block_20_Text', and
+        'Block Text' are all treated as the same name.
+    fallback: identifier to use when nothing matches. The caller is
+        responsible for making sure a style by that identifier actually
+        exists (e.g. via ensure_docx_styles/ensure_odt_styles) before
+        referencing it — resolve_style_alias only picks the name.
+    """
+    rows = [(_normalize_style_key(ident), _normalize_style_key(name), ident)
+            for ident, name in defined]
+    for cand in candidates:
+        nc = _normalize_style_key(cand)
+        for nid, nname, ident in rows:
+            if nc == nid or nc == nname:
+                return ident
+    return fallback
 
 
 # ── cover-value resolution + text helpers (shared) ──────────────────────────

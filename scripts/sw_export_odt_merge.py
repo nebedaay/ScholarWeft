@@ -43,6 +43,7 @@ from lxml import etree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sw_merge_helpers import (split_paragraphs, find_bibliography_range,
     strip_bibliography, ZOTERO_BIBL_INSTR, resize_images, STYLE_REMAP,
+    STYLE_ALIASES, resolve_style_alias,
     resolve_cover, title_case as _title_case, strip_markdown as _strip_markdown,
     is_toc_heading, process_figures, bundled_template, ensure_odt_styles,
     strip_chapter_prefix, parse_chapter_number, append_extra_sections,
@@ -432,9 +433,19 @@ def _fill_title_block(title_block, title, subtitle, author, date_val):
         # where AKH sections appear after the TOC and therefore aren't in title_block.
         elif sn == _AKH_STYLE:
             before_akh = False
-            # Drop this heading and skip its body paragraph if present.
-            if i + 1 < len(title_block) and _get_sn(title_block[i + 1]) == _BODY_STYLE:
-                i += 1  # skip body paragraph too
+            # Drop this heading AND every following paragraph up to the next
+            # heading (or the end of the title block) — that's the whole
+            # AKH section, whatever style its body paragraph(s) carry.
+            # A template converted from DOCX (e.g. book.odt) gives each such
+            # paragraph its own auto-style rather than literally
+            # 'Text_20_body' (its Note body is styled "P3"), so matching on
+            # style name alone misses it and leaks the placeholder text —
+            # matching "runs of non-heading elements" instead is robust to
+            # that regardless of the template's paragraph-style naming.
+            j = i + 1
+            while j < len(title_block) and title_block[j].tag != T('h'):
+                j += 1
+            i = j - 1
 
         # ── article.odt: first Text_20_body before any AKH = author ─────────
         elif sn == _BODY_STYLE and before_akh and not first_para_done:
@@ -502,7 +513,7 @@ def _append_extra_sections(out_list, extra_sections):
 
 # ── pandoc body classification ────────────────────────────────────────────────
 
-def classify_pandoc_body(pdc_text):
+def classify_pandoc_body(pdc_text, style_remap=None):
     """
     Walk pandoc's <office:text>, skipping:
       - <text:table-of-content> elements (we manage TOC from the template)
@@ -510,9 +521,13 @@ def classify_pandoc_body(pdc_text):
         duplicate what the template title block already provides
 
     Applies style remaps (First_20_paragraph → Text_20_body, etc.) in-place.
+    `style_remap` defaults to STYLE_REMAP['odt']; merge_odt passes an
+    effective copy with 'Quotations' resolved per-template by
+    resolve_style_alias — see STYLE_ALIASES.
     Returns a list of body element references (still children of pdc_text;
     moved to tmpl_text by the caller when assembling output).
     """
+    style_remap = style_remap if style_remap is not None else _STYLE_REMAPS
     elements = list(pdc_text)
     i = 0
 
@@ -540,7 +555,7 @@ def classify_pandoc_body(pdc_text):
             continue  # drop pandoc's own TOC
         if el.tag in (T('p'), T('h')):
             sn = _get_sn(el)
-            new_sn = _STYLE_REMAPS.get(sn)
+            new_sn = style_remap.get(sn)
             if new_sn:
                 el.set(T('style-name'), new_sn)
         body.append(el)
@@ -627,7 +642,73 @@ def _rewrite_style_refs(elements, name_map):
 _H1_PB_STYLE = 'SW_Heading1_Pagebreak'
 _H1_PARENT   = 'Heading_20_1'
 
-def _ensure_h1_pagebreak_style(auto_styles):
+
+def _resolve_named_style_and_display(tmpl_root, styles_root, style_name, max_depth=6):
+    """Walk a style's parent-style-name chain to find (a) the nearest REAL
+    NAMED style (defined in styles.xml's <office:styles>, as opposed to an
+    automatic style in content.xml) and (b) a human-readable
+    style:display-name found along the way.
+
+    (a) matters because ODF's style:parent-style-name is meant to reference a
+    common/named style, not another automatic one — book.odt's TOC heading is
+    styled with the AUTOMATIC style "P5", whose own parent-style-name is the
+    NAMED style "Heading_20_1_20_-_20_exclude_20_from_20_TOC"; our synthetic
+    page-break variant should be parented to the latter, not to "P5" directly.
+
+    (b) matters for LibreOffice's <loext:style-ref> header fields, which look
+    up a heading by its human-readable name — "Heading_20_1_20_-_20_exclude_
+    20_from_20_TOC"'s display-name is "Heading 1 - exclude from TOC", the
+    exact text such a field's text:ref-name carries. Giving our synthetic
+    style the WRONG display name (or none) is why those fields show "Error:
+    Reference source not found", and referencing an undefined canonical name
+    (book.odt has no style literally named "TOCHeading") is why a heading
+    renders unstyled as "Default Paragraph Style".
+
+    Returns (resolved_named_style, display_name); display_name falls back to
+    a best-effort underscore-to-space rendering of whatever name was last
+    resolved when no explicit style:display-name is found anywhere.
+    """
+    auto = tmpl_root.find('.//' + O('automatic-styles')) if tmpl_root is not None else None
+    seen = set()
+    name = style_name
+    display_name = None
+    resolved_named = style_name
+    for _ in range(max_depth):
+        if not name or name in seen:
+            break
+        seen.add(name)
+        named_el = None
+        if styles_root is not None:
+            for child in styles_root.iter(S('style')):
+                if child.get(S('name')) == name:
+                    named_el = child
+                    break
+        if named_el is not None:
+            resolved_named = name
+            if display_name is None:
+                display_name = named_el.get(S('display-name'))
+            break   # a real named style — stop walking further up
+        auto_el = None
+        if auto is not None:
+            for child in auto:
+                if child.get(S('name')) == name:
+                    auto_el = child
+                    break
+        if auto_el is None:
+            break
+        if display_name is None:
+            display_name = auto_el.get(S('display-name'))
+        parent = auto_el.get(S('parent-style-name'))
+        if not parent:
+            break
+        name = parent
+    if not display_name:
+        display_name = (resolved_named or style_name or '') \
+            .replace('_20_', ' ').replace('_2d_', '-')
+    return resolved_named, display_name
+
+
+def _ensure_h1_pagebreak_style(auto_styles, display_name=None):
     """Inject the SW_Heading1_Pagebreak automatic style if absent."""
     for child in auto_styles:
         if child.get(S('name')) == _H1_PB_STYLE:
@@ -636,10 +717,12 @@ def _ensure_h1_pagebreak_style(auto_styles):
     style_el.set(S('name'),                _H1_PB_STYLE)
     style_el.set(S('family'),              'paragraph')
     style_el.set(S('parent-style-name'),   _H1_PARENT)
+    if display_name:
+        style_el.set(S('display-name'), display_name)
     pp = etree.SubElement(style_el, S('paragraph-properties'))
     pp.set(F('break-before'), 'page')
 
-def apply_page_breaks(body_elements, tmpl_root):
+def apply_page_breaks(body_elements, tmpl_root, display_name=None):
     """Set the page-break style on all H1 elements in body_elements.
     Also injects the style definition into tmpl_root's automatic-styles.
     Chapter headings already wrapped in <text:list> by apply_chapter_numbering_odt
@@ -647,7 +730,7 @@ def apply_page_breaks(body_elements, tmpl_root):
     carry their own page-break-bearing style."""
     auto = tmpl_root.find('.//' + O('automatic-styles'))
     if auto is not None:
-        _ensure_h1_pagebreak_style(auto)
+        _ensure_h1_pagebreak_style(auto, display_name)
     for el in body_elements:
         if el.tag == T('h') and el.get(T('outline-level'), '') == '1':
             el.set(T('style-name'), _H1_PB_STYLE)
@@ -689,7 +772,7 @@ def _enable_chapter_outline_numbering(styles_root, fmt):
 
 _CHAPTER_H_STYLE = 'SW_Chapter_Heading'
 
-def _ensure_chapter_heading_style(auto_styles, new_page):
+def _ensure_chapter_heading_style(auto_styles, new_page, display_name=None):
     """SW_Chapter_Heading: inherits Heading 1 but with list-style-name="" so the
     template's paragraph-level chapter list does NOT also number it — only the
     <text:outline-style> chapter numbering does. Page break when per-heading
@@ -702,12 +785,14 @@ def _ensure_chapter_heading_style(auto_styles, new_page):
     se.set(S('family'),            'paragraph')
     se.set(S('parent-style-name'), _H1_PARENT)
     se.set(T('list-style-name'),   '')
+    if display_name:
+        se.set(S('display-name'), display_name)
     if new_page:
         pp = etree.SubElement(se, S('paragraph-properties'))
         pp.set(F('break-before'), 'page')
 
 
-def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings):
+def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings, display_name=None):
     """Strip the literal 'Chapter N:' prefix from numbered chapter Heading 1s so
     ODF chapter numbering (the outline-style enabled by
     _enable_chapter_outline_numbering) supplies 'Chapter N.'. Numbered chapters
@@ -727,7 +812,7 @@ def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings):
         stripped = strip_chapter_prefix(txt)
         if parse_chapter_number(txt) > 0 and stripped != txt:
             if auto is not None:
-                _ensure_chapter_heading_style(auto, new_page_headings)
+                _ensure_chapter_heading_style(auto, new_page_headings, display_name)
             _set_plain_text(el, stripped)
             el.set(T('style-name'), _CHAPTER_H_STYLE)
             numbered += 1
@@ -888,33 +973,51 @@ def _ensure_toc_pagebreak_style(auto_styles):
     pp = etree.SubElement(style_el, S('paragraph-properties'))
     pp.set(F('break-before'), 'page')
 
-def _ensure_toc_heading_pb_style(auto_styles):
-    """Inject SW_TOCHeading_Pagebreak: inherits TOCHeading + fo:break-before=page.
-    Applying this to the TOC heading avoids the need for a separate blank
-    spacer paragraph before it."""
+def _ensure_toc_heading_pb_style(auto_styles, parent=None, display_name=None):
+    """Inject SW_TOCHeading_Pagebreak: inherits the TOC heading's OWN style +
+    fo:break-before=page. Applying this to the TOC heading avoids the need
+    for a separate blank spacer paragraph before it.
+
+    `parent` defaults to the canonical _TOCHEADING_STYLE ('TOCHeading', as
+    used by document.odt/article.odt) — but book.odt has no such style; its
+    own TOC heading is styled after "Heading 1 - exclude from TOC" instead.
+    merge_odt passes the ACTUAL template's own TOC-heading style here so a
+    template that names it differently doesn't end up parented to an
+    undefined style (silently rendered "Default Paragraph Style") and keeps
+    the display name book.odt's own header <loext:style-ref> fields expect.
+    """
+    parent = parent or _TOCHEADING_STYLE
     for child in auto_styles:
         if child.get(S('name')) == _TOC_H_PB_STYLE:
             return
     style_el = etree.SubElement(auto_styles, S('style'))
     style_el.set(S('name'),               _TOC_H_PB_STYLE)
     style_el.set(S('family'),             'paragraph')
-    style_el.set(S('parent-style-name'),  _TOCHEADING_STYLE)
+    style_el.set(S('parent-style-name'),  parent)
+    if display_name:
+        style_el.set(S('display-name'), display_name)
     pp = etree.SubElement(style_el, S('paragraph-properties'))
     pp.set(F('break-before'), 'page')
 
 _TOF_H_PB_STYLE = 'SW_FigureIndexHeading_Pagebreak'
 
-def _ensure_tof_heading_pb_style(auto_styles):
-    """Inject SW_FigureIndexHeading_Pagebreak: inherits the ToF heading style +
-    fo:break-before=page, so the Table of Figures heading starts a new page
-    without a separate spacer paragraph."""
+def _ensure_tof_heading_pb_style(auto_styles, parent=None, display_name=None):
+    """Inject SW_FigureIndexHeading_Pagebreak: inherits the ToF heading's OWN
+    style + fo:break-before=page, so the Table of Figures heading starts a
+    new page without a separate spacer paragraph. See
+    _ensure_toc_heading_pb_style for why `parent`/`display_name` are resolved
+    per-template rather than hard-coded (book.odt styles its ToF heading
+    after plain "Heading 1", not the canonical _TOF_HEADING_STYLE)."""
+    parent = parent or _TOF_HEADING_STYLE
     for child in auto_styles:
         if child.get(S('name')) == _TOF_H_PB_STYLE:
             return
     style_el = etree.SubElement(auto_styles, S('style'))
     style_el.set(S('name'),              _TOF_H_PB_STYLE)
     style_el.set(S('family'),            'paragraph')
-    style_el.set(S('parent-style-name'), _TOF_HEADING_STYLE)
+    style_el.set(S('parent-style-name'), parent)
+    if display_name:
+        style_el.set(S('display-name'), display_name)
     pp = etree.SubElement(style_el, S('paragraph-properties'))
     pp.set(F('break-before'), 'page')
 
@@ -1116,6 +1219,41 @@ def merge_odt(template_path, input_path, output_path,
         except Exception as e:
             print(f'WARNING: could not load fallback ToF from document.odt: {e}')
 
+    # Resolve the real style-name/display-name each page-break-variant style
+    # should present as, PER THIS TEMPLATE, instead of assuming the canonical
+    # document.odt/article.odt names — book.odt names its TOC heading style
+    # "Heading 1 - exclude from TOC" and its ToF heading after plain
+    # "Heading 1", not the generic 'TOCHeading'/'Figure_20_Index_20_Heading'.
+    # Getting the display-name right also matters for LibreOffice's
+    # <loext:style-ref> header fields (see _resolve_named_style_and_display).
+    _, _h1_display_name = _resolve_named_style_and_display(
+        tmpl_root, styles_root, _H1_PARENT)
+
+    if layout['toc_heading'] is not None:
+        _toc_parent, _toc_display_name = _resolve_named_style_and_display(
+            tmpl_root, styles_root, _get_sn(layout['toc_heading']))
+    else:
+        _toc_parent, _toc_display_name = _TOCHEADING_STYLE, None
+
+    if layout['tof_heading'] is not None:
+        _tof_style = _get_sn(layout['tof_heading'])
+        if _tof_from_fallback:
+            # Borrowed from the bundled document.odt — resolve against ITS
+            # OWN roots, not this (book.odt) template's.
+            try:
+                with zipfile.ZipFile(bundled_template('document.odt')) as _z:
+                    _fb_content = etree.fromstring(_z.read('content.xml'))
+                    _fb_styles = etree.fromstring(_z.read('styles.xml'))
+                _tof_parent, _tof_display_name = _resolve_named_style_and_display(
+                    _fb_content, _fb_styles, _tof_style)
+            except Exception:
+                _tof_parent, _tof_display_name = _TOF_HEADING_STYLE, None
+        else:
+            _tof_parent, _tof_display_name = _resolve_named_style_and_display(
+                tmpl_root, styles_root, _tof_style)
+    else:
+        _tof_parent, _tof_display_name = _TOF_HEADING_STYLE, None
+
     # ── Fill title block ───────────────────────────────────────────────────
     filled_title = _fill_title_block(
         layout['title_block'], title, subtitle, author, date_val)
@@ -1132,8 +1270,33 @@ def merge_odt(template_path, input_path, output_path,
     if all_extra:
         _append_extra_sections(filled_title, all_extra)
 
+    # Resolve semantic-role style aliases (currently: the blockquote style)
+    # against THIS template's own defined styles — parallel to the DOCX merge.
+    # pandoc's ODT writer always emits 'Quotations' for a blockquote; a
+    # template that instead defines its own differently-named equivalent
+    # (book.odt has "Block_20_quote", converted from the DOCX original) gets
+    # its own style. See sw_merge_helpers.STYLE_ALIASES.
+    def _odt_style_display_name(style_el):
+        return style_el.get(S('display-name')) or style_el.get(S('name'))
+
+    _style_remap = dict(STYLE_REMAP['odt'])
+    _extra_style_names_for_aliases = []
+    if styles_root is not None:
+        _defined_styles = [
+            (st.get(S('name')), _odt_style_display_name(st))
+            for st in styles_root.iter(S('style'))
+            if st.get(S('family')) == 'paragraph'
+        ]
+        for _pandoc_name, (_candidates, _fallback) in STYLE_ALIASES['odt'].items():
+            _target = resolve_style_alias(_defined_styles, _candidates, _fallback)
+            _style_remap[_pandoc_name] = _target
+            if _target == _fallback:
+                # Nothing in the template matched — make sure the fallback
+                # style actually exists (borrowed from document.odt).
+                _extra_style_names_for_aliases.append(_fallback)
+
     # ── Classify pandoc body ───────────────────────────────────────────────
-    body_elements = classify_pandoc_body(pdc_text)
+    body_elements = classify_pandoc_body(pdc_text, style_remap=_style_remap)
 
     # Roman-numeral frontmatter: locate the heading where arabic "page 1"
     # begins, using the SAME shared decision as the DOCX merge. The switch
@@ -1174,7 +1337,7 @@ def merge_odt(template_path, input_path, output_path,
 
     # ── Apply page breaks ──────────────────────────────────────────────────
     if new_page_headings:
-        apply_page_breaks(body_elements, tmpl_root)
+        apply_page_breaks(body_elements, tmpl_root, display_name=_h1_display_name)
 
     # ── Chapter numbering (ODF outline numbering) ──────────────────────────
     # Strip the literal "Chapter N:" prefix; ODF chapter numbering supplies
@@ -1185,7 +1348,8 @@ def merge_odt(template_path, input_path, output_path,
     _chaptered = False
     if layout['chapter_number_format']:
         _chaptered = apply_chapter_numbering_odt(
-            body_elements, tmpl_root, new_page_headings)
+            body_elements, tmpl_root, new_page_headings,
+            display_name=_h1_display_name)
         if _chaptered and styles_root is not None:
             _enable_chapter_outline_numbering(
                 styles_root, layout['chapter_number_format'])
@@ -1214,7 +1378,8 @@ def merge_odt(template_path, input_path, output_path,
         if new_page_headings:
             auto = tmpl_root.find('.//' + O('automatic-styles'))
             if auto is not None:
-                _ensure_toc_heading_pb_style(auto)
+                _ensure_toc_heading_pb_style(auto, parent=_toc_parent,
+                                             display_name=_toc_display_name)
         if layout['toc_heading'] is not None:
             toc_h = copy.deepcopy(layout['toc_heading'])
             if new_page_headings:
@@ -1230,7 +1395,8 @@ def merge_odt(template_path, input_path, output_path,
         if new_page_headings:
             auto = tmpl_root.find('.//' + O('automatic-styles'))
             if auto is not None:
-                _ensure_toc_heading_pb_style(auto)
+                _ensure_toc_heading_pb_style(auto, parent=_toc_parent,
+                                             display_name=_toc_display_name)
         h = etree.Element(T('h'))
         h.set(T('style-name'), _TOC_H_PB_STYLE if new_page_headings else _H1_PARENT)
         h.set(T('outline-level'), '1')
@@ -1245,7 +1411,8 @@ def merge_odt(template_path, input_path, output_path,
         if new_page_headings:
             auto = tmpl_root.find('.//' + O('automatic-styles'))
             if auto is not None:
-                _ensure_tof_heading_pb_style(auto)
+                _ensure_tof_heading_pb_style(auto, parent=_tof_parent,
+                                             display_name=_tof_display_name)
         if layout['tof_heading'] is not None:
             tof_h = copy.deepcopy(layout['tof_heading'])
             if new_page_headings:
@@ -1290,7 +1457,7 @@ def merge_odt(template_path, input_path, output_path,
         if new_page_headings:
             auto = tmpl_root.find('.//' + O('automatic-styles'))
             if auto is not None:
-                _ensure_h1_pagebreak_style(auto)
+                _ensure_h1_pagebreak_style(auto, _h1_display_name)
         _bh = etree.Element(T('h'))
         _bh.set(T('style-name'), _bibl_style)
         _bh.set(T('outline-level'), '1')
@@ -1325,6 +1492,17 @@ def merge_odt(template_path, input_path, output_path,
                 _src)
         except Exception as e:
             print(f'WARNING: could not inject ToF styles: {e}')
+
+    # Same for a style alias fallback (e.g. no blockquote-equivalent style
+    # found in the template) — borrow the bundled document.odt's version.
+    if _extra_style_names_for_aliases and 'styles.xml' in z_data:
+        try:
+            with zipfile.ZipFile(bundled_template('document.odt')) as _z:
+                _src = _z.read('styles.xml')
+            z_data['styles.xml'] = ensure_odt_styles(
+                z_data['styles.xml'], _extra_style_names_for_aliases, _src)
+        except Exception as e:
+            print(f'WARNING: could not inject style-alias fallback styles: {e}')
 
     # With ODF chapter numbering on, exclude every non-chapter level-1 heading
     # (TOC, ToF, Bibliography, and the frontmatter headings marked earlier) from

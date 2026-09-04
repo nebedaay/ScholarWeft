@@ -30,8 +30,9 @@ export interface ExportOptions {
   outputFilename: string;
   /** PDF only: keep the intermediate docx/odt after conversion. */
   keepIntermediate: boolean;
-  /** PDF only: intermediate format to export through ('odt' or 'docx'). */
-  pdfIntermediate: 'docx' | 'odt';
+  /** Non-md formats only: keep the compiled markdown instead of deleting it
+   *  once the export is done. */
+  keepIntermediateMd: boolean;
   /** IDs of StyleMappings enabled for this export (subset of settings.styleMappings). */
   enabledMappingIds: string[];
 }
@@ -51,7 +52,7 @@ interface FileExportHistory {
   outputDir: string;
   outputFilename: string;
   keepIntermediate: boolean;
-  pdfIntermediate: 'docx' | 'odt';
+  keepIntermediateMd: boolean;
   enabledMappingIds: string[];
 }
 
@@ -120,8 +121,8 @@ export class ExportModal extends Modal {
   private romanStartInput!: HTMLInputElement;
   private keepIntermediateCb!: HTMLInputElement;
   private keepIntermediateRow!: HTMLElement;
-  private pdfIntermediateSelect!: HTMLSelectElement;
-  private pdfIntermediateRow!: HTMLElement;
+  private keepIntermediateMdCb!: HTMLInputElement;
+  private keepIntermediateMdRow!: HTMLElement;
   /** Map from StyleMapping.id → checkbox, for reading enabled state in options(). */
   private mappingCheckboxes: Map<string, HTMLInputElement> = new Map();
   private runButton!: HTMLButtonElement;
@@ -334,7 +335,9 @@ export class ExportModal extends Modal {
       this.romanStartRow.style.display = this.romanFrontmatterCb.checked ? '' : 'none';
     });
 
-    // ── PDF-specific controls (hidden unless format = pdf) ────────────────
+    // ── PDF-specific: keep the intermediate ODT/DOCX (hidden unless format
+    //    = pdf). The intermediate format itself is not a choice — it's
+    //    whatever format the chosen template is.
     this.keepIntermediateRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
     this.keepIntermediateCb = this.keepIntermediateRow.createEl('input', { type: 'checkbox' });
     this.keepIntermediateCb.id = 'lc-export-keep-inter';
@@ -344,16 +347,16 @@ export class ExportModal extends Modal {
     keepInterLbl.htmlFor = 'lc-export-keep-inter';
     this.keepIntermediateCb.checked = fileHistory?.keepIntermediate ?? false;
 
-    this.pdfIntermediateRow = contentEl.createDiv({ cls: 'lc-export-row' });
-    this.pdfIntermediateRow.style.marginTop = '8px';
-    this.pdfIntermediateRow.createEl('label', { text: 'Intermediate format' });
-    this.pdfIntermediateSelect = this.pdfIntermediateRow.createEl('select');
-    this.pdfIntermediateSelect.style.cssText = 'width:100%;margin-top:4px';
-    for (const [val, lbl] of [['odt', 'ODT (recommended)'], ['docx', 'DOCX']] as const) {
-      const o = this.pdfIntermediateSelect.createEl('option', { text: lbl });
-      o.value = val;
-    }
-    this.pdfIntermediateSelect.value = fileHistory?.pdfIntermediate ?? 'odt';
+    // ── Keep the compiled markdown (hidden when format = md — there it IS
+    //    the output, not an intermediate) ─────────────────────────────────
+    this.keepIntermediateMdRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.keepIntermediateMdCb = this.keepIntermediateMdRow.createEl('input', { type: 'checkbox' });
+    this.keepIntermediateMdCb.id = 'lc-export-keep-inter-md';
+    const keepInterMdLbl = this.keepIntermediateMdRow.createEl('label', {
+      text: 'Keep intermediate compiled markdown',
+    });
+    keepInterMdLbl.htmlFor = 'lc-export-keep-inter-md';
+    this.keepIntermediateMdCb.checked = fileHistory?.keepIntermediateMd ?? false;
 
     // ── Style mappings (collapsible, only when mappings exist) ───────────
     this.buildMappingsSection(contentEl, fileHistory?.enabledMappingIds);
@@ -483,10 +486,10 @@ export class ExportModal extends Modal {
     this.romanStartRow.style.display =
       !isMd && this.romanFrontmatterCb.checked ? '' : 'none';
     // footnotesCb stays active — the compile step still uses it.
-    // PDF-specific rows: show only when format is pdf.
-    const pdfDisplay = isPdf ? '' : 'none';
-    this.keepIntermediateRow.style.display  = pdfDisplay;
-    this.pdfIntermediateRow.style.display   = pdfDisplay;
+    // PDF-specific row: show only when format is pdf.
+    this.keepIntermediateRow.style.display = isPdf ? '' : 'none';
+    // Compiled-markdown row: show for any exported (non-md) format.
+    this.keepIntermediateMdRow.style.display = isMd ? 'none' : '';
   }
 
   /**
@@ -702,7 +705,7 @@ export class ExportModal extends Modal {
       outputDir: this.outputDirInput.value.trim(),
       outputFilename: this.filenameInput.value.trim(),
       keepIntermediate: this.keepIntermediateCb.checked,
-      pdfIntermediate: this.pdfIntermediateSelect.value as 'docx' | 'odt',
+      keepIntermediateMd: this.keepIntermediateMdCb.checked,
       enabledMappingIds: Array.from(this.mappingCheckboxes.entries())
         .filter(([, cb]) => cb.checked)
         .map(([id]) => id),
@@ -732,7 +735,7 @@ export class ExportModal extends Modal {
       outputDir:        opts.outputDir,
       outputFilename:   opts.outputFilename,
       keepIntermediate: opts.keepIntermediate,
-      pdfIntermediate:  opts.pdfIntermediate,
+      keepIntermediateMd: opts.keepIntermediateMd,
       enabledMappingIds: opts.enabledMappingIds,
     };
     const s = this.plugin.settings as any;

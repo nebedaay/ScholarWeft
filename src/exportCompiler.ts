@@ -167,10 +167,13 @@ export interface CompilerOptions {
   /** Desired output filename (basename.ext). When set and different from the
    *  compiler's default name, the output file is renamed after compilation. */
   outputFilename?: string;
-  /** PDF only: keep the intermediate docx/odt after PDF conversion. */
+  /** PDF only: keep the intermediate docx/odt after PDF conversion. The
+   *  intermediate format itself is NOT user-selectable — it's always the
+   *  format of the chosen template (auto-detected by DocumentCompiler.py). */
   keepIntermediate?: boolean;
-  /** PDF only: intermediate format ('odt' default, 'docx' alternative). */
-  pdfIntermediate?: 'docx' | 'odt';
+  /** Non-md formats only: keep the compiled markdown DocumentCompiler
+   *  produces from an outline, instead of deleting it once export is done. */
+  keepIntermediateMd?: boolean;
   /** IDs of StyleMappings to apply on this export (subset of settings.styleMappings). */
   enabledMappingIds?: string[];
 }
@@ -242,10 +245,10 @@ export async function runDocumentCompiler(
   if (isExport) {
     args.push('--export');
     args.push('--format', opts.format); // 'docx', 'odt', or 'pdf'
-    if (opts.format === 'pdf') {
-      args.push('--pdf-intermediate', opts.pdfIntermediate ?? 'odt');
-      if (opts.keepIntermediate) args.push('--keep-intermediate');
+    if (opts.format === 'pdf' && opts.keepIntermediate) {
+      args.push('--keep-intermediate');
     }
+    if (opts.keepIntermediateMd) args.push('--keep-compiled-md');
   }
   args.push(opts.toc ? '--toc' : '--no-toc');
   args.push(opts.tof ? '--list-of-figures' : '--no-list-of-figures');

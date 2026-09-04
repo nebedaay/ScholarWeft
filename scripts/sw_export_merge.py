@@ -55,7 +55,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sw_merge_helpers import (
     tag, get_style, set_style, collect_ids, mint_id, ensure_para_id,
     split_paragraphs, find_bibliography_range, strip_bibliography, ZOTERO_BIBL_INSTR,
-    resize_images, STYLE_REMAP, resolve_cover, process_figures,
+    resize_images, STYLE_REMAP, STYLE_ALIASES, resolve_style_alias,
+    resolve_cover, process_figures,
     title_case as _title_case, strip_markdown as _strip_markdown,
     is_main_start, is_toc_heading, is_tof_heading, strip_chapter_prefix,
     find_page_reset_index, bundled_template, ensure_docx_styles,
@@ -657,7 +658,7 @@ def transform_figures(sections, chapter_scoped, has_alttext_style):
 
 def build_body(template_body, layout, sections, used, has_figures, toc=False,
                tof=False, new_page_headings=True, restart_footnotes=True,
-               extra_sections=None, has_bibliography=False):
+               extra_sections=None, has_bibliography=False, style_remap=None):
     """
     Rebuild the template body:
       1. title block (cover values filled by the caller)
@@ -822,11 +823,12 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
             # Remap pandoc-specific styles to template names.
             if b.tag == tag('p'):
                 st = get_style(b)
-                # Pandoc emits blockquotes as "Block Text" (styleId BlockText)
-                # and first paragraphs as FirstParagraph; remap both onto the
-                # template's styles. Table shared with ODT via
-                # sw_merge_helpers.STYLE_REMAP.
-                remap = STYLE_REMAP['docx']
+                # Pandoc emits blockquotes as styleId "BlockText" and first
+                # paragraphs as "FirstParagraph"; remap both onto the
+                # template's styles. `style_remap` is STYLE_REMAP['docx']
+                # (shared with ODT) with 'BlockText' resolved per-template by
+                # resolve_style_alias in merge() — see STYLE_ALIASES.
+                remap = style_remap or STYLE_REMAP['docx']
                 if st in remap:
                     set_style(b, remap[st])
                 elif st == 'Abstract' and not _abstract_heading_injected:
@@ -938,6 +940,7 @@ def merge(template_path, input_path, output_path, title=None, author=None,
           roman_frontmatter=False, page1_starts_with=''):
     with zipfile.ZipFile(template_path) as z:
         tmpl_doc = etree.fromstring(z.read('word/document.xml'))
+        _tmpl_styles_bytes = z.read('word/styles.xml') if 'word/styles.xml' in z.namelist() else b''
     tmpl_body = tmpl_doc.find(tag('body'))
     used = collect_ids(tmpl_doc)
 
@@ -946,6 +949,31 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     pdc_body, pdc_children = parse_body(pdc_doc)
 
     layout = extract_template_layout(template_path)
+
+    # Resolve semantic-role style aliases (currently: the blockquote style)
+    # against THIS template's own defined styles, so a template that names its
+    # blockquote style differently from pandoc's fixed output id (book.docx
+    # has its own "Blockquote"/"Block quote" instead of document.docx's
+    # "BlockText") gets its own style instead of an undefined-style fallback
+    # to Normal. See sw_merge_helpers.STYLE_ALIASES.
+    def _style_display_name(style_el):
+        name_el = style_el.find(tag('name'))
+        return name_el.get(tag('val')) if name_el is not None else None
+
+    _style_remap = dict(STYLE_REMAP['docx'])
+    _extra_style_ids_for_aliases = []
+    if _tmpl_styles_bytes:
+        _defined_styles = [
+            (s.get(tag('styleId')), _style_display_name(s))
+            for s in etree.fromstring(_tmpl_styles_bytes).findall(tag('style'))
+        ]
+        for _pandoc_id, (_candidates, _fallback) in STYLE_ALIASES['docx'].items():
+            _target = resolve_style_alias(_defined_styles, _candidates, _fallback)
+            _style_remap[_pandoc_id] = _target
+            if _target == _fallback:
+                # Nothing in the template matched — make sure the fallback
+                # style actually exists (borrowed from document.docx).
+                _extra_style_ids_for_aliases.append(_fallback)
 
     # When the user asked for a table of figures but their template has no ToF
     # structure, borrow the heading + field code from the bundled document.docx
@@ -1033,7 +1061,7 @@ def merge(template_path, input_path, output_path, title=None, author=None,
                new_page_headings=new_page_headings,
                restart_footnotes=restart_footnotes,
                extra_sections=all_extra if not _has_structured_title else None,
-               has_bibliography=_has_bibliography)
+               has_bibliography=_has_bibliography, style_remap=_style_remap)
 
     # Remove ORPHANED bookmarkEnd elements: any end whose matching
     # bookmarkStart is absent from the final body. This happens when a
@@ -1093,7 +1121,7 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     _write_docx(template_path, output_path, tmpl_doc, new_footnotes,
                 short_title=short_title, author=author, title=title,
                 subtitle=subtitle, input_path=input_path,
-                extra_style_ids=_tof_style_ids)
+                extra_style_ids=_tof_style_ids + _extra_style_ids_for_aliases)
 
 def _fill_title_block(title_block, title, subtitle, author, date_val):
     """Replace placeholder text in the template title block (a list of deep
