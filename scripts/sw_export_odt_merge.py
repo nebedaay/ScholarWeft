@@ -318,6 +318,12 @@ def extract_template_layout(template_path):
     chapter_number_format = _detect_chapter_number_format(
         etree.fromstring(styles_bytes) if styles_bytes else None, tmpl_root)
 
+    # Master page the template's OWN numbered-chapter sample headings switch
+    # to (book.odt: "Converted5" on its first sample chapter). Needed so each
+    # EXPORTED chapter can re-trigger that master's "different first page"
+    # header/footer-first treatment — see apply_chapter_numbering_odt.
+    chapter_master = _detect_chapter_master(tmpl_root)
+
     return {
         'title_block': title_block,
         'toc_heading': toc_heading,
@@ -327,17 +333,31 @@ def extract_template_layout(template_path):
         'has_alttext_style': has_alttext_style,
         'caption_style': caption_style,
         'chapter_number_format': chapter_number_format,
+        'chapter_master': chapter_master,
         'content_bytes': content_bytes,
         'styles_bytes': styles_bytes,
     }
 
 
 def _detect_chapter_number_format(styles_root, tmpl_root):
-    """Find the {prefix, num_format, suffix} the template uses to number chapter
-    headings. Looks at the list style bound to Heading 1 (style:list-style-name)
-    and any list style wrapping a level-1 <text:h> in the template body.
-    Returns None when the template does not number its chapter headings."""
-    def _fmt(list_style_el):
+    """Find the {prefix, num_format, suffix, direct} the template uses to
+    number chapter headings. Looks at the list style bound to Heading 1
+    (style:list-style-name) and any list style wrapping a level-1 <text:h> in
+    the template body. Returns None when the template does not number its
+    chapter headings.
+
+    `direct` is True when Heading_20_1/Heading ITSELF carries the
+    list-style-name (numbering built directly into the heading style — what
+    book.odt does as of 2026-09-04), False when it was only found via a
+    <text:list> wrapping a sample numbered heading (the template numbers by
+    wrapping, not by the style). apply_chapter_numbering_odt uses this to
+    decide whether the numbered-chapter auto-style should PRESERVE the
+    heading's own list-style-name (direct case — clearing it would silence
+    the only numbering mechanism the template has) or blank it (wrap case —
+    our merge doesn't replicate the wrap, so numbering instead comes from the
+    <text:outline-style> fallback that applies to headings with no list-style
+    of their own)."""
+    def _fmt(list_style_el, direct):
         lvl = list_style_el.find(T('list-level-style-number'))
         if lvl is None:
             return None
@@ -348,29 +368,71 @@ def _detect_chapter_number_format(styles_root, tmpl_root):
             'num_list_format': lvl.get(
                 '{urn:org:documentfoundation:names:experimental:'
                 'office:xmlns:loext:1.0}num-list-format'),
+            'direct': direct,
         }
-    # candidate list-style names
-    names = set()
+    # candidate list-style names, tagged by how we found them
+    direct_names = set()
+    wrap_names = set()
     for root in (styles_root, tmpl_root):
         if root is None:
             continue
         for st in root.iter(S('style')):
             if st.get(S('name')) in ('Heading_20_1', 'Heading') \
-                    and st.get(T('list-style-name')):
-                names.add(st.get(T('list-style-name')))
+                    and st.get(S('list-style-name')):
+                direct_names.add(st.get(S('list-style-name')))
     for lst in tmpl_root.iter(T('list')):
         h = lst.find(T('list-item') + '/' + T('h'))
         if h is not None and h.get(T('outline-level'), '') == '1' \
                 and lst.get(T('style-name')):
-            names.add(lst.get(T('style-name')))
-    for root in (styles_root, tmpl_root):
-        if root is None:
-            continue
-        for ls in root.iter(T('list-style')):
-            if ls.get(S('name')) in names:
-                f = _fmt(ls)
-                if f:
-                    return f
+            wrap_names.add(lst.get(T('style-name')))
+    for names, direct in ((direct_names, True), (wrap_names, False)):
+        for root in (styles_root, tmpl_root):
+            if root is None:
+                continue
+            for ls in root.iter(T('list-style')):
+                if ls.get(S('name')) in names:
+                    f = _fmt(ls, direct)
+                    if f:
+                        return f
+    return None
+
+
+def _detect_chapter_master(tmpl_root):
+    """Return the master-page-name the template's OWN first main-body chapter
+    heading (the one right after Introduction/Chapter 1/frontmatter — same
+    reset point find_page_reset_index would pick) switches to, via its
+    auto-style's style:master-page-name. None if the template assigns no
+    such master.
+
+    Doesn't use parse_chapter_number on the heading TEXT — book.odt's own
+    sample chapters ("What's It All About?", "How It All Began") number
+    purely via the style now (see _detect_chapter_number_format's `direct`),
+    so their text carries no "Chapter N" marker to match at all. Locating
+    "the heading after the frontmatter reset point" with the SAME
+    find_page_reset_index used for roman/arabic numbering finds the right
+    heading regardless of whether its numbering is text-based or style-based.
+
+    Rationale for why this matters: ODF's "different first page"
+    (header-first/footer-first vs. header/footer) only applies on the page
+    where a style:master-page-name is EXPLICITLY assigned — every subsequent
+    page just continues that same master's regular header/footer, even
+    across an fo:break-before page break, until another explicit
+    master-page-name switch. book.odt assigns a fresh master (e.g.
+    "Converted5") to each of its OWN sample chapter headings for exactly this
+    reason; our merge must do the same for every EXPORTED chapter (there's no
+    way to give each one its own unique template-authored master — a note
+    can have any number of chapters — so the one found here is reused for
+    all of them, re-triggering "first page" treatment each time it's
+    (re-)assigned)."""
+    h1_els = [h for h in tmpl_root.iter(T('h')) if h.get(T('outline-level'), '') == '1']
+    h1_texts = [_elem_text(h) for h in h1_els]
+    idx = find_page_reset_index(h1_texts)
+    if idx is None or idx + 1 >= len(h1_els):
+        return None
+    next_h = h1_els[idx + 1]
+    for st in tmpl_root.iter(S('style')):
+        if st.get(S('family')) == 'paragraph' and st.get(S('name')) == next_h.get(T('style-name')):
+            return st.get(S('master-page-name'))
     return None
 
 # ── title block fill ──────────────────────────────────────────────────────────
@@ -772,11 +834,23 @@ def _enable_chapter_outline_numbering(styles_root, fmt):
 
 _CHAPTER_H_STYLE = 'SW_Chapter_Heading'
 
-def _ensure_chapter_heading_style(auto_styles, new_page, display_name=None):
-    """SW_Chapter_Heading: inherits Heading 1 but with list-style-name="" so the
-    template's paragraph-level chapter list does NOT also number it — only the
-    <text:outline-style> chapter numbering does. Page break when per-heading
-    page breaks are on."""
+def _ensure_chapter_heading_style(auto_styles, new_page, display_name=None,
+                                  clear_list_style=True):
+    """SW_Chapter_Heading: inherits Heading 1. Page break when per-heading
+    page breaks are on.
+
+    clear_list_style: True (the historical default) sets list-style-name=""
+    so the template's paragraph-level chapter list does NOT also number it —
+    only <text:outline-style>'s chapter numbering does. This is correct ONLY
+    when the template's chapter numbering was detected via a <text:list>
+    WRAPPING a sample heading rather than attached to Heading_20_1 itself
+    (_detect_chapter_number_format's `direct` is False): the wrap isn't
+    reproduced by this merge, so outline-style's numbering — which applies to
+    any heading with no list-style of its own — is the only thing left to
+    number it. When numbering is instead built directly into Heading_20_1's
+    OWN list-style-name (book.odt as of 2026-09-04: `direct` True), clearing
+    it here would silence the template's only numbering mechanism and leave
+    numbered chapters unnumbered — pass False to inherit it unchanged."""
     for child in auto_styles:
         if child.get(S('name')) == _CHAPTER_H_STYLE:
             return
@@ -784,7 +858,8 @@ def _ensure_chapter_heading_style(auto_styles, new_page, display_name=None):
     se.set(S('name'),              _CHAPTER_H_STYLE)
     se.set(S('family'),            'paragraph')
     se.set(S('parent-style-name'), _H1_PARENT)
-    se.set(T('list-style-name'),   '')
+    if clear_list_style:
+        se.set(S('list-style-name'), '')
     if display_name:
         se.set(S('display-name'), display_name)
     if new_page:
@@ -792,16 +867,28 @@ def _ensure_chapter_heading_style(auto_styles, new_page, display_name=None):
         pp.set(F('break-before'), 'page')
 
 
-def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings, display_name=None):
+def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings,
+                                display_name=None, direct_list_style=False,
+                                chapter_master=None):
     """Strip the literal 'Chapter N:' prefix from numbered chapter Heading 1s so
-    ODF chapter numbering (the outline-style enabled by
-    _enable_chapter_outline_numbering) supplies 'Chapter N.'. Numbered chapters
-    get SW_Chapter_Heading (suppresses the template's paragraph-level chapter
-    list so it isn't double-numbered). Non-numbered Heading 1s (Preface,
-    Introduction, Conclusion, TOC, ToF, Bibliography) get
-    text:is-list-header="true" so they are excluded from the chapter count — a
-    figure in the Preface then numbers 'Figure 0.n' like DOCX's STYLEREF.
-    Run AFTER apply_page_breaks. Returns True when a numbered chapter was seen.
+    ODF chapter numbering supplies 'Chapter N.' — either via Heading_20_1's own
+    list-style-name (direct_list_style=True) or via the <text:outline-style>
+    fallback _enable_chapter_outline_numbering enables (direct_list_style=
+    False). Numbered chapters get SW_Chapter_Heading; see
+    _ensure_chapter_heading_style for what direct_list_style controls there.
+    Non-numbered Heading 1s (Preface, Introduction, Conclusion, TOC, ToF,
+    Bibliography) get text:is-list-header="true" so they are excluded from
+    the chapter count — a figure in the Preface then numbers 'Figure 0.n'
+    like DOCX's STYLEREF. Run AFTER apply_page_breaks. Returns True when a
+    numbered chapter was seen.
+
+    chapter_master (from _detect_chapter_master): when the template assigns
+    its OWN sample chapters a master-page-name, re-assign that SAME master to
+    EVERY exported chapter so its "different first page" header/footer-first
+    treatment re-triggers at each chapter start rather than only the first
+    time that master appears (see _detect_chapter_master; needs LibreOffice
+    verification that re-assigning an already-active master-page-name really
+    does retrigger first-page treatment).
     """
     auto = tmpl_root.find('.//' + O('automatic-styles'))
     numbered = 0
@@ -812,9 +899,16 @@ def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings, dis
         stripped = strip_chapter_prefix(txt)
         if parse_chapter_number(txt) > 0 and stripped != txt:
             if auto is not None:
-                _ensure_chapter_heading_style(auto, new_page_headings, display_name)
+                _ensure_chapter_heading_style(
+                    auto, new_page_headings, display_name,
+                    clear_list_style=not direct_list_style)
             _set_plain_text(el, stripped)
-            el.set(T('style-name'), _CHAPTER_H_STYLE)
+            style_name = _CHAPTER_H_STYLE
+            if chapter_master and auto is not None:
+                style_name = _page_switch_variant(
+                    auto, _CHAPTER_H_STYLE, chapter_master, None,
+                    suffix='_ChapterStart')
+            el.set(T('style-name'), style_name)
             numbered += 1
         else:
             el.set(T('is-list-header'), 'true')
@@ -874,14 +968,19 @@ def _detect_page_masters(styles_root, tmpl_root):
     return roman, arabic
 
 
-def _page_switch_variant(auto_styles, base_style_name, master, page_number):
+def _page_switch_variant(auto_styles, base_style_name, master, page_number,
+                         suffix=None):
     """Return the name of a paragraph auto-style identical to base_style_name but
     pinned to `master` (and, when page_number is given, restarting page numbers
     at it). base_style_name is usually one of the SW_* heading auto-styles set
     earlier in the merge (page break / TOC heading / chapter heading); we clone
     it so the heading keeps its own appearance and only the page master changes.
-    A base that is a named style (e.g. 'Heading_20_1') yields a fresh child."""
-    suffix = '_PgReset' if page_number else '_Roman'
+    A base that is a named style (e.g. 'Heading_20_1') yields a fresh child.
+    `suffix` defaults to '_PgReset' (page_number given) or '_Roman' (roman-
+    frontmatter master switch, no page_number) — pass an explicit suffix for
+    any other kind of master switch (e.g. '_ChapterStart')."""
+    if suffix is None:
+        suffix = '_PgReset' if page_number else '_Roman'
     new_name = (base_style_name or _H1_PARENT) + suffix
     for child in auto_styles:
         if child.get(S('name')) == new_name:
@@ -1086,8 +1185,11 @@ def _merge_manifest(z_data, pdc_data):
 
 # ── metadata update ───────────────────────────────────────────────────────────
 
-def _update_meta(z_data, title, author):
-    """Update meta.xml dc:title and meta:initial-creator / dc:creator if present."""
+def _update_meta(z_data, title, author, short_title=None, subtitle=None):
+    """Update meta.xml dc:title, meta:initial-creator / dc:creator, and the
+    'Short Title' / 'Subtitle' <meta:user-defined> custom properties (the ODF
+    equivalent of DOCX's docProps/custom.xml 'Short Title'/'Subtitle',
+    mirrored in sw_export_merge.normalize_headers_footers)."""
     if 'meta.xml' not in z_data:
         return
     DC  = _NS['dc']
@@ -1105,10 +1207,47 @@ def _update_meta(z_data, title, author):
             for el in root.iter('{%s}initial-creator' % META_NS):
                 el.text = author
                 break
+        for name, val in (('Author', author), ('Short Title', short_title),
+                         ('Subtitle', subtitle)):
+            if not val:
+                continue
+            for el in root.iter('{%s}user-defined' % META_NS):
+                if el.get('{%s}name' % META_NS) == name:
+                    el.text = val
+                    break
         z_data['meta.xml'] = etree.tostring(
             root, xml_declaration=True, encoding='UTF-8', standalone=True)
     except Exception as e:
         print(f'WARNING: could not update meta.xml: {e}')
+
+
+def _update_odt_field_placeholders(z_data, author, short_title):
+    """Rewrite the cached text of every <text:user-defined text:name="Author"
+    | "Short Title"> field in styles.xml's headers/footers, mirroring DOCX's
+    normalize_headers_footers (which refreshes its DOCPROPERTY fldSimple
+    caches the same way). book.odt's even-page header shows these via
+    text:user-defined fields — one is text:fixed="true" ("Author"), which
+    means it does NOT recompute from the underlying meta:user-defined
+    property at all; both need their cached text rewritten directly, and the
+    meta.xml property updated too (belt-and-suspenders, same as DOCX) so a
+    manual field refresh in LibreOffice also shows the right value."""
+    if 'styles.xml' not in z_data:
+        return
+    TEXT_NS = _NS['text']
+    try:
+        root = etree.fromstring(z_data['styles.xml'])
+        changed = False
+        for el in root.iter('{%s}user-defined' % TEXT_NS):
+            name = el.get('{%s}name' % TEXT_NS)
+            val = author if name == 'Author' else short_title if name == 'Short Title' else None
+            if val and el.text != val:
+                el.text = val
+                changed = True
+        if changed:
+            z_data['styles.xml'] = etree.tostring(
+                root, xml_declaration=True, encoding='UTF-8', standalone=True)
+    except Exception as e:
+        print(f'WARNING: could not update header/footer user-defined fields: {e}')
 
 # ── Zotero bibliography section injection ────────────────────────────────────
 
@@ -1349,7 +1488,9 @@ def merge_odt(template_path, input_path, output_path,
     if layout['chapter_number_format']:
         _chaptered = apply_chapter_numbering_odt(
             body_elements, tmpl_root, new_page_headings,
-            display_name=_h1_display_name)
+            display_name=_h1_display_name,
+            direct_list_style=bool(layout['chapter_number_format'].get('direct')),
+            chapter_master=layout.get('chapter_master'))
         if _chaptered and styles_root is not None:
             _enable_chapter_outline_numbering(
                 styles_root, layout['chapter_number_format'])
@@ -1536,7 +1677,8 @@ def merge_odt(template_path, input_path, output_path,
     _merge_manifest(z_data, pdc_data)
 
     # ── Update document metadata ───────────────────────────────────────────
-    _update_meta(z_data, title, author)
+    _update_meta(z_data, title, author, short_title=short_title, subtitle=subtitle)
+    _update_odt_field_placeholders(z_data, author, short_title)
 
     # ── Write output ODT ───────────────────────────────────────────────────
     with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
