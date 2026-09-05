@@ -1831,6 +1831,26 @@ local function zotero_bibl_odt()
     'ZOTERO_BIBL ' .. utils.xmlattr(bib_settings) .. ' CSL_BIBLIOGRAPHY' .. ' RND' .. utils.next_id(10))
 end
 
+-- DOCX has no equivalent of ODT's "hide the field instruction in a
+-- text:section's name" trick, and hand-building the fldChar begin/separate/
+-- end run sequence for a real Word field here would duplicate what
+-- sw_export_merge.py already builds correctly (make_field_paragraph) for a
+-- note's OWN "# Bibliography" heading. So this only inserts a plain
+-- Heading1 "Bibliography" paragraph — a signal, not the final field —  which
+-- sw_export_merge.py's _strip_bibliography_from_sections/has_bibliography
+-- path detects exactly the same way it detects a heading the NOTE wrote
+-- itself, then replaces with a real ADDIN ZOTERO_BIBL field. This keeps the
+-- two formats' bibliography-field construction in ONE place (Python) while
+-- still auto-inserting the heading for a note that never wrote one, just
+-- like zotero_bibl_odt() does for ODT.
+local function zotero_bibl_docx_heading()
+  if config.format ~= 'docx' or not config.csl_style then
+    error('zotero_bibl_docx_heading: This should not happen')
+  end
+  return '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>'
+      .. '<w:r><w:t>Bibliography</w:t></w:r></w:p>'
+end
+
 -- -- -- citation marker generators -- -- --
 
 function clean_csl(item)
@@ -2155,7 +2175,17 @@ function Div(div)
   return pandoc.RawBlock('opendocument', zotero_bibl_odt())
 end
 
-function Doc(doc)
+function Pandoc(doc)
+  if config.format == 'docx' then
+    -- See zotero_bibl_docx_heading(): DOCX gets a plain "Bibliography"
+    -- heading here, not a real field — sw_export_merge.py replaces it with
+    -- one, the same way it replaces a heading the note wrote itself.
+    if config.csl_style then
+      table.insert(doc.blocks, pandoc.RawBlock('openxml', zotero_bibl_docx_heading()))
+    end
+    return pandoc.Pandoc(doc.blocks, doc.meta)
+  end
+
   -- Original odt handling.
   if config.format ~= 'odt' then return nil end
 
@@ -2175,6 +2205,6 @@ return {
   { Cite = Cite_collect },
   { Cite = Cite_replace },
   { Div = Div },
-  { Doc = Doc },
+  { Pandoc = Pandoc },
 }
 

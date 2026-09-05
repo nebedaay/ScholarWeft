@@ -2010,6 +2010,7 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
             print(f'Intermediate {intermediate_format.upper()} kept at: {dest}')
 
         print(f'\nExported PDF written to {out_pdf}')
+        print(str(out_pdf))   # last line — parsed by exportCompiler.ts as the output path
         return str(out_pdf)
     finally:
         _sh.rmtree(tmp_dir, ignore_errors=True)
