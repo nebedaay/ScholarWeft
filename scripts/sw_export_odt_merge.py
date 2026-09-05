@@ -914,6 +914,163 @@ def apply_chapter_numbering_odt(body_elements, tmpl_root, new_page_headings,
             el.set(T('is-list-header'), 'true')
     return numbered > 0
 
+
+# ── Named-style page mode (2026-09-05) ──────────────────────────────────────
+# An alternative to the SW_*-clone machinery above, for a template that drives
+# chapter page breaks + page-style switching from the heading styles
+# THEMSELVES — LibreOffice's native "insert page break before, with page
+# style" Text Flow setting, i.e. style:master-page-name set directly on the
+# NAMED style "Heading 1" (and a "Heading 1 Frontmatter" variant for
+# roman-numbered sections) — rather than needing this merge to synthesize a
+# fresh per-paragraph auto-style for every heading just to carry that
+# property. book.odt was rebuilt this way 2026-09-05. Plain chapter and
+# frontmatter headings are assigned the matching NAMED style verbatim, unlike
+# every other heading-styling function above; LibreOffice re-triggers
+# "different first page" every time that style's master-page-name is
+# (re-)applied to a new paragraph, with no per-heading bookkeeping needed on
+# our side. Only the roman→arabic reset heading still needs a one-off
+# per-instance auto-style: LibreOffice has no way to attach "restart page
+# numbering here" to a reusable named style — the "change page number"
+# option only exists on a manual/direct page break — which is exactly why
+# the user had to insert one by hand for Introduction and remove the style's
+# own automatic break there. _ensure_reset_heading_style mirrors that by-hand
+# result (a 'P12'-style auto-style: parent Heading_20_1, its own
+# master-page-name, page-number=1, list-style-name cleared since it isn't a
+# numbered chapter).
+
+def uses_named_style_page_mode(styles_root):
+    """True when the template's own 'Heading 1' carries a
+    style:master-page-name — signal to use apply_heading_roles_named_style_mode
+    instead of apply_page_breaks/apply_chapter_numbering_odt/
+    apply_roman_frontmatter_odt. False for templates (document.odt,
+    article.odt, or a book.odt not yet rebuilt this way) that need this merge
+    to synthesize the page-break/master-switch styling itself."""
+    return bool(_named_style_master(styles_root, _H1_PARENT))
+
+
+def _named_style_master(styles_root, style_name):
+    """The style:master-page-name a NAMED paragraph style carries directly
+    (not inherited — ODF/LibreOffice never applies master-page-name through
+    style:parent-style-name, only when set on the paragraph's own exact
+    style), or None."""
+    if styles_root is None or not style_name:
+        return None
+    for st in styles_root.iter(S('style')):
+        if st.get(S('name')) == style_name:
+            return st.get(S('master-page-name'))
+    return None
+
+
+def _detect_frontmatter_heading_style(styles_root):
+    """Find the template's dedicated frontmatter variant of Heading 1 (book.odt:
+    'Heading 1 Frontmatter', parented to Heading_20_1 with its own
+    style:master-page-name so the roman-numbered pages get their own page
+    style the same native way). Returns the style's own name, or None if the
+    template doesn't define one (then every heading just uses Heading_20_1 —
+    matches the outcome of leaving roman_frontmatter off)."""
+    if styles_root is None:
+        return None
+    defined = [(st.get(S('name')), st.get(S('display-name')))
+               for st in styles_root.iter(S('style'))
+               if st.get(S('family')) == 'paragraph']
+    return resolve_style_alias(
+        defined,
+        ['Heading 1 Frontmatter', 'Frontmatter Heading 1',
+         'Heading 1 - Frontmatter'],
+        None)
+
+
+_RESET_HEADING_SUFFIX = '_PgReset'
+
+def _ensure_reset_heading_style(auto_styles, base_style, master, clear_numbering):
+    """One-off per-instance style for the roman→arabic reset heading — see
+    the "Named-style page mode" note above for why this ONE heading still
+    needs an auto-style even in named-style mode."""
+    name = base_style + _RESET_HEADING_SUFFIX
+    for child in auto_styles:
+        if child.get(S('name')) == name:
+            return name
+    se = etree.SubElement(auto_styles, S('style'))
+    se.set(S('name'), name)
+    se.set(S('family'), 'paragraph')
+    se.set(S('parent-style-name'), base_style)
+    se.set(S('master-page-name'), master)
+    if clear_numbering:
+        se.set(S('list-style-name'), '')
+    pp = etree.SubElement(se, S('paragraph-properties'))
+    pp.set(S('page-number'), '1')
+    return name
+
+
+def apply_heading_roles_named_style_mode(body_elements, tmpl_root, styles_root,
+                                         frontmatter_style, reset_text):
+    """The named-style-mode replacement for apply_page_breaks +
+    apply_chapter_numbering_odt's chapter-clone step + apply_roman_
+    frontmatter_odt, combined into one pass (all three decisions — chapter
+    vs frontmatter vs the reset heading — depend on the same per-heading
+    role classification, so there is no need to touch each heading three
+    times under three different auto-style names the way the old,
+    independent passes did).
+
+    reset_text — plain text of the heading where arabic page 1 begins (from
+    find_page_reset_index), or None/'' when roman_frontmatter is off — in
+    which case every heading just gets Heading_20_1, no frontmatter split.
+    Returns True when a numbered chapter was seen (mirrors
+    apply_chapter_numbering_odt)."""
+    auto = tmpl_root.find('.//' + O('automatic-styles'))
+    h1s = [el for el in body_elements
+           if el.tag == T('h') and el.get(T('outline-level'), '') == '1']
+
+    reset_idx = None
+    if reset_text:
+        marker = strip_chapter_prefix(reset_text).strip().lower()
+        full = reset_text.strip().lower()
+        for i, h in enumerate(h1s):
+            cand = {_elem_text(h).strip().lower(),
+                    strip_chapter_prefix(_elem_text(h)).strip().lower()}
+            if full in cand or (marker and marker in cand):
+                reset_idx = i
+                break
+
+    arabic_master = _named_style_master(styles_root, _H1_PARENT)
+    numbered = 0
+    for i, el in enumerate(h1s):
+        txt = _elem_text(el)
+        stripped = strip_chapter_prefix(txt)
+        is_numbered = parse_chapter_number(txt) > 0 and stripped != txt
+
+        if i == reset_idx:
+            _set_plain_text(el, stripped if is_numbered else txt)
+            if auto is not None and arabic_master:
+                el.set(T('style-name'), _ensure_reset_heading_style(
+                    auto, _H1_PARENT, arabic_master,
+                    clear_numbering=not is_numbered))
+            else:
+                el.set(T('style-name'), _H1_PARENT)
+            if is_numbered:
+                numbered += 1
+            else:
+                el.set(T('is-list-header'), 'true')
+            continue
+
+        if is_numbered:
+            _set_plain_text(el, stripped)
+            el.set(T('style-name'), _H1_PARENT)
+            numbered += 1
+            continue
+
+        # Non-chapter, non-reset: the frontmatter style before the reset
+        # point (Preface, ToF-in-body if it's ever a real pandoc heading),
+        # plain Heading_20_1 after it (Conclusion, a trailing Bibliography).
+        el.set(T('is-list-header'), 'true')
+        if frontmatter_style and reset_idx is not None and i < reset_idx:
+            el.set(T('style-name'), frontmatter_style)
+        else:
+            el.set(T('style-name'), _H1_PARENT)
+
+    return numbered > 0
+
+
 # ── Roman-numeral frontmatter page numbering ──────────────────────────────────
 # Parallel to the DOCX section-break switch (sw_export_merge.merge, the
 # roman_frontmatter block). The shared decision — which heading is where arabic
@@ -1344,6 +1501,13 @@ def merge_odt(template_path, input_path, output_path,
     # ── Extract template layout ────────────────────────────────────────────
     layout = extract_template_layout(template_path)
 
+    # See "Named-style page mode" above uses_named_style_page_mode: True when
+    # the template drives chapter page breaks + page-style switching from
+    # Heading 1's OWN named style (book.odt as of 2026-09-05) rather than
+    # needing this merge to synthesize per-paragraph auto-styles for it.
+    _new_mode = uses_named_style_page_mode(styles_root)
+    _frontmatter_style = _detect_frontmatter_heading_style(styles_root) if _new_mode else None
+
     # When the user asked for a table of figures but the template has no
     # <text:illustration-index>, borrow the index + heading from the bundled
     # document.odt and pull in the styles they reference.
@@ -1474,29 +1638,37 @@ def merge_odt(template_path, input_path, output_path,
     name_map = _merge_auto_styles(tmpl_root, pdc_root, styles_root)
     _rewrite_style_refs(body_elements, name_map)
 
-    # ── Apply page breaks ──────────────────────────────────────────────────
-    if new_page_headings:
-        apply_page_breaks(body_elements, tmpl_root, display_name=_h1_display_name)
-
-    # ── Chapter numbering (ODF outline numbering) ──────────────────────────
-    # Strip the literal "Chapter N:" prefix; ODF chapter numbering supplies
-    # "Chapter N." (parallel to the DOCX numPr) and makes figure captions
-    # chapter-scoped. Runs AFTER apply_page_breaks so it can override the
-    # page-break style on numbered chapters. document/article templates carry
-    # no chapter_number_format → left untouched (≈ DOCX chapter_numid).
+    # ── Apply page breaks + chapter numbering ───────────────────────────────
+    # Named-style mode (see uses_named_style_page_mode): one combined pass —
+    # chapter/frontmatter/reset-heading role all decide the same style
+    # assignment, so there's no separate page-break step. Otherwise, the
+    # original two independent passes (clone-based page breaks, then
+    # ODF-outline-numbering-based chapter numbering).
     _chaptered = False
-    if layout['chapter_number_format']:
-        _chaptered = apply_chapter_numbering_odt(
-            body_elements, tmpl_root, new_page_headings,
-            display_name=_h1_display_name,
-            direct_list_style=bool(layout['chapter_number_format'].get('direct')),
-            chapter_master=layout.get('chapter_master'))
-        if _chaptered and styles_root is not None:
-            _enable_chapter_outline_numbering(
-                styles_root, layout['chapter_number_format'])
-            z_data['styles.xml'] = etree.tostring(
-                styles_root, xml_declaration=True, encoding='UTF-8',
-                standalone=True)
+    if _new_mode:
+        _chaptered = apply_heading_roles_named_style_mode(
+            body_elements, tmpl_root, styles_root, _frontmatter_style,
+            _reset_text)
+    else:
+        if new_page_headings:
+            apply_page_breaks(body_elements, tmpl_root, display_name=_h1_display_name)
+        # Strip the literal "Chapter N:" prefix; ODF chapter numbering supplies
+        # "Chapter N." (parallel to the DOCX numPr) and makes figure captions
+        # chapter-scoped. Runs AFTER apply_page_breaks so it can override the
+        # page-break style on numbered chapters. document/article templates
+        # carry no chapter_number_format → left untouched (≈ DOCX chapter_numid).
+        if layout['chapter_number_format']:
+            _chaptered = apply_chapter_numbering_odt(
+                body_elements, tmpl_root, new_page_headings,
+                display_name=_h1_display_name,
+                direct_list_style=bool(layout['chapter_number_format'].get('direct')),
+                chapter_master=layout.get('chapter_master'))
+    if _chaptered and layout['chapter_number_format'] and styles_root is not None:
+        _enable_chapter_outline_numbering(
+            styles_root, layout['chapter_number_format'])
+        z_data['styles.xml'] = etree.tostring(
+            styles_root, xml_declaration=True, encoding='UTF-8',
+            standalone=True)
 
     # ── Locate and clear template <office:text> ────────────────────────────
     tmpl_text = tmpl_root.find('.//' + O('text'))
@@ -1516,30 +1688,42 @@ def merge_odt(template_path, input_path, output_path,
     # auto-style (SW_TOCHeading_Pagebreak, inheriting TOCHeading), so no separate
     # blank spacer paragraph is needed before the heading.
     if toc and layout['toc_element'] is not None:
-        if new_page_headings:
+        if not _new_mode and new_page_headings:
             auto = tmpl_root.find('.//' + O('automatic-styles'))
             if auto is not None:
                 _ensure_toc_heading_pb_style(auto, parent=_toc_parent,
                                              display_name=_toc_display_name)
         if layout['toc_heading'] is not None:
             toc_h = copy.deepcopy(layout['toc_heading'])
-            if new_page_headings:
+            if _new_mode:
+                # Named-style mode: keep the TOC heading's OWN style (its
+                # page break/master switch is baked into that style already —
+                # book.odt's "Heading 1 - exclude from TOC"). Only exclude it
+                # from the outline chapter count when numbering is active.
+                if layout['chapter_number_format'] and toc_h.tag == T('h'):
+                    toc_h.set(T('is-list-header'), 'true')
+            elif new_page_headings:
                 toc_h.set(T('style-name'), _TOC_H_PB_STYLE)
             tmpl_text.append(toc_h)
-        elif new_page_headings:
+        elif new_page_headings and not _new_mode:
             # No standalone heading in template — fall back to a blank spacer.
             tmpl_text.append(make_toc_pagebreak_para(tmpl_root))
         tmpl_text.append(copy.deepcopy(layout['toc_element']))
     elif toc and layout['toc_element'] is None:
         # Template has no TOC element (unusual). Insert a minimal TOC heading.
         print('WARNING: template has no TOC element; inserting a bare heading.')
-        if new_page_headings:
+        if not _new_mode and new_page_headings:
             auto = tmpl_root.find('.//' + O('automatic-styles'))
             if auto is not None:
                 _ensure_toc_heading_pb_style(auto, parent=_toc_parent,
                                              display_name=_toc_display_name)
         h = etree.Element(T('h'))
-        h.set(T('style-name'), _TOC_H_PB_STYLE if new_page_headings else _H1_PARENT)
+        if _new_mode:
+            h.set(T('style-name'), _frontmatter_style or _H1_PARENT)
+            if layout['chapter_number_format']:
+                h.set(T('is-list-header'), 'true')
+        else:
+            h.set(T('style-name'), _TOC_H_PB_STYLE if new_page_headings else _H1_PARENT)
         h.set(T('outline-level'), '1')
         h.text = 'Table of Contents'
         tmpl_text.append(h)
@@ -1549,20 +1733,29 @@ def merge_odt(template_path, input_path, output_path,
     #     heading + styles) come from the template, or from the bundled
     #     document.odt when the template has none.
     if tof and has_figures and layout['tof_element'] is not None:
-        if new_page_headings:
+        if not _new_mode and new_page_headings:
             auto = tmpl_root.find('.//' + O('automatic-styles'))
             if auto is not None:
                 _ensure_tof_heading_pb_style(auto, parent=_tof_parent,
                                              display_name=_tof_display_name)
         if layout['tof_heading'] is not None:
             tof_h = copy.deepcopy(layout['tof_heading'])
-            if new_page_headings:
+            if _new_mode:
+                # Named-style mode: keep its OWN style (book.odt's ToF
+                # heading is "Heading 1 Frontmatter" — already the right
+                # page style), just exclude it from the chapter count.
+                if layout['chapter_number_format'] and tof_h.tag == T('h'):
+                    tof_h.set(T('is-list-header'), 'true')
+            elif new_page_headings:
                 tof_h.set(T('style-name'), _TOF_H_PB_STYLE)
             tmpl_text.append(tof_h)
         else:
             th = etree.Element(T('p'))
-            th.set(T('style-name'),
-                   _TOF_H_PB_STYLE if new_page_headings else _TOF_HEADING_STYLE)
+            if _new_mode:
+                th.set(T('style-name'), _frontmatter_style or _H1_PARENT)
+            else:
+                th.set(T('style-name'),
+                       _TOF_H_PB_STYLE if new_page_headings else _TOF_HEADING_STYLE)
             th.text = 'Table of Figures'
             tmpl_text.append(th)
         tmpl_text.append(copy.deepcopy(layout['tof_element']))
@@ -1594,14 +1787,19 @@ def merge_odt(template_path, input_path, output_path,
     #    output contained a bibliography.  Uses SW_Heading1_Pagebreak so the
     #    heading starts on a new page (same as all other Heading 1 elements).
     if _has_bibliography:
-        _bibl_style = _H1_PB_STYLE if new_page_headings else _H1_PARENT
-        if new_page_headings:
-            auto = tmpl_root.find('.//' + O('automatic-styles'))
-            if auto is not None:
-                _ensure_h1_pagebreak_style(auto, _h1_display_name)
+        if _new_mode:
+            _bibl_style = _H1_PARENT
+        else:
+            _bibl_style = _H1_PB_STYLE if new_page_headings else _H1_PARENT
+            if new_page_headings:
+                auto = tmpl_root.find('.//' + O('automatic-styles'))
+                if auto is not None:
+                    _ensure_h1_pagebreak_style(auto, _h1_display_name)
         _bh = etree.Element(T('h'))
         _bh.set(T('style-name'), _bibl_style)
         _bh.set(T('outline-level'), '1')
+        if _new_mode and layout['chapter_number_format']:
+            _bh.set(T('is-list-header'), 'true')
         _bh.text = 'Bibliography'
         tmpl_text.append(_bh)
         _bsect = etree.Element(T('section'))
@@ -1648,8 +1846,11 @@ def merge_odt(template_path, input_path, output_path,
     # With ODF chapter numbering on, exclude every non-chapter level-1 heading
     # (TOC, ToF, Bibliography, and the frontmatter headings marked earlier) from
     # the chapter count so the first numbered chapter is "Chapter 1", not
-    # "Chapter 4".
-    if _chaptered:
+    # "Chapter 4". Named-style mode already marked every non-chapter heading
+    # is-list-header at assignment time (its chapters share Heading_20_1 with
+    # everything else, so this style-name-based sweep can't tell them apart
+    # the way the SW_Chapter_Heading clone let it in the old mode).
+    if _chaptered and not _new_mode:
         for h in tmpl_text.iter(T('h')):
             if h.get(T('outline-level'), '') == '1' \
                     and _get_sn(h) != _CHAPTER_H_STYLE:
@@ -1657,11 +1858,15 @@ def merge_odt(template_path, input_path, output_path,
 
     # Roman-numeral frontmatter page-numbering switch (ODF master pages).
     # Runs last so it can restore chapter counting on a numbered reset heading
-    # after the is-list-header pass above.
-    if _reset_text:
+    # after the is-list-header pass above. Named-style mode already assigned
+    # the reset heading's master + page-number restart as part of
+    # apply_heading_roles_named_style_mode above.
+    if _reset_text and not _new_mode:
         if apply_roman_frontmatter_odt(tmpl_text, tmpl_root, styles_root,
                                        _reset_text, new_page_headings):
             print(f'ODT: roman frontmatter → arabic restart at "{_reset_text}"')
+    elif _reset_text and _new_mode:
+        print(f'ODT: roman frontmatter → arabic restart at "{_reset_text}" (named-style mode)')
 
     # Cap images to template text area dimensions, preserving aspect ratio.
     n_scaled = resize_images(tmpl_root, 'odt', template_zip_data=z_data)
