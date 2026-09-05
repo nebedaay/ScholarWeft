@@ -1831,6 +1831,25 @@ local function zotero_bibl_odt()
     'ZOTERO_BIBL ' .. utils.xmlattr(bib_settings) .. ' CSL_BIBLIOGRAPHY' .. ' RND' .. utils.next_id(10))
 end
 
+-- zotero_bibl_odt() (above) builds only the field's own section, with no
+-- heading above it — sw_export_odt_merge.py's own bibliography-heading
+-- construction (page break, role-appropriate style, is-list-header, etc.)
+-- is far more capable than anything worth duplicating here, and it ALREADY
+-- runs on any "# Bibliography" heading the note wrote itself. So — mirroring
+-- zotero_bibl_docx_heading() below — insert only a plain, throwaway
+-- heading; strip_bibliography's has_bibliography path finds it (any
+-- <text:h> whose text contains "bibliography"), strips it AND the
+-- zotero_bibl_odt() field section right after it (any non-heading element
+-- counts as an "entry" to strip), then builds a fresh, correctly-styled
+-- heading + field from scratch. This heading's own style genuinely doesn't
+-- matter — it never survives to the final document.
+local function zotero_bibl_odt_heading()
+  if config.format ~= 'odt' or not config.csl_style then
+    error('zotero_bibl_odt_heading: This should not happen')
+  end
+  return '<text:h text:outline-level="1">Bibliography</text:h>'
+end
+
 -- DOCX has no equivalent of ODT's "hide the field instruction in a
 -- text:section's name" trick, and hand-building the fldChar begin/separate/
 -- end run sequence for a real Word field here would duplicate what
@@ -2194,6 +2213,15 @@ function Pandoc(doc)
   end
 
   if config.csl_style and not refsDivSeen then
+    -- Heading (see zotero_bibl_odt_heading()) PLUS the field section: the
+    -- shared find_bibliography_range (sw_merge_helpers.py) only recognizes a
+    -- heading as a bibliography section if at least one non-heading element
+    -- follows it, so the heading alone (DOCX's own detector has no such
+    -- requirement) wouldn't be picked up. sw_export_odt_merge.py replaces
+    -- BOTH with its own correctly-styled heading + fresh field exactly like
+    -- it replaces a "# Bibliography" heading the note wrote itself — the
+    -- field's own content here never survives to the final document.
+    table.insert(doc.blocks, pandoc.RawBlock('opendocument', zotero_bibl_odt_heading()))
     table.insert(doc.blocks, pandoc.RawBlock('opendocument', zotero_bibl_odt()))
   end
 
