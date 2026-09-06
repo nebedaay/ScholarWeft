@@ -120,6 +120,7 @@ export class ExportModal extends Modal {
   private romanStartRow!: HTMLElement;
   private romanStartInput!: HTMLInputElement;
   private keepIntermediateCb!: HTMLInputElement;
+  private pdfNote!: HTMLElement;
   private keepIntermediateRow!: HTMLElement;
   private keepIntermediateMdCb!: HTMLInputElement;
   private keepIntermediateMdRow!: HTMLElement;
@@ -192,6 +193,14 @@ export class ExportModal extends Modal {
     const fileHistory = this.getFileHistory();
     const lastFmt = this.plugin.settings.lastExportFormat;
     this.formatSelect.value = fileHistory?.format ?? lastFmt ?? (fmTpl ? 'docx' : 'md');
+
+    this.pdfNote = fmtWrap.createEl('p', {
+      text: 'PDF export requires LibreOffice to be installed. An ODT template '
+        + 'generally produces better results than DOCX for PDF (footnote '
+        + 'numbering, figure references).',
+      cls: 'lc-mapping-modal-note',
+    });
+    this.pdfNote.style.marginTop = '4px';
 
     // ── Template dropdown (SECOND, filtered by format) ────────────────────
     const tplWrap = contentEl.createDiv({ cls: 'lc-export-row' });
@@ -488,6 +497,7 @@ export class ExportModal extends Modal {
     // footnotesCb stays active — the compile step still uses it.
     // PDF-specific row: show only when format is pdf.
     this.keepIntermediateRow.style.display = isPdf ? '' : 'none';
+    this.pdfNote.style.display = isPdf ? '' : 'none';
     // Compiled-markdown row: show for any exported (non-md) format.
     this.keepIntermediateMdRow.style.display = isMd ? 'none' : '';
   }

@@ -74258,6 +74258,11 @@ var ExportModal = class extends import_obsidian14.Modal {
     const fileHistory = this.getFileHistory();
     const lastFmt = this.plugin.settings.lastExportFormat;
     this.formatSelect.value = (_b = (_a = fileHistory == null ? void 0 : fileHistory.format) != null ? _a : lastFmt) != null ? _b : fmTpl ? "docx" : "md";
+    this.pdfNote = fmtWrap.createEl("p", {
+      text: "PDF export requires LibreOffice to be installed. An ODT template generally produces better results than DOCX for PDF (footnote numbering, figure references).",
+      cls: "lc-mapping-modal-note"
+    });
+    this.pdfNote.style.marginTop = "4px";
     const tplWrap = contentEl.createDiv({ cls: "lc-export-row" });
     tplWrap.style.marginTop = "10px";
     tplWrap.createEl("label", { text: "Template" });
@@ -74471,6 +74476,7 @@ var ExportModal = class extends import_obsidian14.Modal {
     this.romanFrontmatterCb.disabled = isMd;
     this.romanStartRow.style.display = !isMd && this.romanFrontmatterCb.checked ? "" : "none";
     this.keepIntermediateRow.style.display = isPdf ? "" : "none";
+    this.pdfNote.style.display = isPdf ? "" : "none";
     this.keepIntermediateMdRow.style.display = isMd ? "none" : "";
   }
   buildTemplateDropdown(format2, preferredValue = "") {
@@ -76960,6 +76966,184 @@ def find_soffice():
     return None
 
 
+_CITEKEY_TOKEN_RE = re.compile(r'(?<![\\w@.])-?@([A-Za-z][\\w:.#$%&+?<>~/-]*)')
+
+
+def _extract_citekeys(text):
+    """Best-effort scan for pandoc citation keys (@key) in compiled markdown,
+    used to pre-fetch a static CSL-JSON bibliography before pandoc runs.
+    Mirrors the character class the plugin's own parser uses for a citation
+    token (src/parser/parser.ts's /@[^\\\\s,;\\\\]\\\\[]*/), tightened to avoid
+    matching emails/handles in prose. A stray false positive just costs a
+    harmless "not found" lookup; missing a real key would silently drop that
+    citation instead, so this stays intentionally permissive.
+    """
+    keys = set()
+    for m in _CITEKEY_TOKEN_RE.finditer(text):
+        key = m.group(1).rstrip('.,;:\\'")]')
+        if key:
+            keys.add(key)
+    return sorted(keys)
+
+
+def _parse_zotero_meta(text):
+    """Read the 'zotero:' YAML frontmatter block (csl-style, client, library)
+    that sw-zotero.lua normally reads itself \u2014 needed here only for the
+    static-citation (PDF) path, where Python builds the bibliography instead
+    of the Lua filter building live Zotero fields.
+    """
+    import yaml
+    yaml_block, _ = extract_yaml(text)
+    z = {}
+    if yaml_block:
+        try:
+            data = yaml.safe_load(yaml_block)
+            if isinstance(data, dict):
+                z = data.get('zotero') or {}
+        except yaml.YAMLError:
+            z = {}
+    csl_style = z.get('csl-style')
+    if csl_style == 'apa7':
+        csl_style = 'apa'
+    return {
+        'csl_style': csl_style or 'apa',
+        'client':    z.get('client') or 'zotero',
+        'library':   z.get('library'),
+    }
+
+
+def _fetch_zotero_csl_items(citekeys, csl_style, client='zotero', library=None):
+    """Fetch CSL-JSON bibliography data for citekeys via Better BibTeX's
+    JSON-RPC \u2014 the same endpoint/method sw-zotero.lua's load_items() uses
+    (item.pandoc_filter). Returns a list of CSL-JSON item dicts ready for
+    pandoc's --bibliography: Better BibTeX already sets each item's own "id"
+    field to the citekey itself (confirmed via a live call to this endpoint),
+    so no remapping is needed the way sw-zotero.lua must remap to Zotero's
+    internal numeric item ID for its live-field use case.
+
+    Missing/duplicate citekeys are reported but don't fail the export;
+    pandoc will just leave those citations unresolved.
+    """
+    if not citekeys:
+        return []
+    import urllib.request
+    import urllib.parse
+    import urllib.error
+    port = 24119 if client == 'jurism' else 23119
+    base_url = f'http://127.0.0.1:{port}/better-bibtex/json-rpc?'
+    payload = {
+        'jsonrpc': '2.0',
+        'method':  'item.pandoc_filter',
+        'params': {
+            'citekeys': citekeys,
+            'style':    csl_style or 'apa',
+            'asCSL':    True,
+        },
+    }
+    if library:
+        payload['params']['libraryID'] = library
+    url = base_url + urllib.parse.quote(json.dumps(payload))
+    # A book-length document can have 100+ citekeys in one request; Better
+    # BibTeX resolving all of them against a large library can genuinely take
+    # a while, and this is a one-time build step \u2014 waiting longer is far
+    # better than failing outright. A quick "not running" call (no citekeys
+    # queued for a live document) fails via immediate connection-refused
+    # well before this, so a long timeout here doesn't slow that case down.
+    try:
+        with urllib.request.urlopen(url, timeout=90) as resp:
+            body = resp.read().decode('utf-8')
+    except (OSError, urllib.error.URLError) as e:
+        raise RuntimeError(
+            'PDF export needs Zotero running (with Better BibTeX installed) '
+            f'to fetch citation data: {e}') from e
+    response = json.loads(body)
+    if response.get('error'):
+        raise RuntimeError(
+            f"Could not fetch Zotero items: {response['error'].get('message')}")
+    result = response.get('result') or {}
+    errors = result.get('errors') or {}
+    for key, code in errors.items():
+        print(f"@{key}: {'not found' if code == 0 else 'duplicates found'} in Zotero")
+    items = result.get('items') or {}
+    csl_items = []
+    for key, item in items.items():
+        clean = dict(item)
+        clean.pop('custom', None)
+        csl_items.append(clean)
+    return csl_items
+
+
+_DEFAULT_STATIC_CSL_STYLE = 'chicago-author-date'
+
+
+def _read_template_csl_style(template_path, fmt):
+    """Look for a real Zotero "Document Preferences" payload already stored
+    in the export template file itself \u2014 the same ZOTERO_PREF_1/_2/...
+    custom document properties Zotero's own Word/LibreOffice integration
+    writes when a user runs "Document Preferences" (or inserts a citation)
+    on that file directly, chunked across multiple numbered properties when
+    the payload is long.
+
+    Different templates legitimately target different journals/publishers
+    with different required styles, so the template's own stored preference
+    (when present) takes priority over any single global default \u2014 that's
+    the whole point of checking here rather than using one fixed style.
+
+    Returns a short CSL style id (e.g. "chicago-author-date") or None if the
+    template has never had Zotero's own document preferences set on it.
+    """
+    import zipfile
+    try:
+        with zipfile.ZipFile(template_path) as z:
+            if fmt == 'docx':
+                raw = z.read('docProps/custom.xml').decode('utf-8', 'ignore')
+                parts = re.findall(
+                    r'name="ZOTERO_PREF_\\d+"[^>]*><vt:lpwstr>(.*?)</vt:lpwstr>',
+                    raw, re.S)
+            else:
+                raw = z.read('meta.xml').decode('utf-8', 'ignore')
+                parts = re.findall(
+                    r'meta:name="ZOTERO_PREF_\\d+"[^>]*>(.*?)</meta:user-defined>',
+                    raw, re.S)
+    except (KeyError, FileNotFoundError, OSError, zipfile.BadZipFile):
+        return None
+    if not parts:
+        return None
+    import html
+    payload = html.unescape(''.join(parts))
+    m = re.search(r'<style\\s+id="([^"]+)"', payload)
+    if not m:
+        return None
+    return m.group(1).rstrip('/').rsplit('/', 1)[-1]
+
+
+def _fetch_csl_style_file(csl_style):
+    """Return a local path to the given CSL style's XML, downloading (and
+    disk-caching) it from the citation-style-language/styles GitHub repo \u2014
+    the same source BibManager.ts uses for in-editor citeproc.js rendering,
+    so PDF citations use the same style file as Obsidian's live preview.
+    """
+    import tempfile
+    import urllib.request
+    import urllib.error
+    cache_dir = Path(tempfile.gettempdir()) / 'scholarweave-csl-cache'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f'{csl_style}.csl'
+    if not cache_path.exists():
+        url = (
+            'https://raw.githubusercontent.com/citation-style-language/'
+            f'styles/master/{csl_style}.csl'
+        )
+        try:
+            with urllib.request.urlopen(url, timeout=20) as resp:
+                cache_path.write_bytes(resp.read())
+        except (OSError, urllib.error.URLError) as e:
+            raise RuntimeError(
+                f'Could not download CSL style "{csl_style}" from '
+                f'citation-style-language/styles: {e}') from e
+    return str(cache_path)
+
+
 def _parse_yaml_metadata(text, stem):
     """Parse all YAML frontmatter properties used by the export pipeline.
 
@@ -77041,8 +77225,16 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                     tof=False, template_dir=None, output_dir=None,
                     default_author=None, new_page_headings=True,
                     restart_footnotes=True, mappings_data=None, generate_date=True,
-                    roman_frontmatter=False, page1_starts_with=''):
+                    roman_frontmatter=False, page1_starts_with='',
+                    static_citations=False):
     """Unified export pipeline for DOCX and ODT.
+
+    static_citations: when True, skip sw-zotero.lua's live-Zotero-field
+    generation and let pandoc's own --citeproc render final citation text
+    and a real bibliography instead, using a CSL-JSON bibliography fetched
+    from Zotero/Better BibTeX up front. Used by export_pdf(), since a PDF
+    has no live document to refresh fields in later; DOCX/ODT exports keep
+    the default (live fields, refreshable in Word/LibreOffice).
 
     Both formats share: YAML metadata parsing, citation conversion, markdown
     pre-processing, Lua filter construction, pandoc invocation, template
@@ -77114,8 +77306,9 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         plugin_script_path('sw-doc-title.lua'),
         plugin_script_path('sw-export.lua'),
         plugin_script_path('sw-poetry.lua'),
-        plugin_script_path('sw-zotero.lua'),
     ]
+    if not static_citations:
+        filters.append(plugin_script_path('sw-zotero.lua'))
     filters += find_user_lua_filters(template_dir)
     active_mappings = mappings_data or load_mappings(template_dir)
     # Only include poetry styles when the document actually contains poetry callouts.
@@ -77154,6 +77347,41 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
     elif not template_path.endswith(f'{tpl}{ext}'):
         print(f"WARNING: template '{tpl}{ext}' not found; using {template_path} as fallback.")
 
+    # \u2500\u2500 Static-citation mode (PDF path): fetch a CSL-JSON bibliography and
+    # the CSL style file up front, and hand citation processing to pandoc's
+    # own --citeproc instead of sw-zotero.lua's live-field generation.
+    #
+    # Style priority: a template that has already had Zotero's own "Document
+    # Preferences" set on it (i.e. it carries a real ZOTERO_PREF_1/_2/...
+    # payload \u2014 the same one Word/LibreOffice's Zotero integration writes)
+    # wins, since different templates legitimately target different
+    # journals/publishers with different required styles. Only when the
+    # template has no such preference does this fall back to a fixed
+    # default, rather than Obsidian's own live-preview style \u2014 that style is
+    # a per-user editing convenience, not necessarily what any given export
+    # template should render with.
+    citeproc_args = []
+    _tmp_biblio_dir = None
+    if static_citations:
+        zmeta = _parse_zotero_meta(text)
+        csl_style = (_read_template_csl_style(template_path, fmt)
+                     if os.path.exists(template_path) else None) \\
+            or _DEFAULT_STATIC_CSL_STYLE
+        citekeys = _extract_citekeys(cit_text)
+        csl_items = _fetch_zotero_csl_items(
+            citekeys, csl_style, zmeta['client'], zmeta['library'])
+        csl_path = _fetch_csl_style_file(csl_style)
+        import tempfile as _tempfile
+        _tmp_biblio_dir = Path(_tempfile.mkdtemp())
+        biblio_path = _tmp_biblio_dir / 'bibliography.json'
+        biblio_path.write_text(json.dumps(csl_items, ensure_ascii=False), encoding='utf-8')
+        citeproc_args = [
+            '--citeproc',
+            '--bibliography', str(biblio_path),
+            '--csl', csl_path,
+            '--metadata', 'reference-section-title=Bibliography',
+        ]
+
     # \u2500\u2500 pandoc invocation (format-specific) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     if fmt == 'docx':
         # DOCX: clean output with no reference-doc; merge script applies template.
@@ -77161,6 +77389,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                '-t', 'docx',
                '-f', 'markdown+wikilinks_title_after_pipe+lists_without_preceding_blankline',
                *filter_args,
+               *citeproc_args,
                '--metadata', f'source-note={compiled_md.stem}',
                '-o', str(clean_path)]
         print('Running pandoc:', ' '.join(cmd))
@@ -77181,6 +77410,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                '-t', 'odt',
                '-f', 'markdown+wikilinks_title_after_pipe+lists_without_preceding_blankline',
                *filter_args,
+               *citeproc_args,
                *ref_doc_args,
                '-o', str(clean_path)]
         print('Running pandoc:', ' '.join(cmd))
@@ -77188,6 +77418,10 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         if _tmp_ref_dir:
             import shutil as _sh2
             _sh2.rmtree(_tmp_ref_dir, ignore_errors=True)
+
+    if _tmp_biblio_dir:
+        import shutil as _sh3
+        _sh3.rmtree(_tmp_biblio_dir, ignore_errors=True)
 
     citations_md.unlink(missing_ok=True)
 
@@ -77223,6 +77457,8 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         merge_cmd.append('--roman-frontmatter')
         if page1_starts_with:
             merge_cmd += ['--page1-starts-with', page1_starts_with]
+    if static_citations:
+        merge_cmd.append('--static-citations')
     print('Merging:', ' '.join(merge_cmd))
     subprocess.run(merge_cmd, check=True)
     clean_path.unlink(missing_ok=True)
@@ -77247,7 +77483,8 @@ def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                 tof=False, template_dir=None, output_dir=None, default_author=None,
                 new_page_headings=True, restart_footnotes=True,
                 mappings_data=None, generate_date=True,
-                roman_frontmatter=False, page1_starts_with=''):
+                roman_frontmatter=False, page1_starts_with='',
+                static_citations=False):
     """Export compiled markdown to DOCX. Thin wrapper around export_document."""
     return export_document('docx', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -77258,7 +77495,8 @@ def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                            restart_footnotes=restart_footnotes,
                            mappings_data=mappings_data, generate_date=generate_date,
                            roman_frontmatter=roman_frontmatter,
-                           page1_starts_with=page1_starts_with)
+                           page1_starts_with=page1_starts_with,
+                           static_citations=static_citations)
 
 
 def _prep_reference_odt(ref_doc_path, style_names):
@@ -77363,7 +77601,8 @@ def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                tof=False, template_dir=None, output_dir=None, default_author=None,
                new_page_headings=True, restart_footnotes=True,
                mappings_data=None, generate_date=True,
-               roman_frontmatter=False, page1_starts_with=''):
+               roman_frontmatter=False, page1_starts_with='',
+               static_citations=False):
     """Export compiled markdown to ODT. Thin wrapper around export_document."""
     return export_document('odt', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -77374,7 +77613,8 @@ def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                            restart_footnotes=restart_footnotes,
                            mappings_data=mappings_data, generate_date=generate_date,
                            roman_frontmatter=roman_frontmatter,
-                           page1_starts_with=page1_starts_with)
+                           page1_starts_with=page1_starts_with,
+                           static_citations=static_citations)
 
 
 
@@ -77390,10 +77630,12 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
     preferred when an ODT template file exists, otherwise DOCX is used.
     Pass intermediate_format='docx' or 'odt' to override.
 
-    Uses LibreOffice headless for conversion when available (produces a
-    layout-faithful PDF matching what you see in the word processor).
-    Falls back to pandoc if LibreOffice is not found (requires a PDF engine
-    such as xelatex or weasyprint to be installed separately).
+    Uses LibreOffice headless for the DOCX/ODT -> PDF conversion. A pandoc
+    (LaTeX/weasyprint) fallback was removed deliberately: it needs a large
+    separate PDF engine, has unicode/font issues, and produces output that
+    looks nothing like the word-processor rendering. If LibreOffice is not
+    installed, PDF export raises with a clear message. (A future non-DOCX/ODT
+    export route \u2014 e.g. HTML+CSS -> PDF \u2014 could revisit pandoc then.)
     """
     import tempfile, shutil as _sh
     compiled_md = Path(compiled_md)
@@ -77405,16 +77647,24 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
     if intermediate_format is None:
         text = compiled_md.read_text(encoding='utf-8')
         meta = _parse_yaml_metadata(text, compiled_md.stem)
-        tpl  = template if template is not None else meta['tpl']
-        template_dir_r = resolve_template_dir(template_dir, vault_root)
-        odt_candidates = []
-        if template_dir_r:
-            odt_candidates.append(os.path.join(template_dir_r, f'{tpl}.odt'))
-        odt_candidates.append(plugin_template_path(f'{tpl}.odt'))
-        if any(os.path.exists(c) for c in odt_candidates):
-            intermediate_format = 'odt'
+        raw_tpl = template if template is not None else meta['tpl']
+        ext_m = re.search(r'\\.(docx|odt)$', raw_tpl or '', flags=re.IGNORECASE)
+        if ext_m:
+            # The export dialog passes a specific template ("book.docx" vs
+            # "book.odt") \u2014 that choice IS the intended intermediate format.
+            intermediate_format = ext_m.group(1).lower()
         else:
-            intermediate_format = 'docx'
+            # Bare name (from frontmatter): prefer ODT when a matching ODT
+            # template exists, else DOCX.
+            tpl = raw_tpl
+            template_dir_r = resolve_template_dir(template_dir, vault_root)
+            odt_candidates = []
+            if template_dir_r:
+                odt_candidates.append(os.path.join(template_dir_r, f'{tpl}.odt'))
+            odt_candidates.append(plugin_template_path(f'{tpl}.odt'))
+            intermediate_format = ('odt'
+                                   if any(os.path.exists(c) for c in odt_candidates)
+                                   else 'docx')
         print(f'PDF intermediate format auto-determined: {intermediate_format}')
 
     # Export to the intermediate format in a temp directory.
@@ -77426,7 +77676,11 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
             new_page_headings=new_page_headings,
             restart_footnotes=restart_footnotes,
             mappings_data=mappings_data, generate_date=generate_date,
-            roman_frontmatter=roman_frontmatter, page1_starts_with=page1_starts_with)
+            roman_frontmatter=roman_frontmatter, page1_starts_with=page1_starts_with,
+            # PDF has no live document to refresh fields in later, so let
+            # pandoc's own --citeproc render final citations + bibliography
+            # instead of live Zotero fields (see export_document's docstring).
+            static_citations=True)
         if intermediate_format == 'docx':
             inter_path = Path(export_docx(compiled_md, **common_kwargs))
         else:
@@ -77434,26 +77688,24 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
 
         out_pdf = out_dir / f"{compiled_md.stem}.pdf"
 
-        # Prefer LibreOffice headless \u2014 it renders the document identically to
-        # what the user sees on screen, honouring all template styles.
+        # LibreOffice headless \u2014 renders the document identically to what the
+        # user sees on screen, honouring all template styles. Required: there
+        # is no fallback (see the docstring).
         soffice = find_soffice()
-        if soffice:
-            import subprocess
-            cmd = [soffice, '--headless', '--convert-to', 'pdf',
-                   '--outdir', str(out_dir), str(inter_path)]
-            print('Converting to PDF via LibreOffice:', ' '.join(cmd))
-            subprocess.run(cmd, check=True)
-            # LibreOffice names the output <stem>.pdf in outdir.
-            lo_out = out_dir / f"{inter_path.stem}.pdf"
-            if lo_out.exists() and lo_out != out_pdf:
-                lo_out.rename(out_pdf)
-        else:
-            # Fallback: pandoc (needs xelatex / weasyprint / wkhtmltopdf).
-            import subprocess
-            pandoc = os.environ.get('SW_PANDOC', 'pandoc')
-            cmd = [pandoc, str(inter_path), '-o', str(out_pdf)]
-            print('Converting to PDF via pandoc:', ' '.join(cmd))
-            subprocess.run(cmd, check=True)
+        if not soffice:
+            raise RuntimeError(
+                'PDF export needs LibreOffice installed (it converts the '
+                'DOCX/ODT to PDF). Install LibreOffice, or export to DOCX/ODT '
+                'and convert to PDF yourself.')
+        import subprocess
+        cmd = [soffice, '--headless', '--convert-to', 'pdf',
+               '--outdir', str(out_dir), str(inter_path)]
+        print('Converting to PDF via LibreOffice:', ' '.join(cmd))
+        subprocess.run(cmd, check=True)
+        # LibreOffice names the output <stem>.pdf in outdir.
+        lo_out = out_dir / f"{inter_path.stem}.pdf"
+        if lo_out.exists() and lo_out != out_pdf:
+            lo_out.rename(out_pdf)
 
         if keep_intermediate:
             dest = out_dir / inter_path.name
@@ -80980,9 +81232,68 @@ def extract_template_layout(template_path):
         'kinds': kinds,
         'final_sect': final_sect,
         'chapter_numid': chapter_numid,
+        'chapter_number_format': _chapter_number_format(template_path, chapter_numid),
         'has_alttext_style': has_alttext_style,
         'has_section_breaks': has_section_breaks,
     }
+
+
+def _chapter_number_format(template_path, numid):
+    """{lvlText, numFmt} the template's chapter numId uses at level 0, e.g.
+    {'lvlText': 'Chapter %1.', 'numFmt': 'decimal'}. None when not numbered.
+    Word only renders this on a field/numbering update, so the cached TOC has
+    to reproduce it \u2014 same reason the ODT merge computes chapter numbers."""
+    if not numid:
+        return None
+    try:
+        with zipfile.ZipFile(template_path) as z:
+            num_xml = etree.fromstring(z.read('word/numbering.xml'))
+    except (KeyError, OSError):
+        return None
+    abs_id = None
+    for num in num_xml.findall(tag('num')):
+        if num.get(tag('numId')) == str(numid):
+            ai = num.find(tag('abstractNumId'))
+            abs_id = ai.get(tag('val')) if ai is not None else None
+            break
+    if abs_id is None:
+        return None
+    for an in num_xml.findall(tag('abstractNum')):
+        if an.get(tag('abstractNumId')) != abs_id:
+            continue
+        for lvl in an.findall(tag('lvl')):
+            if lvl.get(tag('ilvl')) == '0':
+                lt = lvl.find(tag('lvlText'))
+                nf = lvl.find(tag('numFmt'))
+                return {
+                    'lvlText': lt.get(tag('val')) if lt is not None else '%1.',
+                    'numFmt': nf.get(tag('val')) if nf is not None else 'decimal',
+                }
+    return None
+
+
+def _fmt_docx_chapter_number(fmt, n):
+    """Render chapter number n per the template's lvlText/numFmt."""
+    nf = fmt.get('numFmt', 'decimal')
+    if nf in ('upperRoman', 'lowerRoman'):
+        s = _roman(n)
+        if nf == 'lowerRoman':
+            s = s.lower()
+    else:
+        s = str(n)
+    return re.sub(r'%\\d', s, fmt.get('lvlText', '%1.'))
+
+
+def _roman(n):
+    vals = ((1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'),
+            (90, 'XC'), (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'),
+            (5, 'V'), (4, 'IV'), (1, 'I'))
+    out = ''
+    for v, s in vals:
+        while n >= v:
+            out += s
+            n -= v
+    return out
 
 def make_field_paragraph(pstyle_val, instr_text, placeholder='Right-click to '
                         'update field.'):
@@ -81012,6 +81323,156 @@ def make_field_paragraph(pstyle_val, instr_text, placeholder='Right-click to '
     fc.set(tag('fldCharType'), 'end')
     return p
 
+
+def _toc_depth_from_instr(instr, default=9):
+    """Deepest heading level a Word TOC field is configured to show, from its
+    \`\\\\o "n-m"\` range and any \`\\\\t "style,level"\` pairs."""
+    depths = []
+    m = re.search(r'\\\\o\\s+"(\\d+)-(\\d+)"', instr or '')
+    if m:
+        depths.append(int(m.group(2)))
+    for m in re.finditer(r'\\\\t\\s+"([^"]*)"', instr or ''):
+        parts = m.group(1).split(',')
+        for i in range(1, len(parts), 2):
+            try:
+                depths.append(int(parts[i]))
+            except ValueError:
+                pass
+    return max(depths) if depths else default
+
+
+def _add_toc_bookmarks(sections, extra_styles=(), start_id=900000):
+    """Wrap each Heading1..N paragraph (and any paragraph whose style is in
+    extra_styles, e.g. figure captions) in a <w:bookmarkStart/End> so TOC/ToF
+    entries can link to it \u2014 pandoc's DOCX headings/captions carry none.
+    Returns {id(paragraph): bookmark_name}."""
+    names = {}
+    seen = set()
+    bid = start_id
+    for _kind, blocks in sections:
+        for p in blocks:
+            if p.tag != tag('p'):
+                continue
+            st = get_style(p) or ''
+            if not (re.match(r'Heading\\d+$', st) or st in extra_styles):
+                continue
+            slug = re.sub(r'[^a-z0-9]+', '-', _para_text(p).strip().lower()).strip('-')
+            name = ('_sw_' + slug) if slug else ('_sw_p%d' % bid)
+            n, base = name, name
+            while n in seen:
+                n = '%s_%d' % (base, bid)
+            seen.add(n)
+            names[id(p)] = n
+            bs = etree.Element(tag('bookmarkStart'))
+            bs.set(tag('id'), str(bid))
+            bs.set(tag('name'), n)
+            be = etree.Element(tag('bookmarkEnd'))
+            be.set(tag('id'), str(bid))
+            ppr = p.find(tag('pPr'))
+            p.insert(1 if ppr is not None else 0, bs)
+            p.append(be)
+            bid += 1
+    return names
+
+
+def make_field_paragraphs(instr_text, entries, style_fn):
+    """A TOC/ToF field whose cached result is real entries for THIS document,
+    not the template's stale cache or the "Right-click to update field"
+    placeholder. Neither pandoc nor this merge computes a field's display
+    content \u2014 only a word processor does, on update \u2014 and a headless
+    LibreOffice PDF conversion never updates it. Entries carry a hyperlink to
+    the target's bookmark but no page number (pagination isn't known until
+    layout); the field code is intact, so updating in a word processor
+    regenerates everything.
+
+    entries: list of (text, level, bookmark_or_None). style_fn(level) -> style.
+    Returns a list of <w:p>; the field spans them (begin in the first,
+    end in the last).
+    """
+    if not entries:
+        return [make_field_paragraph(style_fn(1), instr_text)]
+    paras = []
+    for idx, (text, level, bookmark) in enumerate(entries):
+        p = etree.Element(tag('p'))
+        ppr = etree.SubElement(p, tag('pPr'))
+        ps = etree.SubElement(ppr, tag('pStyle'))
+        ps.set(tag('val'), style_fn(level))
+        if idx == 0:
+            r = etree.SubElement(p, tag('r'))
+            etree.SubElement(r, tag('fldChar')).set(tag('fldCharType'), 'begin')
+            r = etree.SubElement(p, tag('r'))
+            it = etree.SubElement(r, tag('instrText'))
+            it.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            it.text = ' ' + instr_text + ' '
+            r = etree.SubElement(p, tag('r'))
+            etree.SubElement(r, tag('fldChar')).set(tag('fldCharType'), 'separate')
+        container = p
+        if bookmark:
+            container = etree.SubElement(p, tag('hyperlink'))
+            container.set(tag('anchor'), bookmark)
+        r = etree.SubElement(container, tag('r'))
+        if bookmark:
+            rpr = etree.SubElement(r, tag('rPr'))
+            etree.SubElement(rpr, tag('rStyle')).set(tag('val'), 'Hyperlink')
+        t = etree.SubElement(r, tag('t'))
+        t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        t.text = text
+        if idx == len(entries) - 1:
+            r = etree.SubElement(p, tag('r'))
+            etree.SubElement(r, tag('fldChar')).set(tag('fldCharType'), 'end')
+        paras.append(p)
+    return paras
+
+
+def _docx_toc_entries(sections, max_level=9, bookmarks=None, chapter_fmt=None):
+    """(text, level, bookmark) for every Heading1..HeadingN paragraph across
+    sections, down to max_level. When the template numbers chapters, the
+    number ('Chapter 1.') is computed here and prepended \u2014 Word only renders
+    it on a numbering/field update, so the cached text would otherwise omit
+    it. A numbered chapter is a Heading1 carrying <w:numPr> (added by
+    apply_chapter_numbering, which runs before this)."""
+    out = []
+    chap_n = 0
+    for _kind, blocks in sections:
+        for p in blocks:
+            if p.tag != tag('p'):
+                continue
+            m = re.match(r'Heading(\\d+)$', get_style(p) or '')
+            if not m:
+                continue
+            level = int(m.group(1))
+            if level > max_level:
+                continue
+            text = _para_text(p).strip()
+            if not text:
+                continue
+            ppr = p.find(tag('pPr'))
+            numbered = (level == 1 and chapter_fmt is not None
+                        and ppr is not None and ppr.find(tag('numPr')) is not None)
+            if numbered:
+                chap_n += 1
+                text = _fmt_docx_chapter_number(chapter_fmt, chap_n) + ' ' + text
+            out.append((text, max(1, level), (bookmarks or {}).get(id(p))))
+    return out
+
+
+#: Styles a figure caption can carry in merged DOCX output \u2014 'Caption' is what
+#: _make_figure_caption emits; 'ImageCaption' is pandoc's own, kept when
+#: transform_figures didn't restyle it.
+_DOCX_CAPTION_STYLES = frozenset({'Caption', 'ImageCaption'})
+
+
+def _docx_tof_entries(sections, bookmarks=None):
+    """(text, 1, bookmark) for every figure-caption paragraph across sections."""
+    out = []
+    for _kind, blocks in sections:
+        for p in blocks:
+            if p.tag == tag('p') and get_style(p) in _DOCX_CAPTION_STYLES:
+                text = _para_text(p).strip()
+                if text:
+                    out.append((text, 1, (bookmarks or {}).get(id(p))))
+    return out
+
 #: <w:sectPr> child order \u2014 <w:pgNumType> sits after these, before <w:cols> etc.
 _SECTPR_BEFORE_PGNUM = ('headerReference', 'footerReference', 'footnotePr',
                         'endnotePr', 'type', 'pgSz', 'pgMar', 'paperSrc',
@@ -81034,25 +81495,45 @@ def _ensure_pgnumtype(sectpr):
         sectpr.insert(0, pg)
     return pg
 
+#: Set by merge() for the static/PDF path: LibreOffice's DOCX import can't do
+#: per-section footnote restart (numRestart="eachSect") \u2014 it renders every
+#: restarted footnote as "0" \u2014 and the PDF path always goes through LibreOffice,
+#: so those sections must NOT carry the restart. Direct DOCX export (opened in
+#: Word) keeps it.
+_SUPPRESS_FN_RESTART = False
+
+
 def make_section_break(sectpr_kind, rsid='00DE2936'):
     """Build a paragraph whose pPr carries the given sectPr \u2014 a section break.
     Ensures footnote numbering restarts per section (eachSect) so chapters
-    don't number footnotes document-wide."""
+    don't number footnotes document-wide (unless _SUPPRESS_FN_RESTART)."""
     p = etree.Element(tag('p'))
     ppr = etree.SubElement(p, tag('pPr'))
     sect = copy.deepcopy(sectpr_kind)
     sect.set(tag('rsidR'), rsid)
     sect.set(tag('rsidSect'), rsid)
-    # Ensure per-section footnote restart.
     fnpr = sect.find(tag('footnotePr'))
-    if fnpr is None:
-        fnpr = etree.Element(tag('footnotePr'))
-        pos = etree.SubElement(fnpr, tag('pos'))
-        pos.set(tag('val'), 'beneathText')
-        sect.insert(0, fnpr)
-    if fnpr.find(tag('numRestart')) is None:
-        nr = etree.SubElement(fnpr, tag('numRestart'))
-        nr.set(tag('val'), 'eachSect')
+    if _SUPPRESS_FN_RESTART:
+        if fnpr is not None:
+            for _c in fnpr.findall(tag('numRestart')) + fnpr.findall(tag('numStart')):
+                fnpr.remove(_c)
+    else:
+        # Per-section footnote restart. Schema order: pos, numFmt, numStart,
+        # numRestart \u2014 explicit numStart="1" for word processors that need it.
+        if fnpr is None:
+            fnpr = etree.Element(tag('footnotePr'))
+            pos = etree.SubElement(fnpr, tag('pos'))
+            pos.set(tag('val'), 'beneathText')
+            sect.insert(0, fnpr)
+        if fnpr.find(tag('numStart')) is None:
+            ns = etree.Element(tag('numStart'))
+            ns.set(tag('val'), '1')
+            nr_existing = fnpr.find(tag('numRestart'))
+            fnpr.insert(list(fnpr).index(nr_existing) if nr_existing is not None
+                        else len(fnpr), ns)
+        if fnpr.find(tag('numRestart')) is None:
+            nr = etree.SubElement(fnpr, tag('numRestart'))
+            nr.set(tag('val'), 'eachSect')
     ppr.append(sect)
     return p
 
@@ -81237,6 +81718,37 @@ def _make_field_run(para, instr_text, cached=''):
     fc = etree.SubElement(r, tag('fldChar'))
     fc.set(tag('fldCharType'), 'end')
 
+def _flatten_caption_fields(sections):
+    """Replace the SEQ/STYLEREF field runs in each figure caption with their
+    cached number as plain runs. Static path only \u2014 Word/LibreOffice recompute
+    those fields (STYLEREF reads chapter numbering that may not resolve, SEQ
+    without a working \\\\s restart goes continuous), so 'Figure 1.1' comes back
+    as 'Figure 1'. Freezing the text sidesteps that, like the cached TOC/ToF."""
+    for _kind, blocks in sections:
+        for p in blocks:
+            if p.tag != tag('p') or get_style(p) not in _DOCX_CAPTION_STYLES:
+                continue
+            depth = 0
+            after_sep = False
+            for r in list(p.findall(tag('r'))):
+                fc = r.find(tag('fldChar'))
+                if fc is not None:
+                    ft = fc.get(tag('fldCharType'))
+                    if ft == 'begin':
+                        depth += 1
+                        after_sep = False
+                    elif ft == 'separate':
+                        after_sep = True
+                    elif ft == 'end':
+                        depth = max(0, depth - 1)
+                        after_sep = False
+                    p.remove(r)
+                elif r.find(tag('instrText')) is not None:
+                    p.remove(r)
+                elif depth and not after_sep:
+                    p.remove(r)
+
+
 def _make_figure_caption(description, number, chapter_scoped):
     """Build a Caption-style paragraph 'Figure {number}. {description}'.
 
@@ -81342,6 +81854,19 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     # A simple template can still have a cover title_block to fill (document.docx).
     structured = layout['has_section_breaks']
 
+    # Cached-TOC support: bookmark every heading + figure caption so TOC/ToF
+    # entries can link to them, honour the template TOC field's configured
+    # depth, and compute chapter numbers ("Chapter 1.") Word only renders on
+    # a numbering update.
+    _toc_bookmarks = (_add_toc_bookmarks(sections, extra_styles=_DOCX_CAPTION_STYLES)
+                      if (toc or tof) else {})
+    _toc_max_level = _toc_depth_from_instr(layout.get('toc_instr'))
+    _toc_chap_fmt = layout.get('chapter_number_format')
+    _toc_entry_list = lambda: _docx_toc_entries(
+        sections, _toc_max_level, _toc_bookmarks, _toc_chap_fmt)
+    _tof_entry_list = lambda: _docx_tof_entries(
+        sections, bookmarks=_toc_bookmarks)
+
     # Clear the template body.
     for c in list(template_body):
         template_body.remove(c)
@@ -81363,7 +81888,10 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     if toc and layout['toc_instr'] and structured:
         if layout['toc_heading'] is not None:
             template_body.append(layout['toc_heading'])
-        template_body.append(make_field_paragraph('TOC1', layout['toc_instr']))
+        for _p in make_field_paragraphs(layout['toc_instr'],
+                                        _toc_entry_list(),
+                                        lambda l: 'TOC%d' % l):
+            template_body.append(_p)
         _brk = make_section_break(kinds['toc'])
         if not new_page_headings:
             _set_continuous(_brk)
@@ -81381,7 +81909,10 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     # 3. ToF section \u2014 structured (book) templates.
     if want_tof and structured:
         template_body.append(layout['tof_heading'])
-        template_body.append(make_field_paragraph('TableofFigures', layout['tof_instr']))
+        for _p in make_field_paragraphs(layout['tof_instr'],
+                                        _tof_entry_list(),
+                                        lambda l: 'TableofFigures'):
+            template_body.append(_p)
         _brk = make_section_break(kinds['tof'])
         if not new_page_headings:
             _set_continuous(_brk)
@@ -81451,8 +81982,8 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
                     if _is_bare_pb:
                         template_body.remove(_prev)
 
-                def _emit_field_section(heading_el, field_pstyle, field_instr):
-                    """Append heading (+ optional page break) + field paragraph
+                def _emit_field_section(heading_el, field_instr, entries, style_fn):
+                    """Append heading (+ optional page break) + field paragraphs
                     + optional trailing page break for a deferred TOC / ToF."""
                     if heading_el is not None:
                         _ppr = heading_el.find(tag('pPr'))
@@ -81470,20 +82001,22 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
                             etree.SubElement(etree.SubElement(
                                 template_body, tag('p')), tag('r')), tag('br'))
                         _pb.set(tag('type'), 'page')
-                    template_body.append(
-                        make_field_paragraph(field_pstyle, field_instr))
+                    for _fp in make_field_paragraphs(field_instr, entries, style_fn):
+                        template_body.append(_fp)
                     if new_page_headings:
                         _b = etree.SubElement(etree.SubElement(etree.SubElement(
                             template_body, tag('p')), tag('r')), tag('br'))
                         _b.set(tag('type'), 'page')
 
                 if toc_deferred:
-                    _emit_field_section(layout['toc_heading'], 'TOC1',
-                                        layout['toc_instr'])
+                    _emit_field_section(layout['toc_heading'], layout['toc_instr'],
+                                        _toc_entry_list(),
+                                        lambda l: 'TOC%d' % l)
                     toc_deferred = False
                 if tof_deferred:
-                    _emit_field_section(layout['tof_heading'], 'TableofFigures',
-                                        layout['tof_instr'])
+                    _emit_field_section(layout['tof_heading'], layout['tof_instr'],
+                                        _tof_entry_list(),
+                                        lambda l: 'TableofFigures')
                     tof_deferred = False
         for b in blocks:
             # Remap pandoc-specific styles to template names.
@@ -81603,7 +82136,9 @@ def merge(template_path, input_path, output_path, title=None, author=None,
           subtitle=None, date_val=None, toc=False, tof=False, short_title=None,
           basename=None, abstract=None, extra_sections=None,
           new_page_headings=True, restart_footnotes=True, generate_date=True,
-          roman_frontmatter=False, page1_starts_with=''):
+          roman_frontmatter=False, page1_starts_with='', static_citations=False):
+    global _SUPPRESS_FN_RESTART
+    _SUPPRESS_FN_RESTART = static_citations
     with zipfile.ZipFile(template_path) as z:
         tmpl_doc = etree.fromstring(z.read('word/document.xml'))
         _tmpl_styles_bytes = z.read('word/styles.xml') if 'word/styles.xml' in z.namelist() else b''
@@ -81691,13 +82226,25 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     # Strip the bibliography section (pandoc plain-text entries) so the merge
     # can append a fresh Zotero field at the end instead.  This mirrors the ODT
     # approach and ensures both formats use identical bibliography handling.
-    sections, _has_bibliography = _strip_bibliography_from_sections(sections)
+    #
+    # In static_citations mode (PDF path \u2014 see DocumentCompiler.py), pandoc's
+    # own --citeproc already produced a real, populated bibliography (Heading1
+    # + rendered entries, already last) \u2014 there's no live field to refresh, so
+    # it's left as ordinary body content instead of being stripped and
+    # replaced with the "Refresh Zotero" placeholder.
+    if static_citations:
+        _has_bibliography = False
+    else:
+        sections, _has_bibliography = _strip_bibliography_from_sections(sections)
 
     # Figure captions \u2192 template caption layout; decides ToF presence.
     # Chapter-scoped numbering (Figure C.N) tracks the footnote-restart setting
     # (both are the "per chapter" behaviour); otherwise captions are 'Figure N'.
     has_figures = transform_figures(
         sections, restart_footnotes, layout['has_alttext_style'])
+
+    if static_citations:
+        _flatten_caption_fields(sections)
 
     # Chapter numbering: strip literal "Chapter N:" and let Word number.
     apply_chapter_numbering(sections, layout['chapter_numid'])
@@ -82132,13 +82679,24 @@ def _remap_footnote_refs(doc, id_map):
         if old in id_map:
             ref.set(tag('id'), id_map[old])
 
+#: Elements whose text content is meaningful even when it is only whitespace \u2014
+#: <w:t xml:space="preserve"> </w:t> is the standalone-space run pandoc emits
+#: between a word and a citation / emphasis. Never blank these.
+_WS_TEXT_ELEMENTS = frozenset(
+    '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}%s' % n
+    for n in ('t', 'instrText', 'delText', 'delInstrText'))
+
+
 def _strip_ws_text_nodes(root):
     """Remove whitespace-only text/tail nodes from element-only containers.
     Word treats raw whitespace text inside element-only elements (w:rPr,
     w:pPr, w:sectPr, \u2026) as unreadable content \u2014 pandoc's pretty-printed
-    XML leaves newlines/indentation there, and lxml preserves them."""
+    XML leaves newlines/indentation there, and lxml preserves them. Tails
+    between sibling elements are always noise in OOXML; element text is only
+    noise when the element isn't one that carries literal text."""
     for el in list(root.iter()):
-        if el.text and el.text.strip() == '':
+        if (el.text and el.text.strip() == ''
+                and el.tag not in _WS_TEXT_ELEMENTS):
             el.text = None
         if el.tail and el.tail.strip() == '':
             el.tail = None
@@ -82723,6 +83281,12 @@ def main():
                     help='Roman-numeral frontmatter page numbers, arabic from the reset heading')
     ap.add_argument('--page1-starts-with', default='', dest='page1_starts_with',
                     help='Heading text that begins arabic page 1 (blank = auto)')
+    ap.add_argument('--static-citations', action='store_true',
+                    dest='static_citations',
+                    help='Pandoc already rendered final citations + a real '
+                         'bibliography via --citeproc (PDF path) \u2014 preserve '
+                         'it instead of stripping and replacing with a live '
+                         'Zotero field placeholder')
     args = ap.parse_args()
     extra_sections = None
     if args.extra_sections:
@@ -82741,7 +83305,8 @@ def main():
           restart_footnotes=restart_footnotes,
           generate_date=not args.no_generated_date,
           roman_frontmatter=args.roman_frontmatter,
-          page1_starts_with=args.page1_starts_with)
+          page1_starts_with=args.page1_starts_with,
+          static_citations=args.static_citations)
     print(f'Merged: {args.output}')
 
 if __name__ == '__main__':
@@ -82815,6 +83380,7 @@ def T(n):  return '{%s}%s' % (_NS['text'],   n)
 def S(n):  return '{%s}%s' % (_NS['style'],  n)
 def O(n):  return '{%s}%s' % (_NS['office'], n)
 def F(n):  return '{%s}%s' % (_NS['fo'],     n)
+def X(n):  return '{%s}%s' % (_NS['xlink'],  n)
 
 # \u2500\u2500 Canonical ODT style names \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -82907,6 +83473,144 @@ def _set_markdown_text(el, markdown):
         else:
             last.tail = (last.tail or '') + suffix
 
+# \u2500\u2500 cached index (TOC / ToF) content \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+def _rebuild_index_body(index_el, entries, entry_style_fn):
+    """Replace an index element's cached <text:index-body> with fresh entries.
+
+    Neither pandoc nor this merge ever computes a TOC/ToF field's displayed
+    content \u2014 only a word processor does, on "update fields". A headless
+    LibreOffice PDF conversion never updates it, so the exported PDF shows
+    whatever was last cached in the *template's* field (real but stale
+    content, or the literal "Right-click to update field" placeholder). This
+    writes correct entries for THIS document instead \u2014 as hyperlinks to each
+    target's bookmark, without page numbers (pagination isn't known until a
+    word processor lays the document out). The field structure is untouched,
+    so updating it in a word processor still regenerates everything, page
+    numbers included.
+
+    entries: list of (text, bookmark_name_or_None, level) tuples.
+    entry_style_fn(level) -> paragraph style name for that entry.
+    """
+    body = index_el.find(T('index-body'))
+    if body is None:
+        body = etree.SubElement(index_el, T('index-body'))
+    title = body.find(T('index-title'))
+    for child in list(body):
+        body.remove(child)
+    body.text = None
+    if title is not None:
+        body.append(title)
+    for text, bookmark, level in entries:
+        if not text:
+            continue
+        p = etree.SubElement(body, T('p'))
+        p.set(T('style-name'), entry_style_fn(level))
+        if bookmark:
+            a = etree.SubElement(p, T('a'))
+            a.set(X('type'), 'simple')
+            a.set(X('href'), '#%s' % bookmark)
+            a.set(T('style-name'), 'Index_20_Link')
+            a.set(T('visited-style-name'), 'Index_20_Link')
+            a.text = text
+        else:
+            p.text = text
+
+
+def _heading_bookmark(h_el):
+    """The name of the first <text:bookmark-start> inside a heading (pandoc
+    emits one per heading, slugified from the heading text), or None."""
+    bs = h_el.find(T('bookmark-start'))
+    return bs.get(T('name')) if bs is not None else None
+
+
+def _toc_depth(toc_el, default=10):
+    """The deepest heading level the template's TOC is configured to show \u2014
+    <text:table-of-content-source text:outline-level="N">."""
+    src = toc_el.find(T('table-of-content-source'))
+    if src is not None:
+        try:
+            return max(1, int(src.get(T('outline-level'))))
+        except (TypeError, ValueError):
+            pass
+    return default
+
+
+def _roman(n):
+    vals = ((1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'),
+            (90, 'XC'), (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'),
+            (5, 'V'), (4, 'IV'), (1, 'I'))
+    out = ''
+    for v, s in vals:
+        while n >= v:
+            out += s
+            n -= v
+    return out
+
+
+def _fmt_chapter_number(fmt, n):
+    """Render chapter number \`n\` the way the template's chapter list style
+    would \u2014 its num-format ('1'/'I'/'i') and either its loext num-list-format
+    ('Chapter %1%.') or prefix+num+suffix ('Chapter ' + n + '.')."""
+    nf = fmt.get('num_format', '1')
+    s = _roman(n) if nf == 'I' else _roman(n).lower() if nf == 'i' else str(n)
+    nlf = fmt.get('num_list_format')
+    if nlf and '%1%' in nlf:
+        return nlf.replace('%1%', s)
+    return (fmt.get('prefix') or '') + s + (fmt.get('suffix') or '')
+
+
+def _toc_entries(body_elements, max_level=10, chapter_fmt=None):
+    """(text, bookmark, level) for every <text:h> in the assembled body, down
+    to max_level (the template's configured TOC depth). When the template
+    numbers its chapters, the number ('Chapter 1.') is computed here and
+    prepended \u2014 ODF outline numbering only renders on a word-processor field
+    update, so the static cached text would otherwise omit it."""
+    out = []
+    chap_n = 0
+    for el in body_elements:
+        if el.tag != T('h'):
+            continue
+        try:
+            level = int(el.get(T('outline-level')) or '1')
+        except ValueError:
+            level = 1
+        if level > max_level:
+            continue
+        level = max(1, level)
+        text = _elem_text(el)
+        if not text:
+            continue
+        if (level == 1 and chapter_fmt
+                and el.get(T('is-list-header')) != 'true'):
+            chap_n += 1
+            text = _fmt_chapter_number(chapter_fmt, chap_n) + ' ' + text
+        out.append((text, _heading_bookmark(el), level))
+    return out
+
+
+def _tof_entries(body_elements, caption_styles):
+    """(text, bookmark, 1) for every figure-caption paragraph in the body.
+    Captions carry a <text:sequence>, not a bookmark, so a bookmark is added
+    here (in place \u2014 the elements are appended to the body right after) so the
+    ToF entry can link to it."""
+    out = []
+    n = 0
+    for el in body_elements:
+        if el.tag == T('p') and el.get(T('style-name')) in caption_styles:
+            text = _elem_text(el)
+            if not text:
+                continue
+            n += 1
+            name = '_sw_fig_%d' % n
+            bs = etree.Element(T('bookmark-start'));  bs.set(T('name'), name)
+            be = etree.Element(T('bookmark-end'));    be.set(T('name'), name)
+            el.insert(0, bs)
+            el.append(be)
+            out.append((text, name, 1))
+    return out
+
+
 # \u2500\u2500 figure caption builders (used by the shared process_figures walk) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 def _make_figure_caption(desc, number, ordinal, chapter_scoped, style=_FIGCAPTION_STYLE):
@@ -82929,6 +83633,32 @@ def _make_figure_caption(desc, number, ordinal, chapter_scoped, style=_FIGCAPTIO
     seq.text = number
     seq.tail = '. ' + desc
     return p
+
+
+def _flatten_caption_fields(body_elements, caption_styles):
+    """Replace the <text:sequence> in each figure caption with its computed
+    number as literal text. Static path only.
+
+    process_figures computes the correct chapter-scoped number ('1.1') and
+    caches it in the sequence, but LibreOffice recomputes the sequence on
+    load / PDF export and gets continuous numbering ('1', '2', '3') \u2014 its
+    display-outline-level reads document *outline* numbering, and book.odt
+    numbers chapters via a list style bound to Heading 1, not outline
+    numbering. Freezing the caption text sidesteps that, the same way the
+    cached TOC/ToF and static citations sidestep every other field the PDF
+    path can't rely on a word processor to update."""
+    for el in body_elements:
+        if el.tag != T('p') or el.get(T('style-name')) not in caption_styles:
+            continue
+        for seq in list(el.findall(T('sequence'))):
+            frozen = (seq.text or '') + (seq.tail or '')
+            children = list(el)
+            i = children.index(seq)
+            el.remove(seq)
+            if i == 0:
+                el.text = (el.text or '') + frozen
+            else:
+                children[i - 1].tail = (children[i - 1].tail or '') + frozen
 
 
 def _make_alttext_para(alt_text):
@@ -84205,7 +84935,8 @@ def merge_odt(template_path, input_path, output_path,
               toc=False, tof=False, short_title=None, basename=None,
               abstract=None, extra_sections=None,
               new_page_headings=True, restart_footnotes=True,
-              generate_date=True, roman_frontmatter=False, page1_starts_with=''):
+              generate_date=True, roman_frontmatter=False, page1_starts_with='',
+              static_citations=False):
     """
     Merge pandoc ODT output into the ODT template.
 
@@ -84382,6 +85113,10 @@ def merge_odt(template_path, input_path, output_path,
         make_caption=_odt_caption, make_alttext=_odt_alttext,
         chapter_scoped=restart_footnotes)
 
+    if static_citations:
+        _flatten_caption_fields(body_elements,
+                                {layout['caption_style'], _FIGCAPTION_STYLE})
+
     # \u2500\u2500 Merge pandoc auto-styles into template (before moving elements) \u2500\u2500\u2500\u2500
     name_map = _merge_auto_styles(tmpl_root, pdc_root, styles_root)
     _rewrite_style_refs(body_elements, name_map)
@@ -84456,7 +85191,13 @@ def merge_odt(template_path, input_path, output_path,
         elif new_page_headings and not _new_mode:
             # No standalone heading in template \u2014 fall back to a blank spacer.
             tmpl_text.append(make_toc_pagebreak_para(tmpl_root))
-        tmpl_text.append(copy.deepcopy(layout['toc_element']))
+        _toc_el = copy.deepcopy(layout['toc_element'])
+        _rebuild_index_body(
+            _toc_el,
+            _toc_entries(body_elements, _toc_depth(_toc_el),
+                         layout['chapter_number_format'] if _chaptered else None),
+            lambda lvl: 'Contents_20_%d' % lvl)
+        tmpl_text.append(_toc_el)
     elif toc and layout['toc_element'] is None:
         # Template has no TOC element (unusual). Insert a minimal TOC heading.
         print('WARNING: template has no TOC element; inserting a bare heading.')
@@ -84506,12 +85247,26 @@ def merge_odt(template_path, input_path, output_path,
                        _TOF_H_PB_STYLE if new_page_headings else _TOF_HEADING_STYLE)
             th.text = 'Table of Figures'
             tmpl_text.append(th)
-        tmpl_text.append(copy.deepcopy(layout['tof_element']))
+        _tof_el = copy.deepcopy(layout['tof_element'])
+        _rebuild_index_body(
+            _tof_el,
+            _tof_entries(body_elements, {layout['caption_style'], _FIGCAPTION_STYLE}),
+            lambda lvl: 'Figure_20_Index_20_1')
+        tmpl_text.append(_tof_el)
 
     # 3. Strip the bibliography section (pandoc plain-text entries) so a fresh
     #    Zotero section can be appended at the end.  Mirrors the DOCX approach:
     #    both formats detect and strip via the shared strip_bibliography helper,
     #    then each appends its own format-specific Zotero bibliography section.
+    #
+    #    In static_citations mode (PDF path \u2014 see DocumentCompiler.py), pandoc's
+    #    own --citeproc already produced a real, populated bibliography (heading
+    #    + rendered entries, always positioned last, same as here) \u2014 there's no
+    #    live field to refresh, so it's left as ordinary body content instead of
+    #    being stripped and replaced with the "Refresh Zotero" placeholder. It
+    #    gets the same Heading_20_1 style pandoc gives any other heading, so it
+    #    flows through the general heading-remapping/chapter-exclusion logic
+    #    below exactly like a normal section.
     def _bibl_heading_text(el):
         if el.tag == T('h'):
             return _elem_text(el)
@@ -84524,8 +85279,21 @@ def merge_odt(template_path, input_path, output_path,
         # This mirrors the DOCX approach, which also doesn't inspect entry styles.
         return el.tag != T('h')
 
-    body_elements, _has_bibliography = strip_bibliography(
-        body_elements, _bibl_heading_text, _is_bibl_entry)
+    if static_citations:
+        _has_bibliography = False
+        # Pandoc's citeproc wraps bibliography entries in <text:p
+        # style-name="First_20_paragraph"> inside nested <text:section> \u2014 and
+        # a template may style "First paragraph" distinctively (book.odt gives
+        # it a yellow background). Normalise those entries to plain body text.
+        for _el in body_elements:
+            if _el.tag == T('section'):
+                for _p in _el.iter(T('p')):
+                    if _p.get(T('style-name')) in (
+                            'First_20_paragraph', 'Text_20_body', None):
+                        _p.set(T('style-name'), _BODY_STYLE)
+    else:
+        body_elements, _has_bibliography = strip_bibliography(
+            body_elements, _bibl_heading_text, _is_bibl_entry)
 
     # 4. Pandoc body elements (moved from pdc_text to tmpl_text).
     for el in body_elements:
@@ -84683,6 +85451,12 @@ def main():
     ap.add_argument('--page1-starts-with', default='', dest='page1_starts_with',
                     help='Heading text where arabic "page 1" begins (default: '
                          'first Introduction/Chapter 1/numbered heading)')
+    ap.add_argument('--static-citations', action='store_true',
+                    dest='static_citations',
+                    help='Pandoc already rendered final citations + a real '
+                         'bibliography via --citeproc (PDF path) \u2014 preserve '
+                         'it instead of stripping and replacing with a live '
+                         'Zotero field placeholder')
     args = ap.parse_args()
 
     extra_sections = None
@@ -84709,6 +85483,7 @@ def main():
         generate_date=not args.no_generated_date,
         roman_frontmatter=args.roman_frontmatter,
         page1_starts_with=args.page1_starts_with,
+        static_citations=args.static_citations,
     )
     print(f'Merged: {args.output}')
 

@@ -67,6 +67,7 @@ def T(n):  return '{%s}%s' % (_NS['text'],   n)
 def S(n):  return '{%s}%s' % (_NS['style'],  n)
 def O(n):  return '{%s}%s' % (_NS['office'], n)
 def F(n):  return '{%s}%s' % (_NS['fo'],     n)
+def X(n):  return '{%s}%s' % (_NS['xlink'],  n)
 
 # ── Canonical ODT style names ─────────────────────────────────────────────────
 
@@ -159,6 +160,144 @@ def _set_markdown_text(el, markdown):
         else:
             last.tail = (last.tail or '') + suffix
 
+# ── cached index (TOC / ToF) content ────────────────────────────────────────
+
+def _rebuild_index_body(index_el, entries, entry_style_fn):
+    """Replace an index element's cached <text:index-body> with fresh entries.
+
+    Neither pandoc nor this merge ever computes a TOC/ToF field's displayed
+    content — only a word processor does, on "update fields". A headless
+    LibreOffice PDF conversion never updates it, so the exported PDF shows
+    whatever was last cached in the *template's* field (real but stale
+    content, or the literal "Right-click to update field" placeholder). This
+    writes correct entries for THIS document instead — as hyperlinks to each
+    target's bookmark, without page numbers (pagination isn't known until a
+    word processor lays the document out). The field structure is untouched,
+    so updating it in a word processor still regenerates everything, page
+    numbers included.
+
+    entries: list of (text, bookmark_name_or_None, level) tuples.
+    entry_style_fn(level) -> paragraph style name for that entry.
+    """
+    body = index_el.find(T('index-body'))
+    if body is None:
+        body = etree.SubElement(index_el, T('index-body'))
+    title = body.find(T('index-title'))
+    for child in list(body):
+        body.remove(child)
+    body.text = None
+    if title is not None:
+        body.append(title)
+    for text, bookmark, level in entries:
+        if not text:
+            continue
+        p = etree.SubElement(body, T('p'))
+        p.set(T('style-name'), entry_style_fn(level))
+        if bookmark:
+            a = etree.SubElement(p, T('a'))
+            a.set(X('type'), 'simple')
+            a.set(X('href'), '#%s' % bookmark)
+            a.set(T('style-name'), 'Index_20_Link')
+            a.set(T('visited-style-name'), 'Index_20_Link')
+            a.text = text
+        else:
+            p.text = text
+
+
+def _heading_bookmark(h_el):
+    """The name of the first <text:bookmark-start> inside a heading (pandoc
+    emits one per heading, slugified from the heading text), or None."""
+    bs = h_el.find(T('bookmark-start'))
+    return bs.get(T('name')) if bs is not None else None
+
+
+def _toc_depth(toc_el, default=10):
+    """The deepest heading level the template's TOC is configured to show —
+    <text:table-of-content-source text:outline-level="N">."""
+    src = toc_el.find(T('table-of-content-source'))
+    if src is not None:
+        try:
+            return max(1, int(src.get(T('outline-level'))))
+        except (TypeError, ValueError):
+            pass
+    return default
+
+
+def _roman(n):
+    vals = ((1000, 'M'), (900, 'CM'), (500, 'D'), (400, 'CD'), (100, 'C'),
+            (90, 'XC'), (50, 'L'), (40, 'XL'), (10, 'X'), (9, 'IX'),
+            (5, 'V'), (4, 'IV'), (1, 'I'))
+    out = ''
+    for v, s in vals:
+        while n >= v:
+            out += s
+            n -= v
+    return out
+
+
+def _fmt_chapter_number(fmt, n):
+    """Render chapter number `n` the way the template's chapter list style
+    would — its num-format ('1'/'I'/'i') and either its loext num-list-format
+    ('Chapter %1%.') or prefix+num+suffix ('Chapter ' + n + '.')."""
+    nf = fmt.get('num_format', '1')
+    s = _roman(n) if nf == 'I' else _roman(n).lower() if nf == 'i' else str(n)
+    nlf = fmt.get('num_list_format')
+    if nlf and '%1%' in nlf:
+        return nlf.replace('%1%', s)
+    return (fmt.get('prefix') or '') + s + (fmt.get('suffix') or '')
+
+
+def _toc_entries(body_elements, max_level=10, chapter_fmt=None):
+    """(text, bookmark, level) for every <text:h> in the assembled body, down
+    to max_level (the template's configured TOC depth). When the template
+    numbers its chapters, the number ('Chapter 1.') is computed here and
+    prepended — ODF outline numbering only renders on a word-processor field
+    update, so the static cached text would otherwise omit it."""
+    out = []
+    chap_n = 0
+    for el in body_elements:
+        if el.tag != T('h'):
+            continue
+        try:
+            level = int(el.get(T('outline-level')) or '1')
+        except ValueError:
+            level = 1
+        if level > max_level:
+            continue
+        level = max(1, level)
+        text = _elem_text(el)
+        if not text:
+            continue
+        if (level == 1 and chapter_fmt
+                and el.get(T('is-list-header')) != 'true'):
+            chap_n += 1
+            text = _fmt_chapter_number(chapter_fmt, chap_n) + ' ' + text
+        out.append((text, _heading_bookmark(el), level))
+    return out
+
+
+def _tof_entries(body_elements, caption_styles):
+    """(text, bookmark, 1) for every figure-caption paragraph in the body.
+    Captions carry a <text:sequence>, not a bookmark, so a bookmark is added
+    here (in place — the elements are appended to the body right after) so the
+    ToF entry can link to it."""
+    out = []
+    n = 0
+    for el in body_elements:
+        if el.tag == T('p') and el.get(T('style-name')) in caption_styles:
+            text = _elem_text(el)
+            if not text:
+                continue
+            n += 1
+            name = '_sw_fig_%d' % n
+            bs = etree.Element(T('bookmark-start'));  bs.set(T('name'), name)
+            be = etree.Element(T('bookmark-end'));    be.set(T('name'), name)
+            el.insert(0, bs)
+            el.append(be)
+            out.append((text, name, 1))
+    return out
+
+
 # ── figure caption builders (used by the shared process_figures walk) ────────
 
 def _make_figure_caption(desc, number, ordinal, chapter_scoped, style=_FIGCAPTION_STYLE):
@@ -181,6 +320,32 @@ def _make_figure_caption(desc, number, ordinal, chapter_scoped, style=_FIGCAPTIO
     seq.text = number
     seq.tail = '. ' + desc
     return p
+
+
+def _flatten_caption_fields(body_elements, caption_styles):
+    """Replace the <text:sequence> in each figure caption with its computed
+    number as literal text. Static path only.
+
+    process_figures computes the correct chapter-scoped number ('1.1') and
+    caches it in the sequence, but LibreOffice recomputes the sequence on
+    load / PDF export and gets continuous numbering ('1', '2', '3') — its
+    display-outline-level reads document *outline* numbering, and book.odt
+    numbers chapters via a list style bound to Heading 1, not outline
+    numbering. Freezing the caption text sidesteps that, the same way the
+    cached TOC/ToF and static citations sidestep every other field the PDF
+    path can't rely on a word processor to update."""
+    for el in body_elements:
+        if el.tag != T('p') or el.get(T('style-name')) not in caption_styles:
+            continue
+        for seq in list(el.findall(T('sequence'))):
+            frozen = (seq.text or '') + (seq.tail or '')
+            children = list(el)
+            i = children.index(seq)
+            el.remove(seq)
+            if i == 0:
+                el.text = (el.text or '') + frozen
+            else:
+                children[i - 1].tail = (children[i - 1].tail or '') + frozen
 
 
 def _make_alttext_para(alt_text):
@@ -1457,7 +1622,8 @@ def merge_odt(template_path, input_path, output_path,
               toc=False, tof=False, short_title=None, basename=None,
               abstract=None, extra_sections=None,
               new_page_headings=True, restart_footnotes=True,
-              generate_date=True, roman_frontmatter=False, page1_starts_with=''):
+              generate_date=True, roman_frontmatter=False, page1_starts_with='',
+              static_citations=False):
     """
     Merge pandoc ODT output into the ODT template.
 
@@ -1634,6 +1800,10 @@ def merge_odt(template_path, input_path, output_path,
         make_caption=_odt_caption, make_alttext=_odt_alttext,
         chapter_scoped=restart_footnotes)
 
+    if static_citations:
+        _flatten_caption_fields(body_elements,
+                                {layout['caption_style'], _FIGCAPTION_STYLE})
+
     # ── Merge pandoc auto-styles into template (before moving elements) ────
     name_map = _merge_auto_styles(tmpl_root, pdc_root, styles_root)
     _rewrite_style_refs(body_elements, name_map)
@@ -1708,7 +1878,13 @@ def merge_odt(template_path, input_path, output_path,
         elif new_page_headings and not _new_mode:
             # No standalone heading in template — fall back to a blank spacer.
             tmpl_text.append(make_toc_pagebreak_para(tmpl_root))
-        tmpl_text.append(copy.deepcopy(layout['toc_element']))
+        _toc_el = copy.deepcopy(layout['toc_element'])
+        _rebuild_index_body(
+            _toc_el,
+            _toc_entries(body_elements, _toc_depth(_toc_el),
+                         layout['chapter_number_format'] if _chaptered else None),
+            lambda lvl: 'Contents_20_%d' % lvl)
+        tmpl_text.append(_toc_el)
     elif toc and layout['toc_element'] is None:
         # Template has no TOC element (unusual). Insert a minimal TOC heading.
         print('WARNING: template has no TOC element; inserting a bare heading.')
@@ -1758,12 +1934,26 @@ def merge_odt(template_path, input_path, output_path,
                        _TOF_H_PB_STYLE if new_page_headings else _TOF_HEADING_STYLE)
             th.text = 'Table of Figures'
             tmpl_text.append(th)
-        tmpl_text.append(copy.deepcopy(layout['tof_element']))
+        _tof_el = copy.deepcopy(layout['tof_element'])
+        _rebuild_index_body(
+            _tof_el,
+            _tof_entries(body_elements, {layout['caption_style'], _FIGCAPTION_STYLE}),
+            lambda lvl: 'Figure_20_Index_20_1')
+        tmpl_text.append(_tof_el)
 
     # 3. Strip the bibliography section (pandoc plain-text entries) so a fresh
     #    Zotero section can be appended at the end.  Mirrors the DOCX approach:
     #    both formats detect and strip via the shared strip_bibliography helper,
     #    then each appends its own format-specific Zotero bibliography section.
+    #
+    #    In static_citations mode (PDF path — see DocumentCompiler.py), pandoc's
+    #    own --citeproc already produced a real, populated bibliography (heading
+    #    + rendered entries, always positioned last, same as here) — there's no
+    #    live field to refresh, so it's left as ordinary body content instead of
+    #    being stripped and replaced with the "Refresh Zotero" placeholder. It
+    #    gets the same Heading_20_1 style pandoc gives any other heading, so it
+    #    flows through the general heading-remapping/chapter-exclusion logic
+    #    below exactly like a normal section.
     def _bibl_heading_text(el):
         if el.tag == T('h'):
             return _elem_text(el)
@@ -1776,8 +1966,21 @@ def merge_odt(template_path, input_path, output_path,
         # This mirrors the DOCX approach, which also doesn't inspect entry styles.
         return el.tag != T('h')
 
-    body_elements, _has_bibliography = strip_bibliography(
-        body_elements, _bibl_heading_text, _is_bibl_entry)
+    if static_citations:
+        _has_bibliography = False
+        # Pandoc's citeproc wraps bibliography entries in <text:p
+        # style-name="First_20_paragraph"> inside nested <text:section> — and
+        # a template may style "First paragraph" distinctively (book.odt gives
+        # it a yellow background). Normalise those entries to plain body text.
+        for _el in body_elements:
+            if _el.tag == T('section'):
+                for _p in _el.iter(T('p')):
+                    if _p.get(T('style-name')) in (
+                            'First_20_paragraph', 'Text_20_body', None):
+                        _p.set(T('style-name'), _BODY_STYLE)
+    else:
+        body_elements, _has_bibliography = strip_bibliography(
+            body_elements, _bibl_heading_text, _is_bibl_entry)
 
     # 4. Pandoc body elements (moved from pdc_text to tmpl_text).
     for el in body_elements:
@@ -1935,6 +2138,12 @@ def main():
     ap.add_argument('--page1-starts-with', default='', dest='page1_starts_with',
                     help='Heading text where arabic "page 1" begins (default: '
                          'first Introduction/Chapter 1/numbered heading)')
+    ap.add_argument('--static-citations', action='store_true',
+                    dest='static_citations',
+                    help='Pandoc already rendered final citations + a real '
+                         'bibliography via --citeproc (PDF path) — preserve '
+                         'it instead of stripping and replacing with a live '
+                         'Zotero field placeholder')
     args = ap.parse_args()
 
     extra_sections = None
@@ -1961,6 +2170,7 @@ def main():
         generate_date=not args.no_generated_date,
         roman_frontmatter=args.roman_frontmatter,
         page1_starts_with=args.page1_starts_with,
+        static_citations=args.static_citations,
     )
     print(f'Merged: {args.output}')
 

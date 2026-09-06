@@ -1508,6 +1508,184 @@ def find_soffice():
     return None
 
 
+_CITEKEY_TOKEN_RE = re.compile(r'(?<![\w@.])-?@([A-Za-z][\w:.#$%&+?<>~/-]*)')
+
+
+def _extract_citekeys(text):
+    """Best-effort scan for pandoc citation keys (@key) in compiled markdown,
+    used to pre-fetch a static CSL-JSON bibliography before pandoc runs.
+    Mirrors the character class the plugin's own parser uses for a citation
+    token (src/parser/parser.ts's /@[^\\s,;\\]\\[]*/), tightened to avoid
+    matching emails/handles in prose. A stray false positive just costs a
+    harmless "not found" lookup; missing a real key would silently drop that
+    citation instead, so this stays intentionally permissive.
+    """
+    keys = set()
+    for m in _CITEKEY_TOKEN_RE.finditer(text):
+        key = m.group(1).rstrip('.,;:\'")]')
+        if key:
+            keys.add(key)
+    return sorted(keys)
+
+
+def _parse_zotero_meta(text):
+    """Read the 'zotero:' YAML frontmatter block (csl-style, client, library)
+    that sw-zotero.lua normally reads itself — needed here only for the
+    static-citation (PDF) path, where Python builds the bibliography instead
+    of the Lua filter building live Zotero fields.
+    """
+    import yaml
+    yaml_block, _ = extract_yaml(text)
+    z = {}
+    if yaml_block:
+        try:
+            data = yaml.safe_load(yaml_block)
+            if isinstance(data, dict):
+                z = data.get('zotero') or {}
+        except yaml.YAMLError:
+            z = {}
+    csl_style = z.get('csl-style')
+    if csl_style == 'apa7':
+        csl_style = 'apa'
+    return {
+        'csl_style': csl_style or 'apa',
+        'client':    z.get('client') or 'zotero',
+        'library':   z.get('library'),
+    }
+
+
+def _fetch_zotero_csl_items(citekeys, csl_style, client='zotero', library=None):
+    """Fetch CSL-JSON bibliography data for citekeys via Better BibTeX's
+    JSON-RPC — the same endpoint/method sw-zotero.lua's load_items() uses
+    (item.pandoc_filter). Returns a list of CSL-JSON item dicts ready for
+    pandoc's --bibliography: Better BibTeX already sets each item's own "id"
+    field to the citekey itself (confirmed via a live call to this endpoint),
+    so no remapping is needed the way sw-zotero.lua must remap to Zotero's
+    internal numeric item ID for its live-field use case.
+
+    Missing/duplicate citekeys are reported but don't fail the export;
+    pandoc will just leave those citations unresolved.
+    """
+    if not citekeys:
+        return []
+    import urllib.request
+    import urllib.parse
+    import urllib.error
+    port = 24119 if client == 'jurism' else 23119
+    base_url = f'http://127.0.0.1:{port}/better-bibtex/json-rpc?'
+    payload = {
+        'jsonrpc': '2.0',
+        'method':  'item.pandoc_filter',
+        'params': {
+            'citekeys': citekeys,
+            'style':    csl_style or 'apa',
+            'asCSL':    True,
+        },
+    }
+    if library:
+        payload['params']['libraryID'] = library
+    url = base_url + urllib.parse.quote(json.dumps(payload))
+    # A book-length document can have 100+ citekeys in one request; Better
+    # BibTeX resolving all of them against a large library can genuinely take
+    # a while, and this is a one-time build step — waiting longer is far
+    # better than failing outright. A quick "not running" call (no citekeys
+    # queued for a live document) fails via immediate connection-refused
+    # well before this, so a long timeout here doesn't slow that case down.
+    try:
+        with urllib.request.urlopen(url, timeout=90) as resp:
+            body = resp.read().decode('utf-8')
+    except (OSError, urllib.error.URLError) as e:
+        raise RuntimeError(
+            'PDF export needs Zotero running (with Better BibTeX installed) '
+            f'to fetch citation data: {e}') from e
+    response = json.loads(body)
+    if response.get('error'):
+        raise RuntimeError(
+            f"Could not fetch Zotero items: {response['error'].get('message')}")
+    result = response.get('result') or {}
+    errors = result.get('errors') or {}
+    for key, code in errors.items():
+        print(f"@{key}: {'not found' if code == 0 else 'duplicates found'} in Zotero")
+    items = result.get('items') or {}
+    csl_items = []
+    for key, item in items.items():
+        clean = dict(item)
+        clean.pop('custom', None)
+        csl_items.append(clean)
+    return csl_items
+
+
+_DEFAULT_STATIC_CSL_STYLE = 'chicago-author-date'
+
+
+def _read_template_csl_style(template_path, fmt):
+    """Look for a real Zotero "Document Preferences" payload already stored
+    in the export template file itself — the same ZOTERO_PREF_1/_2/...
+    custom document properties Zotero's own Word/LibreOffice integration
+    writes when a user runs "Document Preferences" (or inserts a citation)
+    on that file directly, chunked across multiple numbered properties when
+    the payload is long.
+
+    Different templates legitimately target different journals/publishers
+    with different required styles, so the template's own stored preference
+    (when present) takes priority over any single global default — that's
+    the whole point of checking here rather than using one fixed style.
+
+    Returns a short CSL style id (e.g. "chicago-author-date") or None if the
+    template has never had Zotero's own document preferences set on it.
+    """
+    import zipfile
+    try:
+        with zipfile.ZipFile(template_path) as z:
+            if fmt == 'docx':
+                raw = z.read('docProps/custom.xml').decode('utf-8', 'ignore')
+                parts = re.findall(
+                    r'name="ZOTERO_PREF_\d+"[^>]*><vt:lpwstr>(.*?)</vt:lpwstr>',
+                    raw, re.S)
+            else:
+                raw = z.read('meta.xml').decode('utf-8', 'ignore')
+                parts = re.findall(
+                    r'meta:name="ZOTERO_PREF_\d+"[^>]*>(.*?)</meta:user-defined>',
+                    raw, re.S)
+    except (KeyError, FileNotFoundError, OSError, zipfile.BadZipFile):
+        return None
+    if not parts:
+        return None
+    import html
+    payload = html.unescape(''.join(parts))
+    m = re.search(r'<style\s+id="([^"]+)"', payload)
+    if not m:
+        return None
+    return m.group(1).rstrip('/').rsplit('/', 1)[-1]
+
+
+def _fetch_csl_style_file(csl_style):
+    """Return a local path to the given CSL style's XML, downloading (and
+    disk-caching) it from the citation-style-language/styles GitHub repo —
+    the same source BibManager.ts uses for in-editor citeproc.js rendering,
+    so PDF citations use the same style file as Obsidian's live preview.
+    """
+    import tempfile
+    import urllib.request
+    import urllib.error
+    cache_dir = Path(tempfile.gettempdir()) / 'scholarweave-csl-cache'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f'{csl_style}.csl'
+    if not cache_path.exists():
+        url = (
+            'https://raw.githubusercontent.com/citation-style-language/'
+            f'styles/master/{csl_style}.csl'
+        )
+        try:
+            with urllib.request.urlopen(url, timeout=20) as resp:
+                cache_path.write_bytes(resp.read())
+        except (OSError, urllib.error.URLError) as e:
+            raise RuntimeError(
+                f'Could not download CSL style "{csl_style}" from '
+                f'citation-style-language/styles: {e}') from e
+    return str(cache_path)
+
+
 def _parse_yaml_metadata(text, stem):
     """Parse all YAML frontmatter properties used by the export pipeline.
 
@@ -1589,8 +1767,16 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                     tof=False, template_dir=None, output_dir=None,
                     default_author=None, new_page_headings=True,
                     restart_footnotes=True, mappings_data=None, generate_date=True,
-                    roman_frontmatter=False, page1_starts_with=''):
+                    roman_frontmatter=False, page1_starts_with='',
+                    static_citations=False):
     """Unified export pipeline for DOCX and ODT.
+
+    static_citations: when True, skip sw-zotero.lua's live-Zotero-field
+    generation and let pandoc's own --citeproc render final citation text
+    and a real bibliography instead, using a CSL-JSON bibliography fetched
+    from Zotero/Better BibTeX up front. Used by export_pdf(), since a PDF
+    has no live document to refresh fields in later; DOCX/ODT exports keep
+    the default (live fields, refreshable in Word/LibreOffice).
 
     Both formats share: YAML metadata parsing, citation conversion, markdown
     pre-processing, Lua filter construction, pandoc invocation, template
@@ -1662,8 +1848,9 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         plugin_script_path('sw-doc-title.lua'),
         plugin_script_path('sw-export.lua'),
         plugin_script_path('sw-poetry.lua'),
-        plugin_script_path('sw-zotero.lua'),
     ]
+    if not static_citations:
+        filters.append(plugin_script_path('sw-zotero.lua'))
     filters += find_user_lua_filters(template_dir)
     active_mappings = mappings_data or load_mappings(template_dir)
     # Only include poetry styles when the document actually contains poetry callouts.
@@ -1702,6 +1889,41 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
     elif not template_path.endswith(f'{tpl}{ext}'):
         print(f"WARNING: template '{tpl}{ext}' not found; using {template_path} as fallback.")
 
+    # ── Static-citation mode (PDF path): fetch a CSL-JSON bibliography and
+    # the CSL style file up front, and hand citation processing to pandoc's
+    # own --citeproc instead of sw-zotero.lua's live-field generation.
+    #
+    # Style priority: a template that has already had Zotero's own "Document
+    # Preferences" set on it (i.e. it carries a real ZOTERO_PREF_1/_2/...
+    # payload — the same one Word/LibreOffice's Zotero integration writes)
+    # wins, since different templates legitimately target different
+    # journals/publishers with different required styles. Only when the
+    # template has no such preference does this fall back to a fixed
+    # default, rather than Obsidian's own live-preview style — that style is
+    # a per-user editing convenience, not necessarily what any given export
+    # template should render with.
+    citeproc_args = []
+    _tmp_biblio_dir = None
+    if static_citations:
+        zmeta = _parse_zotero_meta(text)
+        csl_style = (_read_template_csl_style(template_path, fmt)
+                     if os.path.exists(template_path) else None) \
+            or _DEFAULT_STATIC_CSL_STYLE
+        citekeys = _extract_citekeys(cit_text)
+        csl_items = _fetch_zotero_csl_items(
+            citekeys, csl_style, zmeta['client'], zmeta['library'])
+        csl_path = _fetch_csl_style_file(csl_style)
+        import tempfile as _tempfile
+        _tmp_biblio_dir = Path(_tempfile.mkdtemp())
+        biblio_path = _tmp_biblio_dir / 'bibliography.json'
+        biblio_path.write_text(json.dumps(csl_items, ensure_ascii=False), encoding='utf-8')
+        citeproc_args = [
+            '--citeproc',
+            '--bibliography', str(biblio_path),
+            '--csl', csl_path,
+            '--metadata', 'reference-section-title=Bibliography',
+        ]
+
     # ── pandoc invocation (format-specific) ────────────────────────────────────
     if fmt == 'docx':
         # DOCX: clean output with no reference-doc; merge script applies template.
@@ -1709,6 +1931,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                '-t', 'docx',
                '-f', 'markdown+wikilinks_title_after_pipe+lists_without_preceding_blankline',
                *filter_args,
+               *citeproc_args,
                '--metadata', f'source-note={compiled_md.stem}',
                '-o', str(clean_path)]
         print('Running pandoc:', ' '.join(cmd))
@@ -1729,6 +1952,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                '-t', 'odt',
                '-f', 'markdown+wikilinks_title_after_pipe+lists_without_preceding_blankline',
                *filter_args,
+               *citeproc_args,
                *ref_doc_args,
                '-o', str(clean_path)]
         print('Running pandoc:', ' '.join(cmd))
@@ -1736,6 +1960,10 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         if _tmp_ref_dir:
             import shutil as _sh2
             _sh2.rmtree(_tmp_ref_dir, ignore_errors=True)
+
+    if _tmp_biblio_dir:
+        import shutil as _sh3
+        _sh3.rmtree(_tmp_biblio_dir, ignore_errors=True)
 
     citations_md.unlink(missing_ok=True)
 
@@ -1771,6 +1999,8 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         merge_cmd.append('--roman-frontmatter')
         if page1_starts_with:
             merge_cmd += ['--page1-starts-with', page1_starts_with]
+    if static_citations:
+        merge_cmd.append('--static-citations')
     print('Merging:', ' '.join(merge_cmd))
     subprocess.run(merge_cmd, check=True)
     clean_path.unlink(missing_ok=True)
@@ -1795,7 +2025,8 @@ def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                 tof=False, template_dir=None, output_dir=None, default_author=None,
                 new_page_headings=True, restart_footnotes=True,
                 mappings_data=None, generate_date=True,
-                roman_frontmatter=False, page1_starts_with=''):
+                roman_frontmatter=False, page1_starts_with='',
+                static_citations=False):
     """Export compiled markdown to DOCX. Thin wrapper around export_document."""
     return export_document('docx', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -1806,7 +2037,8 @@ def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                            restart_footnotes=restart_footnotes,
                            mappings_data=mappings_data, generate_date=generate_date,
                            roman_frontmatter=roman_frontmatter,
-                           page1_starts_with=page1_starts_with)
+                           page1_starts_with=page1_starts_with,
+                           static_citations=static_citations)
 
 
 def _prep_reference_odt(ref_doc_path, style_names):
@@ -1911,7 +2143,8 @@ def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                tof=False, template_dir=None, output_dir=None, default_author=None,
                new_page_headings=True, restart_footnotes=True,
                mappings_data=None, generate_date=True,
-               roman_frontmatter=False, page1_starts_with=''):
+               roman_frontmatter=False, page1_starts_with='',
+               static_citations=False):
     """Export compiled markdown to ODT. Thin wrapper around export_document."""
     return export_document('odt', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
@@ -1922,7 +2155,8 @@ def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                            restart_footnotes=restart_footnotes,
                            mappings_data=mappings_data, generate_date=generate_date,
                            roman_frontmatter=roman_frontmatter,
-                           page1_starts_with=page1_starts_with)
+                           page1_starts_with=page1_starts_with,
+                           static_citations=static_citations)
 
 
 
@@ -1938,10 +2172,12 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
     preferred when an ODT template file exists, otherwise DOCX is used.
     Pass intermediate_format='docx' or 'odt' to override.
 
-    Uses LibreOffice headless for conversion when available (produces a
-    layout-faithful PDF matching what you see in the word processor).
-    Falls back to pandoc if LibreOffice is not found (requires a PDF engine
-    such as xelatex or weasyprint to be installed separately).
+    Uses LibreOffice headless for the DOCX/ODT -> PDF conversion. A pandoc
+    (LaTeX/weasyprint) fallback was removed deliberately: it needs a large
+    separate PDF engine, has unicode/font issues, and produces output that
+    looks nothing like the word-processor rendering. If LibreOffice is not
+    installed, PDF export raises with a clear message. (A future non-DOCX/ODT
+    export route — e.g. HTML+CSS -> PDF — could revisit pandoc then.)
     """
     import tempfile, shutil as _sh
     compiled_md = Path(compiled_md)
@@ -1953,16 +2189,24 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
     if intermediate_format is None:
         text = compiled_md.read_text(encoding='utf-8')
         meta = _parse_yaml_metadata(text, compiled_md.stem)
-        tpl  = template if template is not None else meta['tpl']
-        template_dir_r = resolve_template_dir(template_dir, vault_root)
-        odt_candidates = []
-        if template_dir_r:
-            odt_candidates.append(os.path.join(template_dir_r, f'{tpl}.odt'))
-        odt_candidates.append(plugin_template_path(f'{tpl}.odt'))
-        if any(os.path.exists(c) for c in odt_candidates):
-            intermediate_format = 'odt'
+        raw_tpl = template if template is not None else meta['tpl']
+        ext_m = re.search(r'\.(docx|odt)$', raw_tpl or '', flags=re.IGNORECASE)
+        if ext_m:
+            # The export dialog passes a specific template ("book.docx" vs
+            # "book.odt") — that choice IS the intended intermediate format.
+            intermediate_format = ext_m.group(1).lower()
         else:
-            intermediate_format = 'docx'
+            # Bare name (from frontmatter): prefer ODT when a matching ODT
+            # template exists, else DOCX.
+            tpl = raw_tpl
+            template_dir_r = resolve_template_dir(template_dir, vault_root)
+            odt_candidates = []
+            if template_dir_r:
+                odt_candidates.append(os.path.join(template_dir_r, f'{tpl}.odt'))
+            odt_candidates.append(plugin_template_path(f'{tpl}.odt'))
+            intermediate_format = ('odt'
+                                   if any(os.path.exists(c) for c in odt_candidates)
+                                   else 'docx')
         print(f'PDF intermediate format auto-determined: {intermediate_format}')
 
     # Export to the intermediate format in a temp directory.
@@ -1974,7 +2218,11 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
             new_page_headings=new_page_headings,
             restart_footnotes=restart_footnotes,
             mappings_data=mappings_data, generate_date=generate_date,
-            roman_frontmatter=roman_frontmatter, page1_starts_with=page1_starts_with)
+            roman_frontmatter=roman_frontmatter, page1_starts_with=page1_starts_with,
+            # PDF has no live document to refresh fields in later, so let
+            # pandoc's own --citeproc render final citations + bibliography
+            # instead of live Zotero fields (see export_document's docstring).
+            static_citations=True)
         if intermediate_format == 'docx':
             inter_path = Path(export_docx(compiled_md, **common_kwargs))
         else:
@@ -1982,26 +2230,24 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
 
         out_pdf = out_dir / f"{compiled_md.stem}.pdf"
 
-        # Prefer LibreOffice headless — it renders the document identically to
-        # what the user sees on screen, honouring all template styles.
+        # LibreOffice headless — renders the document identically to what the
+        # user sees on screen, honouring all template styles. Required: there
+        # is no fallback (see the docstring).
         soffice = find_soffice()
-        if soffice:
-            import subprocess
-            cmd = [soffice, '--headless', '--convert-to', 'pdf',
-                   '--outdir', str(out_dir), str(inter_path)]
-            print('Converting to PDF via LibreOffice:', ' '.join(cmd))
-            subprocess.run(cmd, check=True)
-            # LibreOffice names the output <stem>.pdf in outdir.
-            lo_out = out_dir / f"{inter_path.stem}.pdf"
-            if lo_out.exists() and lo_out != out_pdf:
-                lo_out.rename(out_pdf)
-        else:
-            # Fallback: pandoc (needs xelatex / weasyprint / wkhtmltopdf).
-            import subprocess
-            pandoc = os.environ.get('SW_PANDOC', 'pandoc')
-            cmd = [pandoc, str(inter_path), '-o', str(out_pdf)]
-            print('Converting to PDF via pandoc:', ' '.join(cmd))
-            subprocess.run(cmd, check=True)
+        if not soffice:
+            raise RuntimeError(
+                'PDF export needs LibreOffice installed (it converts the '
+                'DOCX/ODT to PDF). Install LibreOffice, or export to DOCX/ODT '
+                'and convert to PDF yourself.')
+        import subprocess
+        cmd = [soffice, '--headless', '--convert-to', 'pdf',
+               '--outdir', str(out_dir), str(inter_path)]
+        print('Converting to PDF via LibreOffice:', ' '.join(cmd))
+        subprocess.run(cmd, check=True)
+        # LibreOffice names the output <stem>.pdf in outdir.
+        lo_out = out_dir / f"{inter_path.stem}.pdf"
+        if lo_out.exists() and lo_out != out_pdf:
+            lo_out.rename(out_pdf)
 
         if keep_intermediate:
             dest = out_dir / inter_path.name
