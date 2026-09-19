@@ -125,32 +125,14 @@
 % own default heading spacing is stretchy, so a heading's gap from the text
 % above it can end up much larger on one page than another with no visible
 % cause, whenever the page-breaking algorithm stretches it to fill a page.
-\usepackage{titlesec}
-\titleformat{\section}{\normalfont\Large\bfseries}{}{0pt}{SWTOKNEWPAGEHEADING}
-\titlespacing*{\section}{0pt}{3.5ex}{2.3ex}
-\titleformat{\subsection}{\normalfont\large\bfseries}{}{0pt}{}
-\titlespacing*{\subsection}{0pt}{3.25ex}{1.5ex}
-% Levels 3 and 4 (Markdown ###/####) too: numbersections=true makes pandoc
-% number every heading level, and only levels with an explicit \titleformat
-% get the empty (unnumbered) label — see document.tex.
-\titleformat{\subsubsection}{\normalfont\normalsize\bfseries}{}{0pt}{}
-\titlespacing*{\subsubsection}{0pt}{3ex}{1.2ex}
-\titleformat{\paragraph}[runin]{\normalfont\normalsize\bfseries}{}{0pt}{}
-\titlespacing*{\paragraph}{0pt}{2.5ex}{1em}
-% Headings show no number (above), and the TOC entries below match — but
-% \thesection still increments normally (--metadata numbersections=true,
-% set in DocumentCompiler.py): SWTOKFIGURECOUNTER below needs a real,
-% incrementing section counter to scope figures by, which secnumdepth's
-% usual "no visible number" approach silently prevents (it stops the
-% counter, not just the display).
-\usepackage{titletoc}
-\titlecontents{section}[0pt]{}{}{}{\hfill\thecontentspage}
-\titlecontents{subsection}[1.5em]{}{}{}{\hfill\thecontentspage}
-% Levels 3 and 4 in the TOC too — see document.tex: \titlecontents supplies
-% the empty (unnumbered) label, so without these the headings are unnumbered
-% but their TOC entries still show "4.1.1"-style numbers.
-\titlecontents{subsubsection}[3em]{}{}{}{\hfill\thecontentspage}
-\titlecontents{paragraph}[4.5em]{}{}{}{\hfill\thecontentspage}
+% Heading NUMBERING is decided by DocumentCompiler.py, which emits every
+% heading as raw LaTeX: a numbered chapter from "@@" becomes \chapter{...} (so
+% LaTeX supplies the number and the chapter counter increments, which is what
+% figure numbering "chapter.N" relies on), and every other heading becomes the
+% starred form \section*/\subsection*/... carrying whatever literal number the
+% compiler wrote (e.g. "1.1"). There is therefore no titlesec/titletoc
+% configuration here and no secnumdepth juggling: LaTeX's own defaults style
+% the headings, and headings simply never show a counter they weren't given.
 SWTOKFIGURECOUNTER
 
 \usepackage{fancyhdr}

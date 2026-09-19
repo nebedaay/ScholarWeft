@@ -215,46 +215,14 @@
 \setlist[itemize,3]{label=\textbullet}
 \setlist[itemize,4]{label=\textendash}
 
-% Heading 1 (\section) / Heading 2 (\subsection) styles — edit these to
-% change appearance (bold/size/spacing/etc.); deeper heading levels use
-% LaTeX's own defaults. No number prefix by default (\thesection etc. exist
-% if you want to add one back — see titlesec's own documentation).
-%
-% \titlespacing's before/after values are FIXED lengths (no "plus/minus"
-% stretch component) deliberately: the class's own default heading spacing
-% is stretchy glue, which LaTeX's page-breaking algorithm will expand to
-% help a page reach the bottom margin evenly — so the gap above a heading
-% can end up looking much larger on one page than another with no visible
-% cause. Fixed lengths make heading spacing the same everywhere, at the
-% cost of pages no longer stretching to a perfectly even bottom margin.
-\usepackage{titlesec}
-\titleformat{\section}{\normalfont\Large\bfseries}{}{0pt}{SWTOKNEWPAGEHEADING}
-\titlespacing*{\section}{0pt}{3.5ex}{2.3ex}
-\titleformat{\subsection}{\normalfont\large\bfseries}{}{0pt}{}
-\titlespacing*{\subsection}{0pt}{3.25ex}{1.5ex}
-% Levels 3 and 4 (Markdown ###/####) as well: pandoc numbers every heading
-% level when numbersections=true, and only the levels given an explicit
-% \titleformat here get an empty label — so without these two, ### and ####
-% kept their default numbers while ##/### appeared unnumbered.
-\titleformat{\subsubsection}{\normalfont\normalsize\bfseries}{}{0pt}{}
-\titlespacing*{\subsubsection}{0pt}{3ex}{1.2ex}
-\titleformat{\paragraph}[runin]{\normalfont\normalsize\bfseries}{}{0pt}{}
-\titlespacing*{\paragraph}{0pt}{2.5ex}{1em}
-% Headings show no number (above), and the TOC entries below match — but
-% \thesection still increments normally (--metadata numbersections=true,
-% set in DocumentCompiler.py): SWTOKFIGURECOUNTER below needs a real,
-% incrementing section counter to scope figures by, which secnumdepth's
-% usual "no visible number" approach silently prevents (it stops the
-% counter, not just the display).
-\usepackage{titletoc}
-\titlecontents{section}[0pt]{}{}{}{\hfill\thecontentspage}
-\titlecontents{subsection}[1.5em]{}{}{}{\hfill\thecontentspage}
-% Levels 3 and 4 in the TOC too — \titlecontents, like \titleformat above,
-% is what supplies the empty (unnumbered) label. Without these, ### and ####
-% entries keep their default "4.1.1"-style numbers in the table of contents
-% even though the headings themselves are unnumbered.
-\titlecontents{subsubsection}[3em]{}{}{}{\hfill\thecontentspage}
-\titlecontents{paragraph}[4.5em]{}{}{}{\hfill\thecontentspage}
+% Heading NUMBERING is decided by DocumentCompiler.py, which emits every
+% heading as raw LaTeX: a numbered chapter from "@@" becomes \chapter{…} (so
+% LaTeX supplies the number and the chapter counter increments, which is what
+% figure numbering "chapter.N" relies on), and every other heading becomes the
+% starred form \section*/\subsection*/… carrying whatever literal number the
+% compiler wrote (e.g. "1.1"). There is therefore no titlesec/titletoc
+% configuration here and no secnumdepth juggling: LaTeX's own defaults style
+% the headings, and headings simply never show a counter they weren't given.
 SWTOKFIGURECOUNTER
 
 \usepackage{fancyhdr}

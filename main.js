@@ -68226,7 +68226,8 @@ from sw_merge_helpers import (  # noqa: E402
     resolve_cover, first_line, cover_author_lines,
     find_page_reset_index, looks_like_caption, strip_figure_prefix,
     append_extra_sections, resolve_note_sections,
-    strip_bibliography_heading_from_markdown,
+    strip_bibliography_heading_from_markdown, parse_chapter_number,
+    strip_chapter_prefix,
 )
 
 
@@ -68677,7 +68678,7 @@ def linkify_bare_urls(text: str) -> str:
     return _BARE_URL.sub(_sub, text)
 
 
-def compile_note(note_name: str, depth: int, chapter_number=None, suppress_heading=False):
+def compile_note(note_name: str, depth: int, label=None, suppress_heading=False):
     """Compile a linked note into an optional heading + content.
 
     Heading title resolution order:
@@ -68733,8 +68734,8 @@ def compile_note(note_name: str, depth: int, chapter_number=None, suppress_headi
     if suppress_heading:
         return content
 
-    if chapter_number is not None:
-        section_heading = '#' * depth + f' Chapter {chapter_number}: {original_heading}'
+    if label:
+        section_heading = '#' * depth + f' {label} {original_heading}'
     else:
         section_heading = '#' * depth + ' ' + original_heading
 
@@ -68824,42 +68825,136 @@ def parse_outline(body_text: str):
 
     return root
 
-def compile_node(node, depth, chapter_number=None):
+def compile_node(node, depth, label=None, number_path=None):
     """Compile one outline node recursively. Returns the section text.
 
     - Linked node:       heading (from note title/filename) + note content + children.
     - Linked + suppress: note content only (no heading) + children.
     - Plain-text node:   heading from bullet text + children.
-    - chapter=True:      heading is prefixed "Chapter N: " using chapter_number.
+    - label:             the literal number to show for a @@-marked item
+                         ("Chapter 1." at depth 1, "1.1" when nested under a
+                         numbered parent, "2." when not). None = unnumbered.
+    - number_path:       the NUMERIC components of the label only (e.g. (1,)
+                         for "Chapter 1.", (1, 2) for "1.2"), used to build a
+                         child's number. The display label carries the word
+                         "Chapter" at depth 1, but that is never repeated when
+                         nesting \u2014 "Chapter 1." at depth 1 gives "1.1", not
+                         "Chapter 1.1".
 
-    Children that have chapter=True get their own sequential chapter number
-    within the sibling group at that depth.
+    Numbering rule (see the @@ note at the top of this file): each outline
+    LEVEL keeps its own counter, which simply increments for every @@ item at
+    that level and is INDEPENDENT of other levels. A @@ item nested under a
+    numbered parent inherits the parent's number as a prefix ("1" -> "1.1");
+    under an unnumbered parent it starts a fresh bare number ("1."). Depth 1
+    reads "Chapter N."; every other level reads "N." or "parent.N".
     """
     parts = []
 
     if node['link']:
         parts.append(compile_note(
             node['link'], depth,
-            chapter_number if node['chapter'] else None,
+            label,
             suppress_heading=node.get('suppress_heading', False),
         ))
     else:
         title = node['text']
-        if chapter_number is not None:
-            parts.append('#' * depth + f' Chapter {chapter_number}: {title}')
+        if label:
+            parts.append('#' * depth + f' {label} {title}')
         else:
             parts.append('#' * depth + ' ' + title)
 
-    # Compile children, assigning sequential numbers to @@-marked siblings.
-    child_chapter_num = 0
+    # Compile children. Each level's counter is independent: it increments for
+    # each @@ item and never resets, so a run of @@ items counts 1, 2, 3 \u2026
+    # even across interleaved unnumbered items (Chapter 1, Interlude,
+    # Chapter 2 / 1. Example, Some Thoughts, 2. Another Example).
+    child_num = 0
     for child in node['children']:
-        num = None
+        child_label = None
+        child_path = None
         if child.get('chapter'):
-            child_chapter_num += 1
-            num = child_chapter_num
-        parts.append(compile_node(child, depth + 1, num))
+            child_num += 1
+            child_label, child_path = _number_label(
+                depth + 1, child_num, number_path)
+        parts.append(compile_node(child, depth + 1, child_label, child_path))
 
     return '\\n\\n'.join(parts)
+
+def _number_label(depth, n, parent_path):
+    """The literal number and numeric path to print before a @@ heading.
+
+    depth 1                   -> ("Chapter N.", (n,))
+    nested under a numbered parent -> ("<parent>.<n>", parent_path + (n,))
+    otherwise                 -> ("N.", (n,))  \u2014 a fresh number that isn't
+                                 under a number, so e.g. sections under an
+                                 unnumbered Introduction read "1.", "2."
+                                 rather than colliding with Chapter 1's "1.1".
+    """
+    if parent_path:
+        display = '.'.join(str(p) for p in parent_path + (n,))
+        return display, parent_path + (n,)
+    if depth == 1:
+        return f'Chapter {n}.', (n,)
+    return f'{n}.', (n,)
+
+
+def run_selftest():
+    """Assert the @@ numbering rule and the heading->LaTeX rule.
+
+    Runnable with \`\`DocumentCompiler.py --selftest x\`\` (the positional master
+    file is ignored). Exists because this project has no Python test runner;
+    these are the pure functions most likely to regress silently, and a wrong
+    number or a missing \\\\addcontentsline is invisible until a PDF is opened.
+    Returns 0 when every check passes, 1 otherwise.
+    """
+    failures = []
+
+    def check(name, got, want):
+        if got != want:
+            failures.append(f'{name}\\n    got:  {got!r}\\n    want: {want!r}')
+
+    # \u2500\u2500 Numbering rule (via _number_label directly) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    check('L1 first', _number_label(1, 1, None), ('Chapter 1.', (1,)))
+    check('L1 second', _number_label(1, 2, None), ('Chapter 2.', (2,)))
+    check('L2 under numbered L1',
+          _number_label(2, 1, (1,)), ('1.1', (1, 1)))
+    check('L3 under numbered L1/L2',
+          _number_label(3, 2, (1, 1)), ('1.1.2', (1, 1, 2)))
+    check('L2 under UNnumbered L1 (fresh, not 0.x)',
+          _number_label(2, 1, None), ('1.', (1,)))
+
+    # \u2500\u2500 Heading -> LaTeX: star pattern and chapter-number stripping \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    book_in = ('# Chapter 1. The *Tarbiya* Process\\n'
+               '## 1.1 Some section\\n'
+               '# Preface\\n'
+               '## 1. Topic\\n')
+    out = latexize_headings(book_in, is_book=True)
+    check('numbered chapter -> \\\\chapter (no star, label stripped)',
+          '\\\\chapter{The \\\\textit{Tarbiya} Process}' in out, True)
+    check('numbered chapter keeps no literal "Chapter 1."',
+          'Chapter 1.' in out, False)
+    check('unnumbered chapter -> \\\\chapter*',
+          '\\\\chapter*{Preface}' in out, True)
+    check('section -> \\\\section* keeping literal number',
+          '\\\\section*{1.1 Some section}' in out, True)
+    check('starred heading also gets a TOC entry',
+          '\\\\addcontentsline{toc}{section}{1.1 Some section}' in out, True)
+    check('numbered chapter does NOT get a manual TOC entry '
+          '(\\\\chapter adds its own)',
+          '\\\\addcontentsline{toc}{chapter}{The \\\\textit{Tarbiya} Process}' in out,
+          False)
+
+    # document/article: no chapters, so even a "Chapter 1." heading is starred
+    # (level 1 becomes \\section) \u2014 only books auto-number chapters.
+    doc_out = latexize_headings('# Chapter 1. T\\n## 1.1 S\\n', is_book=False)
+    check('document: level 1 is \\\\section*', '\\\\section*{Chapter 1. T}' in doc_out, True)
+
+    if failures:
+        print(f'SELFTEST FAILED ({len(failures)}):\\n')
+        for f in failures:
+            print('  \u2717 ' + f)
+        return 1
+    print('SELFTEST PASSED (numbering + heading->LaTeX rules)')
+    return 0
 
 def compile_book(master_file_path, global_footnotes=False, output_dir=None):
     """
@@ -68889,12 +68984,14 @@ def compile_book(master_file_path, global_footnotes=False, output_dir=None):
         is_chapter = node['chapter']
         if is_chapter:
             chapter_number += 1
+            top_label, top_path = _number_label(1, chapter_number, None)
             chapter_prefix = f"Ch_{chapter_number}"
-            chapter_heading = f"Chapter {chapter_number}: {node['text']}"
+            chapter_heading = f"Chapter {chapter_number}. {node['text']}"
             print(f"\\n{'='*60}")
             print(f"Processing Chapter {chapter_number}: {node['text']}")
             print(f"{'='*60}")
         else:
+            top_label, top_path = None, None
             chapter_prefix = sanitize_title(node['text'])
             chapter_heading = node['text']
             print(f"\\n{'='*60}")
@@ -68902,7 +68999,7 @@ def compile_book(master_file_path, global_footnotes=False, output_dir=None):
             print(f"{'='*60}")
 
         # Compile this node (heading + any linked content) and its children.
-        section_text = compile_node(node, 1, chapter_number if is_chapter else None)
+        section_text = compile_node(node, 1, top_label, top_path)
         print(f"  Added main section: {node['text']}")
 
         # Process ALL footnotes in the combined section text at once
@@ -68933,26 +69030,26 @@ def compile_book(master_file_path, global_footnotes=False, output_dir=None):
     # Add all the processed sections
     final_text += "\\n\\n".join(output_sections)
     
-    # Add the Notes section if there are any footnotes
+    # Footnote DEFINITIONS. Every writer pandoc targets (LaTeX, Word, ODT)
+    # renders footnotes from these definitions with no heading above them, so
+    # the old "# Notes / ## <chapter>" organizational scaffolding is omitted
+    # here \u2014 it produced an EMPTY "Notes" chapter in every format (LaTeX showed
+    # it outright; DOCX/ODT only hid it via a sw-export.lua filter, which was
+    # the format-specific duplication this rewrite removes). The definitions
+    # themselves MUST stay: pandoc pairs them with the [^n] references in the
+    # body to make real footnotes. When endnotes become an option, the heading
+    # belongs here again, decided once for all formats.
     if collected_notes:
-        notes_heading = "Notes" if global_footnotes else "Notes"
-        final_text += f"\\n\\n# {notes_heading}\\n\\n"
-        
         if global_footnotes:
-            # For global footnotes, put them all in one section
             all_notes = []
             for notes_list in collected_notes.values():
                 all_notes.extend(notes_list)
-            final_text += "\\n\\n".join(all_notes)
-            final_text += "\\n\\n"
-            print(f"\\nAdded global Notes section with {global_counter} footnotes")
+            final_text += "\\n\\n" + "\\n\\n".join(all_notes) + "\\n\\n"
+            print(f"\\nAdded {global_counter} footnote definition(s)")
         else:
-            # For chapter-specific footnotes, organize by chapter
-            for notes_heading, notes_list in collected_notes.items():
-                final_text += f"## {notes_heading}\\n\\n"
-                final_text += "\\n\\n".join(notes_list)
-                final_text += "\\n\\n"
-            print(f"\\nAdded chapter-specific Notes section with {len(collected_notes)} chapters")
+            for _chapter, notes_list in collected_notes.items():
+                final_text += "\\n\\n" + "\\n\\n".join(notes_list) + "\\n\\n"
+            print(f"\\nAdded footnote definitions for {len(collected_notes)} chapter(s)")
 
     # Clean up extra blank lines
     final_text = re.sub(r'\\n{3,}', '\\n\\n', final_text)
@@ -69999,6 +70096,93 @@ def _latex_escape(text):
     if not text:
         return ''
     return _LATEX_ESCAPE_RE.sub(lambda m: _LATEX_ESCAPE_MAP[m.group(0)], text)
+
+
+#: A compiled-markdown ATX heading line: level (#s) + text.
+_MD_HEADING_RE = re.compile(r'^(#{1,6})[ \\t]+(.*?)[ \\t]*$', re.M)
+
+
+def _md_inline_to_latex(text):
+    """Minimal Markdown-inline -> LaTeX for heading titles.
+
+    Handles the common emphasis forms (\`\`**bold**\`\`/\`\`__bold__\`\` and
+    \`\`*italic*\`\`/\`\`_italic_\`\`) before escaping the rest, so a chapter written
+    as \`\`@@ The *Tarbiya* Process\`\` becomes \`\`The \\\\textit{Tarbiya} Process\`\`.
+    Deliberately small: heading titles rarely carry more than emphasis, and
+    anything else is escaped as literal text.
+    """
+    placeholders = []
+
+    def stash(latex):
+        placeholders.append(latex)
+        return f'\\x00{len(placeholders) - 1}\\x00'
+
+    # Strong first (so ** isn't eaten by the single-* rule), then emphasis.
+    text = re.sub(r'\\*\\*(.+?)\\*\\*', lambda m: stash(r'\\textbf{' + m.group(1) + '}'), text)
+    text = re.sub(r'__(.+?)__', lambda m: stash(r'\\textbf{' + m.group(1) + '}'), text)
+    text = re.sub(r'\\*(.+?)\\*', lambda m: stash(r'\\textit{' + m.group(1) + '}'), text)
+    text = re.sub(r'(?<![A-Za-z0-9])_(.+?)_(?![A-Za-z0-9])',
+                  lambda m: stash(r'\\textit{' + m.group(1) + '}'), text)
+
+    text = _latex_escape(text)
+    # Restore stashed LaTeX; re-escape their inner text too.
+    def unstash(m):
+        latex = placeholders[int(m.group(1))]
+        head, inner = latex.split('{', 1)
+        inner = inner.rsplit('}', 1)[0]
+        return head + '{' + _latex_escape(inner) + '}'
+    return re.sub(r'\\x00(\\d+)\\x00', unstash, text)
+
+
+def latexize_headings(md_text, is_book):
+    """Rewrite Markdown headings as raw LaTeX so their NUMBERING is exactly
+    what the compiler decided, rather than pandoc's all-or-nothing rule.
+
+    - A numbered chapter (book, level-1 heading whose text starts
+      "Chapter N.") -> \`\`\\\\chapter{\u2026}\`\`: LaTeX renders the number, and the
+      chapter counter increments (figure numbering "chapter.N" depends on it).
+    - Every other heading -> the starred form (\`\`\\\\chapter*\`\`/\`\`\\\\section*\`\`/\u2026),
+      keeping whatever literal number the compiler wrote (e.g. "1.1", "1.").
+
+    Emitting raw LaTeX (via the raw_attribute passthrough pandoc is already
+    run with) is what makes the star/no-star choice possible at all: pandoc on
+    its own numbers ALL headings or NONE, and never emits a starred form.
+    Inline emphasis in the title is converted by _md_inline_to_latex.
+    """
+    level_cmd_book = {1: 'chapter', 2: 'section', 3: 'subsection',
+                      4: 'subsubsection', 5: 'paragraph', 6: 'subparagraph'}
+    level_cmd_plain = {1: 'section', 2: 'subsection', 3: 'subsubsection',
+                       4: 'paragraph', 5: 'subparagraph', 6: 'subparagraph'}
+
+    def repl(m):
+        hashes, title = m.group(1), m.group(2)
+        level = len(hashes)
+        cmd = (level_cmd_book if is_book else level_cmd_plain).get(level, 'subparagraph')
+        # "Is this a numbered chapter?" uses the SAME test as DOCX/ODT
+        # (parse_chapter_number on a level-1 heading), and the label is removed
+        # with the SAME stripper (strip_chapter_prefix) \u2014 so all three formats
+        # agree on which chapters are numbered and on the bare title, and none
+        # can drift from the others.
+        numbered_chapter = is_book and level == 1 and parse_chapter_number(title) > 0
+        if numbered_chapter:
+            # LaTeX supplies "Chapter N" itself, so drop the literal label the
+            # compiler wrote \u2014 otherwise the number would appear twice.
+            title = strip_chapter_prefix(title)
+        latex_title = _md_inline_to_latex(title)
+        star = '' if numbered_chapter else '*'
+        # Raw LaTeX headings bypass pandoc's own TOC/label plumbing, so we add
+        # the TOC entry (and a label) ourselves: a *-form heading is NOT
+        # auto-added to the TOC, and a numbered \\chapter already adds itself.
+        # The TOC line carries the same text the heading shows, so numbered
+        # chapters read "1 Name" (number from \\numberline) and unnumbered ones
+        # read their bare title/ literal number \u2014 i.e. the TOC mirrors the body.
+        out = [f'\`\`\`{{=latex}}', f'\\\\{cmd}{star}{{{latex_title}}}']
+        if star:
+            out.append(
+                f'\\\\addcontentsline{{toc}}{{{cmd}}}{{{latex_title}}}')
+        out.append('\`\`\`')
+        return '\\n'.join(out)
+    return _MD_HEADING_RE.sub(repl, md_text)
 
 
 #: A solo image markdown line \u2014 \`![alt](path)\` optionally followed by a
@@ -71163,6 +71347,13 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
     cit_text = strip_wikilinks(cit_text)
     cit_text = linkify_bare_urls(cit_text)
 
+    # NOTE: headings are converted to raw LaTeX near the END of this function
+    # (see latexize_headings below), AFTER the \\mainmatter insertion and the
+    # bibliography-heading strip \u2014 both of those search for Markdown "#"
+    # headings, so latexizing first would make them find nothing (which is
+    # exactly the bug that silently dropped \\mainmatter and left a book in
+    # roman numerals throughout).
+
     # Strip the note's own YAML frontmatter \u2014 pandoc reads title/author/date
     # from IT directly (independent of any --metadata CLI flag, and even an
     # empty --metadata override doesn't unset a $if(title)$ check), which
@@ -71239,6 +71430,21 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
     title_block_fn = _latex_titlepage_block if is_book else _latex_title_block
     front_matter = title_block_fn(
         doc_title, doc_subtitle, doc_author, doc_date, doc_abstract, extra_sections)
+
+    # \u2500\u2500 Headings -> raw LaTeX (MUST run after every step above that searches
+    # for Markdown "#" headings: the \\mainmatter insertion and the
+    # bibliography-heading strip). Only a NUMBERED chapter gets LaTeX's
+    # automatic number; every other heading is unnumbered (\\chapter*/\\section*/
+    # \u2026) and simply shows whatever literal number the compiler wrote into its
+    # text (e.g. "1.1", or "1." for a numbered section under an unnumbered
+    # parent). LaTeX's own sectioning counters are therefore untouched, which
+    # keeps per-chapter figure numbering correct (it needs the chapter counter
+    # alive) \u2014 see the @@ note at the top of this file for the numbering rule.
+    # Emitting raw LaTeX (via the raw_attribute passthrough pandoc is already
+    # run with) is what makes the star/no-star choice possible at all: pandoc
+    # on its own numbers ALL headings or NONE, and never emits a starred form.
+    cit_text = latexize_headings(cit_text, is_book)
+
     if is_book and roman_frontmatter:
         front_matter += '\`\`\`{=latex}\\n\\\\frontmatter\\n\`\`\`\\n\\n'
     if toc:
@@ -71254,7 +71460,7 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
 
     citations_md.write_text(cit_text, encoding='utf-8')
 
-    # \u2500\u2500 Lua filters: Notes-section suppression, poetry -> verse. No
+    # \u2500\u2500 Lua filters: poetry -> verse (sw-export.lua), bidi, etc. No
     # sw-doc-title.lua \u2014 its "fall back to source-note" title logic would set
     # meta.title from --metadata source-note=..., re-triggering pandoc's own
     # \\maketitle (which we deliberately avoid \u2014 see the title-page block
@@ -71331,6 +71537,14 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
         )
         newpage_latex = '\\\\newpage' if new_page_headings else ''
 
+        # Heading numbering is decided in the compiled markdown by the compiler
+        # itself (see latexize_headings + the @@ note): numbered chapters use
+        # LaTeX's own number, every other heading is emitted starred. So
+        # pandoc's \`numbersections\` and LaTeX's \`secnumdepth\` are no longer
+        # used to control the display at all. Titles keep their styling from
+        # LaTeX's defaults (or the class's), not from per-level \\titleformat,
+        # which is why neither titlesec nor titletoc appears here any more.
+
         preamble_src = (preamble_src
                         .replace('SWTOKAUTHOR', _latex_escape(first_line(doc_author) or ''))
                         .replace('SWTOKSHORTTITLE', _latex_escape(short_title or ''))
@@ -71358,18 +71572,14 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                '--include-in-header', str(preamble_path),
                '--metadata', f'documentclass={"book" if is_book else "article"}',
                '--metadata', 'classoption=twoside',
-               # numbersections=true keeps pandoc from setting secnumdepth to
-               # -\\maxdimen (its default when this is unset) \u2014 headings still
-               # show NO visible number (titlesec's \\titleformat calls below
-               # use an empty label) and the TOC still shows no number
-               # (titletoc's \\titlecontents calls do the same for TOC
-               # entries), but critically the underlying \\thechapter/
-               # \\thesection counter now actually increments: at
-               # secnumdepth -\\maxdimen it never does (confirmed empirically
-               # \u2014 \\thechapter reads 0 after every single \\chapter), which
-               # silently broke \\counterwithin{figure/footnote}{chapter} \u2014
-               # every chapter's figures numbered "Figure 0.1", and footnotes
-               # never reset at all, regardless of restart_footnotes.
+               # numbersections=true is now BELT-AND-BRACES: every heading is
+               # emitted as raw LaTeX by latexize_headings, so pandoc never
+               # numbers anything itself. It is kept because a raw \\chapter{}
+               # increments LaTeX's chapter counter unconditionally (which is
+               # what per-chapter figure numbering needs), and leaving this on
+               # means any heading that somehow escaped latexize_headings
+               # still keeps the counters alive rather than silently freezing
+               # them at -\\maxdimen (the historical "Figure 0.1" bug).
                '--metadata', 'numbersections=true',
                *[a for opt in extra_classoptions
                  for a in ('--metadata', f'classoption={opt}')],
@@ -71674,8 +71884,14 @@ def main():
                        help='Do NOT use Zotero fields or --citeproc: leave citations as '
                             'literal text (e.g. [@citekey]). Used when the user chooses to '
                             'export without Zotero running. DOCX/ODT only.')
+    parser.add_argument('--selftest', action='store_true', dest='selftest',
+                       help='Run internal checks on the @@ numbering and heading->LaTeX '
+                            'rules, print PASS/FAIL, and exit (no file is read or written).')
 
     args = parser.parse_args()
+
+    if args.selftest:
+        sys.exit(run_selftest())
 
     master_file = Path(args.master_file).expanduser()
     if not master_file.exists():
@@ -71913,36 +72129,14 @@ function BlockQuote(el)
   return pandoc.Div(body, pandoc.Attr('', {}, {['custom-style'] = 'Callout heading'}))
 end
 
--- \u2500\u2500 Notes-section suppression \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+-- The former "Notes-section suppression" lived here. It dropped a "# Notes"
+-- organizational section that DocumentCompiler.py used to emit and that showed
+-- up as an empty chapter. That heading is no longer emitted at all (the
+-- footnote DEFINITIONS are still written, just without a heading \u2014 see
+-- compile_book), so suppression belongs to no single writer: every format now
+-- gets the right result from the one shared decision in the compiler.
 
--- Drop the DocumentCompiler "Notes" organizational section: a "# Notes" heading
--- and any following "## <chapter>" subheadings whose content pandoc turned
--- into real Word footnotes. Without this they render as empty headings.
-local in_notes = false
-function Header(el)
-  local text = pandoc.utils.stringify(el.content):lower()
-  if el.level == 1 and text == 'notes' then
-    in_notes = true
-    return pandoc.List{}  -- drop the Notes heading itself
-  end
-  if in_notes then
-    -- Drop chapter subheadings inside Notes (they have no body content).
-    return pandoc.List{}
-  end
-  return nil
-end
-
-function Block(block)
-  -- A non-header block (paragraph, list, etc.) after Notes marks the end of
-  -- the organizational section \u2014 reset the flag. (Footnotes are converted by
-  -- the writer, so the Notes body is headings-only in practice.)
-  if in_notes and block.t ~= 'Header' then
-    in_notes = false
-  end
-  return nil
-end
-
-return { { Meta = Meta, Block = Block, Header = Header, BlockQuote = BlockQuote } }
+return { { Meta = Meta, BlockQuote = BlockQuote } }
 `, "binary": false }, "scripts/sw-poetry.lua": { "content": `-- sw-poetry.lua
 --
 -- Optional ScholarWeft Lua filter: converts Obsidian poetry callouts to
@@ -81920,32 +82114,14 @@ if __name__ == '__main__':
 % own default heading spacing is stretchy, so a heading's gap from the text
 % above it can end up much larger on one page than another with no visible
 % cause, whenever the page-breaking algorithm stretches it to fill a page.
-\\usepackage{titlesec}
-\\titleformat{\\section}{\\normalfont\\Large\\bfseries}{}{0pt}{SWTOKNEWPAGEHEADING}
-\\titlespacing*{\\section}{0pt}{3.5ex}{2.3ex}
-\\titleformat{\\subsection}{\\normalfont\\large\\bfseries}{}{0pt}{}
-\\titlespacing*{\\subsection}{0pt}{3.25ex}{1.5ex}
-% Levels 3 and 4 (Markdown ###/####) too: numbersections=true makes pandoc
-% number every heading level, and only levels with an explicit \\titleformat
-% get the empty (unnumbered) label \u2014 see document.tex.
-\\titleformat{\\subsubsection}{\\normalfont\\normalsize\\bfseries}{}{0pt}{}
-\\titlespacing*{\\subsubsection}{0pt}{3ex}{1.2ex}
-\\titleformat{\\paragraph}[runin]{\\normalfont\\normalsize\\bfseries}{}{0pt}{}
-\\titlespacing*{\\paragraph}{0pt}{2.5ex}{1em}
-% Headings show no number (above), and the TOC entries below match \u2014 but
-% \\thesection still increments normally (--metadata numbersections=true,
-% set in DocumentCompiler.py): SWTOKFIGURECOUNTER below needs a real,
-% incrementing section counter to scope figures by, which secnumdepth's
-% usual "no visible number" approach silently prevents (it stops the
-% counter, not just the display).
-\\usepackage{titletoc}
-\\titlecontents{section}[0pt]{}{}{}{\\hfill\\thecontentspage}
-\\titlecontents{subsection}[1.5em]{}{}{}{\\hfill\\thecontentspage}
-% Levels 3 and 4 in the TOC too \u2014 see document.tex: \\titlecontents supplies
-% the empty (unnumbered) label, so without these the headings are unnumbered
-% but their TOC entries still show "4.1.1"-style numbers.
-\\titlecontents{subsubsection}[3em]{}{}{}{\\hfill\\thecontentspage}
-\\titlecontents{paragraph}[4.5em]{}{}{}{\\hfill\\thecontentspage}
+% Heading NUMBERING is decided by DocumentCompiler.py, which emits every
+% heading as raw LaTeX: a numbered chapter from "@@" becomes \\chapter{...} (so
+% LaTeX supplies the number and the chapter counter increments, which is what
+% figure numbering "chapter.N" relies on), and every other heading becomes the
+% starred form \\section*/\\subsection*/... carrying whatever literal number the
+% compiler wrote (e.g. "1.1"). There is therefore no titlesec/titletoc
+% configuration here and no secnumdepth juggling: LaTeX's own defaults style
+% the headings, and headings simply never show a counter they weren't given.
 SWTOKFIGURECOUNTER
 
 \\usepackage{fancyhdr}
@@ -82120,35 +82296,15 @@ SWTOKFIGURECOUNTER
 % cause, whenever the page-breaking algorithm stretches it to fill a page.
 % \\chapter's own "before" skip is moot (it always starts a fresh page) but
 % titlesec still wants a value.
-\\usepackage{titlesec}
-\\titleformat{\\chapter}{\\normalfont\\huge\\bfseries}{}{0pt}{}
-\\titlespacing*{\\chapter}{0pt}{0pt}{40pt}
-\\titleformat{\\section}{\\normalfont\\Large\\bfseries}{}{0pt}{}
-\\titlespacing*{\\section}{0pt}{3.5ex}{2.3ex}
-% Levels 3 and 4 (Markdown ###/####) too: numbersections=true makes pandoc
-% number every heading level, and only levels given an explicit \\titleformat
-% get the empty (unnumbered) label \u2014 see document.tex.
-\\titleformat{\\subsection}{\\normalfont\\large\\bfseries}{}{0pt}{}
-\\titlespacing*{\\subsection}{0pt}{3.25ex}{1.5ex}
-\\titleformat{\\subsubsection}{\\normalfont\\normalsize\\bfseries}{}{0pt}{}
-\\titlespacing*{\\subsubsection}{0pt}{3ex}{1.2ex}
-\\titleformat{\\paragraph}[runin]{\\normalfont\\normalsize\\bfseries}{}{0pt}{}
-\\titlespacing*{\\paragraph}{0pt}{2.5ex}{1em}
-% Headings show no number (above), and the TOC entries below match \u2014 but
-% \\thechapter/\\thesection still increment normally (--metadata
-% numbersections=true, set in DocumentCompiler.py): the class's own native
-% per-chapter footnote/figure numbering (see the top-of-file note) needs a
-% real, incrementing chapter counter to key off, which secnumdepth's usual
-% "no visible number" approach silently prevents (it stops the counter
-% incrementing entirely, not just its display \u2014 confirmed empirically).
-\\usepackage{titletoc}
-\\titlecontents{chapter}[0pt]{}{}{}{\\hfill\\thecontentspage}
-\\titlecontents{section}[1.5em]{}{}{}{\\hfill\\thecontentspage}
-% Deeper levels in the TOC too \u2014 \\titlecontents supplies the empty
-% (unnumbered) label; see document.tex.
-\\titlecontents{subsection}[3em]{}{}{}{\\hfill\\thecontentspage}
-\\titlecontents{subsubsection}[4.5em]{}{}{}{\\hfill\\thecontentspage}
-\\titlecontents{paragraph}[6em]{}{}{}{\\hfill\\thecontentspage}
+% Heading NUMBERING is decided by DocumentCompiler.py, which emits every
+% heading as raw LaTeX: a numbered chapter from "@@" becomes \\chapter{...} (so
+% LaTeX supplies the number and the chapter counter increments, which is what
+% figure numbering "chapter.N" relies on), and every other heading becomes the
+% starred form \\section*/\\subsection*/... carrying whatever literal number the
+% compiler wrote (e.g. "1.1"). There is therefore no titlesec/titletoc
+% configuration here and no secnumdepth juggling: LaTeX's own defaults style
+% the headings, and headings simply never show a counter they weren't given.
+
 
 \\usepackage{fancyhdr}
 % Running heads match book.docx/book.odt: LEFT (even) page = "Author Name \u2013
@@ -82392,46 +82548,14 @@ SWTOKFIGURECOUNTER
 \\setlist[itemize,3]{label=\\textbullet}
 \\setlist[itemize,4]{label=\\textendash}
 
-% Heading 1 (\\section) / Heading 2 (\\subsection) styles \u2014 edit these to
-% change appearance (bold/size/spacing/etc.); deeper heading levels use
-% LaTeX's own defaults. No number prefix by default (\\thesection etc. exist
-% if you want to add one back \u2014 see titlesec's own documentation).
-%
-% \\titlespacing's before/after values are FIXED lengths (no "plus/minus"
-% stretch component) deliberately: the class's own default heading spacing
-% is stretchy glue, which LaTeX's page-breaking algorithm will expand to
-% help a page reach the bottom margin evenly \u2014 so the gap above a heading
-% can end up looking much larger on one page than another with no visible
-% cause. Fixed lengths make heading spacing the same everywhere, at the
-% cost of pages no longer stretching to a perfectly even bottom margin.
-\\usepackage{titlesec}
-\\titleformat{\\section}{\\normalfont\\Large\\bfseries}{}{0pt}{SWTOKNEWPAGEHEADING}
-\\titlespacing*{\\section}{0pt}{3.5ex}{2.3ex}
-\\titleformat{\\subsection}{\\normalfont\\large\\bfseries}{}{0pt}{}
-\\titlespacing*{\\subsection}{0pt}{3.25ex}{1.5ex}
-% Levels 3 and 4 (Markdown ###/####) as well: pandoc numbers every heading
-% level when numbersections=true, and only the levels given an explicit
-% \\titleformat here get an empty label \u2014 so without these two, ### and ####
-% kept their default numbers while ##/### appeared unnumbered.
-\\titleformat{\\subsubsection}{\\normalfont\\normalsize\\bfseries}{}{0pt}{}
-\\titlespacing*{\\subsubsection}{0pt}{3ex}{1.2ex}
-\\titleformat{\\paragraph}[runin]{\\normalfont\\normalsize\\bfseries}{}{0pt}{}
-\\titlespacing*{\\paragraph}{0pt}{2.5ex}{1em}
-% Headings show no number (above), and the TOC entries below match \u2014 but
-% \\thesection still increments normally (--metadata numbersections=true,
-% set in DocumentCompiler.py): SWTOKFIGURECOUNTER below needs a real,
-% incrementing section counter to scope figures by, which secnumdepth's
-% usual "no visible number" approach silently prevents (it stops the
-% counter, not just the display).
-\\usepackage{titletoc}
-\\titlecontents{section}[0pt]{}{}{}{\\hfill\\thecontentspage}
-\\titlecontents{subsection}[1.5em]{}{}{}{\\hfill\\thecontentspage}
-% Levels 3 and 4 in the TOC too \u2014 \\titlecontents, like \\titleformat above,
-% is what supplies the empty (unnumbered) label. Without these, ### and ####
-% entries keep their default "4.1.1"-style numbers in the table of contents
-% even though the headings themselves are unnumbered.
-\\titlecontents{subsubsection}[3em]{}{}{}{\\hfill\\thecontentspage}
-\\titlecontents{paragraph}[4.5em]{}{}{}{\\hfill\\thecontentspage}
+% Heading NUMBERING is decided by DocumentCompiler.py, which emits every
+% heading as raw LaTeX: a numbered chapter from "@@" becomes \\chapter{\u2026} (so
+% LaTeX supplies the number and the chapter counter increments, which is what
+% figure numbering "chapter.N" relies on), and every other heading becomes the
+% starred form \\section*/\\subsection*/\u2026 carrying whatever literal number the
+% compiler wrote (e.g. "1.1"). There is therefore no titlesec/titletoc
+% configuration here and no secnumdepth juggling: LaTeX's own defaults style
+% the headings, and headings simply never show a counter they weren't given.
 SWTOKFIGURECOUNTER
 
 \\usepackage{fancyhdr}

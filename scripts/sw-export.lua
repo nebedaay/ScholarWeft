@@ -91,33 +91,11 @@ function BlockQuote(el)
   return pandoc.Div(body, pandoc.Attr('', {}, {['custom-style'] = 'Callout heading'}))
 end
 
--- ── Notes-section suppression ────────────────────────────────────────────────
+-- The former "Notes-section suppression" lived here. It dropped a "# Notes"
+-- organizational section that DocumentCompiler.py used to emit and that showed
+-- up as an empty chapter. That heading is no longer emitted at all (the
+-- footnote DEFINITIONS are still written, just without a heading — see
+-- compile_book), so suppression belongs to no single writer: every format now
+-- gets the right result from the one shared decision in the compiler.
 
--- Drop the DocumentCompiler "Notes" organizational section: a "# Notes" heading
--- and any following "## <chapter>" subheadings whose content pandoc turned
--- into real Word footnotes. Without this they render as empty headings.
-local in_notes = false
-function Header(el)
-  local text = pandoc.utils.stringify(el.content):lower()
-  if el.level == 1 and text == 'notes' then
-    in_notes = true
-    return pandoc.List{}  -- drop the Notes heading itself
-  end
-  if in_notes then
-    -- Drop chapter subheadings inside Notes (they have no body content).
-    return pandoc.List{}
-  end
-  return nil
-end
-
-function Block(block)
-  -- A non-header block (paragraph, list, etc.) after Notes marks the end of
-  -- the organizational section — reset the flag. (Footnotes are converted by
-  -- the writer, so the Notes body is headings-only in practice.)
-  if in_notes and block.t ~= 'Header' then
-    in_notes = false
-  end
-  return nil
-end
-
-return { { Meta = Meta, Block = Block, Header = Header, BlockQuote = BlockQuote } }
+return { { Meta = Meta, BlockQuote = BlockQuote } }
