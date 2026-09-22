@@ -83,14 +83,14 @@ The heading text for a linked note comes from the note's `title:` property, else
 
 - **Output format** — Markdown, DOCX, ODT, PDF.
 - **Template** — auto-selected from the note's `template:` property; changeable per export.
-- **Document type** — Book, Article, or Markdown; sets the other checkboxes (TOC, per-chapter footnotes, new-page headings, roman frontmatter), which can then be customised.
+- **Document type** — Book, Article, or Custom; sets the other checkboxes (TOC, per-chapter footnotes, new-page headings, roman frontmatter), which can then be customised.
 - **Output filename and folder.**
-- **Table of contents / table of figures**, **restart footnote and figure numbering per chapter**, **top-level headings start on a new page**.
+- **Table of contents / table of figures**, **restart footnote and figure numbering per chapter**, **top-level headings start on a new page**. The per-chapter restart is greyed out for ODT exports with native endnotes, which LibreOffice numbers continuously (the setting is kept, so it still applies to DOCX/LaTeX).
 - **Auto-number headings down to level** — `0` (default) numbers only `@@`-marked headings; `1` numbers chapters; `2` chapters and sections; and so on. When set above `0`, `@@` is ignored and a `* ` prefix on a bullet marks an unnumbered exception. Numbering is applied to the **final** document, so a heading is numbered by where it ends up — including headings inside an included note. Set by the note's `numbering-levels` property. (A numbered single note is written to a separate `… - numbered.md` copy; the original is never overwritten.)
 - **TOC depth** — `1` lists chapters only, `2` (default) chapters and sections. Set by the note's `toc-levels` property.
 - **Notes** — three choices, set by the note's `endnotes` property. Both endnote choices compile the document exactly as the footnote path does — author notes and in-text citations all become real notes — then route them:
   - **Footnotes (page-bottom)** — the default; notes render as native footnotes in every format.
-  - **Endnotes (native word-processor formatting)** — every footnote is converted to a real endnote object, preceded by a level-1 **Notes** heading (it appears in the TOC). The word processor owns that stream: it is a single continuous sequence, so its numbering does **not** restart per chapter and it cannot be divided by chapter. Markdown/LaTeX get a `# Notes` section.
+  - **Endnotes (native word-processor formatting)** — every footnote is converted to a real endnote object, preceded by a level-1 **Notes** heading (it appears in the TOC). The word processor owns that stream and it cannot be divided by chapter: in **DOCX** its numbering restarts per chapter (per-chapter section breaks), while **ODT/LibreOffice numbers it continuously** — that format has no per-chapter endnote numbering. Markdown/LaTeX get a `# Notes` section.
   - **Endnotes (as body paragraphs divided by chapter)** — the notes appear as visible paragraphs after the Notes heading, each group under its chapter (`## <chapter>`), with superscript note numbers in the body, per-chapter numbering, and no native note objects. Each note's citations are rendered inline within it (no page-bottom footnotes remain). This option mirrors the footnote path's per-chapter structure. Shown only when per-chapter (discontinuous) numbering is selected; with continuous numbering the option is hidden.
   - In all cases the notes keep their original order, and nothing is left as a page-bottom footnote.
 

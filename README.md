@@ -49,7 +49,7 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 
 ### Document import and export (desktop only)
 
-- **Compile and export** a note or a multi-note outline as markdown, DOCX, ODT, or PDF with one command, with fine-grained options (TOC, per-chapter footnotes, figure captions, custom styles). See [Document Import and Export](./docs/import-export.md).
+- **Compile and export** a note or a multi-note outline as markdown, DOCX, ODT, or PDF with one command, with fine-grained options (TOC, footnotes or endnotes, figure captions, custom styles). See [Document Import and Export](./docs/import-export.md).
 - **Import DOCX/ODT** documents as markdown notes, converting their Zotero citation fields to linked citations.
 - **Custom callouts and markdown → DOCX/ODT styles** — Markdown Attributes / Extended Markdown Syntax styles are converted automatically; undefined styles get a highlighted sentinel so you can define them.
 

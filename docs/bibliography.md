@@ -45,4 +45,4 @@ bibliography:
 ---
 ```
 
-Paths resolve relative to the note first, then to the vault root. For the citation *style* overrides (`csl:` / `citation-style:` / `lang:`), see [Citations](./citations.md).
+Paths resolve relative to the note first, then to the vault root. For the citation *style* overrides (`csl:` / `citation-style:` / `lang:`), see [Citations](./citations.md). To turn the generated bibliography off for a note's export, use the separate `include-bibliography` property — see [Document Import and Export](./import-export.md).
