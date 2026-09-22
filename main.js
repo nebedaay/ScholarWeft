@@ -68784,6 +68784,14 @@ def compile_note(note_name: str, depth: int, marker='', suppress_heading=False):
     # the FINAL document for outlines and single notes alike.
     content = adjust_heading_levels(content, depth)
 
+    # Each note numbers its own footnotes from 1, so compiling several notes
+    # would otherwise reuse the same [^fn1] name and mismatch anchors to
+    # definitions once they are one document. Prefix this note's footnotes with
+    # a slug unique to the note (the finalize stage matches them by name).
+    _slug = re.sub(r'[^A-Za-z0-9]+', '-', note_name).strip('-') or 'note'
+    content = re.sub(r'\\[\\^([^\\]]+)\\]',
+                     lambda m: f'[^{_slug}--{m.group(1)}]', content)
+
     if suppress_heading:
         return content
 
@@ -68957,10 +68965,12 @@ def _endnote_entry(n):
     AND the leading "N." cannot be read as an ordered-list marker \u2014 while the
     note text itself sits OUTSIDE the span, so a note whose text contains "[",
     "]", or unbalanced brackets can no longer break the anchor or leak a stray
-    bracket. The number's dot is escaped so pandoc keeps it literal, and no
-    space is written after the span \u2014 the merge's number-tab step supplies the
-    separator, so the note reads "N." + tab + text with no stray space."""
-    return (f'[{n["display"]}\\\\.]{{#notes-{n["anchor_id"]}}}{n["content"]}')
+    bracket. The number's dot is escaped so pandoc keeps it literal.
+
+    A single SPACE separates the number from the text. LaTeX/Markdown keep it
+    (the note reads "N. text"); the DOCX/ODT merges replace it with a tab in
+    their endnote style, so it never shows up twice."""
+    return (f'[{n["display"]}\\\\.]{{#notes-{n["anchor_id"]}}} {n["content"]}')
 
 
 def render_notes_section(collected_notes, *, endnotes, global_footnotes,
