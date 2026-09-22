@@ -19,7 +19,22 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run build
-      - name: Create GitHub release
+      # The release body comes from release-notes.md, which is committed with
+      # the release (see the "Releasing" section in CLAUDE.md). When that file
+      # is absent, fall back to GitHub's generated notes so a release is never
+      # blocked — but a release WITH notes is the norm.
+      - name: Create GitHub release (notes from release-notes.md)
+        if: ${{ hashFiles('release-notes.md') != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            main.js
+            manifest.json
+            styles.css
+          body_path: release-notes.md
+          fail_on_unmatched_files: true
+      - name: Create GitHub release (generated notes)
+        if: ${{ hashFiles('release-notes.md') == '' }}
         uses: softprops/action-gh-release@v2
         with:
           files: |

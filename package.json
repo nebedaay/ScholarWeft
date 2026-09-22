@@ -13,8 +13,8 @@
     "prettier": "prettier --write \"./src/**/*.{ts,tsx}\"",
     "clean": "npm run prettier && npm run lint:fix",
     "test": "jest",
-    "rlnotes": "git fetch --tags --quiet || true; git log $(git describe --tags --abbrev=0)..HEAD --oneline > release-notes.md && git add release-notes.md",
-    "bump": "node version-bump.mjs && git add package.json package-lock.json manifest.json versions.json main.js styles.css scripts docs README.md NOTICE.md sw-export-templates sw-markdown-templates sw-zotlit-templates && npm run rlnotes",
+    "rlnotes": "node release-notes.mjs && git add release-notes.md",
+    "bump": "node version-bump.mjs && git add -A && npm run rlnotes",
     "release": "version=$(node -p \"require('./manifest.json').version\") && git commit -m \"$version\" && git tag \"$version\" && git push && git push --tags"
   },
   "keywords": [],
