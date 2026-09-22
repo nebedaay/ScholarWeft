@@ -1284,19 +1284,19 @@ def run_selftest():
           'Chapter 1.' in out, False)
     check('unnumbered chapter -> \\chapter*',
           '\\chapter*{Preface}' in out, True)
-    check('section -> \\section* keeping literal number',
-          '\\section*{1.1 Some section}' in out, True)
-    check('starred heading also gets a TOC entry',
-          '\\addcontentsline{toc}{section}{1.1 Some section}' in out, True)
+    check('section -> \\section keeping literal number (LaTeX adds the TOC entry)',
+          '\\section{1.1 Some section}' in out, True)
+    check('section gets NO manual TOC entry (LaTeX adds it)',
+          '\\addcontentsline{toc}{section}' in out, False)
     check('numbered chapter does NOT get a manual TOC entry '
           '(\\chapter adds its own)',
           '\\addcontentsline{toc}{chapter}{The \\textit{Tarbiya} Process}' in out,
           False)
 
-    # document/article: no chapters, so even a "Chapter 1." heading is starred
+    # document/article: no chapters, so even a "Chapter 1." heading is unstarred
     # (level 1 becomes \section) — only books auto-number chapters.
     doc_out = latexize_headings('# Chapter 1. T\n## 1.1 S\n', is_book=False)
-    check('document: level 1 is \\section*', '\\section*{Chapter 1. T}' in doc_out, True)
+    check('document: level 1 is \\section', '\\section{Chapter 1. T}' in doc_out, True)
 
     if failures:
         print(f'SELFTEST FAILED ({len(failures)}):\n')
@@ -2529,13 +2529,15 @@ def latexize_headings(md_text, is_book):
             # compiler wrote — otherwise the number would appear twice.
             title = strip_chapter_prefix(title)
         latex_title = _md_inline_to_latex(title)
-        star = '' if numbered_chapter else '*'
-        # Raw LaTeX headings bypass pandoc's own TOC/label plumbing, so we add
-        # the TOC entry (and a label) ourselves: a *-form heading is NOT
-        # auto-added to the TOC, and a numbered \chapter already adds itself.
-        # The TOC line carries the same text the heading shows, so numbered
-        # chapters read "1 Name" (number from \numberline) and unnumbered ones
-        # read their bare title/ literal number — i.e. the TOC mirrors the body.
+        # A numbered chapter -> \chapter{Title}: LaTeX supplies the number and
+        # adds the TOC entry itself. Every other heading -> the UNSTARRED form,
+        # which LaTeX ALSO adds to the TOC automatically; secnumdepth=0 (set in
+        # the body) keeps sections and deeper unnumbered, so the literal number
+        # the compiler wrote is what shows. Only an UNNUMBERED chapter needs the
+        # starred form plus a manual TOC entry, since a *-form heading is not
+        # auto-added.
+        unnumbered_chapter = is_book and level == 1 and not numbered_chapter
+        star = '*' if unnumbered_chapter else ''
         out = [f'```{{=latex}}', f'\\{cmd}{star}{{{latex_title}}}']
         if star:
             out.append(
@@ -3242,6 +3244,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
     # otherwise citeproc turns them into footnotes in the BODY and the inline
     # step would replace the body's note anchors with full references.
     _move_citations = (not raw_citations and not citations_converted
+                       and fmt in ('docx', 'odt')
                        and (not use_static or endnotes_mode == 'body'))
     if _move_citations:
         try:
@@ -4014,6 +4017,19 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                         .replace('SWTOKTITLE', _latex_escape(doc_title or ''))
                         .replace('SWTOKFIGURECOUNTER', figure_counter_latex)
                         .replace('SWTOKNEWPAGEHEADING', newpage_latex))
+        # LaTeX native endnotes: pandoc emits \footnote for BOTH author notes
+        # and note-style citations. Aliasing \footnote to the endnotes package's
+        # \endnote collects them all; \theendnotes (added via
+        # --include-after-body below) prints the stream at the end. This keeps
+        # every note — and the citations inside them — rendered by pandoc
+        # exactly as the footnote path does, with no Notes-section rebuild (the
+        # DOCX/ODT pathway, which caused duplicated notes and nested footnotes).
+        if endnotes_mode and endnotes_mode != 'none':
+            preamble_src += (
+                '\n\\usepackage{endnotes}\n'
+                '\\let\\footnote\\endnote\n'
+                '\\renewcommand{\\notesname}{Notes}\n'
+                '\\renewcommand{\\theendnote}{\\arabic{endnote}.}\n')
         preamble_path = tmp_dir / 'preamble.tex'
         preamble_path.write_text(preamble_src, encoding='utf-8')
 
@@ -4058,6 +4074,17 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                '--metadata', 'citecolor=swlinkcolor',
                '--metadata', 'urlcolor=swlinkcolor',
                '--metadata', f'source-note={compiled_md.stem}']
+        if endnotes_mode and endnotes_mode != 'none':
+            # \theendnotes prints the collected endnote stream (pandoc's
+            # footnotes, aliased to \endnote) at the very end, with a "Notes"
+            # entry added to the TOC.
+            _after = tmp_dir / 'after-body.tex'
+            _after.write_text(
+                '\\theendnotes\n'
+                + ('\\addcontentsline{toc}{chapter}{Notes}\n' if is_book
+                   else '\\addcontentsline{toc}{section}{Notes}\n'),
+                encoding='utf-8')
+            cmd += ['--include-after-body', str(_after)]
         if is_book:
             # Force \chapter for level-1 headings explicitly, rather than
             # relying on pandoc's own book/report-class detection: that
@@ -4452,7 +4479,13 @@ def main():
     # convert to, so both choices give them the same visible Notes section.
     use_native_endnotes = (endnotes_mode == 'native'
                            and target_fmt in ('docx', 'odt'))
-    use_body_endnotes = not use_native_endnotes and endnotes_mode != 'none'
+    # LaTeX renders endnotes natively (the 'endnotes' package) from ordinary
+    # footnotes, so it keeps plain footnotes here and the .tex export converts
+    # them. Only DOCX/ODT (and Markdown) use the compiler's visible '# Notes'
+    # section; bringing LaTeX into that pathway caused duplicated notes and
+    # citations nested as footnotes.
+    use_body_endnotes = (not use_native_endnotes and endnotes_mode != 'none'
+                         and target_fmt != 'latex')
     # prepare-convert hands the compiled markdown to the plugin, which converts
     # citations and re-invokes for the export. For DOCX/ODT the endnote stream
     # is built in the EXPORT step, AFTER citation conversion, so the compiled
