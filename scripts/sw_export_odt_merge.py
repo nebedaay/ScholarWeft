@@ -2214,6 +2214,13 @@ def merge_odt(template_path, input_path, output_path,
     # at the end of this function borrows the definition from the bundled
     # book.odt (ENDNOTE_STYLE_NAMES_ODT).
     _endnote_para_style = 'Endnote'
+    # Per-chapter group headings inside the Notes region ("## <chapter>") are
+    # Heading 2; restyle them to "Heading 2 - exclude from TOC" (a Heading 2
+    # variant with an empty outline level) so they look like headings but stay
+    # out of the TOC. The explicit text:outline-level="2" pandoc wrote must be
+    # dropped too, or LibreOffice keeps the heading in the outline regardless
+    # of the style.
+    _group_heading_style = 'Heading_20_2_20_-_20_exclude_20_from_20_TOC'
     _n_restyled = restyle_notes_sections(
         [(None, body_elements)],
         get_style=lambda p: p.get(T('style-name')) or '',
@@ -2223,7 +2230,11 @@ def merge_odt(template_path, input_path, output_path,
             and p.get(T('outline-level'), '') == '1',
         endnote_style=_endnote_para_style,
         body_styles={_BODY_STYLE, 'First_20_paragraph', 'Standard'},
-        on_note=_odt_note_number_tab)
+        on_note=_odt_note_number_tab,
+        group_heading_style=_group_heading_style,
+        is_group_heading=lambda p: p.tag == T('h')
+            and p.get(T('outline-level'), '') == '2',
+        on_group_heading=lambda p: p.attrib.pop(T('outline-level'), None))
     if _n_restyled:
         print(f'ODT: styled {_n_restyled} endnote paragraph(s) as Endnote')
     # Native endnote bodies were restyled in place earlier; count them so the
@@ -2341,7 +2352,8 @@ def merge_odt(template_path, input_path, output_path,
             with zipfile.ZipFile(bundled_template('book.odt')) as _z:
                 _src = _z.read('styles.xml')
             z_data['styles.xml'] = ensure_odt_styles(
-                z_data['styles.xml'], list(ENDNOTE_STYLE_NAMES_ODT), _src)
+                z_data['styles.xml'],
+                list(ENDNOTE_STYLE_NAMES_ODT) + [_group_heading_style], _src)
         except Exception as e:
             print(f'WARNING: could not inject endnote styles: {e}')
 

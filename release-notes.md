@@ -1,33 +1,30 @@
 Install/update via BRAT.
 
-### Endnotes
+### LaTeX / PDF endnotes
 
-New **Notes** choices in the export dialogue (saved as the note's `endnotes` property):
+Endnote exports (`endnotes: native` or `body`) rendered through a `.tex` template now produce a proper endnote apparatus:
 
-- **Footnotes (page-bottom)** — the default; unchanged.
-- **Endnotes (native word-processor formatting)** — every note becomes a real Word/LibreOffice endnote object, preceded by a level-1 **Notes** heading (it appears in the TOC).
-- **Endnotes (as body paragraphs divided by chapter)** — the notes appear as visible paragraphs after the Notes heading, each group under its chapter (`## <chapter>`), with superscript note numbers in the body, per-chapter numbering, and citations rendered inline (no page-bottom footnotes remain).
+- **Per-chapter group headings are correct** — *Notes for Preface*, *Notes for Introduction*, *Notes for Chapter 1*, *Notes for Chapter 2*, *Notes for Conclusion*. Previously an unnumbered chapter (`\chapter*`) shared its counter with the next one, so Preface and Introduction collided and Chapter 2's notes were mislabelled "Notes for Conclusion".
+- **Notes now come before the Bibliography** — the usual academic order, and what the DOCX/ODT body-endnote pipeline already did.
+- **The *Notes* TOC entry points to the first page of the notes**, not the last, and the per-chapter group headings stay out of the TOC.
+- **Notes are set at body size (10pt, was 8pt)** with a small (~6pt) gap between notes instead of a full blank line; **bibliography entries are spaced to match**.
 
-In every mode the document is compiled exactly as the footnote path — author notes and in-text citations become one stream — and only then are the notes routed, so nothing is dropped and notes stay in order. (ODT/LibreOffice numbers native endnotes continuously; per-chapter restart isn't available there, and the option is greyed out with a note.)
+### Notes headings out of the TOC (DOCX/ODT)
 
-### More export controls
+The per-chapter group headings in body-endnote exports now use a dedicated **Heading 2 - exclude from TOC** style — they still look like headings but no longer appear in the table of contents. The style ships in the bundled templates and is borrowed automatically for older user templates.
 
-- **Auto-number headings down to level** (`numbering-levels`) — `0` numbers only `@@` headings; `1` chapters; `2` chapters + sections; …
-- **TOC depth** (`toc-levels`) — `1` chapters, `2` chapters + sections.
-- **Include a bibliography** (`include-bibliography`) — a boolean, distinct from the `bibliography` source-override key.
-- **Reset to note properties** — re-read the note's YAML export settings and forget the per-file remembered values.
-- **Skip recompilation** — reuse an existing compiled markdown to make several formats from one compile (not remembered between exports).
+### Templates: consistent fonts and headings
+
+- **One font root per role.** The `book` and `article` templates now declare **Noto Serif** as the heading *and* body font; `document` declares **Noto Sans**; **Scheherazade New** is the complex-script (Arabic) font in every template. Fonts are declared once at the style root and inherited, instead of being repeated (and drifting) across styles.
+- **Heading 3–10 styles are aligned** across the book/article templates — black, consistent sizes, and hierarchical indents — with Heading 1/2 left as each format needs them (chapter numbering and page breaks).
 
 ### Fixed
 
-- Notes are matched to their references **by name** and grouped by the chapter their reference is in, so citation notes land under the right chapter.
-- In-text citations are moved into the Notes section on both the live (Zotero field) and static (citeproc) paths — the body keeps its superscript anchors instead of showing full references.
-- DOCX/ODT notes read `N.` + tab + text consistently, robust even when the note text contains brackets, with working jump links.
-- DOCX: referenced-but-undefined paragraph styles (e.g. `SourceCode`) are now injected, so Word no longer reports "unreadable content".
-- ODT: native endnotes no longer render in reverse order.
+- The export dialogue now always offers the **body-Notes** endnote form (it was hidden when continuous numbering was selected).
+- Endnote content is no longer misassigned when note names collide.
+- `sync-plugin.sh` no longer copies editor lock files into the plugin folder.
 
 ### Internal
 
-- The Notes-heading move is a single shared helper (`sw_merge_helpers.move_notes_heading_to_end`) used by both the DOCX and ODT merges.
-- Release plumbing: `version-bump.mjs`, CI and release GitHub workflows, a `deploy` script, and the `pandoc-default-odt-styles.xml` asset is now tracked.
-- Docs updated for the new options and modes.
+- LaTeX endnotes use the `enotez` package (`split=chapter` + `reset`); the group-label lookup is keyed on enotez's own per-chapter counter, and `\printendnotes` runs before pandoc's bibliography.
+- Template fonts normalised and heading styles synced from `article.odt`; docs updated for the new endnote behaviour.

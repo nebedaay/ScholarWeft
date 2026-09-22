@@ -40,3 +40,7 @@ sync-plugin.sh
 
 # Local scratch / debug output
 tmp/
+
+# Editor lock/temp files (Word "~$name.docx", LibreOffice ".~lock.name#")
+~$*
+.~lock.*#

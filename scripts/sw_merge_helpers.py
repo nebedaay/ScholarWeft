@@ -703,7 +703,9 @@ def append_extra_sections(out_list, extra_sections, make_heading, make_body):
 
 
 def restyle_notes_sections(sections, *, get_style, set_style, get_text,
-                           is_h1, endnote_style, body_styles, on_note=None):
+                           is_h1, endnote_style, body_styles, on_note=None,
+                           group_heading_style=None, is_group_heading=None,
+                           on_group_heading=None):
     """Give the endnote stream the template's endnote paragraph style.
 
     The compiler's body-endnotes mode emits a Heading 1 "Notes" followed by the
@@ -720,6 +722,14 @@ def restyle_notes_sections(sections, *, get_style, set_style, get_text,
     identifies a level-1 heading. `endnote_style` of None/'' disables the pass.
     Returns the number of paragraphs restyled.
 
+    `group_heading_style` (with `is_group_heading`) additionally restyles the
+    per-chapter group headings inside the Notes region — e.g. to the template's
+    "Heading 2 - exclude from TOC" style, so the groups stay out of the TOC
+    while still looking like headings. `on_group_heading(el)` lets a caller do
+    format-specific extra work (the ODT merge drops the heading's explicit
+    `text:outline-level`, which would otherwise keep it in the TOC regardless
+    of the style).
+
     Format-neutral: callers pass their own accessors, so DOCX and ODT share the
     one decision of WHICH paragraphs are endnotes.
     """
@@ -732,10 +742,18 @@ def restyle_notes_sections(sections, *, get_style, set_style, get_text,
             if is_h1(el):
                 # The Notes Heading 1 opens the region; any later Heading 1
                 # (e.g. a Bibliography) closes it. Deeper headings inside the
-                # region (the per-chapter groups) are left alone.
+                # region (the per-chapter groups) are handled below.
                 in_notes = is_notes_heading(get_text(el))
                 continue
-            if in_notes and get_style(el) in body_styles:
+            if not in_notes:
+                continue
+            if (group_heading_style and is_group_heading is not None
+                    and is_group_heading(el)):
+                set_style(el, group_heading_style)
+                if on_group_heading is not None:
+                    on_group_heading(el)
+                continue
+            if get_style(el) in body_styles:
                 set_style(el, endnote_style)
                 changed += 1
                 if on_note is not None:

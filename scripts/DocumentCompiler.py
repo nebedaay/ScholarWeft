@@ -2544,14 +2544,20 @@ def latexize_headings(md_text, is_book):
                 f'\\addcontentsline{{toc}}{{{cmd}}}{{{latex_title}}}')
         # Book: define this chapter's notes-group heading, which the enotez
         # split-title looks up ("Notes for Chapter N" for a numbered chapter,
-        # "Notes for <title>" for an unnumbered one). \xdef expands the counter
-        # now, so each chapter's value is stored, not the last one's.
+        # "Notes for <title>" for an unnumbered one). The key is enotez's OWN
+        # per-\chapter split counter (via \swnotesgroupid), NOT
+        # \arabic{chapter}: a starred \chapter* does not advance the chapter
+        # counter, so keying by it made Preface/Introduction (both 0) and
+        # Chapter 2/Conclusion (both 2) collide — Introduction's and
+        # Conclusion's labels silently overwrote the earlier ones. \xdef
+        # expands the id now, so each chapter's value is stored, not the last
+        # one's.
         if is_book and level == 1:
             _grp = ('\\chaptername\\ \\thechapter' if numbered_chapter
                     else latex_title)
             out.append(
                 '\\expandafter\\xdef\\csname swnotesheading'
-                f'\\arabic{{chapter}}\\endcsname{{{_grp}}}')
+                f'\\swnotesgroupid\\endcsname{{{_grp}}}')
         out.append('```')
         return '\n'.join(out)
     return _MD_HEADING_RE.sub(repl, md_text)
@@ -3933,6 +3939,23 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
         front_matter += '```{=latex}\n\\listoffigures\n```\n\n'
     cit_text = front_matter + cit_text
 
+    # ── Notes: print the enotez list at the END OF THE BODY, before pandoc's
+    # --citeproc bibliography. Pandoc appends its CSLReferences bibliography
+    # after the body, so putting \printendnotes in the body (rather than via
+    # --include-after-body, which lands AFTER the bibliography) is what makes
+    # Notes precede Bibliography — the usual academic order, and what the
+    # DOCX/ODT body-endnotes pipeline already does. \swnotesfixids (book) must
+    # run first so enotez's <split-level-id> resolves to the same unique
+    # per-chapter id \swnotesheading was keyed on. The "Notes" TOC entry is
+    # added by \AtEveryEndnotesList (see the preamble below) so it lands on the
+    # first notes page, i.e. AFTER \chapter*{Notes}'s page break.
+    if endnotes_mode and endnotes_mode != 'none':
+        cit_text = cit_text.rstrip() + (
+            '\n\n```{=latex}\n'
+            + ('\\swnotesfixids\n' if is_book else '')
+            + '\\printendnotes\n'
+            + '```\n')
+
     citations_md.write_text(cit_text, encoding='utf-8')
 
     # ── Lua filters: poetry -> verse (sw-export.lua), bidi, etc. No
@@ -4029,27 +4052,95 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                         .replace('SWTOKNEWPAGEHEADING', newpage_latex))
         # LaTeX endnotes, natively: enotez collects pandoc's footnotes (both
         # author notes and note-style citations), splits the list by chapter and
-        # restarts the numbering in each — the book's endnote layout. \printendnotes
-        # (added via --include-after-body) prints the list at the end.
+        # restarts the numbering in each — the book's endnote layout.
+        # \printendnotes is emitted at the end of the BODY (see above), before
+        # pandoc's bibliography, so Notes precedes Bibliography.
         if endnotes_mode and endnotes_mode != 'none':
+            # List heading: a chapter for book (Notes is a major back-matter
+            # division with its own TOC entry and page), a section for
+            # article/document. Per-chapter group headings sit one level below
+            # (\section*), matching DOCX/ODT's Heading 1 / Heading 2 hierarchy.
+            _notes_heading = '\\chapter*{#1}' if is_book else '\\section*{#1}'
+            _notes_toc = 'chapter' if is_book else 'section'
             preamble_src += (
                 '\n\\usepackage{enotez}\n'
                 '\\let\\footnote\\endnote\n'
-                # Tighter spacing between the notes (the default leaves a full
-                # blank line); ~10pt reads like the DOCX/ODT endnote stream.
+                # ~6pt between consecutive notes, at body size (\normalsize, not
+                # enotez's default \footnotesize which is 8pt in a 10pt book).
+                # The list preamble also zeroes \parskip: pandoc's template
+                # loads parskip.sty (6pt between body paragraphs), and enotez's
+                # notes are ordinary paragraphs, so without this each note got
+                # notes-sep PLUS the 6pt body paragraph skip (a full blank line).
                 '\\DeclareInstance{enotez-list}{swendnotes}{paragraph}\n'
-                '  {notes-sep=10pt, heading=\\section*{#1}}\n'
-                # Each chapter defines \\swnotesheading<chapter> (see
-                # latexize_headings): "Chapter N" for a numbered chapter, the
-                # bare title for an unnumbered one — so a group reads "Notes for
-                # Chapter 1" / "Notes for Introduction", never "Notes for
-                # Chapter 0". split-heading is starred so the groups stay out of
-                # the TOC (only the "Notes" list heading is added).
-                '\\setenotez{list-style=swendnotes, list-name=Notes, '
-                'counter-format=arabic, split=chapter, reset, '
-                'split-heading={\\section*{#1}}, '
-                'split-title={Notes for \\csname swnotesheading'
-                '<split-level-id>\\endcsname}}\n')
+                f'  {{notes-sep=6pt, format=\\normalsize, heading={_notes_heading}}}\n'
+                # The "Notes" TOC entry is added from the endnote-list preamble,
+                # which enotez runs AFTER the list heading — so for book it lands
+                # on the first notes page, after \chapter*{Notes}'s page break
+                # (adding it before, as enotez's own totoc option does, would
+                # point the TOC at the previous page).
+                '\\AtEveryEndnotesList{\\setlength{\\parskip}{0pt}'
+                '\\phantomsection'
+                f'\\addcontentsline{{toc}}{{{_notes_toc}}}{{Notes}}}}\n')
+            if is_book:
+                preamble_src += (
+                    # Each chapter defines \swnotesheading<id> (see
+                    # latexize_headings): "Chapter N" for a numbered chapter,
+                    # the bare title for an unnumbered one — so a group reads
+                    # "Notes for Chapter 1" / "Notes for Introduction", never
+                    # "Notes for Chapter 0". The id is enotez's own per-chapter
+                    # split counter (incremented by every \chapter, starred or
+                    # not), so starred chapters get distinct ids.
+                    '\\ExplSyntaxOn\n'
+                    '\\cs_new:Npn \\swnotesgroupid '
+                    '{ \\int_use:N \\g__enotez_list_printed_int }\n'
+                    # enotez's <split-level-id> tag expands to \value{chapter},
+                    # which starred chapters do NOT advance — so Preface and
+                    # Introduction (both 0) and Chapter 2 and Conclusion (both 2)
+                    # would look up the same label. Rebuild that property from
+                    # enotez's own unique split counter (run by \swnotesfixids
+                    # just before \printendnotes) so the lookup key matches the
+                    # key \swnotesheading was stored under.
+                    '\\cs_new_protected:Npn \\swnotesfixids {\n'
+                    '  \\prop_map_inline:Nn \\g__enotez_endnote_split_prop\n'
+                    '    { \\prop_gput:Nnn \\g__enotez_endnote_sect_id_prop'
+                    ' {##1} {##2} }\n'
+                    '}\n'
+                    '\\ExplSyntaxOff\n'
+                    # split-heading is starred so the per-chapter groups stay
+                    # out of the TOC (only the "Notes" list heading is added).
+                    '\\setenotez{list-style=swendnotes, list-name=Notes, '
+                    'counter-format=arabic, split=chapter, reset, '
+                    'split-heading={\\section*{#1}}, '
+                    'split-title={Notes for \\csname swnotesheading'
+                    '<split-level-id>\\endcsname}}\n')
+            else:
+                # No chapters to split by: one flat list (article-class
+                # footnotes are continuous), matching DOCX/ODT's global mode.
+                preamble_src += (
+                    '\\setenotez{list-style=swendnotes, list-name=Notes, '
+                    'counter-format=arabic, split=false}\n')
+        # Tighter spacing between bibliography entries: pandoc's CSLReferences
+        # environment (defined in pandoc's own template, BEFORE this include)
+        # hard-codes \itemsep to its entry-spacing argument, which pandoc always
+        # passes as 1 (= one full \baselineskip) — hence the full blank line
+        # between references. Redefine it with the same body but ~6pt, matching
+        # the endnote spacing. Only when pandoc will actually emit the
+        # environment: it is undefined when there is no bibliography (no
+        # resolved items, or --no-bibliography/suppress-bibliography), and
+        # \renewenvironment on an undefined environment is an error.
+        if csl_items and include_bibliography:
+            preamble_src += (
+                '\\renewenvironment{CSLReferences}[2]\n'
+                ' {\\begin{list}{}{%\n'
+                '  \\setlength{\\itemindent}{0pt}\n'
+                '  \\setlength{\\leftmargin}{0pt}\n'
+                '  \\setlength{\\parsep}{0pt}\n'
+                '  \\ifodd #1\n'
+                '   \\setlength{\\leftmargin}{\\cslhangindent}\n'
+                '   \\setlength{\\itemindent}{-1\\cslhangindent}\n'
+                '  \\fi\n'
+                '  \\setlength{\\itemsep}{6pt}}}\n'
+                ' {\\end{list}}\n')
         preamble_path = tmp_dir / 'preamble.tex'
         preamble_path.write_text(preamble_src, encoding='utf-8')
 
@@ -4094,17 +4185,6 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                '--metadata', 'citecolor=swlinkcolor',
                '--metadata', 'urlcolor=swlinkcolor',
                '--metadata', f'source-note={compiled_md.stem}']
-        if endnotes_mode and endnotes_mode != 'none':
-            # \printendnotes prints the enotez list (split by chapter, numbering
-            # restarted in each) at the very end; add only the "Notes" heading
-            # itself to the TOC (the per-chapter group headings stay out).
-            _after = tmp_dir / 'after-body.tex'
-            _after.write_text(
-                '\\printendnotes\n'
-                + ('\\addcontentsline{toc}{chapter}{Notes}\n' if is_book
-                   else '\\addcontentsline{toc}{section}{Notes}\n'),
-                encoding='utf-8')
-            cmd += ['--include-after-body', str(_after)]
         if is_book:
             # Force \chapter for level-1 headings explicitly, rather than
             # relying on pandoc's own book/report-class detection: that

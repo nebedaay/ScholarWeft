@@ -1442,6 +1442,11 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     # ENDNOTE_STYLE_IDS_DOCX), so a user template predating endnotes still gets
     # the hanging-indent endnote look.
     _endnote_style_id = 'EndnoteText'
+    # Per-chapter group headings inside the Notes region ("## <chapter>") are
+    # Heading 2; restyle them to "Heading 2 - exclude from TOC" (a Heading 2
+    # variant with outlineLvl 9) so they look like headings but stay out of the
+    # TOC — the Heading-2 analog of the TOC/ToF Heading 1 exclude style.
+    _group_heading_style_id = 'Heading2-excludefromTOC'
     _n_restyled = restyle_notes_sections(
         sections,
         get_style=lambda p: get_style(p) or '',
@@ -1450,7 +1455,10 @@ def merge(template_path, input_path, output_path, title=None, author=None,
         is_h1=lambda p: p.tag == tag('p') and get_style(p) == 'Heading1',
         endnote_style=_endnote_style_id,
         body_styles={'BodyText', 'FirstParagraph', 'Normal'},
-        on_note=_docx_note_number_tab)
+        on_note=_docx_note_number_tab,
+        group_heading_style=_group_heading_style_id,
+        is_group_heading=lambda p: p.tag == tag('p')
+            and get_style(p) == 'Heading2')
     if _n_restyled:
         print(f'DOCX: styled {_n_restyled} endnote paragraph(s) as {_endnote_style_id}')
 
@@ -1569,6 +1577,7 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     _extra_ids = list(_tof_style_ids) + list(_extra_style_ids_for_aliases)
     if _n_restyled:
         _extra_ids += list(ENDNOTE_STYLE_IDS_DOCX)
+        _extra_ids.append(_group_heading_style_id)
     _write_docx(template_path, output_path, tmpl_doc, new_footnotes,
                 new_endnotes_xml=new_endnotes,
                 short_title=short_title, author=author, title=title,
