@@ -70708,6 +70708,16 @@ def latexize_headings(md_text, is_book):
         if star:
             out.append(
                 f'\\\\addcontentsline{{toc}}{{{cmd}}}{{{latex_title}}}')
+        # Book: define this chapter's notes-group heading, which the enotez
+        # split-title looks up ("Notes for Chapter N" for a numbered chapter,
+        # "Notes for <title>" for an unnumbered one). \\xdef expands the counter
+        # now, so each chapter's value is stored, not the last one's.
+        if is_book and level == 1:
+            _grp = ('\\\\chaptername\\\\ \\\\thechapter' if numbered_chapter
+                    else latex_title)
+            out.append(
+                '\\\\expandafter\\\\xdef\\\\csname swnotesheading'
+                f'\\\\arabic{{chapter}}\\\\endcsname{{{_grp}}}')
         out.append('\`\`\`')
         return '\\n'.join(out)
     return _MD_HEADING_RE.sub(repl, md_text)
@@ -72191,8 +72201,21 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
             preamble_src += (
                 '\\n\\\\usepackage{enotez}\\n'
                 '\\\\let\\\\footnote\\\\endnote\\n'
-                '\\\\setenotez{list-name=Notes, counter-format=arabic, '
-                'split=chapter, reset, totoc}\\n')
+                # Tighter spacing between the notes (the default leaves a full
+                # blank line); ~10pt reads like the DOCX/ODT endnote stream.
+                '\\\\DeclareInstance{enotez-list}{swendnotes}{paragraph}\\n'
+                '  {notes-sep=10pt, heading=\\\\section*{#1}}\\n'
+                # Each chapter defines \\\\swnotesheading<chapter> (see
+                # latexize_headings): "Chapter N" for a numbered chapter, the
+                # bare title for an unnumbered one \u2014 so a group reads "Notes for
+                # Chapter 1" / "Notes for Introduction", never "Notes for
+                # Chapter 0". split-heading is starred so the groups stay out of
+                # the TOC (only the "Notes" list heading is added).
+                '\\\\setenotez{list-style=swendnotes, list-name=Notes, '
+                'counter-format=arabic, split=chapter, reset, '
+                'split-heading={\\\\section*{#1}}, '
+                'split-title={Notes for \\\\csname swnotesheading'
+                '<split-level-id>\\\\endcsname}}\\n')
         preamble_path = tmp_dir / 'preamble.tex'
         preamble_path.write_text(preamble_src, encoding='utf-8')
 
@@ -72239,9 +72262,14 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                '--metadata', f'source-note={compiled_md.stem}']
         if endnotes_mode and endnotes_mode != 'none':
             # \\printendnotes prints the enotez list (split by chapter, numbering
-            # restarted in each) at the very end.
+            # restarted in each) at the very end; add only the "Notes" heading
+            # itself to the TOC (the per-chapter group headings stay out).
             _after = tmp_dir / 'after-body.tex'
-            _after.write_text('\\\\printendnotes\\n', encoding='utf-8')
+            _after.write_text(
+                '\\\\printendnotes\\n'
+                + ('\\\\addcontentsline{toc}{chapter}{Notes}\\n' if is_book
+                   else '\\\\addcontentsline{toc}{section}{Notes}\\n'),
+                encoding='utf-8')
             cmd += ['--include-after-body', str(_after)]
         if is_book:
             # Force \\chapter for level-1 headings explicitly, rather than
