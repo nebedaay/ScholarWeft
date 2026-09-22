@@ -4017,19 +4017,16 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                         .replace('SWTOKTITLE', _latex_escape(doc_title or ''))
                         .replace('SWTOKFIGURECOUNTER', figure_counter_latex)
                         .replace('SWTOKNEWPAGEHEADING', newpage_latex))
-        # LaTeX native endnotes: pandoc emits \footnote for BOTH author notes
-        # and note-style citations. Aliasing \footnote to the endnotes package's
-        # \endnote collects them all; \theendnotes (added via
-        # --include-after-body below) prints the stream at the end. This keeps
-        # every note — and the citations inside them — rendered by pandoc
-        # exactly as the footnote path does, with no Notes-section rebuild (the
-        # DOCX/ODT pathway, which caused duplicated notes and nested footnotes).
+        # LaTeX endnotes, natively: enotez collects pandoc's footnotes (both
+        # author notes and note-style citations), splits the list by chapter and
+        # restarts the numbering in each — the book's endnote layout. \printendnotes
+        # (added via --include-after-body) prints the list at the end.
         if endnotes_mode and endnotes_mode != 'none':
             preamble_src += (
-                '\n\\usepackage{endnotes}\n'
+                '\n\\usepackage{enotez}\n'
                 '\\let\\footnote\\endnote\n'
-                '\\renewcommand{\\notesname}{Notes}\n'
-                '\\renewcommand{\\theendnote}{\\arabic{endnote}.}\n')
+                '\\setenotez{list-name=Notes, counter-format=arabic, '
+                'split=chapter, reset, totoc}\n')
         preamble_path = tmp_dir / 'preamble.tex'
         preamble_path.write_text(preamble_src, encoding='utf-8')
 
@@ -4075,15 +4072,10 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                '--metadata', 'urlcolor=swlinkcolor',
                '--metadata', f'source-note={compiled_md.stem}']
         if endnotes_mode and endnotes_mode != 'none':
-            # \theendnotes prints the collected endnote stream (pandoc's
-            # footnotes, aliased to \endnote) at the very end, with a "Notes"
-            # entry added to the TOC.
+            # \printendnotes prints the enotez list (split by chapter, numbering
+            # restarted in each) at the very end.
             _after = tmp_dir / 'after-body.tex'
-            _after.write_text(
-                '\\theendnotes\n'
-                + ('\\addcontentsline{toc}{chapter}{Notes}\n' if is_book
-                   else '\\addcontentsline{toc}{section}{Notes}\n'),
-                encoding='utf-8')
+            _after.write_text('\\printendnotes\n', encoding='utf-8')
             cmd += ['--include-after-body', str(_after)]
         if is_book:
             # Force \chapter for level-1 headings explicitly, rather than
@@ -4479,11 +4471,6 @@ def main():
     # convert to, so both choices give them the same visible Notes section.
     use_native_endnotes = (endnotes_mode == 'native'
                            and target_fmt in ('docx', 'odt'))
-    # LaTeX renders endnotes natively (the 'endnotes' package) from ordinary
-    # footnotes, so it keeps plain footnotes here and the .tex export converts
-    # them. Only DOCX/ODT (and Markdown) use the compiler's visible '# Notes'
-    # section; bringing LaTeX into that pathway caused duplicated notes and
-    # citations nested as footnotes.
     use_body_endnotes = (not use_native_endnotes and endnotes_mode != 'none'
                          and target_fmt != 'latex')
     # prepare-convert hands the compiled markdown to the plugin, which converts
