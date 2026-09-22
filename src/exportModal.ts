@@ -513,7 +513,7 @@ export class ExportModal extends Modal {
     this.notesModeNative = makeNotesRadio(
       'native', 'Endnotes (native word-processor formatting)').cb;
     const _body = makeNotesRadio(
-      'body', 'Endnotes (as body paragraphs divided by chapter)');
+      'body', 'Endnotes (as body paragraphs in the Notes section)');
     this.notesModeBody = _body.cb;
     this.notesModeBodyRow = _body.row;
 
@@ -927,18 +927,14 @@ export class ExportModal extends Modal {
     this.tocLevelsInput.disabled = isMd;
     this.tocLevelsRow.style.display =
       !isMd && this.tocCb.checked ? '' : 'none';
-    // Native endnotes are a DOCX/ODT word-processor feature; the visible
-    // "body paragraphs divided by chapter" Notes section is the alternative.
-    // Both need per-chapter (discontinuous) numbering for chapter groups.
+    // Native endnotes are a DOCX/ODT word-processor feature; Markdown/LaTeX
+    // have no native endnote objects and always use the body form instead.
     const nativeOk = format === 'docx' || format === 'odt' || format === 'pdf';
     this.notesModeNative.disabled = !nativeOk;
     this.notesModeNative.parentElement!.style.opacity = nativeOk ? '' : '0.55';
-    const bodyOk = this.footnotesCb.checked;
-    this.notesModeBodyRow.style.display = bodyOk ? '' : 'none';
-    if (!bodyOk && this.notesModeBody.checked) {
-      // Continuous numbering: body endnotes don't apply — fall back to native.
-      (nativeOk ? this.notesModeNative : this.notesModeFootnotes).checked = true;
-    }
+    // The body form is always available: with per-chapter numbering its Notes
+    // section is divided by chapter; with continuous numbering it is one list.
+    this.notesModeBodyRow.style.display = '';
     // Per-chapter restart cannot take effect for ODT native endnotes — the word
     // processor numbers endnotes continuously — so grey the option out. Its
     // value is kept (not cleared), since it still applies to DOCX/LaTeX or if
@@ -1469,12 +1465,9 @@ export class ExportModal extends Modal {
     }
   }
 
-  /** Resolved notes mode, with "body" folded to "native" when numbering is
-   *  continuous (body endnotes are divided by chapter). */
+  /** The notes mode selected in the dialogue. */
   private effectiveNotesMode(): 'none' | 'native' | 'body' {
-    const mode = this.notesMode();
-    if (mode === 'body' && !this.footnotesCb.checked) return 'native';
-    return mode;
+    return this.notesMode();
   }
 
   private options(): ExportOptions {

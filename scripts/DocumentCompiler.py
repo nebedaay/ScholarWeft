@@ -4426,12 +4426,9 @@ def main():
                   else _yaml_int(text, 'toc-levels', 2))
     endnotes_mode = (args.endnotes_mode if args.endnotes_mode is not None
                      else _yaml_endnotes_mode(text))
-    # 'body' divides the Notes section by chapter, so it needs per-chapter
-    # (discontinuous) numbering; with continuous numbering it has no chapters to
-    # divide by and degrades to 'native' (the undivided endnote stream).
-    if endnotes_mode == 'body' and use_global:
-        print('endnotes: body requires per-chapter numbering — using native.')
-        endnotes_mode = 'native'
+    # 'body' always means a visible '# Notes' section: with per-chapter
+    # numbering it is divided by chapter, with continuous numbering it is a
+    # single list (see apply_note_style / render_notes_section).
     # For PDF, follow the intermediate the chosen template implies.
     target_fmt = args.export_format
     if target_fmt == 'pdf':
