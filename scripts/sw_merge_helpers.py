@@ -302,6 +302,19 @@ def is_tof_heading(text):
     return text.strip().lower() == 'table of figures'
 
 
+def is_notes_heading(text):
+    """True when a Heading 1's text is the endnotes "Notes" heading (the
+    compiler's body-endnotes mode emits it — see DocumentCompiler's
+    endnotes handling). Everything from there to the document end (or the next
+    Heading 1) is the endnote stream, which the merges restyle to the
+    template's endnote paragraph style. Tolerates the leading '* ' exception
+    marker kept for heading-numbering."""
+    t = (text or '').strip()
+    if t.startswith('* '):
+        t = t[2:].strip()
+    return t.lower() == 'notes'
+
+
 def first_line(text):
     """First non-empty line of a multi-line value, else the value itself.
 
@@ -689,6 +702,72 @@ def append_extra_sections(out_list, extra_sections, make_heading, make_body):
             out_list.append(make_body(chunk))
 
 
+def restyle_notes_sections(sections, *, get_style, set_style, get_text,
+                           is_h1, endnote_style, body_styles, on_note=None):
+    """Give the endnote stream the template's endnote paragraph style.
+
+    The compiler's body-endnotes mode emits a Heading 1 "Notes" followed by the
+    note paragraphs (grouped under "## <chapter>" when numbering is per-chapter).
+    Pandoc styles those paragraphs as ordinary body text; the template's own
+    "Endnote"/"EndnoteText" style is the right look (it is what a word
+    processor uses for real endnotes, typically a hanging indent).
+
+    Walks `sections` (a list of (kind, blocks)); once the Heading 1 whose text
+    is the Notes heading is seen, every body paragraph after it — until the next
+    **Heading 1** (so a "## <chapter>" subheading does NOT end the region) — is
+    restyled, but only when its current style is one of `body_styles` (so a
+    subheading or a deliberately-styled block is left alone). `is_h1(el)`
+    identifies a level-1 heading. `endnote_style` of None/'' disables the pass.
+    Returns the number of paragraphs restyled.
+
+    Format-neutral: callers pass their own accessors, so DOCX and ODT share the
+    one decision of WHICH paragraphs are endnotes.
+    """
+    if not endnote_style:
+        return 0
+    in_notes = False
+    changed = 0
+    for _kind, blocks in sections:
+        for el in blocks:
+            if is_h1(el):
+                # The Notes Heading 1 opens the region; any later Heading 1
+                # (e.g. a Bibliography) closes it. Deeper headings inside the
+                # region (the per-chapter groups) are left alone.
+                in_notes = is_notes_heading(get_text(el))
+                continue
+            if in_notes and get_style(el) in body_styles:
+                set_style(el, endnote_style)
+                changed += 1
+                if on_note is not None:
+                    # The caller adds its format's tab after the leading
+                    # "N. " so the note text lines up under a hanging indent.
+                    on_note(el)
+    return changed
+
+
+def move_notes_heading_to_end(container, *, get_text, is_h1):
+    """Move the level-1 "Notes" heading to the end of `container`.
+
+    The word processor places the generated note stream after ALL body content,
+    including the bibliography, so a "Notes" heading left in the pandoc body
+    would sit before the bibliography instead of directly before the notes.
+    Moving it to the end yields … → Bibliography → Notes → note stream.
+
+    Format-neutral: DOCX and ODT share this decision, passing their own
+    accessors (and the container element to reorder). Returns True when moved.
+    """
+    target = None
+    for el in list(container):
+        if is_h1(el) and is_notes_heading(get_text(el)):
+            target = el
+            break
+    if target is None:
+        return False
+    container.remove(target)
+    container.append(target)
+    return True
+
+
 def strip_chapter_prefix(text):
     """Strip a leading 'Chapter N:' / 'N.' / 'N)' chapter-number prefix from a
     Heading 1's text, returning the bare title. Unchanged when there is no such
@@ -698,6 +777,33 @@ def strip_chapter_prefix(text):
     if m and m.group(2).strip():
         return m.group(2).strip()
     return text or ''
+
+
+#: Prefix of the endnote-anchor link targets the compiler emits.
+NOTE_ANCHOR_PREFIX = 'notes-'
+
+#: Leading note number marker the compiler writes: "1. ", "2. ", "1.1. ".
+#: The separating whitespace is OPTIONAL — pandoc drops it when the number and
+#: the note text end up in different runs (notably for citation notes), so a
+#: bare "1." must still be recognised and given its tab.
+NOTE_NUMBER_RE = re.compile(r'^(\d+(?:\.\d+)*\.)[ \t]*')
+
+#: Endnote style names the body-endnotes mode styles its note paragraphs with.
+#: Both merges ensure these exist in the template (borrowing from the bundled
+#: book template when a user template lacks them), so an endnote stream always
+#: gets the hanging indent a word processor's endnote style provides.
+ENDNOTE_STYLE_IDS_DOCX = ('EndnoteText', 'EndnoteTextChar', 'EndnoteReference')
+ENDNOTE_STYLE_NAMES_ODT = ('Endnote', 'Endnote_20_Text_20_Char',
+                           'Endnote_20_Symbol', 'Endnote_20_anchor')
+
+
+def is_note_anchor_target(target):
+    """True when a hyperlink's target is one of the compiler's endnote
+    anchors (see DocumentCompiler's endnotes mode: the body's superscript
+    number links to '#notes-<id>'). Such anchors are functional jump links, not
+    web links, so their link styling (blue + underline) is stripped — the
+    superscript should look like the surrounding text but stay clickable."""
+    return (target or '').lstrip('#').startswith(NOTE_ANCHOR_PREFIX)
 
 
 def find_page_reset_index(h1_texts, marker=None):

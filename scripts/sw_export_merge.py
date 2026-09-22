@@ -62,6 +62,9 @@ from sw_merge_helpers import (
     is_main_start, is_toc_heading, is_tof_heading, strip_chapter_prefix,
     find_page_reset_index, bundled_template, ensure_docx_styles,
     append_extra_sections, resolve_note_sections,
+    is_note_anchor_target, restyle_notes_sections,
+    move_notes_heading_to_end,
+    NOTE_NUMBER_RE, ENDNOTE_STYLE_IDS_DOCX,
     csl_style_id, zotero_pref_blob, zotero_pref_chunks,
 )
 
@@ -428,6 +431,36 @@ def _toc_depth_from_instr(instr, default=9):
             except ValueError:
                 pass
     return max(depths) if depths else default
+
+
+def _toc_instr_for_levels(instr, n):
+    """Rewrite a Word TOC field instruction so it shows exactly levels 1..n.
+
+    Sets the `\\o "1-n"` range and drops any `\\t "style,level"` switch entry
+    whose level exceeds n (a template like book.docx maps Heading 1 explicitly
+    via `\\t`). This keeps BOTH the cached entries (capped by the caller) and a
+    later "update field" in Word consistent with the toc-levels property.
+    Returns the instruction unchanged when n is falsy.
+    """
+    if not instr or not n:
+        return instr
+    out = re.sub(r'\\o\s+"\d+-\d+"', r'\\o "1-%d"' % n, instr)
+    if not re.search(r'\\o\s+"', out):
+        out = out.rstrip() + ' \\o "1-%d"' % n
+
+    def _t(m):
+        parts = m.group(1).split(',')
+        keep = []
+        for i in range(0, len(parts) - 1, 2):
+            try:
+                lvl = int(parts[i + 1])
+            except ValueError:
+                lvl = 1
+            if lvl <= n:
+                keep += [parts[i], parts[i + 1]]
+        return ('\\t "' + ','.join(keep) + '"') if keep else ''
+    out = re.sub(r'\\t\s+"([^"]*)"', _t, out)
+    return re.sub(r'\s{2,}', ' ', out).strip()
 
 
 def _add_toc_bookmarks(sections, extra_styles=(), start_id=900000):
@@ -964,7 +997,8 @@ def transform_figures(sections, chapter_scoped, has_alttext_style):
 
 def build_body(template_body, layout, sections, used, has_figures, toc=False,
                tof=False, new_page_headings=True, restart_footnotes=True,
-               extra_sections=None, has_bibliography=False, style_remap=None):
+               extra_sections=None, has_bibliography=False, style_remap=None,
+               toc_levels=None, endnotes_mode='none'):
     """
     Rebuild the template body:
       1. title block (cover values filled by the caller)
@@ -988,7 +1022,15 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     # a numbering update.
     _toc_bookmarks = (_add_toc_bookmarks(sections, extra_styles=_DOCX_CAPTION_STYLES)
                       if (toc or tof) else {})
-    _toc_max_level = _toc_depth_from_instr(layout.get('toc_instr'))
+    # toc-levels (export property, default 2) overrides the template's own
+    # configured TOC depth for the cached entries AND the field instruction,
+    # so a Word "update field" agrees with the PDF/LibreOffice output.
+    if toc_levels and toc_levels > 0:
+        _toc_max_level = toc_levels
+        _toc_instr = _toc_instr_for_levels(layout.get('toc_instr'), toc_levels)
+    else:
+        _toc_max_level = _toc_depth_from_instr(layout.get('toc_instr'))
+        _toc_instr = layout.get('toc_instr')
     _toc_chap_fmt = layout.get('chapter_number_format')
     _toc_entry_list = lambda: _docx_toc_entries(
         sections, _toc_max_level, _toc_bookmarks, _toc_chap_fmt)
@@ -1013,10 +1055,10 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
     # 2. TOC section. Structured templates emit it here, after the cover, with a
     #    section closer. Simple templates defer it into the content stream (just
     #    before the first content heading) so no spurious section break appears.
-    if toc and layout['toc_instr'] and structured:
+    if toc and _toc_instr and structured:
         if layout['toc_heading'] is not None:
             template_body.append(layout['toc_heading'])
-        for _p in make_field_paragraphs(layout['toc_instr'],
+        for _p in make_field_paragraphs(_toc_instr,
                                         _toc_entry_list(),
                                         lambda l: 'TOC%d' % l):
             template_body.append(_p)
@@ -1024,7 +1066,7 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
         if not new_page_headings:
             _set_continuous(_brk)
         template_body.append(_brk)
-    toc_deferred = toc and bool(layout['toc_instr']) and not structured
+    toc_deferred = toc and bool(_toc_instr) and not structured
 
     # The user asked for a table of figures AND the document has figures AND a
     # ToF heading + field code is available (from the template or the bundled
@@ -1137,7 +1179,7 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
                         _b.set(tag('type'), 'page')
 
                 if toc_deferred:
-                    _emit_field_section(layout['toc_heading'], layout['toc_instr'],
+                    _emit_field_section(layout['toc_heading'], _toc_instr,
                                         _toc_entry_list(),
                                         lambda l: 'TOC%d' % l)
                     toc_deferred = False
@@ -1255,14 +1297,25 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
             ZOTERO_BIBL_INSTR,
             'Refresh Zotero to view this content.'))
 
+    # Native endnotes: move the 'Notes' heading after the bibliography so it
+    # directly precedes the generated endnote stream (shared decision — see
+    # move_notes_heading_to_end).
+    if endnotes_mode == 'native':
+        if move_notes_heading_to_end(
+                template_body,
+                get_text=_para_text,
+                is_h1=lambda p: p.tag == tag('p') and get_style(p) == 'Heading1'):
+            print('DOCX: moved the Notes heading after the bibliography')
+
     # 6. Final body sectPr.
     template_body.append(final_sect)
 
 # ── merge ────────────────────────────────────────────────────────────────────
 
 def merge(template_path, input_path, output_path, title=None, author=None,
-          subtitle=None, date_val=None, toc=False, tof=False, short_title=None,
-          basename=None, abstract=None, extra_sections=None,
+          subtitle=None, date_val=None, toc=False, toc_levels=None, tof=False,
+          endnotes_mode='none', short_title=None, basename=None, abstract=None,
+          extra_sections=None,
           new_page_headings=True, restart_footnotes=True, generate_date=True,
           roman_frontmatter=False, page1_starts_with='', static_citations=False,
           csl_style=None):
@@ -1383,6 +1436,24 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     # Chapter numbering: strip literal "Chapter N:" and let Word number.
     apply_chapter_numbering(sections, layout['chapter_numid'])
 
+    # Endnote stream -> the template's own endnote paragraph style. EndnoteText
+    # is used whether or not the template already defines it: when it does not,
+    # _write_docx borrows the definition from the bundled document.docx (see
+    # ENDNOTE_STYLE_IDS_DOCX), so a user template predating endnotes still gets
+    # the hanging-indent endnote look.
+    _endnote_style_id = 'EndnoteText'
+    _n_restyled = restyle_notes_sections(
+        sections,
+        get_style=lambda p: get_style(p) or '',
+        set_style=set_style,
+        get_text=_para_text,
+        is_h1=lambda p: p.tag == tag('p') and get_style(p) == 'Heading1',
+        endnote_style=_endnote_style_id,
+        body_styles={'BodyText', 'FirstParagraph', 'Normal'},
+        on_note=_docx_note_number_tab)
+    if _n_restyled:
+        print(f'DOCX: styled {_n_restyled} endnote paragraph(s) as {_endnote_style_id}')
+
     # Cover values (Title/Subtitle/Author/Date resolution).
     title, subtitle, author, date_val = resolve_cover(
         title, subtitle, author, date_val, basename, generate_date=generate_date)
@@ -1408,7 +1479,8 @@ def merge(template_path, input_path, output_path, title=None, author=None,
                new_page_headings=new_page_headings,
                restart_footnotes=restart_footnotes,
                extra_sections=all_extra if not _has_structured_title else None,
-               has_bibliography=_has_bibliography, style_remap=_style_remap)
+               has_bibliography=_has_bibliography, style_remap=_style_remap,
+               toc_levels=toc_levels, endnotes_mode=endnotes_mode)
 
     # Remove ORPHANED bookmarkEnd elements: any end whose matching
     # bookmarkStart is absent from the final body. This happens when a
@@ -1419,14 +1491,38 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     _remove_orphan_bookmark_ends(tmpl_body)
 
     if toc and layout['toc_instr'] is None:
-        inject_toc(tmpl_body)
+        inject_toc(tmpl_body, toc_levels=toc_levels)
 
-    # Rebuild footnotes: template separators + real footnotes from clean
-    # docx, renumbered sequentially; rewrite the body's footnoteReference
-    # ids to match (Word treats non-sequential ids as unreadable content).
-    new_footnotes, fn_id_map = rebuild_footnotes(template_path, input_path)
-    if fn_id_map:
-        _remap_footnote_refs(tmpl_doc, fn_id_map)
+    # Rebuild notes. Native endnote mode converts pandoc's footnotes into real
+    # endnotes (renamed refs + word/endnotes.xml); otherwise footnotes stay
+    # footnotes. Both keep the template's separator entries and renumber
+    # sequentially (Word treats non-sequential ids as unreadable content).
+    new_footnotes = new_endnotes = None
+    if endnotes_mode == 'native':
+        new_endnotes, en_id_map = rebuild_endnotes(template_path, input_path)
+        if en_id_map:
+            _convert_footnote_refs_to_endnotes(tmpl_doc, en_id_map)
+        # Drop the template's sample footnotes so no unreferenced note remains.
+        new_footnotes = _footnotes_separators_only(template_path)
+        print(f'DOCX: converted {len(en_id_map)} footnote(s) to native endnotes')
+    elif endnotes_mode == 'body':
+        # Body mode: the notes are already visible paragraphs; the only notes
+        # left are the citation footnotes. Inline each at its reference so the
+        # citation reads inside its note paragraph, then drop the footnotes.
+        _inl = _inline_citation_footnotes_docx(tmpl_doc, input_path)
+        new_footnotes = _footnotes_separators_only(template_path)
+        if _inl:
+            print(f'DOCX: inlined {_inl} citation note(s) into their paragraph')
+    else:
+        new_footnotes, fn_id_map = rebuild_footnotes(template_path, input_path)
+        if fn_id_map:
+            _remap_footnote_refs(tmpl_doc, fn_id_map)
+
+    # Endnote jump links look like web links (blue + underlined) by default.
+    # The body's superscript number should read as plain text while staying
+    # clickable, so drop the Hyperlink run style from hyperlinks whose target is
+    # a '#notes-…' anchor.
+    _unlink_note_anchors_docx(tmpl_doc)
 
     # Every paragraph needs a w14:paraId + w14:textId, and Word expects
     # w:rsidR/w:rsidRDefault on paragraphs (it adds them to all 256 on
@@ -1443,32 +1539,41 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     # footnotes.xml is a separate XML part not covered by the loop above;
     # pandoc's footnote paragraphs lack these attrs, which Word flags as
     # unreadable content (it adds them to every footnote para on repair).
-    if new_footnotes is not None:
-        fn_root = etree.fromstring(new_footnotes)
-        for p in fn_root.iter(tag('p')):
+    def _patch_note_paras(xml_bytes):
+        """paraId/rsid patching + image capping for a footnotes/endnotes part
+        (a separate XML part not covered by the body loop)."""
+        root = etree.fromstring(xml_bytes)
+        for p in root.iter(tag('p')):
             ensure_para_id(p, used)
             if p.get(tag('rsidR')) is None:
                 p.set(tag('rsidR'), '00DE2936')
             if p.get(tag('rsidRDefault')) is None:
                 p.set(tag('rsidRDefault'), '00DE2936')
-        new_footnotes = etree.tostring(fn_root, xml_declaration=True,
-                                       encoding='UTF-8', standalone=True)
+        resize_images(root, 'docx')  # notes: A4 fallback (no sectPr)
+        return etree.tostring(root, xml_declaration=True, encoding='UTF-8',
+                              standalone=True)
 
-    # Cap images to template text area dimensions, preserving aspect ratio.
+    if new_footnotes is not None:
+        new_footnotes = _patch_note_paras(new_footnotes)
+    if new_endnotes is not None:
+        new_endnotes = _patch_note_paras(new_endnotes)
+
+    # Cap body images to template text area dimensions, preserving aspect ratio.
     n_scaled = resize_images(tmpl_doc, 'docx')
     if n_scaled:
         print(f'DOCX: capped {n_scaled} image extent(s) to text area')
-    if new_footnotes is not None:
-        fn_root = etree.fromstring(new_footnotes)
-        resize_images(fn_root, 'docx')  # footnotes: A4 fallback (no sectPr)
-        new_footnotes = etree.tostring(fn_root, xml_declaration=True,
-                                       encoding='UTF-8', standalone=True)
 
     # Save via python-docx-like zip write (preserve all other parts).
+    # The endnote styles are borrowed from the bundled document.docx when the
+    # template lacks them (a user template may predate endnote support).
+    _extra_ids = list(_tof_style_ids) + list(_extra_style_ids_for_aliases)
+    if _n_restyled:
+        _extra_ids += list(ENDNOTE_STYLE_IDS_DOCX)
     _write_docx(template_path, output_path, tmpl_doc, new_footnotes,
+                new_endnotes_xml=new_endnotes,
                 short_title=short_title, author=author, title=title,
                 subtitle=subtitle, input_path=input_path,
-                extra_style_ids=_tof_style_ids + _extra_style_ids_for_aliases,
+                extra_style_ids=_extra_ids,
                 csl_style=csl_style, restart_footnotes=restart_footnotes)
 
 def _fill_title_block(title_block, title, subtitle, author, date_val):
@@ -1924,6 +2029,88 @@ def rebuild_footnotes(template_path, input_path):
     return (ET.tostring(new_root, xml_declaration=True, encoding='UTF-8',
                         standalone=True), id_map)
 
+def _footnotes_separators_only(template_path):
+    """The template's word/footnotes.xml with its sample footnotes dropped,
+    keeping only the separator/continuationSeparator entries. Used by native
+    endnote mode, where no footnote is referenced but Word still requires the
+    part to be present and well-formed."""
+    import zipfile
+    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    def tag(n): return '{%s}%s' % (W_NS, n)
+    with zipfile.ZipFile(template_path) as z:
+        if 'word/footnotes.xml' not in z.namelist():
+            return None
+        tpl_root = etree.fromstring(z.read('word/footnotes.xml'))
+    new_root = etree.Element(tag('footnotes'), nsmap=tpl_root.nsmap)
+    for fn in tpl_root:
+        if fn.get(tag('type')) in ('separator', 'continuationSeparator'):
+            new_root.append(fn)
+    _strip_ws_text_nodes(new_root)
+    return etree.tostring(new_root, xml_declaration=True, encoding='UTF-8',
+                          standalone=True)
+
+
+def _docx_note_number_tab(p):
+    """In an endnote paragraph, replace the space after the leading "N. " with
+    a real <w:tab/>, so with the EndnoteText style's hanging indent the note
+    text lines up past the number. No-op when the paragraph doesn't start with
+    a number marker or has no leading text run."""
+    for r in p.findall(tag('r')):
+        t = r.find(tag('t'))
+        if t is None or not t.text:
+            continue
+        m = NOTE_NUMBER_RE.match(t.text)
+        if not m:
+            return
+        marker, rest = m.group(1), t.text[m.end():]
+        t.text = marker
+        # Drop the separating whitespace so the tab is the only separator. It
+        # may sit in the NEXT RUN — possibly after a bookmarkEnd — so walk
+        # forward past non-run elements to the next run carrying text.
+        if not rest:
+            nxt = r.getnext()
+            while nxt is not None and nxt.tag != tag('r'):
+                nxt = nxt.getnext()
+            if nxt is not None:
+                nt = nxt.find(tag('t'))
+                if nt is not None and nt.text:
+                    nt.text = nt.text.lstrip(' \t')
+        # Build a tab run carrying the same rPr, then a text run for the rest.
+        tab_r = etree.Element(tag('r'))
+        rpr = r.find(tag('rPr'))
+        if rpr is not None:
+            tab_r.append(copy.deepcopy(rpr))
+        etree.SubElement(tab_r, tag('tab'))
+        rest_r = copy.deepcopy(r)
+        rest_t = rest_r.find(tag('t'))
+        rest_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        rest_t.text = rest
+        r.addnext(rest_r)
+        r.addnext(tab_r)
+        return
+
+
+def _unlink_note_anchors_docx(doc):
+    """Remove the Hyperlink run style from every w:hyperlink whose w:anchor is
+    a '#notes-…' endnote jump target, so the superscript anchor looks like body
+    text (pandoc gives every link the blue/underlined Hyperlink style). The
+    hyperlink element is kept, so it stays clickable; for external hyperlinks
+    (which carry r:id, not w:anchor) nothing changes."""
+    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    def tag(n): return '{%s}%s' % (W_NS, n)
+    for hl in doc.iter(tag('hyperlink')):
+        anchor = hl.get(tag('anchor'))
+        if not is_note_anchor_target(anchor):
+            continue
+        for r in hl.iter(tag('r')):
+            rpr = r.find(tag('rPr'))
+            if rpr is None:
+                continue
+            for rs in list(rpr.findall(tag('rStyle'))):
+                if rs.get(tag('val')) == 'Hyperlink':
+                    rpr.remove(rs)
+
+
 def _remap_footnote_refs(doc, id_map):
     """Rewrite every w:footnoteReference w:id in the body per id_map (the
     old pandoc id → new sequential id)."""
@@ -1933,6 +2120,142 @@ def _remap_footnote_refs(doc, id_map):
         old = ref.get(tag('id'))
         if old in id_map:
             ref.set(tag('id'), id_map[old])
+
+
+def _inline_citation_footnotes_docx(doc, input_path):
+    """Body endnote mode: the notes are already visible body paragraphs; the
+    only notes left are the citation footnotes that citeproc created for the
+    note-style citations inside them. Replace each footnote reference run with
+    the footnote's rendered content so the citation reads inline in its note
+    paragraph. Returns the number inlined."""
+    ET = etree
+    _W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    def tag(n): return '{%s}%s' % (_W, n)
+    with zipfile.ZipFile(input_path) as z:
+        if 'word/footnotes.xml' not in z.namelist():
+            return 0
+        root = ET.fromstring(z.read('word/footnotes.xml'))
+    by_id = {}
+    for fn in root.findall(tag('footnote')):
+        fid = fn.get(tag('id'))
+        if fid is not None:
+            by_id[fid] = fn
+    inlined = 0
+    for ref in list(doc.iter(tag('footnoteReference'))):
+        fn = by_id.get(ref.get(tag('id')))
+        if fn is None:
+            continue
+        run = ref.getparent()          # the w:r holding the reference
+        para = run.getparent() if run is not None else None
+        if para is None:
+            continue
+        first_p = fn.find(tag('p'))
+        if first_p is None:
+            continue
+        # Take the footnote's rendered runs, skipping its pPr and the
+        # note-number run (w:footnoteRef) — the body already carries the note
+        # number in the Notes-section paragraph.
+        content = []
+        for ch in list(first_p):
+            if ch.tag == tag('pPr'):
+                continue
+            if ch.tag == tag('r') and ch.find(tag('footnoteRef')) is not None:
+                continue
+            content.append(ch)
+        # Drop a leading space on the inlined content so the number tab is the
+        # only separator (pandoc separates the note number from the citation
+        # text with a space that would otherwise follow the tab).
+        for ch in content:
+            if ch.tag != tag('r'):
+                continue
+            ct = ch.find(tag('t'))
+            if ct is not None and ct.text is not None:
+                ct.text = ct.text.lstrip(' \t')
+                break
+        idx = list(para).index(run)
+        for i, ch in enumerate(content):
+            para.insert(idx + i, ch)
+        para.remove(run)
+        inlined += 1
+    return inlined
+
+
+def rebuild_endnotes(template_path, input_path):
+    """Build word/endnotes.xml from the template's separator entries plus the
+    REAL notes pandoc wrote into word/footnotes.xml, converted to endnotes.
+
+    Native-endnote mode (the note's `endnotes: native`): Word/LibreOffice get
+    real endnote objects instead of page-bottom footnotes. Each pandoc footnote
+    is renamed footnote→endnote, its inner footnoteRef→endnoteRef, its
+    FootnoteReference/FootnoteText styles switched to the Endnote equivalents,
+    and renumbered sequentially (Word rejects non-sequential ids).
+
+    Returns (endnotes_xml_bytes, {old_footnote_id: new_endnote_id}) or
+    (None, None) when either part is missing.
+    """
+    import zipfile
+    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    ET = etree
+    def tag(n): return '{%s}%s' % (W_NS, n)
+
+    with zipfile.ZipFile(template_path) as z:
+        if 'word/endnotes.xml' not in z.namelist():
+            return None, None
+        tpl_root = ET.fromstring(z.read('word/endnotes.xml'))
+    with zipfile.ZipFile(input_path) as z:
+        if 'word/footnotes.xml' not in z.namelist():
+            return None, None
+        in_root = ET.fromstring(z.read('word/footnotes.xml'))
+
+    keep = [en for en in tpl_root
+            if en.get(tag('type')) in ('separator', 'continuationSeparator')]
+
+    id_map = {}
+    next_id = 1
+    for fn in in_root:
+        if fn.get(tag('type')) in ('separator', 'continuationSeparator'):
+            continue
+        old = fn.get(tag('id'))
+        en = copy.deepcopy(fn)
+        en.tag = tag('endnote')
+        en.set(tag('id'), str(next_id))
+        for el in en.iter():
+            if el.tag == tag('footnoteRef'):
+                el.tag = tag('endnoteRef')
+            elif el.tag == tag('rStyle') and el.get(tag('val')) == 'FootnoteReference':
+                el.set(tag('val'), 'EndnoteReference')
+            elif el.tag == tag('pStyle') and el.get(tag('val')) == 'FootnoteText':
+                el.set(tag('val'), 'EndnoteText')
+        if old is not None:
+            id_map[old] = str(next_id)
+        next_id += 1
+        keep.append(en)
+
+    new_root = ET.Element(tag('endnotes'), nsmap=tpl_root.nsmap)
+    for en in keep:
+        new_root.append(en)
+    _strip_ws_text_nodes(new_root)
+    return (ET.tostring(new_root, xml_declaration=True, encoding='UTF-8',
+                        standalone=True), id_map)
+
+
+def _convert_footnote_refs_to_endnotes(doc, id_map):
+    """Rewrite every body w:footnoteReference as w:endnoteReference (renamed,
+    id remapped, run style switched to EndnoteReference)."""
+    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    def tag(n): return '{%s}%s' % (W_NS, n)
+    for ref in list(doc.iter(tag('footnoteReference'))):
+        old = ref.get(tag('id'))
+        ref.tag = tag('endnoteReference')
+        if old in id_map:
+            ref.set(tag('id'), id_map[old])
+        run = ref.getparent()
+        if run is not None and run.tag == tag('r'):
+            rpr = run.find(tag('rPr'))
+            if rpr is not None:
+                rs = rpr.find(tag('rStyle'))
+                if rs is not None and rs.get(tag('val')) == 'FootnoteReference':
+                    rs.set(tag('val'), 'EndnoteReference')
 
 #: Elements whose text content is meaningful even when it is only whitespace —
 #: <w:t xml:space="preserve"> </w:t> is the standalone-space run pandoc emits
@@ -2302,6 +2625,7 @@ def _merge_numbering(data, pdc_num_bytes, doc_root):
 # ── image size capping (DOCX) ─────────────────────────────────────────────────
 
 def _write_docx(template_path, output_path, new_document_xml, new_footnotes_xml=None,
+                new_endnotes_xml=None,
                 short_title=None, author=None, title=None, subtitle=None,
                 input_path=None, extra_style_ids=None, csl_style=None,
                 restart_footnotes=True):
@@ -2335,6 +2659,8 @@ def _write_docx(template_path, output_path, new_document_xml, new_footnotes_xml=
     )
     if new_footnotes_xml is not None and 'word/footnotes.xml' in data:
         data['word/footnotes.xml'] = new_footnotes_xml
+    if new_endnotes_xml is not None and 'word/endnotes.xml' in data:
+        data['word/endnotes.xml'] = new_endnotes_xml
 
     # ── Merge media + image rels from the clean docx ──────────────────────
     if input_path:
@@ -2543,9 +2869,11 @@ def _write_docx(template_path, output_path, new_document_xml, new_footnotes_xml=
         for n in data:
             zout.writestr(n, data[n])
 
-def make_toc_paragraph():
+def make_toc_paragraph(toc_levels=None):
     """Build a TOC field paragraph: 'Table of Contents' style heading with a
-    TOC field. Returns a <w:p> element."""
+    TOC field. Returns a <w:p> element. `toc_levels` sets the `\\o "1-n"`
+    range (default: all three heading levels)."""
+    depth = toc_levels if toc_levels and toc_levels > 0 else 3
     p = etree.Element(tag('p'))
     ppr = etree.SubElement(p, tag('pPr'))
     pstyle = etree.SubElement(ppr, tag('pStyle'))
@@ -2556,7 +2884,7 @@ def make_toc_paragraph():
     r2 = etree.SubElement(p, tag('r'))
     it = etree.SubElement(r2, tag('instrText'))
     it.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
-    it.text = ' TOC \\o "1-3" \\h \\z \\u '
+    it.text = ' TOC \\o "1-%d" \\h \\z \\u ' % depth
     r3 = etree.SubElement(p, tag('r'))
     fc2 = etree.SubElement(r3, tag('fldChar'))
     fc2.set(tag('fldCharType'), 'separate')
@@ -2568,7 +2896,7 @@ def make_toc_paragraph():
     fc3.set(tag('fldCharType'), 'end')
     return p
 
-def inject_toc(template_body, before_heading='Introduction'):
+def inject_toc(template_body, before_heading='Introduction', toc_levels=None):
     """Insert a TOC field paragraph into the body just before the first
     main-text heading (Introduction/Chapter 1)."""
     children = list(template_body)
@@ -2581,7 +2909,7 @@ def inject_toc(template_body, before_heading='Introduction'):
                 if is_main_start(text):
                     idx = i
                     break
-    toc_p = make_toc_paragraph()
+    toc_p = make_toc_paragraph(toc_levels)
     if idx is not None:
         template_body.insert(idx, toc_p)
     else:
@@ -2597,8 +2925,15 @@ def main():
     ap.add_argument('--subtitle', default=None)
     ap.add_argument('--date', default=None, dest='date_val')
     ap.add_argument('--toc', action='store_true')
+    ap.add_argument('--toc-levels', type=int, default=None, dest='toc_levels',
+                    help='Deepest heading level the TOC shows (1 = chapters, '
+                         '2 = chapters + sections). Default: the template TOC.')
     ap.add_argument('--list-of-figures', action='store_true', dest='tof',
                     help='Include a table of figures (only when the doc has figures)')
+    ap.add_argument('--endnotes-mode', choices=['none', 'native', 'body'],
+                    default='none', dest='endnotes_mode',
+                    help="'native' converts the notes to real Word endnotes; "
+                         "'body'/'none' leave the compiled markdown as-is.")
     ap.add_argument('--shorttitle', default=None)
     ap.add_argument('--basename', default=None)
     ap.add_argument('--abstract', default=None)
@@ -2648,7 +2983,8 @@ def main():
     new_page_headings = not args.no_new_page_headings
     restart_footnotes = args.no_global_footnotes  # --no-global-footnotes = restart per chapter
     merge(args.template, args.input, args.output, args.title, args.author,
-          args.subtitle, args.date_val, args.toc, args.tof, args.shorttitle,
+          args.subtitle, args.date_val, args.toc, args.toc_levels, args.tof,
+          args.endnotes_mode, args.shorttitle,
           args.basename, args.abstract, extra_sections,
           new_page_headings=new_page_headings,
           restart_footnotes=restart_footnotes,

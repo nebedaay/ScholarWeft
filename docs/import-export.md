@@ -73,6 +73,9 @@ Outline notes contain only frontmatter and bullets; nesting follows bullet depth
 | `- @@ Heading text` | Numbered heading ("Chapter N: Heading") |
 | `- @@[[Note]]` | Numbered heading + note contents |
 | `- x [[Note]]` | Note contents only, no heading |
+| `- * Heading text` | Unnumbered heading — only when `numbering-levels` is above `0` |
+
+With `numbering-levels: 0` (the default) only `@@` bullets are numbered. Setting it to `1`, `2`, … auto-numbers every heading down to that depth (chapters, then sections, …), ignores `@@`, and treats a `* ` prefix as an unnumbered exception.
 
 The heading text for a linked note comes from the note's `title:` property, else the filename with leading ordering numbers stripped (`1 Introduction` → `Introduction`). A linked note's own headings are demoted so its shallowest heading sits one level below the note's position in the outline.
 
@@ -83,8 +86,28 @@ The heading text for a linked note comes from the note's `title:` property, else
 - **Document type** — Book, Article, or Markdown; sets the other checkboxes (TOC, per-chapter footnotes, new-page headings, roman frontmatter), which can then be customised.
 - **Output filename and folder.**
 - **Table of contents / table of figures**, **restart footnote and figure numbering per chapter**, **top-level headings start on a new page**.
+- **Auto-number headings down to level** — `0` (default) numbers only `@@`-marked headings; `1` numbers chapters; `2` chapters and sections; and so on. When set above `0`, `@@` is ignored and a `* ` prefix on a bullet marks an unnumbered exception. Numbering is applied to the **final** document, so a heading is numbered by where it ends up — including headings inside an included note. Set by the note's `numbering-levels` property. (A numbered single note is written to a separate `… - numbered.md` copy; the original is never overwritten.)
+- **TOC depth** — `1` lists chapters only, `2` (default) chapters and sections. Set by the note's `toc-levels` property.
+- **Notes** — three choices, set by the note's `endnotes` property. Both endnote choices compile the document exactly as the footnote path does — author notes and in-text citations all become real notes — then route them:
+  - **Footnotes (page-bottom)** — the default; notes render as native footnotes in every format.
+  - **Endnotes (native word-processor formatting)** — every footnote is converted to a real endnote object, preceded by a level-1 **Notes** heading (it appears in the TOC). The word processor owns that stream: it is a single continuous sequence, so its numbering does **not** restart per chapter and it cannot be divided by chapter. Markdown/LaTeX get a `# Notes` section.
+  - **Endnotes (as body paragraphs divided by chapter)** — the notes appear as visible paragraphs after the Notes heading, each group under its chapter (`## <chapter>`), with superscript note numbers in the body, per-chapter numbering, and no native note objects. Each note's citations are rendered inline within it (no page-bottom footnotes remain). This option mirrors the footnote path's per-chapter structure. Shown only when per-chapter (discontinuous) numbering is selected; with continuous numbering the option is hidden.
+  - In all cases the notes keep their original order, and nothing is left as a page-bottom footnote.
+
+  A PDF follows whatever its intermediate format supports (DOCX/ODT endnote objects, or a `.tex` Notes section).
+
+- **Include a bibliography** — on by default. On, a bibliography is emitted whenever the document has references; off, it is kept only for author-date citation styles (a note/footnote style omits it, since each citation already carries the reference in its note). A document with no references never gets a bibliography. Set by the note's `include-bibliography` property (default `true`).
+
+The settings the note can specify in YAML — `template`, `csl`/`citation-style`, `toc-levels`, `numbering-levels`, `endnotes`, `include-bibliography` — are **remembered per file** between exports; nothing is written back to the note. Each is resolved in this order:
+
+1. The note's YAML property, when it is new or has changed since the last export (so editing the property in the note takes effect).
+2. The value last used for this file (stored in the plugin's settings).
+3. The built-in default above.
+
+**Reset to note properties** (a button in the dialogue) re-reads the note's YAML for those settings and forgets the value remembered from the last export for each one it finds, leaving any setting with no such property at its current value. Use it to discard a last-used override and go back to what the note's frontmatter says.
 - **Apply a citation style, overriding the template's** — pick an installed Zotero style; used for PDF and written into the exported DOCX/ODT's Zotero document preferences so a later "Refresh" in Word/LibreOffice uses it.
 - **Keep intermediate files** — the compiled markdown and, for PDF, the intermediate ODT/DOCX/TeX.
+- **Skip recompilation and use the already compiled markdown** — shown only when a compiled markdown (`<note> - compiled.md`) already exists in the output folder. When checked, the export runs from that file instead of recompiling the outline, so several formats (e.g. DOCX and ODT) can be produced from one compile. Not remembered between exports.
 
 ### Citation style resolution (export)
 
@@ -115,6 +138,10 @@ Lookup order: your configured templates directory → `<vault>/Export Templates/
 | `author` | Author — a string, a `- Name` list (joined with `, `), or a `\|-` block scalar. The title block prints the **whole block** (line breaks preserved: name / affiliation / date); the running header ("Author — Short Title") uses only its **first line** |
 | `csl` / `citation-style` | Citation style for this note (a Zotero style name, `.csl` path, or URL) |
 | `bibliography` | Override the bibliography source(s) for this note |
+| `numbering-levels` | Levels to auto-number: `0` (default) = only `@@` headings; `1` = chapters; `2` = chapters + sections. Above `0`, `@@` is ignored and `* ` marks an unnumbered exception |
+| `toc-levels` | TOC depth: `1` = chapters, `2` (default) = chapters + sections |
+| `endnotes` | Note rendering: `none` (default, footnotes), `native` (real endnote objects in DOCX/ODT; a `# Notes` section in Markdown/LaTeX), or `body` (a `# Notes` section divided by chapter — DOCX/ODT, per-chapter numbering only). The old boolean still works (`true` → `native`) |
+| `include-bibliography` | Include a generated bibliography in exports: `true` (default) or `false` |
 
 All of these accept the usual YAML forms: an inline value, a `- item` list (joined with `, `), or a `|`/`>` **block scalar**. A `title` written over **two lines** is read as `Title: Subtitle` (so it fills both the title and subtitle slots); a `title:` containing a `:` is likewise split into title/subtitle unless you also set `subtitle:` explicitly.
 

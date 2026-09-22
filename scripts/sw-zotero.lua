@@ -2097,6 +2097,10 @@ function Meta(meta)
 
   config.scannable_cite = test_boolean('scannable-cite', meta.zotero['scannable-cite'])
   config.author_in_text = test_boolean('author-in-text', meta.zotero['author-in-text'])
+  -- "no-bibliography" (pandoc -M zotero_no-bibliography=true) suppresses the
+  -- generated bibliography for this export. ScholarWeft decides this in Python
+  -- (see DocumentCompiler), so the per-format writers only obey.
+  config.no_bibliography = test_boolean('no-bibliography', meta.zotero['no-bibliography'])
 
   if meta.zotero['csl-style'] ~= nil then
     config.csl_style = pandoc.utils.stringify(meta.zotero['csl-style'])
@@ -2205,7 +2209,7 @@ function Pandoc(doc)
     -- See zotero_bibl_docx_heading(): DOCX gets a plain "Bibliography"
     -- heading here, not a real field — sw_export_merge.py replaces it with
     -- one, the same way it replaces a heading the note wrote itself.
-    if config.csl_style and has_citations then
+    if config.csl_style and has_citations and not config.no_bibliography then
       table.insert(doc.blocks, pandoc.RawBlock('openxml', zotero_bibl_docx_heading()))
     end
     return pandoc.Pandoc(doc.blocks, doc.meta)
@@ -2218,7 +2222,8 @@ function Pandoc(doc)
     table.insert(doc.blocks, 1, pandoc.RawBlock('opendocument', zotero_bibl_odt_banner()))
   end
 
-  if config.csl_style and has_citations and not refsDivSeen then
+  if config.csl_style and has_citations and not refsDivSeen
+      and not config.no_bibliography then
     -- Heading (see zotero_bibl_odt_heading()) PLUS the field section: the
     -- shared find_bibliography_range (sw_merge_helpers.py) only recognizes a
     -- heading as a bibliography section if at least one non-heading element

@@ -20,8 +20,20 @@ export interface ExportOptions {
   /** Template filename (with extension, e.g. "book.docx"). Empty = no template. */
   template: string;
   toc: boolean;
+  /** Deepest heading level the TOC shows (1 = chapters, 2 = chapters + sections). */
+  tocLevels: number;
   /** true = include a table of figures (only rendered when the doc has figures). */
   tof: boolean;
+  /** Levels to auto-number (0 = only @@-marked headings; 1 = chapters; 2 = chapters + sections). */
+  numberingLevels: number;
+  /** How notes render: 'none' footnotes, 'native' word-processor endnotes
+   *  (DOCX/ODT) or a Notes section (Markdown/LaTeX), 'body' a Notes section
+   *  divided by chapter. Set by the note's `endnotes` property. */
+  endnotes: 'none' | 'native' | 'body';
+  /** true = include a bibliography. When true, it is emitted whenever there
+   *  are references; when false, only author-date citations keep it. Set by
+   *  the note's `include-bibliography` property (default true). */
+  includeBibliography: boolean;
   /** true = restart footnote AND figure numbering at each top-level heading (Figure C.N); false = continuous (Figure N). */
   restartFootnotes: boolean;
   /** true = each top-level heading starts on a new page. */
@@ -41,6 +53,13 @@ export interface ExportOptions {
   /** Non-md formats only: keep the compiled markdown instead of deleting it
    *  once the export is done. */
   keepIntermediateMd: boolean;
+  /** Non-md exports only: when a compiled markdown already exists for this
+   *  note, export from it instead of recompiling. Not persisted — a one-off
+   *  choice for this export. */
+  skipRecompile?: boolean;
+  /** Absolute path of the existing compiled markdown to reuse (set with
+   *  skipRecompile). */
+  compiledMdPath?: string;
   /** IDs of StyleMappings enabled for this export (subset of settings.styleMappings). */
   enabledMappingIds: string[];
   /** true = apply `cslStyle`, overriding the template's own citation style;
@@ -63,7 +82,11 @@ interface FileExportHistory {
   docType: DocType;
   template: string;
   toc: boolean;
+  tocLevels?: number;
   tof: boolean;
+  numberingLevels?: number;
+  endnotes?: 'none' | 'native' | 'body';
+  includeBibliography?: boolean;
   restartFootnotes: boolean;
   newPageHeadings: boolean;
   generatedDate: boolean;
@@ -76,6 +99,11 @@ interface FileExportHistory {
   enabledMappingIds: string[];
   overrideCslStyle?: boolean;
   cslStyle?: string;
+  /** Raw YAML values of the property-backed options as they were when this
+   *  file was last exported. On reopen, a property whose CURRENT YAML differs
+   *  from its recorded value is a deliberate edit, so the new YAML wins over
+   *  the last-used value (see changedYaml). */
+  yamlObserved?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +152,20 @@ function listTemplates(dir: string, format: ExportFormat): string[] {
  * selector is disabled for MD output since that mode compiles to markdown
  * only and uses no template.
  */
+/** Built-in defaults for the three per-note export properties. */
+const DEFAULT_NUMBERING_LEVELS = 0;
+const DEFAULT_TOC_LEVELS = 2;
+const DEFAULT_ENDNOTES: 'none' | 'native' | 'body' = 'none';
+const DEFAULT_BIBLIOGRAPHY = true;
+/** Highest heading level offered by the numbering / TOC-depth inputs. */
+const MAX_LEVEL = 6;
+/** Label for the per-chapter footnote/figure restart checkbox. */
+const FOOTNOTE_RESTART_LABEL =
+  'Restart footnote and figure numbering per chapter';
+/** Shown when the restart option can't take effect (ODT native endnotes). */
+const FOOTNOTE_RESTART_ODT_NOTE =
+  ' (not available for ODT exports with native word-processor endnotes)';
+
 type ZoteroChoice = 'retry' | 'proceed' | 'cancel';
 
 /** Shown when Zotero is not running and the document cites works that can't
@@ -191,8 +233,17 @@ export class ExportModal extends Modal {
   private docTypeArticle!: HTMLInputElement;
   private docTypeCustom!: HTMLInputElement;
   private tocCb!: HTMLInputElement;
+  private tocLevelsInput!: HTMLInputElement;
+  private tocLevelsRow!: HTMLElement;
   private tofCb!: HTMLInputElement;
+  private numberingLevelsInput!: HTMLInputElement;
+  private notesModeFootnotes!: HTMLInputElement;
+  private notesModeNative!: HTMLInputElement;
+  private notesModeBody!: HTMLInputElement;
+  private notesModeBodyRow!: HTMLElement;
+  private bibliographyCb!: HTMLInputElement;
   private footnotesCb!: HTMLInputElement;
+  private footnotesLabel!: HTMLElement;
   private newPageCb!: HTMLInputElement;
   private generatedDateCb!: HTMLInputElement;
   private romanFrontmatterCb!: HTMLInputElement;
@@ -203,6 +254,8 @@ export class ExportModal extends Modal {
   private keepIntermediateRow!: HTMLElement;
   private keepIntermediateMdCb!: HTMLInputElement;
   private keepIntermediateMdRow!: HTMLElement;
+  private skipRecompileCb!: HTMLInputElement;
+  private skipRecompileRow!: HTMLElement;
   private cslOverrideCb!: HTMLInputElement;
   private cslStyleRow!: HTMLElement;
   private cslStyleSelect!: HTMLSelectElement;
@@ -383,9 +436,11 @@ export class ExportModal extends Modal {
       if (this.sameSourceCb.checked) {
         this.outputDirInput.value = '';
       }
+      this.updateSkipRecompileRow();
     });
     this.outputDirInput.addEventListener('input', () => {
       this.sameSourceCb.checked = false;
+      this.updateSkipRecompileRow();
     });
 
     // ── Checkboxes ────────────────────────────────────────────────────────
@@ -405,11 +460,94 @@ export class ExportModal extends Modal {
     };
 
     this.tocCb = makeCheckRow('lc-export-toc', 'Include table of contents (TOC)');
+    this.tocLevelsRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.tocLevelsRow.style.cssText = 'margin-left:22px';
+    this.tocLevelsRow.createEl('label', {
+      text: 'TOC depth (1 = chapters, 2 = chapters + sections):',
+    });
+    this.tocLevelsInput = this.tocLevelsRow.createEl('input', { type: 'number' });
+    this.tocLevelsInput.style.cssText = 'width:56px;margin-left:6px';
+    this.tocLevelsInput.min = '1';
+    this.tocLevelsInput.max = String(MAX_LEVEL);
+
     this.tofCb = makeCheckRow('lc-export-tof', 'Include table of figures');
+
+    // Auto-number headings by outline level (0 = only @@-marked headings).
+    const numRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    numRow.createEl('label', {
+      text: 'Auto-number headings down to level (0 = only @@):',
+    });
+    this.numberingLevelsInput = numRow.createEl('input', { type: 'number' });
+    this.numberingLevelsInput.style.cssText = 'width:56px;margin-left:6px';
+    this.numberingLevelsInput.min = '0';
+    this.numberingLevelsInput.max = String(MAX_LEVEL);
+
+    // Notes rendering: footnotes (default) / native endnotes / body Notes
+    // section divided by chapter. Native + body endnotes only differ for
+    // DOCX/ODT with per-chapter numbering; body is otherwise greyed out.
+    const notesLabel = checksWrap.createEl('label', { text: 'Notes' });
+    notesLabel.style.cssText = 'display:block;margin-top:4px;font-weight:600';
+    const notesRow = checksWrap.createDiv();
+    // The radio→label gap is the radio's own margin-right (a flex `gap` was
+    // applied inconsistently across the three rows), and a small margin-bottom
+    // separates the stacked options.
+    notesRow.style.cssText = 'display:block;margin:2px 0 6px 4px';
+    const makeNotesRadio = (
+      value: 'none' | 'native' | 'body',
+      label: string
+    ): { row: HTMLElement; cb: HTMLInputElement } => {
+      const row = notesRow.createDiv();
+      row.style.cssText = 'margin:0 0 4px 0;line-height:1.4';
+      const cb = row.createEl('input', { type: 'radio' });
+      cb.name = 'lc-notes-mode';
+      cb.value = value;
+      cb.id = `lc-notes-${value}`;
+      cb.style.cssText = 'margin:0 8px 0 0;vertical-align:middle';
+      const lbl = row.createEl('label', { text: label });
+      lbl.htmlFor = cb.id;
+      lbl.style.cssText = 'margin:0;padding:0;line-height:1.4';
+      return { row, cb };
+    };
+    this.notesModeFootnotes = makeNotesRadio(
+      'none', 'Footnotes (page-bottom)').cb;
+    this.notesModeNative = makeNotesRadio(
+      'native', 'Endnotes (native word-processor formatting)').cb;
+    const _body = makeNotesRadio(
+      'body', 'Endnotes (as body paragraphs divided by chapter)');
+    this.notesModeBody = _body.cb;
+    this.notesModeBodyRow = _body.row;
+
+    this.bibliographyCb = makeCheckRow(
+      'lc-export-bibl',
+      'Include a bibliography (keeps it with a note/footnote citation style)'
+    );
+    this.bibliographyCb.title =
+      'On: emit whenever the document has references. Off: keep it only for '
+      + 'author-date citations (a note/footnote style omits it). Always omitted '
+      + 'when there are no references.';
+
+    // Non-persisted: reuse an already compiled markdown instead of recompiling.
+    // Shown only when such a file exists for the current output folder.
+    this.skipRecompileRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.skipRecompileRow.style.marginTop = '4px';
+    this.skipRecompileCb = this.skipRecompileRow.createEl('input', {
+      type: 'checkbox',
+    });
+    this.skipRecompileCb.id = 'lc-export-skip-recompile';
+    const skipLbl = this.skipRecompileRow.createEl('label', {
+      text: 'Skip recompilation and use the already compiled markdown',
+    });
+    skipLbl.htmlFor = 'lc-export-skip-recompile';
+    this.skipRecompileCb.title =
+      'A compiled markdown already exists for this note. Check to export from '
+      + 'it instead of recompiling (useful for making several formats from one '
+      + 'compile). Not remembered between exports.';
+
     this.footnotesCb = makeCheckRow(
       'lc-export-fn',
-      'Restart footnote and figure numbering per chapter'
+      FOOTNOTE_RESTART_LABEL
     );
+    this.footnotesLabel = this.footnotesCb.nextElementSibling as HTMLElement;
     this.generatedDateCb = makeCheckRow(
       'lc-export-gendate',
       "Use today's date if the note has no date property"
@@ -479,6 +617,7 @@ export class ExportModal extends Modal {
       this.applyDocSettings();
       this.refreshFilename();
       this.syncFormatState(fmt);
+      this.updateSkipRecompileRow();
     });
     this.templateSelect.addEventListener('change', () =>
       this.applyDocSettings()
@@ -497,11 +636,48 @@ export class ExportModal extends Modal {
         this.docTypeCustom.checked  = true;
       });
     });
+    [this.notesModeFootnotes, this.notesModeNative, this.notesModeBody]
+      .forEach(r => {
+        r.addEventListener('change', () => {
+          this.docTypeBook.checked    = false;
+          this.docTypeArticle.checked = false;
+          this.docTypeCustom.checked  = true;
+          this.syncFormatState(this.formatSelect.value as ExportFormat);
+        });
+      });
+    [this.tocLevelsInput, this.numberingLevelsInput].forEach(inp => {
+      inp.addEventListener('change', () => {
+        this.docTypeBook.checked    = false;
+        this.docTypeArticle.checked = false;
+        this.docTypeCustom.checked  = true;
+      });
+    });
+    // Keep the TOC-depth row visible only while a TOC is requested.
+    this.tocCb.addEventListener('change', () => {
+      this.tocLevelsRow.style.display =
+        this.tocCb.disabled || !this.tocCb.checked ? 'none' : '';
+    });
+    // The "body" endnote option requires per-chapter (discontinuous) numbering.
+    this.footnotesCb.addEventListener('change', () => {
+      this.syncFormatState(this.formatSelect.value as ExportFormat);
+    });
 
     // ── Buttons ───────────────────────────────────────────────────────────
     const btnRow = contentEl.createDiv({ cls: 'lc-export-btn-row' });
     btnRow.style.cssText =
       'display:flex;justify-content:flex-end;gap:8px;margin-top:14px';
+    // Reset the YAML-backed options to the note's own properties, discarding
+    // the values remembered from the last export (see resetToNoteProperties).
+    const resetBtn = btnRow.createEl('button', {
+      text: 'Reset to note properties',
+    });
+    resetBtn.style.marginRight = 'auto';
+    resetBtn.title =
+      "Re-read this note's YAML export settings (template, csl, toc-levels, "
+      + 'numbering-levels, endnotes, include-bibliography) and forget the '
+      + 'values remembered for them from the last export. Settings with no '
+      + 'YAML property are left untouched.';
+    resetBtn.addEventListener('click', () => this.resetToNoteProperties());
     const cancelBtn = btnRow.createEl('button', { text: 'Cancel' });
     cancelBtn.addEventListener('click', () => this.close());
     this.runButton = btnRow.createEl('button', {
@@ -515,6 +691,7 @@ export class ExportModal extends Modal {
     });
 
     setTimeout(() => this.runButton.focus(), 50);
+    this.updateSkipRecompileRow();
 
     // Probe installed tools and grey out formats/templates that can't run yet.
     void this.applyToolGating();
@@ -562,6 +739,7 @@ export class ExportModal extends Modal {
     this.applyDocSettings();
     this.refreshFilename();
     this.syncFormatState(fmt);
+    this.updateSkipRecompileRow();
   }
 
   /** Show which dependencies the selected format still needs (if any). */
@@ -745,6 +923,36 @@ export class ExportModal extends Modal {
     this.romanFrontmatterCb.disabled = isMd;
     this.romanStartRow.style.display =
       !isMd && this.romanFrontmatterCb.checked ? '' : 'none';
+    // TOC depth only matters when a TOC will be emitted (not for md output).
+    this.tocLevelsInput.disabled = isMd;
+    this.tocLevelsRow.style.display =
+      !isMd && this.tocCb.checked ? '' : 'none';
+    // Native endnotes are a DOCX/ODT word-processor feature; the visible
+    // "body paragraphs divided by chapter" Notes section is the alternative.
+    // Both need per-chapter (discontinuous) numbering for chapter groups.
+    const nativeOk = format === 'docx' || format === 'odt' || format === 'pdf';
+    this.notesModeNative.disabled = !nativeOk;
+    this.notesModeNative.parentElement!.style.opacity = nativeOk ? '' : '0.55';
+    const bodyOk = this.footnotesCb.checked;
+    this.notesModeBodyRow.style.display = bodyOk ? '' : 'none';
+    if (!bodyOk && this.notesModeBody.checked) {
+      // Continuous numbering: body endnotes don't apply — fall back to native.
+      (nativeOk ? this.notesModeNative : this.notesModeFootnotes).checked = true;
+    }
+    // Per-chapter restart cannot take effect for ODT native endnotes — the word
+    // processor numbers endnotes continuously — so grey the option out. Its
+    // value is kept (not cleared), since it still applies to DOCX/LaTeX or if
+    // the user switches format.
+    const odtNativeEndnotes =
+      (format === 'odt'
+        || (format === 'pdf' && /\.odt$/i.test(this.templateSelect.value)))
+      && this.notesModeNative.checked;
+    this.footnotesCb.disabled = odtNativeEndnotes;
+    if (this.footnotesLabel) {
+      this.footnotesLabel.setText(
+        FOOTNOTE_RESTART_LABEL
+        + (odtNativeEndnotes ? FOOTNOTE_RESTART_ODT_NOTE : ''));
+    }
     // footnotesCb stays active — the compile step still uses it.
     // PDF-specific row: show only when format is pdf.
     this.keepIntermediateRow.style.display = isPdf ? '' : 'none';
@@ -846,6 +1054,145 @@ export class ExportModal extends Modal {
     return typeof tpl === 'string' ? tpl.replace(/\.(docx|odt|tex)$/i, '') : '';
   }
 
+  /** Absolute path where DocumentCompiler would write this note's compiled
+   *  markdown ("<stem> - compiled.md" in the output folder, else beside the
+   *  note), or null when not on desktop. Mirrors write_intermediate(). */
+  private compiledMdPath(): string | null {
+    const adapter = this.plugin.app.vault.adapter as any;
+    if (typeof adapter?.getBasePath !== 'function') return null;
+    const vaultBase: string = adapter.getBasePath();
+    const raw = this.outputDirInput?.value.trim() ?? '';
+    let dir: string;
+    if (!raw) {
+      dir =
+        this.file.parent && this.file.parent.path !== '/'
+          ? `${vaultBase}/${this.file.parent.path}`
+          : vaultBase;
+    } else if (raw === '~' || raw.startsWith('~/') || raw.startsWith('~\\')) {
+      dir = (require('os') as typeof import('os')).homedir() + raw.slice(1);
+    } else if (raw.startsWith('/')) {
+      dir = raw;
+    } else {
+      dir = `${vaultBase}/${raw}`;
+    }
+    return `${dir}/${this.file.basename} - compiled.md`;
+  }
+
+  /** Show the "skip recompilation" row only when a compiled markdown exists
+   *  for the current output folder and the output is not markdown-only. */
+  private updateSkipRecompileRow(): void {
+    if (!this.skipRecompileRow) return;
+    const fmt = this.formatSelect.value as ExportFormat;
+    let exists = false;
+    if (fmt !== 'md') {
+      const p = this.compiledMdPath();
+      if (p) {
+        try {
+          exists = (require('fs') as typeof import('fs')).existsSync(p);
+        } catch {
+          exists = false;
+        }
+      }
+    }
+    this.skipRecompileRow.style.display = exists ? '' : 'none';
+    if (!exists) this.skipRecompileCb.checked = false;
+  }
+
+  /** A raw frontmatter property value as a string, or undefined. */
+  private frontmatterValue(key: string): string | undefined {
+    const fm = this.app.metadataCache.getFileCache(this.file)?.frontmatter as
+      | Record<string, unknown>
+      | undefined;
+    const v = fm?.[key];
+    if (v === undefined || v === null) return undefined;
+    return String(v);
+  }
+
+  /** An integer frontmatter property (handles Obsidian's quoted "2" form). */
+  private frontmatterInt(key: string, fallback: number): number {
+    const raw = this.frontmatterValue(key);
+    if (raw === undefined) return fallback;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  /** A boolean frontmatter property (true/false, yes/no, on/off, 1/0). */
+  private frontmatterBool(key: string, fallback: boolean): boolean {
+    const raw = this.frontmatterValue(key)?.trim().toLowerCase();
+    if (raw === undefined) return fallback;
+    if (['true', 'yes', 'on', '1'].includes(raw)) return true;
+    if (['false', 'no', 'off', '0'].includes(raw)) return false;
+    return fallback;
+  }
+
+  /** The note's `endnotes` mode (none / native / body), accepting the
+   *  historical boolean form (true → native). */
+  private frontmatterNotesMode(): 'none' | 'native' | 'body' {
+    const raw = this.frontmatterValue('endnotes')?.trim().toLowerCase();
+    if (raw === undefined) return DEFAULT_ENDNOTES;
+    if (raw === 'native' || ['true', 'yes', 'on', '1'].includes(raw)) {
+      return 'native';
+    }
+    if (['body', 'paragraphs', 'chapters'].includes(raw)) return 'body';
+    return 'none';
+  }
+
+  /** The current YAML value to honour for a property-backed option, or
+   *  undefined to fall back to the last-used value.
+   *
+   *  A property whose CURRENT YAML differs from the value recorded at last
+   *  export is a deliberate edit, so the new YAML wins. Unchanged YAML (or no
+   *  YAML at all) leaves the last-used value in charge; a first-ever export
+   *  with YAML present uses the YAML. */
+  private changedYaml(key: string, hist: FileExportHistory | null): string | undefined {
+    const cur = this.frontmatterValue(key);
+    const seen = hist?.yamlObserved?.[key];
+    if (cur !== undefined && cur !== seen) return cur;
+    return undefined;
+  }
+
+  /** The property-backed options' CURRENT YAML values (key → raw string),
+   *  recorded in the export history so a later change is detectable. Only keys
+   *  actually present in the frontmatter are recorded. */
+  private observedYaml(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const key of ['toc-levels', 'numbering-levels', 'endnotes', 'include-bibliography']) {
+      const v = this.frontmatterValue(key);
+      if (v !== undefined) out[key] = v;
+    }
+    return out;
+  }
+
+  /** Parse a raw string to an endnotes mode (shared by YAML + fallback). */
+  private parseNotesMode(raw: string): 'none' | 'native' | 'body' {
+    const v = raw.trim().toLowerCase();
+    if (v === 'native' || ['true', 'yes', 'on', '1'].includes(v)) return 'native';
+    if (['body', 'paragraphs', 'chapters'].includes(v)) return 'body';
+    return 'none';
+  }
+
+  /** Parse a raw string to a boolean (true/false, yes/no, on/off, 1/0). */
+  private parseBool(raw: string, fallback: boolean): boolean {
+    const v = raw.trim().toLowerCase();
+    if (['true', 'yes', 'on', '1'].includes(v)) return true;
+    if (['false', 'no', 'off', '0'].includes(v)) return false;
+    return fallback;
+  }
+
+  /** Parse and clamp a raw level string to [min, MAX_LEVEL]. */
+  private parseLevel(raw: string, min: number, fallback: number): number {
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(MAX_LEVEL, n));
+  }
+
+  /** Clamp a level input to [min, max], falling back on a blank/invalid box. */
+  private readLevel(input: HTMLInputElement, min: number, fallback: number): number {
+    const n = parseInt(input.value, 10);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(MAX_LEVEL, n));
+  }
+
   /** Read this file's export history entry, or null if none exists. */
   private getFileHistory(): FileExportHistory | null {
     const hist = (this.plugin.settings as any).fileExportHistory as
@@ -879,9 +1226,11 @@ export class ExportModal extends Modal {
    *
    * Priority order:
    *   1. Per-file history (restored exactly as last used)
-   *   2. Template-name heuristic (book* / article*) when fresh=true or no history
+   *   2. YAML property on the note (for the numbering-levels / toc-levels /
+   *      endnotes options, which have no document-type preset)
+   *   3. Built-in default
    *
-   * Callers must ensure both the radio buttons and checkboxes exist.
+   * Callers must ensure both the radio buttons and the inputs exist.
    */
   private applyDocSettings(fresh = false): void {
     const history = this.getFileHistory();
@@ -909,6 +1258,148 @@ export class ExportModal extends Modal {
       this.docTypeCustom.checked  = docType === 'custom';
       this.applyDocTypePreset(docType);
     }
+    // Property-backed options, precedence: NEW/changed YAML > last-used value
+    // > default. A YAML value that differs from the one recorded at last
+    // export (or any YAML on a first export) is a deliberate edit, so it wins.
+    const hist = history && !fresh ? history : null;
+
+    const yToc = this.changedYaml('toc-levels', hist);
+    this.tocLevelsInput.value = String(
+      yToc !== undefined
+        ? this.parseLevel(yToc, 1, DEFAULT_TOC_LEVELS)
+        : (hist?.tocLevels ?? DEFAULT_TOC_LEVELS));
+
+    const yNum = this.changedYaml('numbering-levels', hist);
+    this.numberingLevelsInput.value = String(
+      yNum !== undefined
+        ? this.parseLevel(yNum, 0, DEFAULT_NUMBERING_LEVELS)
+        : (hist?.numberingLevels ?? DEFAULT_NUMBERING_LEVELS));
+
+    const yEnd = this.changedYaml('endnotes', hist);
+    this.setNotesMode(
+      yEnd !== undefined ? this.parseNotesMode(yEnd) : (hist?.endnotes ?? DEFAULT_ENDNOTES));
+
+    const yBib = this.changedYaml('include-bibliography', hist);
+    this.bibliographyCb.checked =
+      yBib !== undefined ? this.parseBool(yBib, DEFAULT_BIBLIOGRAPHY)
+                         : (hist?.includeBibliography ?? DEFAULT_BIBLIOGRAPHY);
+
+    this.tocLevelsRow.style.display =
+      this.tocCb.disabled || !this.tocCb.checked ? 'none' : '';
+    this.syncFormatState(this.formatSelect.value as ExportFormat);
+  }
+
+  /**
+   * "Reset to note properties": re-read every export setting the note can
+   * specify in YAML — template, citation style, TOC depth, auto-numbering,
+   * notes, bibliography — and forget the values remembered from the last
+   * export, so the note's properties win again. A setting with no YAML
+   * property is left untouched, and its remembered value is kept.
+   */
+  private resetToNoteProperties(): void {
+    const s = this.plugin.settings as any;
+    const hist = s.fileExportHistory?.[this.file.path] as
+      | FileExportHistory
+      | undefined;
+    let applied = 0;
+
+    // ── Template (frontmatter `template:`; a `compile-` prefix is ignored) ──
+    const yTpl = this.frontmatterValue('template');
+    if (yTpl !== undefined) {
+      const stem = yTpl
+        .replace(/^compile-/, '')
+        .replace(/\.(docx|odt|tex)$/i, '');
+      this.buildTemplateDropdown(this.formatSelect.value as ExportFormat, stem);
+      const dt: DocType =
+        stem.startsWith('book') ? 'book' :
+        stem.startsWith('article') ? 'article' : 'custom';
+      this.docTypeBook.checked = dt === 'book';
+      this.docTypeArticle.checked = dt === 'article';
+      this.docTypeCustom.checked = dt === 'custom';
+      this.applyDocTypePreset(dt);
+      if (hist) delete hist.template;
+      applied++;
+    }
+
+    // ── Citation style (frontmatter `csl:` / `citation-style:`) ─────────────
+    const yCsl =
+      this.frontmatterValue('csl') ?? this.frontmatterValue('citation-style');
+    if (yCsl !== undefined) {
+      this.cslOverrideCb.checked = true;
+      const resolved =
+        resolveZoteroStylePath(yCsl, this.plugin.settings.zoteroDataDir) ?? yCsl;
+      if (this.cslStyleHasList) this.cslStyleSelect.value = resolved;
+      else this.cslStyleInput.value = yCsl;
+      this.cslStyleRow.style.display = '';
+      if (hist) {
+        delete hist.overrideCslStyle;
+        delete hist.cslStyle;
+      }
+      applied++;
+    }
+
+    /** Apply one YAML property and drop its remembered last-used value. */
+    const yamlLevel = (
+      key: string,
+      field: 'tocLevels' | 'numberingLevels',
+      input: HTMLInputElement,
+      min: number,
+      fallback: number
+    ): void => {
+      const raw = this.frontmatterValue(key);
+      if (raw === undefined) return;
+      input.value = String(this.parseLevel(raw, min, fallback));
+      if (hist) {
+        delete hist[field];
+        if (hist.yamlObserved) delete hist.yamlObserved[key];
+      }
+      applied++;
+    };
+
+    yamlLevel('toc-levels', 'tocLevels', this.tocLevelsInput, 1, DEFAULT_TOC_LEVELS);
+    yamlLevel('numbering-levels', 'numberingLevels', this.numberingLevelsInput, 0, DEFAULT_NUMBERING_LEVELS);
+
+    const yEnd = this.frontmatterValue('endnotes');
+    if (yEnd !== undefined) {
+      this.setNotesMode(this.parseNotesMode(yEnd));
+      if (hist) {
+        delete hist.endnotes;
+        if (hist.yamlObserved) delete hist.yamlObserved['endnotes'];
+      }
+      applied++;
+    }
+
+    const yBib = this.frontmatterValue('include-bibliography');
+    if (yBib !== undefined) {
+      this.bibliographyCb.checked = this.parseBool(yBib, DEFAULT_BIBLIOGRAPHY);
+      if (hist) {
+        delete hist.includeBibliography;
+        if (hist.yamlObserved) delete hist.yamlObserved['include-bibliography'];
+      }
+      applied++;
+    }
+
+    if (applied > 0) {
+      void this.plugin.saveSettings();
+      new Notice("Reset to this note's properties.");
+    } else {
+      new Notice('This note has no export properties to reset to.');
+    }
+    this.syncFormatState(this.formatSelect.value as ExportFormat);
+  }
+
+  /** Check the radio matching an endnotes mode. */
+  private setNotesMode(mode: 'none' | 'native' | 'body'): void {
+    this.notesModeFootnotes.checked = mode === 'none';
+    this.notesModeNative.checked = mode === 'native';
+    this.notesModeBody.checked = mode === 'body';
+  }
+
+  /** The notes mode currently selected. */
+  private notesMode(): 'none' | 'native' | 'body' {
+    if (this.notesModeBody.checked) return 'body';
+    if (this.notesModeNative.checked) return 'native';
+    return 'none';
   }
 
   /**
@@ -978,6 +1469,14 @@ export class ExportModal extends Modal {
     }
   }
 
+  /** Resolved notes mode, with "body" folded to "native" when numbering is
+   *  continuous (body endnotes are divided by chapter). */
+  private effectiveNotesMode(): 'none' | 'native' | 'body' {
+    const mode = this.notesMode();
+    if (mode === 'body' && !this.footnotesCb.checked) return 'native';
+    return mode;
+  }
+
   private options(): ExportOptions {
     const docType: DocType =
       this.docTypeBook.checked ? 'book' :
@@ -987,7 +1486,12 @@ export class ExportModal extends Modal {
       docType,
       template: this.templateSelect.value,
       toc: this.tocCb.checked,
+      tocLevels: this.readLevel(this.tocLevelsInput, 1, DEFAULT_TOC_LEVELS),
       tof: this.tofCb.checked,
+      numberingLevels: this.readLevel(
+        this.numberingLevelsInput, 0, DEFAULT_NUMBERING_LEVELS),
+      endnotes: this.effectiveNotesMode(),
+      includeBibliography: this.bibliographyCb.checked,
       restartFootnotes: this.footnotesCb.checked,
       newPageHeadings: this.newPageCb.checked,
       generatedDate: this.generatedDateCb.checked,
@@ -997,6 +1501,8 @@ export class ExportModal extends Modal {
       outputFilename: this.filenameInput.value.trim(),
       keepIntermediate: this.keepIntermediateCb.checked,
       keepIntermediateMd: this.keepIntermediateMdCb.checked,
+      skipRecompile: this.skipRecompileCb.checked,
+      compiledMdPath: this.compiledMdPath() ?? undefined,
       enabledMappingIds: Array.from(this.mappingCheckboxes.entries())
         .filter(([, cb]) => cb.checked)
         .map(([id]) => id),
@@ -1067,7 +1573,11 @@ export class ExportModal extends Modal {
       docType:          opts.docType,
       template:         opts.template,
       toc:              opts.toc,
+      tocLevels:        opts.tocLevels,
       tof:              opts.tof,
+      numberingLevels:  opts.numberingLevels,
+      endnotes:         opts.endnotes,
+      includeBibliography: opts.includeBibliography,
       restartFootnotes: opts.restartFootnotes,
       newPageHeadings:  opts.newPageHeadings,
       generatedDate:    opts.generatedDate,
@@ -1080,6 +1590,9 @@ export class ExportModal extends Modal {
       enabledMappingIds: opts.enabledMappingIds,
       overrideCslStyle: opts.overrideCslStyle,
       cslStyle: opts.cslStyle,
+      // Record the YAML values seen now, so a later change to any of them is
+      // recognised as a deliberate edit and overrides the remembered value.
+      yamlObserved: this.observedYaml(),
     };
     const s = this.plugin.settings as any;
     if (!s.fileExportHistory) s.fileExportHistory = {};

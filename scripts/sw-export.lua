@@ -93,9 +93,11 @@ end
 
 -- The former "Notes-section suppression" lived here. It dropped a "# Notes"
 -- organizational section that DocumentCompiler.py used to emit and that showed
--- up as an empty chapter. That heading is no longer emitted at all (the
--- footnote DEFINITIONS are still written, just without a heading — see
--- compile_book), so suppression belongs to no single writer: every format now
--- gets the right result from the one shared decision in the compiler.
+-- up as an empty chapter. That heading is no longer emitted for DOCX/ODT: the
+-- footnote DEFINITIONS are written with no heading (see compile_book), so
+-- pandoc makes real page-bottom footnotes. When the note's `endnotes` property
+-- is on, the compiler instead emits a populated Notes section for
+-- Markdown/LaTeX; DOCX/ODT never receive that scaffold. Either way the decision
+-- belongs to the compiler, not to any single writer.
 
 return { { Meta = Meta, BlockQuote = BlockQuote } }

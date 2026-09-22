@@ -9,6 +9,14 @@
 #   - "- @@[[Note]]"            linked with @@  → numbered heading + note contents
 #   - "- x [[Note]]"            linked with x   → note contents only (no heading)
 #
+# Numbering-levels (YAML property / --numbering-levels):
+#   0 (default) → only '@@'-marked headings are numbered.
+#   N > 0       → every heading down to outline depth N is auto-numbered
+#                 ('@@' is ignored); a '* ' prefix (space required, so
+#                 *italics* is never mistaken for it) marks an unnumbered
+#                 exception. E.g. numbering-levels: 2 numbers chapters and
+#                 sections, leaving deeper headings alone.
+#
 # Heading title for linked notes (in order of preference):
 #   1. YAML "title:" property of the linked note
 #   2. Base filename, with leading ordering numbers stripped
@@ -26,6 +34,18 @@
 #   global (continuous) for article* templates. Override with --global-footnotes
 #   or --no-global-footnotes.
 #
+# Endnotes (YAML property / --endnotes-mode): none (default) | native | body
+#   none   → footnote definitions only (native page-bottom footnotes).
+#   native → real endnote objects for DOCX/ODT (a single editable stream).
+#   body   → a '# Notes' section whose body paragraphs are divided by chapter
+#            ('## <chapter>'), for DOCX/ODT. Requires per-chapter numbering
+#            (with continuous numbering it degrades to native).
+# The native/body distinction is a DOCX/ODT concern (chapter headings inside a
+# real endnote stream are impractical there). Markdown/LaTeX have no such
+# problem and no endnote object to convert to, so BOTH choices give them the
+# same VISIBLE, populated '# Notes' section.
+# The old boolean property still works: true → native, false → none.
+#
 # Outline vs. compiled detection:
 #   - "template: compile-<name>" in YAML explicitly marks a file as an outline;
 #     after compilation the template is rewritten to "<name>".
@@ -37,7 +57,7 @@ import re
 import os
 import sys
 from pathlib import Path
-from collections import defaultdict
+from collections import OrderedDict
 import argparse
 
 # ── vault / plugin path resolution ───────────────────────────────────────────
@@ -182,9 +202,18 @@ def extract_footnotes_from_text(text: str):
     
     return anchors, definitions
 
-def process_chapter_footnotes(chapter_text: str, chapter_prefix: str, chapter_name: str, 
-                              global_footnotes: bool = False, global_counter: int = 0):
-    """Process all footnotes in a chapter at once."""
+def process_chapter_footnotes(chapter_text: str, chapter_prefix: str, chapter_name: str,
+                              global_footnotes: bool = False, global_counter: int = 0,
+                              endnotes: bool = False):
+    """Process all footnotes in a chapter at once.
+
+    Returns (modified_text, notes, pair_count), where `notes` is a list of
+    {'name', 'display', 'content'} dicts in reading order. The caller renders
+    them as native footnote definitions (endnotes=False) or as a visible
+    Notes section (endnotes=True). In endnotes mode the body anchor becomes a
+    superscript number (``^N^``) instead of a ``[^name]`` footnote reference,
+    so nothing is left for pandoc to turn into a page-bottom footnote.
+    """
     
     print(f"\n--- Processing {chapter_name} ---")
     
@@ -200,47 +229,64 @@ def process_chapter_footnotes(chapter_text: str, chapter_prefix: str, chapter_na
     if len(anchors) != len(definitions):
         print(f"  WARNING: Mismatch: {len(anchors)} anchors vs {len(definitions)} definitions")
     
-    # Create list of new footnote names in order
+    # Name + display number for each paired note, in reading order. `name` is
+    # the pandoc footnote id (footnote mode); `anchor_id` is a document-unique
+    # slug for the endnote mode's HTML link targets.
+    notes = []
     if global_footnotes:
         # Use global counter for sequential numbering across all chapters
-        new_names = [f"{global_counter + i + 1}" for i in range(pair_count)]
         print(f"  Using global numbering: starting from Global_{global_counter + 1}")
+        for i in range(pair_count):
+            n = global_counter + i + 1
+            notes.append({
+                'name': f"{n}",
+                'display': n,
+                'anchor_id': f"{n}",
+                'content': definitions[i]['content'],
+            })
     else:
-        # Use chapter-specific numbering
-        new_names = [f"{chapter_prefix}_{i+1}" for i in range(pair_count)]
+        # Use chapter-specific numbering (display number restarts per chapter)
         print(f"  Using chapter numbering: starting from {chapter_prefix}_1")
-    
+        for i in range(pair_count):
+            notes.append({
+                'name': f"{chapter_prefix}_{i+1}",
+                'display': i + 1,
+                # Unique per chapter even when display numbers repeat (1, 2 …).
+                'anchor_id': f"{chapter_prefix}-{i+1}",
+                'content': definitions[i]['content'],
+            })
+
     # Process the text from the end to avoid position shifting
     # Sort anchors in reverse order by position
     sorted_anchors = sorted(anchors[:pair_count], key=lambda x: x['start'], reverse=True)
-    
+
     # Replace anchors in reverse order (from last to first)
     modified_text = chapter_text
-    for i, anchor in enumerate(sorted_anchors):
-        # Find the corresponding new name (need to map from original order)
+    for anchor in sorted_anchors:
+        # Find the corresponding note (need to map from original order)
         original_index = anchors.index(anchor)
-        new_name = new_names[original_index]
-        
-        old_anchor = anchor['full_text']
-        new_anchor = f"[^{new_name}]"
-        
+        note = notes[original_index]
+        if endnotes:
+            # Superscript number linking DOWN to its note. Markdown link with
+            # ^N^ as the link text — pandoc renders it as a real superscript
+            # hyperlink (DOCX/ODT) and as <a><sup>N</sup></a> in HTML/Markdown,
+            # so one form serves every format. The target is a fenced Div
+            # (::: {#id}) emitted at each note, which pandoc turns into a real
+            # bookmark/section in every writer; a raw HTML <a id> is dropped by
+            # the DOCX/ODT writers and would leave a dead link. The id is
+            # chapter-qualified so per-chapter numbering can't collide.
+            new_anchor = (f'[^{note["display"]}^](#notes-{note["anchor_id"]})')
+        else:
+            new_anchor = f"[^{note['name']}]"
         # Replace this specific instance
         modified_text = modified_text[:anchor['start']] + new_anchor + modified_text[anchor['end']:]
-    
+
     # Remove all footnote definitions from the chapter text
     def_pattern = re.compile(r"\[\^([^\]]+)\]:\s*(.*?)(?=\n\[\^|\n\n|\Z)", re.DOTALL)
     modified_text = def_pattern.sub("", modified_text)
-    
-    # Create footnote definitions for this chapter (in order)
-    chapter_notes = []
-    print(f"\n  Creating footnote definitions:")
-    for i in range(pair_count):
-        new_name = new_names[i]
-        content = definitions[i]['content']
-        chapter_notes.append(f"[^{new_name}]: {content}")
-        print(f"    Created: [^{new_name}]: {content[:50]}...")
-    
-    return modified_text, chapter_notes, pair_count
+
+    print(f"\n  Prepared {pair_count} {'endnote' if endnotes else 'footnote'}(s)")
+    return modified_text, notes, pair_count
 
 def resolve_note_path(note_name: str):
     """Find a vault note by name (with .md extension). Returns Path or None.
@@ -512,7 +558,7 @@ def linkify_bare_urls(text: str) -> str:
     return _BARE_URL.sub(_sub, text)
 
 
-def compile_note(note_name: str, depth: int, label=None, suppress_heading=False):
+def compile_note(note_name: str, depth: int, marker='', suppress_heading=False):
     """Compile a linked note into an optional heading + content.
 
     Heading title resolution order:
@@ -522,6 +568,11 @@ def compile_note(note_name: str, depth: int, label=None, suppress_heading=False)
 
     The note's body headings are demoted so that the shallowest heading
     in the body sits one level below the note's own depth in the outline.
+
+    marker: the numbering-intent marker ('@@', '*', or '@@ *') copied from the
+    outline bullet and kept in the compiled heading. A later whole-document
+    numbering pass (number_headings) reads these markers and replaces them with
+    the real number — see the note at the top of this file.
 
     suppress_heading=True omits the section heading entirely (for "x [[Note]]"
     bullets that append content to an existing section).
@@ -560,22 +611,22 @@ def compile_note(note_name: str, depth: int, label=None, suppress_heading=False)
             original_heading = strip_ordering_number(note_name)
             content = body.strip()
 
-    # Demote body headings relative to this node's depth.
+    # Demote body headings relative to this node's depth. This is the last
+    # compilation step: poetry-callout / embed rewrites and every other markdown
+    # transformation belong to the shared post-compile pipeline (see
+    # finalize_markdown and export_document's pre-pandoc block), which runs on
+    # the FINAL document for outlines and single notes alike.
     content = adjust_heading_levels(content, depth)
-    content = rewrite_poetry_callouts(content)
-    content = resolve_embed_links(content)
 
     if suppress_heading:
         return content
 
-    if label:
-        section_heading = '#' * depth + f' {label} {original_heading}'
-    else:
-        section_heading = '#' * depth + ' ' + original_heading
+    prefix = (marker + ' ') if marker else ''
+    section_heading = '#' * depth + ' ' + prefix + original_heading
 
     return section_heading + '\n\n' + content
 
-def parse_outline(body_text: str):
+def parse_outline(body_text: str, numbering_levels=0):
     """Parse the bullet-list body into a tree of nodes.
 
     Each node is a dict:
@@ -583,6 +634,7 @@ def parse_outline(body_text: str):
         'text': str,              # display text (link target name or heading text)
         'link': str | None,       # wikilink target if this bullet is a note include
         'chapter': bool,          # True if bullet started with @@
+        'starred': bool,          # True if bullet started with '* ' (numbering-levels > 0)
         'suppress_heading': bool, # True if bullet started with 'x' (link only)
         'children': [node],
       }
@@ -590,6 +642,8 @@ def parse_outline(body_text: str):
     Prefix rules (applied in order before the wikilink check):
       'x '  or  'x[['  → suppress_heading (content only, no title heading)
       '@@'              → chapter (numbered heading)
+      '* '              → starred (unnumbered exception), ONLY when the caller
+                          set numbering_levels > 0 — see _node_is_numbered.
     Both prefixes may apply together only via '@@' on a plain-text node; 'x'
     only applies to linked nodes (suppressing the heading makes no sense for
     a plain-text heading).
@@ -616,6 +670,7 @@ def parse_outline(body_text: str):
             'text': item,
             'link': None,
             'chapter': False,
+            'starred': False,
             'suppress_heading': False,
             'children': [],
         }
@@ -634,6 +689,16 @@ def parse_outline(body_text: str):
             is_chapter = True
             rest = rest[2:].strip()
 
+        # Check for the '* ' unnumbered-exception prefix. Space required so a
+        # heading that starts with *italics* is never mistaken for the marker.
+        # This is only meaningful when auto-numbering by level is on; when it
+        # is off (the default) the text is left completely untouched, so a
+        # heading literally starting with '* ' keeps rendering as before.
+        starred = False
+        if numbering_levels and numbering_levels > 0 and re.match(r'^\*\s+', rest):
+            starred = True
+            rest = re.sub(r'^\*\s+', '', rest, count=1)
+
         # A bullet that IS a bare wikilink is a note include.
         # A bullet that merely CONTAINS a link (inline citation, prose tail) is plain text.
         link_match = re.fullmatch(r'\[\[([^\[\]]+)\]\]', rest)
@@ -646,9 +711,10 @@ def parse_outline(body_text: str):
                 node['suppress_heading'] = suppress
 
         node['chapter'] = is_chapter
+        node['starred'] = starred
         if not node['link'] and not suppress:
             # Plain-text bullet: use rest (prefix-stripped) as the heading text.
-            node['text'] = rest if is_chapter else item
+            node['text'] = rest if (is_chapter or starred) else item
 
         flush_to(indent)
         if stack:
@@ -659,59 +725,421 @@ def parse_outline(body_text: str):
 
     return root
 
-def compile_node(node, depth, label=None, number_path=None):
+def _marker_is_numbered(anchored, starred, numbering_levels):
+    """The single numbering decision, from a heading's markers.
+
+    numbering_levels == 0: only an '@@'-anchored heading is numbered.
+    numbering_levels  > 0: every heading is numbered EXCEPT a '* '-starred one
+    (the level test happens at the call site, since only number_headings knows
+    the outline depth of a heading). Shared by _heading_numbered_and_title (the
+    finalize pass) and the selftest, so the rule is defined once.
+    """
+    if numbering_levels and numbering_levels > 0:
+        return not starred
+    return bool(anchored)
+
+
+def _node_marker(node):
+    """The numbering-intent marker to keep in an outline node's compiled
+    heading: '@@' (explicit), '* ' (unnumbered exception), or both."""
+    m = '@@' if node.get('chapter') else ''
+    if node.get('starred'):
+        m = (m + ' *').strip()
+    return m
+
+
+def compile_node(node, depth, marker=''):
     """Compile one outline node recursively. Returns the section text.
 
     - Linked node:       heading (from note title/filename) + note content + children.
     - Linked + suppress: note content only (no heading) + children.
     - Plain-text node:   heading from bullet text + children.
-    - label:             the literal number to show for a @@-marked item
-                         ("Chapter 1." at depth 1, "1.1" when nested under a
-                         numbered parent, "2." when not). None = unnumbered.
-    - number_path:       the NUMERIC components of the label only (e.g. (1,)
-                         for "Chapter 1.", (1, 2) for "1.2"), used to build a
-                         child's number. The display label carries the word
-                         "Chapter" at depth 1, but that is never repeated when
-                         nesting — "Chapter 1." at depth 1 gives "1.1", not
-                         "Chapter 1.1".
 
-    Numbering rule (see the @@ note at the top of this file): each outline
-    LEVEL keeps its own counter, which simply increments for every @@ item at
-    that level and is INDEPENDENT of other levels. A @@ item nested under a
-    numbered parent inherits the parent's number as a prefix ("1" -> "1.1");
-    under an unnumbered parent it starts a fresh bare number ("1."). Depth 1
-    reads "Chapter N."; every other level reads "N." or "parent.N".
+    `marker` ('@@', '*', '@@ *') is copied into the heading so the later
+    whole-document numbering pass (number_headings) can see the author's
+    intent. No numbers are written here — see the note at the top of the file.
     """
     parts = []
 
     if node['link']:
         parts.append(compile_note(
             node['link'], depth,
-            label,
+            marker,
             suppress_heading=node.get('suppress_heading', False),
         ))
     else:
         title = node['text']
-        if label:
-            parts.append('#' * depth + f' {label} {title}')
-        else:
-            parts.append('#' * depth + ' ' + title)
+        prefix = (marker + ' ') if marker else ''
+        parts.append('#' * depth + ' ' + prefix + title)
 
-    # Compile children. Each level's counter is independent: it increments for
-    # each @@ item and never resets, so a run of @@ items counts 1, 2, 3 …
-    # even across interleaved unnumbered items (Chapter 1, Interlude,
-    # Chapter 2 / 1. Example, Some Thoughts, 2. Another Example).
-    child_num = 0
     for child in node['children']:
-        child_label = None
-        child_path = None
-        if child.get('chapter'):
-            child_num += 1
-            child_label, child_path = _number_label(
-                depth + 1, child_num, number_path)
-        parts.append(compile_node(child, depth + 1, child_label, child_path))
+        parts.append(compile_node(child, depth + 1, _node_marker(child)))
 
     return '\n\n'.join(parts)
+
+
+#: An ATX heading line (up to 6 hashes) with its text.
+_ATX_HEADING_RE = re.compile(r'^(#{1,6})[ \t]+(.*)$')
+
+
+def _endnote_entry(n):
+    """One endnote line: "[N\\.]{#id} content" — a bracketed span carrying the
+    anchor id wraps ONLY the note number, followed by the note text.
+
+    Wrapping just the number means the anchor id is attached (pandoc turns the
+    span id into a real bookmark/section the body's superscript link targets)
+    AND the leading "N." cannot be read as an ordered-list marker — while the
+    note text itself sits OUTSIDE the span, so a note whose text contains "[",
+    "]", or unbalanced brackets can no longer break the anchor or leak a stray
+    bracket. The number's dot is escaped so pandoc keeps it literal, and no
+    space is written after the span — the merge's number-tab step supplies the
+    separator, so the note reads "N." + tab + text with no stray space."""
+    return (f'[{n["display"]}\\.]{{#notes-{n["anchor_id"]}}}{n["content"]}')
+
+
+def render_notes_section(collected_notes, *, endnotes, global_footnotes,
+                         numbering_levels, group_chapters=True):
+    """The '# Notes' section markup for a set of collected notes, or ''.
+
+    `collected_notes` maps a chapter heading to a list of note dicts (see
+    process_chapter_footnotes). endnotes=False returns the footnote DEFINITIONS
+    instead (no heading — pandoc consumes them into page-bottom footnotes);
+    endnotes=True returns a visible Notes section, grouped per chapter when
+    numbering is per-chapter. Shared by the outline compiler and the
+    single-note path so both emit the identical structure.
+    """
+    if not collected_notes:
+        return ''
+    # When auto-numbering by level is on, the generated Notes headings must be
+    # marked with the '* ' exception so number_headings leaves them unnumbered.
+    star = '* ' if (numbering_levels and numbering_levels > 0) else ''
+    if not endnotes:
+        if global_footnotes:
+            all_defs = []
+            for notes_list in collected_notes.values():
+                all_defs.extend(
+                    f"[^{n['name']}]: {n['content']}" for n in notes_list)
+            return "\n\n" + "\n\n".join(all_defs) + "\n\n"
+        out = ""
+        for _chapter, notes_list in collected_notes.items():
+            defs = [f"[^{n['name']}]: {n['content']}" for n in notes_list]
+            out += "\n\n" + "\n\n".join(defs) + "\n\n"
+        return out
+    if global_footnotes or not group_chapters:
+        # One flat list: continuous numbering, or a single note with no
+        # chapters to divide by.
+        all_notes = []
+        for notes_list in collected_notes.values():
+            all_notes.extend(notes_list)
+        body = "\n\n".join(_endnote_entry(n) for n in all_notes)
+        return f"\n\n# {star}Notes\n\n{body}\n"
+    out = f"\n\n# {star}Notes\n"
+    for chapter_heading, notes_list in collected_notes.items():
+        entries = "\n\n".join(_endnote_entry(n) for n in notes_list)
+        out += f"\n\n## {star}{chapter_heading}\n\n{entries}\n"
+    return out
+
+
+def _split_h1_body(md_text):
+    """Split markdown into (level-1 heading line or None, body) chunks.
+
+    The text before the first level-1 heading comes back with a None heading
+    (frontmatter/title block); each subsequent chunk starts at a '# …' line.
+    Fenced code blocks are ignored, so a '#' inside code is not a heading.
+    """
+    chunks = []
+    heading = None
+    buf = []
+    in_fence = False
+    for line in md_text.split('\n'):
+        if re.match(r'^\s*(?:```|~~~)', line):
+            in_fence = not in_fence
+        if not in_fence:
+            m = re.match(r'^#(?!#)[ \t]+(.*)$', line)
+            if m:
+                chunks.append((heading, '\n'.join(buf)))
+                heading = line
+                buf = []
+                continue
+        buf.append(line)
+    chunks.append((heading, '\n'.join(buf)))
+    return chunks
+
+
+def _heading_numbered_and_title(heading_line, numbering_levels):
+    """From a level-1 heading (its markers still present), return
+    (is_numbered, bare_title). Level-1 is always within any numbering depth, so
+    the decision is _marker_is_numbered's ('@@' numbers in mode 0; '* ' is the
+    exception in mode > 0), with the markers stripped from the title."""
+    text = re.sub(r'^#[ \t]+', '', heading_line or '').strip()
+    anchored = text.startswith('@@')
+    if anchored:
+        text = text[2:].strip()
+    starred = False
+    if numbering_levels and numbering_levels > 0 and re.match(r'^\*\s+', text):
+        starred = True
+        text = re.sub(r'^\*\s+', '', text, count=1)
+    return _marker_is_numbered(anchored, starred, numbering_levels), text
+
+
+def apply_note_style(md_text, *, endnotes=False, global_footnotes=False,
+                     numbering_levels=0):
+    """Build the visible '# Notes' section for endnote mode.
+
+    Every footnote definition is matched to its ANCHOR BY NAME (not by order),
+    so a definition may sit anywhere — including the citation notes that
+    citations_to_footnotes appends at the very end. Notes are grouped by the
+    chapter their anchor falls in, in reading order, so the Notes section and
+    its '## <chapter>' groups mirror the document.
+
+    endnotes=False returns the text unchanged: pandoc resolves plain footnote
+    definitions wherever they sit, so the footnote path needs no restructuring.
+    """
+    if not endnotes:
+        return md_text
+
+    chunks = _split_h1_body(md_text)
+
+    # Collect every definition by name, removing the definition lines. This is
+    # a FULL pass first: definitions usually sit at the document end, so an
+    # anchor in an earlier chapter can only be resolved once they're all known.
+    def_pattern = re.compile(
+        r"\[\^([^\]]+)\]:[ \t]*(.*?)(?=\n\[\^|\n\n|\Z)", re.DOTALL)
+    def_map = {}
+
+    def strip_defs(s):
+        def repl(m):
+            def_map.setdefault(m.group(1), m.group(2).strip())
+            return ''
+        return def_pattern.sub(repl, s)
+
+    stripped_chunks = [(h, strip_defs(b)) for h, b in chunks]
+
+    anchor_re = re.compile(r"\[\^([^\]]+)\](?!:)")
+    out_sections = []
+    collected = OrderedDict()
+    chapter_n = 0
+    global_ctr = [0]
+
+    for heading, body in stripped_chunks:
+        if heading is None:
+            out_sections.append(body)
+            continue
+        numbered, title = _heading_numbered_and_title(heading, numbering_levels)
+        if numbered:
+            chapter_n += 1
+            chapter_prefix = f"Ch_{chapter_n}"
+            chapter_heading = f"Chapter {chapter_n}. {title}"
+        else:
+            chapter_prefix = sanitize_title(title)
+            chapter_heading = title
+
+        counter = [0]
+        notes = []
+
+        def repl(m):
+            name = m.group(1)
+            content = def_map.get(name)
+            if content is None:
+                return m.group(0)  # no matching definition — leave the anchor
+            if global_footnotes:
+                global_ctr[0] += 1
+                disp, anchor_id = global_ctr[0], str(global_ctr[0])
+            else:
+                counter[0] += 1
+                disp, anchor_id = counter[0], f"{chapter_prefix}-{counter[0]}"
+            notes.append({'name': name, 'display': disp,
+                          'anchor_id': anchor_id, 'content': content})
+            return f'[^{disp}^](#notes-{anchor_id})'
+
+        body = anchor_re.sub(repl, body)
+        out_sections.append(heading + '\n' + body)
+        if notes:
+            collected.setdefault(chapter_heading, []).extend(notes)
+
+    final_text = '\n\n'.join(s for s in out_sections if s.strip() != '')
+    if collected:
+        final_text += render_notes_section(
+            collected, endnotes=True, global_footnotes=global_footnotes,
+            numbering_levels=numbering_levels)
+        _total = sum(len(v) for v in collected.values())
+        print(f"Added Notes section ({_total} note(s) in "
+              f"{len(collected)} chapter(s))")
+    return re.sub(r'\n{3,}', '\n\n', final_text)
+
+
+def finalize_markdown(md_text, *, numbering_levels=0, endnotes=False,
+                      global_footnotes=False):
+    """The ONE place every exported document's markdown is finalised.
+
+    Compilation (compile_book) does exactly one thing — assemble linked notes
+    into one markdown document, keeping the author's @@/* markers and footnote
+    syntax untouched. Everything else happens here, on the FINAL markdown, so an
+    outline's compiled output and a single note written as a whole book go
+    through the identical steps:
+
+      1. footnote handling — each level-1 chapter's footnote definitions become
+         either plain definitions (native page-bottom footnotes) or a visible
+         '# Notes' section divided by chapter;
+      2. heading numbering (number_headings), which also strips the markers.
+
+    Order matters: the Notes section is built BEFORE numbering so it can carry
+    the '* ' unnumbered marker, and numbering then consumes every marker.
+    Returns the finalised markdown.
+    """
+    if endnotes:
+        # Visible '# Notes' section: definitions matched to anchors by name so
+        # citation notes appended at the document end group under their chapter.
+        final_text = apply_note_style(
+            md_text, endnotes=True, global_footnotes=global_footnotes,
+            numbering_levels=numbering_levels)
+        final_text = number_headings(final_text, numbering_levels)
+        return re.sub(r'\n{3,}', '\n\n', final_text)
+
+    chunks = _split_h1_body(md_text)
+
+    # ── Footnote handling, grouped by chapter ────────────────────────────────
+    out_sections = []
+    collected_notes = OrderedDict()
+    chapter_n = 0
+    global_counter = 0
+    for heading, body in chunks:
+        if heading is None:
+            out_sections.append(body)
+            continue
+        numbered, title = _heading_numbered_and_title(heading, numbering_levels)
+        if numbered:
+            chapter_n += 1
+            chapter_prefix = f"Ch_{chapter_n}"
+            chapter_heading = f"Chapter {chapter_n}. {title}"
+        else:
+            chapter_prefix = sanitize_title(title)
+            chapter_heading = title
+        processed, notes, count = process_chapter_footnotes(
+            body, chapter_prefix, chapter_heading,
+            global_footnotes, global_counter, endnotes=endnotes)
+        if global_footnotes:
+            global_counter += count
+        out_sections.append(heading + '\n' + processed)
+        if notes:
+            collected_notes.setdefault(chapter_heading, []).extend(notes)
+
+    final_text = '\n\n'.join(s for s in out_sections if s.strip() != '')
+
+    if collected_notes:
+        final_text += render_notes_section(
+            collected_notes, endnotes=endnotes,
+            global_footnotes=global_footnotes,
+            numbering_levels=numbering_levels)
+        print(f"Added footnote definitions for "
+              f"{len(collected_notes)} chapter(s)")
+
+    # ── Whole-document numbering (consumes the @@/* markers) ─────────────────
+    final_text = number_headings(final_text, numbering_levels)
+
+    return re.sub(r'\n{3,}', '\n\n', final_text)
+
+
+def write_intermediate(source_path, markdown, *, compiled=False, output_dir=None):
+    """Write the ONE intermediate file for an export and return its path.
+
+    The user's source is NEVER touched (an outline's source is its bullet list;
+    a single note is a real note the user keeps editing). Named
+    "<stem> - compiled.md" when the text was compiled from an outline, else
+    "<stem> - export.md" (a working copy of the note for this export).
+
+    Everything before this — compiling and every transformation — is done in
+    memory on plain markdown text; this is the only write.
+    """
+    source = Path(source_path)
+    out_dir = Path(output_dir).expanduser() if output_dir else source.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    suffix = 'compiled' if compiled else 'export'
+    dest = out_dir / f'{source.stem} - {suffix}.md'
+    dest.write_text(markdown, encoding='utf-8')
+    return dest
+
+
+def number_headings(md_text, numbering_levels=0):
+    """Number the headings of a FINAL compiled document, in place.
+
+    This is the single numbering decision, applied after compilation so a
+    heading is numbered by where it sits in the finished document — including
+    headings that came from inside an included note, which the outline-level
+    numbering of the old compiler could never see.
+
+    Markers kept by compile_node are consumed:
+      '@@'  → this heading is numbered (numbering_levels == 0 mode).
+      '* '  → this heading is an UNNUMBERED exception (numbering_levels > 0).
+
+    numbering_levels == 0: only '@@'-marked headings are numbered.
+    numbering_levels  > 0: every heading down to that depth is numbered; '@@'
+                          is ignored and '* ' is the exception.
+
+    Labels follow _number_label: a level-1 number reads "Chapter N.", and a
+    heading nested under a numbered ancestor inherits its path ("1.1"), while
+    one under an unnumbered heading starts a fresh bare number ("1."). The
+    parent is the nearest numbered ancestor in the document, exactly as the old
+    tree walk defined it (an unnumbered heading still breaks the chain for its
+    own children). Fenced code blocks are skipped; YAML frontmatter has no
+    headings and passes through untouched.
+    """
+    lines = md_text.split('\n')
+    out = []
+    in_fence = False
+    fence_re = re.compile(r'^\s*(?:```|~~~)')
+    # Stack of every open heading: (level, path_or_None, numbered_child_count).
+    stack = []
+    root_count = 0
+
+    for line in lines:
+        if fence_re.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        m = _ATX_HEADING_RE.match(line)
+        if not m:
+            out.append(line)
+            continue
+
+        level = len(m.group(1))
+        text = m.group(2).strip()
+        has_anchor = False
+        if text.startswith('@@'):
+            has_anchor = True
+            text = text[2:].strip()
+        starred = False
+        if numbering_levels and numbering_levels > 0 and re.match(r'^\*\s+', text):
+            starred = True
+            text = re.sub(r'^\*\s+', '', text, count=1)
+
+        while stack and stack[-1][0] >= level:
+            stack.pop()
+        parent = stack[-1] if stack else None
+
+        if numbering_levels and numbering_levels > 0:
+            numbered = level <= numbering_levels and not starred
+        else:
+            numbered = has_anchor
+
+        if numbered:
+            if parent is not None:
+                parent[2] += 1
+                n, parent_path = parent[2], parent[1]
+            else:
+                root_count += 1
+                n, parent_path = root_count, None
+            label, path = _number_label(level, n, parent_path)
+            stack.append([level, path, 0])
+            out.append('#' * level + ' ' + label + ' ' + text)
+        else:
+            stack.append([level, None, 0])
+            out.append('#' * level + ' ' + text)
+
+    return '\n'.join(out)
 
 def _number_label(depth, n, parent_path):
     """The literal number and numeric path to print before a @@ heading.
@@ -756,6 +1184,84 @@ def run_selftest():
     check('L2 under UNnumbered L1 (fresh, not 0.x)',
           _number_label(2, 1, None), ('1.', (1,)))
 
+    # ── numbering decision (mode 0: @@ only; mode >0: all but '* ') ──────────
+    check('nl=0: @@ numbered', _marker_is_numbered(True, False, 0), True)
+    check('nl=0: plain unnumbered', _marker_is_numbered(False, False, 0), False)
+    check('nl=2: plain numbered', _marker_is_numbered(False, False, 2), True)
+    check('nl=2: @@ also numbered', _marker_is_numbered(True, False, 2), True)
+    check('nl=2: star is the exception',
+          _marker_is_numbered(False, True, 2), False)
+
+    # _heading_numbered_and_title extracts the marker + bare title (level 1).
+    check('heading @@ numbered, title stripped',
+          _heading_numbered_and_title('# @@ The Tarbiya Process', 0),
+          (True, 'The Tarbiya Process'))
+    check('heading plain unnumbered (mode 0)',
+          _heading_numbered_and_title('# Preface', 0), (False, 'Preface'))
+    check('heading plain numbered (mode 2)',
+          _heading_numbered_and_title('# Chapter One', 2),
+          (True, 'Chapter One'))
+    check('heading * exception (mode 2)',
+          _heading_numbered_and_title('# * Preface', 2), (False, 'Preface'))
+
+    # parse_outline strips the '* ' marker ONLY when numbering-levels is on.
+    tree = parse_outline('- * Preface\n- Chapter One\n  - Section A\n', 2)
+    check('nl>0: star stripped + flagged',
+          (tree[0]['text'], tree[0]['starred']), ('Preface', True))
+    check('nl>0: unmarked heading intact', tree[1]['text'], 'Chapter One')
+    check('nl=0: "*" is not a marker',
+          parse_outline('- *Preface*\n', 0)[0]['text'], '*Preface*')
+
+    # ── endnotes: visible Notes stream (superscript anchor, no definition) ────
+    import io as _io
+    import contextlib as _ctx
+    with _ctx.redirect_stdout(_io.StringIO()):
+        en_md, en_notes, en_n = process_chapter_footnotes(
+            'Body.[^a]\n\n[^a]: A note.', 'Ch_1', 'Chapter 1. X',
+            global_footnotes=False, global_counter=0, endnotes=True)
+    check('endnotes: anchor becomes superscript link down to the note',
+          '[^1^](#notes-Ch_1-1)' in en_md and '[^a]' not in en_md, True)
+    check('endnotes: definition removed', '[^a]:' in en_md, False)
+    check('endnotes: note captured',
+          (en_n, en_notes[0]['content']), (1, 'A note.'))
+    check('endnotes: anchor id chapter-qualified',
+          en_notes[0]['anchor_id'], 'Ch_1-1')
+
+    # ── number_headings: whole-document numbering by final position ─────────
+    nh_in = ('# @@ Chapter One\n'
+             '## @@ Section A\n'
+             '### Deep\n'
+             '## @@ Section B\n'
+             '# Preface\n'
+             '## @@ Fresh\n'
+             '# @@ Chapter Two\n'
+             '## @@ Section C\n')
+    nh = number_headings(nh_in, 0)
+    check('nh=0: level-1 chapter', '# Chapter 1. Chapter One' in nh, True)
+    check('nh=0: nested section', '## 1.1 Section A' in nh, True)
+    check('nh=0: unmarked deeper heading untouched', '### Deep' in nh, True)
+    check('nh=0: second section', '## 1.2 Section B' in nh, True)
+    check('nh=0: unmarked chapter left alone', '# Preface' in nh, True)
+    check('nh=0: fresh number under unnumbered parent',
+          '## 1. Fresh' in nh, True)
+    check('nh=0: second chapter', '# Chapter 2. Chapter Two' in nh, True)
+    check('nh=0: section under second chapter', '## 2.1 Section C' in nh, True)
+    check('nh=0: no @@ markers left', '@@' in nh, False)
+    # With numbering-levels 0 the '* ' marker has no meaning and is left as-is.
+    check('nh=0: star not a marker', number_headings('# * X\n', 0).strip(), '# * X')
+
+    # numbering-levels > 0: auto-number by depth, '* ' is the exception.
+    nh2 = number_headings(
+        '# Chapter One\n## Section A\n### Deep\n# * Preface\n## Topic\n', 2)
+    check('nh=2: chapter auto-numbered', '# Chapter 1. Chapter One' in nh2, True)
+    check('nh=2: section auto-numbered', '## 1.1 Section A' in nh2, True)
+    check('nh=2: depth 3 untouched', '### Deep' in nh2, True)
+    check('nh=2: star exception', '# Preface' in nh2, True)
+    check('nh=2: fresh under starred', '## 1. Topic' in nh2, True)
+    # An unnumbered heading still breaks the parent chain for its children.
+    nh3 = number_headings('# @@ A\n## Plain\n### @@ Sub\n', 0)
+    check('nh: unnumbered breaks parent chain', '### 1. Sub' in nh3, True)
+
     # ── Heading -> LaTeX: star pattern and chapter-number stripping ──────────
     book_in = ('# Chapter 1. The *Tarbiya* Process\n'
                '## 1.1 Some section\n'
@@ -790,110 +1296,45 @@ def run_selftest():
     print('SELFTEST PASSED (numbering + heading->LaTeX rules)')
     return 0
 
-def compile_book(master_file_path, global_footnotes=False, output_dir=None):
-    """
-    Read the master (outline) file and return the path of the compiled file.
+def compile_book(master_file_path):
+    """Compile an outline into ONE markdown document (returned as TEXT).
 
-    output_dir: where the compiled markdown is written (default: the master
-    file's own folder).
+    Compilation does exactly one thing: assemble linked notes. It strips each
+    included note's YAML, demotes its headings to sit under its outline
+    position, and copies the note bodies in, keeping the author's @@/* markers
+    and footnote syntax verbatim. It does NOT number headings, move footnotes
+    into a Notes section, or rewrite poetry/embeds — all of that happens in the
+    shared post-compile stage (finalize_markdown) that single notes also use, so
+    an outline and a whole book written in one note come out identically.
+
+    Nothing is written here; the caller writes the one intermediate via
+    write_intermediate after finalize_markdown.
     """
     master_file_path = Path(master_file_path).expanduser()
     text = master_file_path.read_text(encoding="utf-8")
-    
-    # First, extract YAML frontmatter
+
+    # Keep the outline's own frontmatter (title/author/…) at the top.
     yaml_block, body = extract_yaml(text)
-    
-    # Remove any existing footnote definitions from the master file body
-    def_pattern = re.compile(r"\[\^([^\]]+)\]:\s*(.*?)(?=\n\[\^|\n\n|\Z)", re.DOTALL)
-    body_without_footnotes = def_pattern.sub("", body)
 
     output_sections = []
-    collected_notes = defaultdict(list)
-    chapter_number = 0
-    global_counter = 0  # Track global footnote count if using global numbering
-
-    tree = parse_outline(body_without_footnotes)
+    tree = parse_outline(body)
 
     for node in tree:
-        is_chapter = node['chapter']
-        if is_chapter:
-            chapter_number += 1
-            top_label, top_path = _number_label(1, chapter_number, None)
-            chapter_prefix = f"Ch_{chapter_number}"
-            chapter_heading = f"Chapter {chapter_number}. {node['text']}"
-            print(f"\n{'='*60}")
-            print(f"Processing Chapter {chapter_number}: {node['text']}")
-            print(f"{'='*60}")
-        else:
-            top_label, top_path = None, None
-            chapter_prefix = sanitize_title(node['text'])
-            chapter_heading = node['text']
-            print(f"\n{'='*60}")
-            print(f"Processing Section: {node['text']}")
-            print(f"{'='*60}")
-
         # Compile this node (heading + any linked content) and its children.
-        section_text = compile_node(node, 1, top_label, top_path)
+        # The author's @@/* intent is kept in the heading for the numbering
+        # stage; the node's text names its section in the log.
+        print(f"\n{'='*60}")
+        print(f"Processing: {node['text']}")
+        print(f"{'='*60}")
+        section_text = compile_node(node, 1, _node_marker(node))
         print(f"  Added main section: {node['text']}")
+        output_sections.append(section_text)
 
-        # Process ALL footnotes in the combined section text at once
-        processed_text, chapter_notes, footnote_count = process_chapter_footnotes(
-            section_text, chapter_prefix, chapter_heading,
-            global_footnotes, global_counter
-        )
-
-        # Update global counter if using global numbering
-        if global_footnotes:
-            global_counter += footnote_count
-
-        # Add processed section to output
-        output_sections.append(processed_text)
-
-        # Store chapter notes
-        if chapter_notes:
-            collected_notes[chapter_heading].extend(chapter_notes)
-            print(f"\n  ✓ {chapter_heading} has {footnote_count} footnotes")
-        else:
-            print(f"\n  ✗ {chapter_heading} has no footnotes")
-
-    # Build the final document
-    final_text = ""
+    final_text = ''
     if yaml_block:
         final_text += f"---\n{yaml_block}\n---\n\n"
-    
-    # Add all the processed sections
     final_text += "\n\n".join(output_sections)
-    
-    # Footnote DEFINITIONS. Every writer pandoc targets (LaTeX, Word, ODT)
-    # renders footnotes from these definitions with no heading above them, so
-    # the old "# Notes / ## <chapter>" organizational scaffolding is omitted
-    # here — it produced an EMPTY "Notes" chapter in every format (LaTeX showed
-    # it outright; DOCX/ODT only hid it via a sw-export.lua filter, which was
-    # the format-specific duplication this rewrite removes). The definitions
-    # themselves MUST stay: pandoc pairs them with the [^n] references in the
-    # body to make real footnotes. When endnotes become an option, the heading
-    # belongs here again, decided once for all formats.
-    if collected_notes:
-        if global_footnotes:
-            all_notes = []
-            for notes_list in collected_notes.values():
-                all_notes.extend(notes_list)
-            final_text += "\n\n" + "\n\n".join(all_notes) + "\n\n"
-            print(f"\nAdded {global_counter} footnote definition(s)")
-        else:
-            for _chapter, notes_list in collected_notes.items():
-                final_text += "\n\n" + "\n\n".join(notes_list) + "\n\n"
-            print(f"\nAdded footnote definitions for {len(collected_notes)} chapter(s)")
-
-    # Clean up extra blank lines
-    final_text = re.sub(r'\n{3,}', '\n\n', final_text)
-
-    out_dir = Path(output_dir).expanduser() if output_dir else master_file_path.parent
-    out_dir.mkdir(parents=True, exist_ok=True)
-    output_path = out_dir / f"{master_file_path.stem} - compiled.md"
-    output_path.write_text(final_text, encoding="utf-8")
-    print(f"\nCompiled book written to {output_path}")
-    return output_path
+    return re.sub(r'\n{3,}', '\n\n', final_text)
 
 _OUTLINE_LIST_ITEM_RE = re.compile(r'^([-*+]|\d+[.)])\s')
 _OUTLINE_INCLUDE_RE = re.compile(r'^\[\[([^\[\]]+)\]\]$')
@@ -950,19 +1391,18 @@ def read_yaml_prop(yaml_block, prop: str):
     m = re.search(rf'^{prop}:[^\S\n]*["\']?([^"\'\n]+)', yaml_block, re.M)
     return m.group(1).strip() if m else None
 
-def write_compiled_template_prop(compiled_path, template_name: str):
+def rewrite_compiled_template_prop(text, template_name: str):
     """After compiling an outline whose template was 'compile-<name>', the
     compiled output should carry 'template: <name>' (without the prefix) so a
-    later export uses the real template name."""
-    path = Path(compiled_path)
-    text = path.read_text(encoding='utf-8')
-    # Replace the whole template value (prefix + name) with the bare name.
+    later export uses the real template name. Text-in/text-out (the caller owns
+    writing the intermediate)."""
     new_text, n = re.subn(r'^(template:\s*["\']?)(?:compile-)?[^"\'\n]+',
                           rf'\g<1>{re.escape(template_name)}',
                           text, count=1, flags=re.M)
     if n:
-        path.write_text(new_text, encoding='utf-8')
         print(f"  template: compile-{template_name} → template: {template_name}")
+        return new_text
+    return text
 
 def _yaml_block(text, pos, indicator):
     """Read a YAML block scalar (|, |-, >, >-) starting at pos in text.
@@ -1028,6 +1468,52 @@ def _yaml_scalar(text, key):
     return ', '.join(items) if items else None
 
 
+def _yaml_int(text, key, default=0):
+    """Read an integer frontmatter property, tolerating the quoted form
+    Obsidian's property editor writes (``numbering-levels: "2"``). Returns
+    `default` when absent or not an integer."""
+    val = _yaml_scalar(text, key)
+    if val is None:
+        return default
+    try:
+        return int(str(val).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _yaml_bool(text, key, default=False):
+    """Read a boolean frontmatter property (true/false, yes/no, on/off, 1/0).
+    Returns `default` when absent or unrecognised."""
+    val = _yaml_scalar(text, key)
+    if val is None:
+        return default
+    v = str(val).strip().lower()
+    if v in ('true', 'yes', 'on', '1'):
+        return True
+    if v in ('false', 'no', 'off', '0'):
+        return False
+    return default
+
+
+def _yaml_endnotes_mode(text, default='none'):
+    """Read the tri-state `endnotes` property: none / native / body.
+
+    Accepts the historical boolean too (true → native, false → none) so a note
+    written before the tri-state option keeps working.
+    """
+    val = _yaml_scalar(text, 'endnotes')
+    if val is None:
+        return default
+    v = str(val).strip().lower()
+    if v in ('none', 'false', 'no', 'off', '0', ''):
+        return 'none'
+    if v in ('native', 'true', 'yes', 'on', '1'):
+        return 'native'
+    if v in ('body', 'paragraphs', 'chapters'):
+        return 'body'
+    return default
+
+
 def resolve_template_dir(template_dir, vault_root):
     """Resolve the user's templates directory from explicit arg → env → vault."""
     if template_dir is None:
@@ -1037,6 +1523,34 @@ def resolve_template_dir(template_dir, vault_root):
         if os.path.isdir(vault_tpl_dir):
             template_dir = vault_tpl_dir
     return template_dir
+
+
+def resolve_intermediate_format(raw_tpl, template_dir, vault_root=None):
+    """The PDF intermediate format ('docx' / 'odt' / 'latex') for a template.
+
+    Shared by export_pdf's auto-detection and main()'s endnotes decision, so
+    both agree on whether a PDF export goes through LaTeX. An explicit template
+    filename from the export dialog ("book.docx" / "book.odt" / "book.tex")
+    IS the intended format; a bare name (from frontmatter) prefers ODT, then
+    DOCX, then LaTeX — matching the historical default.
+    """
+    ext_m = re.search(r'\.(docx|odt|tex)$', raw_tpl or '', flags=re.IGNORECASE)
+    if ext_m:
+        ext = ext_m.group(1).lower()
+        return 'latex' if ext == 'tex' else ext
+    tpl = raw_tpl or ''
+    if template_dir is None:
+        template_dir = resolve_template_dir(None, vault_root or vault_rel())
+    def _has(ext):
+        cands = []
+        if template_dir:
+            cands.append(os.path.join(template_dir, f'{tpl}{ext}'))
+        cands.append(plugin_template_path(f'{tpl}{ext}'))
+        return any(os.path.exists(c) for c in cands)
+    return ('odt' if _has('.odt')
+            else 'docx' if _has('.docx')
+            else 'latex' if _has('.tex')
+            else 'docx')
 
 
 def find_user_lua_filters(template_dir):
@@ -1766,12 +2280,14 @@ def inject_missing_docx_styles(docx_path, style_names=None, template_docx_path=N
             span_styles=span_styles, to_key=_to_sid,
         )
         # para_missing: human names (used verbatim in <w:name w:val="..."/>),
-        # combined with any auto-detected pStyle refs that have spaces in their
-        # name (the reliable marker for user-created named styles not covered by
-        # style_names).
+        # plus EVERY referenced pStyle absent from the template/output — not
+        # only spaced ones. Word refuses a pStyle it can't resolve (it reports
+        # the file as unreadable and strips the reference), and pandoc's own
+        # built-ins (e.g. "SourceCode", no space) are exactly the ones a
+        # template usually lacks.
         para_missing = sorted(
             _para_h
-            | {n for n in para_referenced if n not in defined and ' ' in n}
+            | {n for n in para_referenced if n not in defined}
         )
         # char_missing: space-stripped IDs (matching rStyle vals in document.xml);
         # sid_to_name recovers the display name at injection time.
@@ -1781,7 +2297,7 @@ def inject_missing_docx_styles(docx_path, style_names=None, template_docx_path=N
         )
     else:
         # Auto-scan only (no explicit style list supplied).
-        para_missing = sorted({n for n in para_referenced if n not in defined and ' ' in n})
+        para_missing = sorted({n for n in para_referenced if n not in defined})
         char_missing = sorted({n for n in char_referenced if n not in defined})
     if not para_missing and not char_missing:
         return
@@ -2445,6 +2961,26 @@ def _csl_is_note_style(csl_path):
     return bool(re.search(r'<category\s+citation-format="note"', head))
 
 
+def resolve_note_citation_style(text, template_path, fmt, override=None,
+                                from_template=False):
+    """True when this export uses a note/footnote CSL citation style.
+
+    Resolves the style the same way export_document does (see
+    _resolve_export_csl_style) and asks whether it is a note style. Used by
+    main() so in-text citations can be turned into notes BEFORE the shared
+    finalize stage, where they join the author's own notes in whichever stream
+    (footnotes or endnotes) the export selected.
+    """
+    style, _ = _resolve_export_csl_style(
+        text, template_path, fmt, override=override, from_template=from_template)
+    zmeta = _parse_zotero_meta(text)
+    try:
+        csl_path = _fetch_csl_style_file(style, zmeta['client'])
+    except (RuntimeError, OSError):
+        csl_path = None
+    return _csl_is_note_style(csl_path)
+
+
 def _parse_yaml_metadata(text, stem):
     """Parse all YAML frontmatter properties used by the export pipeline.
 
@@ -2533,15 +3069,22 @@ def _resolve_output_stem(output_name, default_stem):
 
 
 def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
-                    tof=False, template_dir=None, output_dir=None,
+                    toc_levels=None, tof=False, endnotes_mode='none',
+                    template_dir=None, output_dir=None,
                     default_author=None, new_page_headings=True,
                     restart_footnotes=True, mappings_data=None, generate_date=True,
                     roman_frontmatter=False, page1_starts_with='',
                     static_citations=False, raw_citations=False,
                     static_bibliography=None, csl_style_override=None,
                     csl_from_template=False, output_name=None,
-                    citations_input=None):
+                    citations_input=None, citations_converted=False,
+                    include_bibliography=True):
     """Unified export pipeline for DOCX and ODT.
+
+    citations_converted: the caller (main) already turned in-text citations into
+    notes before the shared finalize stage, so their notes joined the author's
+    own notes in the chosen stream. Skips this function's own
+    citations_to_footnotes step to avoid converting twice.
 
     static_citations: when True, skip sw-zotero.lua's live-Zotero-field
     generation and let pandoc's own --citeproc render final citation text
@@ -2662,6 +3205,11 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
     filter_args = []
     for f in filters:
         filter_args += ['--lua-filter', f]
+    # Live-field path: tell sw-zotero.lua to omit the bibliography (it gates on
+    # this; the static path uses --metadata suppress-bibliography instead).
+    bib_off_args = []
+    if not include_bibliography and not use_static and not raw_citations:
+        bib_off_args = ['--metadata', 'zotero_no-bibliography=true']
 
     # ── Template path lookup (identical candidate chain for every format) ──────
     template_path = _resolve_template_path(tpl, ext, template_dir)
@@ -2675,11 +3223,17 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
         text, template_path, fmt,
         override=csl_style_override, from_template=csl_from_template)
 
-    # ── Note/footnote citation style, live-field path: move each in-text
-    # citation into a real footnote before pandoc runs (see
-    # citations_to_footnotes). The static path skips this — pandoc's own
-    # --citeproc already produces footnotes for a note style.
-    if not use_static and not raw_citations:
+    # ── Note/footnote citation style: move each in-text citation into a real
+    # footnote before pandoc runs (see citations_to_footnotes). The live-field
+    # path needs this so sw-zotero.lua writes note fields. The static path
+    # normally lets --citeproc produce the notes itself — but in BODY endnote
+    # mode the notes must become visible paragraphs, so the citations are moved
+    # first and apply_note_style gathers them into the Notes section too;
+    # otherwise citeproc turns them into footnotes in the BODY and the inline
+    # step would replace the body's note anchors with full references.
+    _move_citations = (not raw_citations and not citations_converted
+                       and (not use_static or endnotes_mode == 'body'))
+    if _move_citations:
         try:
             _csl_path_for_notes = _fetch_csl_style_file(csl_style, zmeta['client'])
         except (RuntimeError, OSError):
@@ -2688,6 +3242,27 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
             cit_text = citations_to_footnotes(cit_text)
             citations_md.write_text(cit_text, encoding='utf-8')
             print('Note citation style — moved in-text citations into footnotes')
+
+    # ── Body endnotes: now that every citation is resolved, move ALL footnotes
+    # (author notes + citation notes) into a visible '# Notes' section, grouped
+    # by the chapter of each reference. The merge styles that section as the
+    # endnote stream; nothing is left as a page-bottom footnote. Native
+    # endnotes skip this — their footnotes are converted to real endnote
+    # objects by the merge instead.
+    if endnotes_mode == 'body' and fmt in ('docx', 'odt'):
+        cit_text = apply_note_style(
+            cit_text, endnotes=True,
+            global_footnotes=not restart_footnotes)
+        citations_md.write_text(cit_text, encoding='utf-8')
+
+    # Native endnotes: a level-1 'Notes' heading at the end of the body, which
+    # the word processor places immediately before the generated endnote
+    # stream, so 'Notes' appears in the TOC. (Body mode's apply_note_style
+    # already emits the heading and its '## <chapter>' groups.)
+    if endnotes_mode == 'native' and fmt in ('docx', 'odt'):
+        if re.search(r'\[\^[^\]]+\]', cit_text):
+            cit_text = cit_text.rstrip() + '\n\n# Notes\n'
+            citations_md.write_text(cit_text, encoding='utf-8')
 
     # ── Static-citation mode (PDF path): fetch a CSL-JSON bibliography and
     # the CSL style file up front, and hand citation processing to pandoc's
@@ -2718,6 +3293,10 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
             '--bibliography', str(biblio_path),
             '--metadata', 'reference-section-title=Bibliography',
         ]
+        if not include_bibliography:
+            # Static path: let citeproc render citations but emit no
+            # bibliography section.
+            citeproc_args += ['--metadata', 'suppress-bibliography=true']
         # csl_path is None when the style is pandoc's built-in default —
         # omit --csl and let pandoc use its own bundled copy.
         if csl_path:
@@ -2731,6 +3310,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                '-f', 'markdown+wikilinks_title_after_pipe+lists_without_preceding_blankline',
                *filter_args,
                *citeproc_args,
+               *bib_off_args,
                '--metadata', f'source-note={compiled_md.stem}',
                '-o', str(clean_path)]
         print('Running pandoc:', ' '.join(cmd))
@@ -2752,6 +3332,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                '-f', 'markdown+wikilinks_title_after_pipe+lists_without_preceding_blankline',
                *filter_args,
                *citeproc_args,
+               *bib_off_args,
                *ref_doc_args,
                '-o', str(clean_path)]
         print('Running pandoc:', ' '.join(cmd))
@@ -2790,8 +3371,12 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
                      else '--global-footnotes')
     if toc:
         merge_cmd.append('--toc')
+        if toc_levels is not None:
+            merge_cmd += ['--toc-levels', str(toc_levels)]
     if tof:
         merge_cmd.append('--list-of-figures')
+    if endnotes_mode and endnotes_mode != 'none':
+        merge_cmd += ['--endnotes-mode', endnotes_mode]
     if not generate_date:
         merge_cmd.append('--no-generated-date')
     if roman_frontmatter:
@@ -2832,18 +3417,21 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
 
 
 def export_docx(compiled_md, vault_root=None, template=None, toc=False,
-                tof=False, template_dir=None, output_dir=None, default_author=None,
-                new_page_headings=True, restart_footnotes=True,
+                toc_levels=None, tof=False, endnotes_mode='none',
+                template_dir=None, output_dir=None,
+                default_author=None, new_page_headings=True, restart_footnotes=True,
                 mappings_data=None, generate_date=True,
                 roman_frontmatter=False, page1_starts_with='',
                 static_citations=False, raw_citations=False,
                 static_bibliography=None, csl_style_override=None,
                 csl_from_template=False, output_name=None,
-                citations_input=None):
+                citations_input=None, citations_converted=False,
+                include_bibliography=True):
     """Export compiled markdown to DOCX. Thin wrapper around export_document."""
     return export_document('docx', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
-                           tof=tof,
+                           toc_levels=toc_levels, tof=tof,
+                           endnotes_mode=endnotes_mode,
                            template_dir=template_dir, output_dir=output_dir,
                            default_author=default_author,
                            new_page_headings=new_page_headings,
@@ -2857,7 +3445,9 @@ def export_docx(compiled_md, vault_root=None, template=None, toc=False,
                            csl_style_override=csl_style_override,
                            csl_from_template=csl_from_template,
                            output_name=output_name,
-                           citations_input=citations_input)
+                           citations_input=citations_input,
+                           citations_converted=citations_converted,
+                           include_bibliography=include_bibliography)
 
 
 def _prep_reference_odt(ref_doc_path, style_names):
@@ -2959,18 +3549,21 @@ def _prep_reference_odt(ref_doc_path, style_names):
 
 
 def export_odt(compiled_md, vault_root=None, template=None, toc=False,
-               tof=False, template_dir=None, output_dir=None, default_author=None,
-               new_page_headings=True, restart_footnotes=True,
+               toc_levels=None, tof=False, endnotes_mode='none',
+               template_dir=None, output_dir=None,
+               default_author=None, new_page_headings=True, restart_footnotes=True,
                mappings_data=None, generate_date=True,
                roman_frontmatter=False, page1_starts_with='',
                static_citations=False, raw_citations=False,
                static_bibliography=None, csl_style_override=None,
                csl_from_template=False, output_name=None,
-               citations_input=None):
+               citations_input=None, citations_converted=False,
+                include_bibliography=True):
     """Export compiled markdown to ODT. Thin wrapper around export_document."""
     return export_document('odt', compiled_md,
                            vault_root=vault_root, template=template, toc=toc,
-                           tof=tof,
+                           toc_levels=toc_levels, tof=tof,
+                           endnotes_mode=endnotes_mode,
                            template_dir=template_dir, output_dir=output_dir,
                            default_author=default_author,
                            new_page_headings=new_page_headings,
@@ -2984,7 +3577,9 @@ def export_odt(compiled_md, vault_root=None, template=None, toc=False,
                            csl_style_override=csl_style_override,
                            csl_from_template=csl_from_template,
                            output_name=output_name,
-                           citations_input=citations_input)
+                           citations_input=citations_input,
+                           citations_converted=citations_converted,
+                           include_bibliography=include_bibliography)
 
 
 def _latex_notes_parts(abstract, extra_sections):
@@ -3095,12 +3690,15 @@ def _latex_title_block(title, subtitle, author, date_val, abstract, extra_sectio
 
 
 def export_latex(compiled_md, vault_root=None, template=None, toc=False,
-                 tof=False, template_dir=None, output_dir=None,
+                 toc_levels=None, tof=False, endnotes_mode='none',
+                 template_dir=None, output_dir=None,
                  default_author=None, new_page_headings=True,
                  restart_footnotes=True, mappings_data=None, generate_date=True,
                  roman_frontmatter=False, page1_starts_with='',
                  csl_style_override=None, csl_from_template=False,
-                 output_name=None, citations_input=None, as_pdf=False):
+                 output_name=None, citations_input=None,
+                 citations_converted=False, include_bibliography=True,
+                 as_pdf=False):
     """Export compiled markdown to LaTeX (.tex), or — when as_pdf — straight
     to PDF via pandoc's own --pdf-engine=lualatex. No LibreOffice, no
     intermediate file: pandoc goes from markdown to PDF in one call.
@@ -3242,6 +3840,12 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                        + '```{=latex}\n\\mainmatter\n```\n\n'
                        + cit_text[cut:])
 
+    # LaTeX needs no endnote-mode handling: 'native' and 'body' both arrive as
+    # the compiler's Notes section (LaTeX has no word-processor endnote object
+    # to convert to, and no awkwardness about putting chapter headings inside
+    # the note stream). See main()'s endnotes_mode resolution: for a .tex
+    # target, 'native' is folded to 'body'.
+
     # ── Front matter, in reading order: title page/block first, then (book
     # only, roman_frontmatter) \frontmatter switching to roman page numbers,
     # then the table of contents. All built as body content (raw LaTeX
@@ -3262,8 +3866,18 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
     # redundant \maketitle, which only gets its own page automatically for
     # book/report anyway, not article.
     title_block_fn = _latex_titlepage_block if is_book else _latex_title_block
-    front_matter = title_block_fn(
-        doc_title, doc_subtitle, doc_author, doc_date, doc_abstract, extra_sections)
+    # secnumdepth 0: LaTeX prints an automatic number ONLY for chapters (level
+    # 0). Sections and deeper are emitted starred by latexize_headings and keep
+    # their literal compiler-written number in the text, so there is nothing for
+    # LaTeX to number at those levels. The old `numbersections=true` (which set
+    # secnumdepth to 5) was belt-and-braces from before heading numbering moved
+    # into the compiler; 0 is the honest setting and can't double-number a
+    # section. An unstarred \chapter still steps the chapter counter, which is
+    # what per-chapter figure numbering needs.
+    front_matter = ('```{=latex}\n\\setcounter{secnumdepth}{0}\n```\n\n'
+                    + title_block_fn(
+                        doc_title, doc_subtitle, doc_author, doc_date,
+                        doc_abstract, extra_sections))
 
     # ── Headings -> raw LaTeX (MUST run after every step above that searches
     # for Markdown "#" headings: the \mainmatter insertion and the
@@ -3282,7 +3896,11 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
     if is_book and roman_frontmatter:
         front_matter += '```{=latex}\n\\frontmatter\n```\n\n'
     if toc:
-        front_matter += ('```{=latex}\n{\\setcounter{tocdepth}{3}\n'
+        # toc-levels (export property, default 2) = deepest heading level the
+        # TOC shows: 1 = chapters only, 2 = chapters + sections. LaTeX's
+        # tocdepth is exactly this number, so it needs no other plumbing.
+        _toc_depth = toc_levels if toc_levels and toc_levels > 0 else 2
+        front_matter += (f'```{{=latex}}\n{{\\setcounter{{tocdepth}}{{{_toc_depth}}}\n'
                          '\\tableofcontents\n}\n```\n\n')
     # Matches DOCX/ODT: only render a Table of Figures when the "Include
     # table of figures" checkbox is on AND the document actually contains at
@@ -3372,12 +3990,13 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
         newpage_latex = '\\newpage' if new_page_headings else ''
 
         # Heading numbering is decided in the compiled markdown by the compiler
-        # itself (see latexize_headings + the @@ note): numbered chapters use
-        # LaTeX's own number, every other heading is emitted starred. So
-        # pandoc's `numbersections` and LaTeX's `secnumdepth` are no longer
-        # used to control the display at all. Titles keep their styling from
-        # LaTeX's defaults (or the class's), not from per-level \titleformat,
-        # which is why neither titlesec nor titletoc appears here any more.
+        # itself (see number_headings + latexize_headings): numbered chapters
+        # use LaTeX's own number, every other heading is emitted starred with a
+        # literal number. secnumdepth is set to 0 in the body (see front_matter)
+        # so pandoc's own numbering can never add a second number. Titles keep
+        # their styling from LaTeX's defaults (or the class's), not from
+        # per-level \titleformat, which is why neither titlesec nor titletoc
+        # appears here any more.
 
         preamble_src = (preamble_src
                         .replace('SWTOKAUTHOR', _latex_escape(first_line(doc_author) or ''))
@@ -3403,18 +4022,17 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                *filter_args,
                '--citeproc', '--bibliography', str(biblio_path),
                '--metadata', 'reference-section-title=Bibliography',
+               *(['--metadata', 'suppress-bibliography=true']
+                 if not include_bibliography else []),
                '--include-in-header', str(preamble_path),
                '--metadata', f'documentclass={"book" if is_book else "article"}',
                '--metadata', 'classoption=twoside',
-               # numbersections=true is now BELT-AND-BRACES: every heading is
-               # emitted as raw LaTeX by latexize_headings, so pandoc never
-               # numbers anything itself. It is kept because a raw \chapter{}
-               # increments LaTeX's chapter counter unconditionally (which is
-               # what per-chapter figure numbering needs), and leaving this on
-               # means any heading that somehow escaped latexize_headings
-               # still keeps the counters alive rather than silently freezing
-               # them at -\maxdimen (the historical "Figure 0.1" bug).
-               '--metadata', 'numbersections=true',
+               # No numbersections: every heading is emitted as raw LaTeX by
+               # latexize_headings, and secnumdepth=0 (set in the body) allows
+               # only the numbered \chapter{} forms to print a number. An
+               # unstarred \chapter still steps LaTeX's chapter counter, which
+               # is what per-chapter figure numbering needs; there is nothing to
+               # gain from letting pandoc number headings itself.
                *[a for opt in extra_classoptions
                  for a in ('--metadata', f'classoption={opt}')],
                # Font, page size/margins, and link color are NOT set here —
@@ -3478,14 +4096,16 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
     return str(out_path)
 
 
-def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False,
+def export_pdf(compiled_md, vault_root=None, template=None, toc=False,
+               toc_levels=None, tof=False, endnotes_mode='none',
                generate_date=True, roman_frontmatter=False, page1_starts_with='',
                template_dir=None, output_dir=None,
                new_page_headings=True, restart_footnotes=True,
                intermediate_format=None, keep_intermediate=False,
                mappings_data=None, csl_style_override=None,
                csl_from_template=False, output_name=None,
-               citations_input=None):
+               citations_input=None, citations_converted=False,
+                include_bibliography=True):
     """Export to PDF via an intermediate ODT, DOCX, or LaTeX file.
 
     The intermediate format is auto-determined from the template: ODT is
@@ -3512,31 +4132,13 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
         text = compiled_md.read_text(encoding='utf-8')
         meta = _parse_yaml_metadata(text, compiled_md.stem)
         raw_tpl = template if template is not None else meta['tpl']
-        ext_m = re.search(r'\.(docx|odt|tex)$', raw_tpl or '', flags=re.IGNORECASE)
-        if ext_m:
-            # The export dialog passes a specific template ("book.docx" vs
-            # "book.odt" vs "book.tex") — that choice IS the intended
-            # intermediate format.
-            intermediate_format = ext_m.group(1).lower()
-            if intermediate_format == 'tex':
-                intermediate_format = 'latex'
-        else:
-            # Bare name (from frontmatter): prefer ODT, then DOCX, then
-            # LaTeX (only when neither of the word-processor formats has a
-            # matching template — keeps existing behaviour unchanged for
-            # every template that predates LaTeX support).
-            tpl = raw_tpl
-            template_dir_r = resolve_template_dir(template_dir, vault_root)
-            def _has(ext):
-                cands = []
-                if template_dir_r:
-                    cands.append(os.path.join(template_dir_r, f'{tpl}{ext}'))
-                cands.append(plugin_template_path(f'{tpl}{ext}'))
-                return any(os.path.exists(c) for c in cands)
-            intermediate_format = ('odt' if _has('.odt')
-                                  else 'docx' if _has('.docx')
-                                  else 'latex' if _has('.tex')
-                                  else 'docx')
+        # The export dialog passes a specific template ("book.docx" vs
+        # "book.odt" vs "book.tex") — that choice IS the intended intermediate
+        # format; a bare name (from frontmatter) prefers ODT, then DOCX, then
+        # LaTeX. See resolve_intermediate_format (also used by main()'s
+        # endnotes decision so both agree).
+        intermediate_format = resolve_intermediate_format(
+            raw_tpl, resolve_template_dir(template_dir, vault_root), vault_root)
         print(f'PDF intermediate format auto-determined: {intermediate_format}')
 
     if intermediate_format == 'latex':
@@ -3545,7 +4147,8 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
         # pandoc would have produced along the way, via one extra (cheap,
         # no lualatex) pandoc call.
         latex_kwargs = dict(
-            vault_root=vault_root, template=template, toc=toc, tof=tof,
+            vault_root=vault_root, template=template, toc=toc,
+            toc_levels=toc_levels, tof=tof, endnotes_mode=endnotes_mode,
             template_dir=template_dir, output_dir=str(out_dir),
             new_page_headings=new_page_headings,
             restart_footnotes=restart_footnotes,
@@ -3553,7 +4156,7 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
             roman_frontmatter=roman_frontmatter, page1_starts_with=page1_starts_with,
             csl_style_override=csl_style_override,
             csl_from_template=csl_from_template, output_name=output_name,
-            citations_input=citations_input)
+            citations_input=citations_input, include_bibliography=include_bibliography)
         if keep_intermediate:
             tex_path = export_latex(compiled_md, as_pdf=False, **latex_kwargs)
             print(f'Intermediate LaTeX kept at: {tex_path}')
@@ -3566,7 +4169,8 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
     tmp_dir = Path(tempfile.mkdtemp())
     try:
         common_kwargs = dict(
-            vault_root=vault_root, template=template, toc=toc, tof=tof,
+            vault_root=vault_root, template=template, toc=toc,
+            toc_levels=toc_levels, tof=tof, endnotes_mode=endnotes_mode,
             template_dir=template_dir, output_dir=str(tmp_dir),
             new_page_headings=new_page_headings,
             restart_footnotes=restart_footnotes,
@@ -3578,7 +4182,7 @@ def export_pdf(compiled_md, vault_root=None, template=None, toc=False, tof=False
             # pandoc's own --citeproc render final citations + bibliography
             # instead of live Zotero fields (see export_document's docstring).
             static_citations=True,
-            citations_input=citations_input)
+            citations_input=citations_input, include_bibliography=include_bibliography)
         if intermediate_format == 'docx':
             inter_path = Path(export_docx(compiled_md, **common_kwargs))
         else:
@@ -3633,8 +4237,11 @@ def main():
     parser.add_argument('--export', action='store_true',
                        help='Also export to docx/odt via pandoc (see --format)')
     parser.add_argument('--format', dest='export_format', default='docx',
-                       choices=['docx', 'odt', 'latex', 'pdf'],
-                       help='Export format when --export is set: docx (default), odt, latex, or pdf')
+                       choices=['md', 'docx', 'odt', 'latex', 'pdf'],
+                       help='Export format when --export is set: docx (default), odt, '
+                            'latex, pdf, or md (compile only). The format also decides '
+                            'whether endnotes are emitted (md/latex) or the notes stay '
+                            'native footnotes (docx/odt).')
     parser.add_argument('--keep-intermediate', action='store_true',
                        help='Keep the intermediate docx/odt/tex when exporting to PDF')
     parser.add_argument('--keep-compiled-md', action='store_true',
@@ -3655,6 +4262,39 @@ def main():
     parser.add_argument('--no-list-of-figures', action='store_true',
                        dest='no_list_of_figures',
                        help='Omit the table of figures')
+    parser.add_argument('--toc-levels', type=int, default=None, dest='toc_levels',
+                       help='Deepest heading level the TOC shows (1 = chapters, '
+                            '2 = chapters + sections; default 2, else the note\'s '
+                            'toc-levels property). Overrides the template\'s own '
+                            'configured TOC depth.')
+    parser.add_argument('--numbering-levels', type=int, default=None,
+                       dest='numbering_levels',
+                       help='Levels to auto-number (0 = only @@-marked headings, the '
+                            'default; 1 = chapters; 2 = chapters + sections). When set, '
+                            '@@ is ignored and a "* " prefix marks an unnumbered '
+                            'exception. Else the note\'s numbering-levels property.')
+    parser.add_argument('--endnotes-mode', choices=['none', 'native', 'body'],
+                       default=None, dest='endnotes_mode',
+                       # default None so the note's own `endnotes` property is
+                       # honoured when the flag is absent
+                       help='How notes are rendered: none = footnotes (default); '
+                            'native = real word-processor endnotes (DOCX/ODT) or a '
+                            'Notes section (Markdown/LaTeX); body = a visible Notes '
+                            'section divided by chapter (per-chapter numbering only).')
+    # Historical aliases: --endnotes == native, --no-endnotes == none.
+    parser.add_argument('--endnotes', action='store_const', const='native',
+                       dest='endnotes_mode',
+                       help='Alias for --endnotes-mode native.')
+    parser.add_argument('--no-endnotes', action='store_const', const='none',
+                       dest='endnotes_mode',
+                       help='Alias for --endnotes-mode none.')
+    parser.add_argument('--bibliography', action='store_true', default=None,
+                       dest='bibliography',
+                       help='Include a bibliography (default on). With a note/'
+                            'footnote citation style, this is what keeps it.')
+    parser.add_argument('--no-bibliography', action='store_false',
+                       dest='bibliography',
+                       help='Omit the generated bibliography.')
     parser.add_argument('--no-generated-date', action='store_true',
                        dest='no_generated_date',
                        help="Don't insert today's date when the doc has no date property")
@@ -3775,19 +4415,146 @@ def main():
     if args.no_global_footnotes:
         use_global = False
 
+    # ── numbering-levels / toc-levels / endnotes ────────────────────────────────
+    # Each is: the export dialog's explicit flag (which already folds in the
+    # file's remembered setting and, below it, the note's YAML property) → the
+    # note's own YAML property → the built-in default. Reading the property here
+    # too means a bare `DocumentCompiler.py` run (no dialog) honours it.
+    numbering_levels = (args.numbering_levels if args.numbering_levels is not None
+                        else _yaml_int(text, 'numbering-levels', 0))
+    toc_levels = (args.toc_levels if args.toc_levels is not None
+                  else _yaml_int(text, 'toc-levels', 2))
+    endnotes_mode = (args.endnotes_mode if args.endnotes_mode is not None
+                     else _yaml_endnotes_mode(text))
+    # 'body' divides the Notes section by chapter, so it needs per-chapter
+    # (discontinuous) numbering; with continuous numbering it has no chapters to
+    # divide by and degrades to 'native' (the undivided endnote stream).
+    if endnotes_mode == 'body' and use_global:
+        print('endnotes: body requires per-chapter numbering — using native.')
+        endnotes_mode = 'native'
+    # For PDF, follow the intermediate the chosen template implies.
+    target_fmt = args.export_format
+    if target_fmt == 'pdf':
+        target_fmt = resolve_intermediate_format(
+            args.template or effective_tpl,
+            resolve_template_dir(args.templates_dir, _VAULT_ABS), _VAULT_ABS)
+    # The native/body distinction only exists for the word-processor formats:
+    # 'native' converts the resolved footnotes into real DOCX/ODT endnote
+    # objects in the merge; 'body' moves them into a visible '# Notes' section
+    # (divided by chapter). LaTeX and Markdown have no endnote objects to
+    # convert to, so both choices give them the same visible Notes section.
+    use_native_endnotes = (endnotes_mode == 'native'
+                           and target_fmt in ('docx', 'odt'))
+    use_body_endnotes = not use_native_endnotes and endnotes_mode != 'none'
+    # prepare-convert hands the compiled markdown to the plugin, which converts
+    # citations and re-invokes for the export. For DOCX/ODT the endnote stream
+    # is built in the EXPORT step, AFTER citation conversion, so the compiled
+    # markdown must keep plain footnotes here — building a Notes section now
+    # would strip the author notes before the citations inside them resolve.
+    if args.prepare_convert and target_fmt in ('docx', 'odt'):
+        use_body_endnotes = False
+
+    print(f"Template: {effective_tpl} — TOC {'on' if use_toc else 'off'} "
+          f"(levels {toc_levels}), footnotes "
+          f"{'global' if use_global else 'per-chapter'}, "
+          f"numbering-levels {numbering_levels}, endnotes {endnotes_mode}")
+
+    # STEP 1 — compile (outlines only), IN MEMORY: assemble the linked notes
+    # into one markdown string. A single note is already one document; its text
+    # is read as-is. Nothing is written yet.
     if is_outline:
-        print(f"Detected outline ({'explicit compile- template' if explicit_compile else 'bullet list without headings'}). Compiling…")
-        print(f"Template: {effective_tpl} — TOC {'on' if use_toc else 'off'}, "
-              f"footnotes {'global' if use_global else 'per-chapter'}")
-        compiled = compile_book(master_file, use_global, output_dir=args.output_dir)
+        print(f"Detected outline "
+              f"({'explicit compile- template' if explicit_compile else 'bullet list without headings'}). "
+              f"Compiling…")
+        working = compile_book(master_file)
         if explicit_compile:
-            write_compiled_template_prop(compiled, effective_tpl)
+            working = rewrite_compiled_template_prop(working, effective_tpl)
     else:
         print("Not an outline (has headings, prose paragraphs, or no note "
               "includes). Treating as a compiled note; skipping compilation.")
-        print(f"Template: {effective_tpl} — TOC {'on' if use_toc else 'off'}, "
-              f"footnotes {'global' if use_global else 'per-chapter'}")
-        compiled = master_file
+        working = master_file.read_text(encoding='utf-8')
+
+    # STEP 1b — citations → notes, IN MEMORY, BEFORE finalize: when the export
+    # uses a note/footnote citation style (live DOCX/ODT fields), turn each
+    # in-text citation into a footnote definition. Doing it here means the
+    # shared finalize stage sees the author's OWN notes and the citation notes
+    # as ONE stream, so with endnotes selected BOTH go to the endnote stream
+    # instead of citations becoming separate page-bottom footnotes.
+    citations_converted = False
+    _live_note_export = (args.export and args.export_format in ('docx', 'odt')
+                         and not args.raw_citations
+                         and not args.static_bibliography)
+    if _live_note_export:
+        try:
+            _tpl_path = _resolve_template_path(
+                effective_tpl, '.docx' if args.export_format == 'docx' else '.odt',
+                resolve_template_dir(args.templates_dir, _VAULT_ABS))
+            if resolve_note_citation_style(
+                    working, _tpl_path, args.export_format,
+                    override=args.csl_style,
+                    from_template=args.csl_from_template):
+                if args.citations_input:
+                    # The plugin converts the citation wikilinks in-process and
+                    # hands the result back via --citations-input. THAT text is
+                    # what pandoc consumes, so the in-text→footnote move has to
+                    # run on it inside export_document — citations_converted
+                    # stays False. (Moving citations in `working` here would be
+                    # discarded AND would suppress the move on the real input.)
+                    print('Note citation style — in-text citations will be moved '
+                          'into notes in the export step (citations-input)')
+                else:
+                    working = citations_to_footnotes(working)
+                    citations_converted = True
+                    print('Note citation style — moved in-text citations into notes')
+        except Exception as e:
+            print(f'WARNING: could not convert citations to notes up front: {e}')
+
+    # STEP 2 — finalize IN MEMORY: the ONE shared post-compile stage every
+    # document goes through (footnote/endnote handling + whole-document
+    # numbering). Identical for outlines and whole books written in one note.
+    working = finalize_markdown(
+        working, numbering_levels=numbering_levels,
+        endnotes=use_body_endnotes, global_footnotes=use_global)
+
+    # ── Bibliography decision (one place, all formats) ───────────────────────
+    # The `include-bibliography` property/flag defaults to TRUE:
+    #   • there are no references at all  → omit (always);
+    #   • setting on                      → emit whenever there are references;
+    #   • setting off                     → emit only for author-date citations
+    #                                        (a note/footnote style omits it).
+    # Since references and author-date citations are exactly what has_citations
+    # and "not a note style" mean, this reduces to:
+    #   include = has_citations and (setting or not note_style)
+    bibliography_opt = (args.bibliography if args.bibliography is not None
+                        else _yaml_bool(text, 'include-bibliography', True))
+    has_citations = bool(re.search(r'\[\[@|(?<![\w@])@[A-Za-z]', working))
+    target_fmt_bib = args.export_format
+    if target_fmt_bib == 'pdf':
+        target_fmt_bib = resolve_intermediate_format(
+            args.template or effective_tpl,
+            resolve_template_dir(args.templates_dir, _VAULT_ABS), _VAULT_ABS)
+    try:
+        _bib_tpl_path = _resolve_template_path(
+            effective_tpl,
+            '.tex' if target_fmt_bib == 'latex'
+            else ('.odt' if target_fmt_bib == 'odt' else '.docx'),
+            resolve_template_dir(args.templates_dir, _VAULT_ABS))
+        note_style = resolve_note_citation_style(
+            working, _bib_tpl_path,
+            'latex' if target_fmt_bib == 'latex' else target_fmt_bib,
+            override=args.csl_style, from_template=args.csl_from_template)
+    except Exception:
+        note_style = False
+    include_bibliography = has_citations and (bibliography_opt or not note_style)
+    if has_citations:
+        print(f"Bibliography: {'included' if include_bibliography else 'omitted'}"
+              f" ({'note' if note_style else 'author-date'} style, "
+              f"setting {'on' if bibliography_opt else 'off'})")
+
+    # STEP 3 — the ONLY write: the single intermediate file. The user's source
+    # is never modified.
+    compiled = write_intermediate(
+        master_file, working, compiled=is_outline, output_dir=args.output_dir)
 
     if args.prepare_convert:
         # Plugin path: hand the (compiled) markdown path back so the plugin can
@@ -3799,7 +4566,9 @@ def main():
     if args.export:
         active_mappings = load_mappings(args.templates_dir, args.mappings)
         _common = dict(
-            template=args.template or effective_tpl, toc=use_toc, tof=use_tof,
+            template=args.template or effective_tpl, toc=use_toc,
+            toc_levels=toc_levels, tof=use_tof,
+            endnotes_mode=endnotes_mode,
             template_dir=args.templates_dir, output_dir=args.output_dir,
             new_page_headings=not args.no_new_page_headings,
             restart_footnotes=not use_global,
@@ -3810,7 +4579,9 @@ def main():
             csl_style_override=args.csl_style,
             csl_from_template=args.csl_from_template,
             output_name=args.output_name,
-            citations_input=args.citations_input)
+            citations_input=args.citations_input,
+            citations_converted=citations_converted,
+            include_bibliography=include_bibliography)
         if args.export_format == 'pdf':
             export_pdf(compiled, keep_intermediate=args.keep_intermediate, **_common)
         elif args.export_format == 'odt':
@@ -3823,22 +4594,20 @@ def main():
                         static_bibliography=args.static_bibliography,
                         default_author=args.default_author, **_common)
 
-        # The compiled markdown is a throwaway intermediate once it's been
-        # exported — delete it unless the user asked to keep it. Never touch
-        # an already-compiled file the user handed us directly (is_outline
-        # False, `compiled is master_file`): that's their own source note.
-        if is_outline and not args.keep_compiled_md:
+        # The intermediate markdown is throwaway once it's been exported —
+        # delete it unless the user asked to keep it. The source note is never
+        # touched either way.
+        if not args.keep_compiled_md:
             try:
                 Path(compiled).unlink(missing_ok=True)
             except OSError as e:
-                print(f'WARNING: could not remove compiled markdown: {e}',
+                print(f'WARNING: could not remove intermediate markdown: {e}',
                       file=sys.stderr)
     elif args.output_name:
         # Compile-only ('md' format) with a chosen filename: rename the
-        # compiled markdown to it (never for an already-compiled input the
-        # user handed us — that's their source note).
+        # intermediate markdown to it.
         src = Path(compiled)
-        if src != master_file and src.exists():
+        if src.exists():
             dest = src.with_name(_resolve_output_stem(args.output_name, src.stem)
                                  + '.md')
             if dest != src:

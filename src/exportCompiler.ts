@@ -62,8 +62,19 @@ export interface CompilerOptions {
   template?: string;
   /** Explicit TOC choice (checkbox). Overrides template-aware default. */
   toc: boolean;
+  /** Deepest heading level the TOC shows (1 = chapters, 2 = chapters + sections). */
+  tocLevels: number;
   /** Explicit table-of-figures choice (checkbox). Only rendered when the doc has figures. */
   tof: boolean;
+  /** Levels to auto-number (0 = only @@-marked headings; 1 = chapters; 2 = chapters + sections). */
+  numberingLevels: number;
+  /** How notes render: 'none' = footnotes; 'native' = real word-processor
+   *  endnotes (DOCX/ODT) or a Notes section (Markdown/LaTeX); 'body' = a
+   *  visible Notes section divided by chapter (per-chapter numbering only). */
+  endnotesMode: 'none' | 'native' | 'body';
+  /** true = include a bibliography (keeps it with a note/footnote style).
+   *  When false, only author-date citations keep it; no references → omitted. */
+  includeBibliography: boolean;
   /** true = restart footnote numbering at each top-level heading; false = continuous. */
   restartFootnotes: boolean;
   /** true = top-level headings start on a new page. */
@@ -86,6 +97,12 @@ export interface CompilerOptions {
   /** Non-md formats only: keep the compiled markdown DocumentCompiler
    *  produces from an outline, instead of deleting it once export is done. */
   keepIntermediateMd?: boolean;
+  /** Non-md exports only: reuse an already compiled markdown (compiledMdPath)
+   *  instead of recompiling. Set by the export modal's non-persisted
+   *  "Skip recompilation" checkbox. */
+  skipRecompile?: boolean;
+  /** Absolute path of the existing compiled markdown to reuse. */
+  compiledMdPath?: string;
   /** IDs of StyleMappings to apply on this export (subset of settings.styleMappings). */
   enabledMappingIds?: string[];
   /** Export dialog: apply an explicit citation style, overriding the
@@ -129,8 +146,10 @@ function resolveFolder(
 export async function runDocumentCompiler(
   plugin: ReferenceList,
   file: TFile,
-  opts: CompilerOptions
+  opts: Omit<CompilerOptions, 'endnotesMode'> & { endnotes?: CompilerOptions['endnotesMode'] }
 ): Promise<CompileResult> {
+  const endnotesMode: CompilerOptions['endnotesMode'] =
+    opts.endnotes ?? 'none';
   const scriptsDir = pluginScriptsDir(plugin);
   if (!scriptsDir) {
     return {
@@ -173,14 +192,20 @@ export async function runDocumentCompiler(
   const args = [input];
   if (isExport) {
     args.push('--export');
-    args.push('--format', opts.format); // 'docx', 'odt', or 'pdf'
     if (opts.format === 'pdf' && opts.keepIntermediate) {
       args.push('--keep-intermediate');
     }
     if (opts.keepIntermediateMd) args.push('--keep-compiled-md');
   }
+  // Always pass the format: for 'md' (compile-only) it is what tells the
+  // compiler whether to emit endnotes; for exports it is the output format.
+  args.push('--format', opts.format);
   args.push(opts.toc ? '--toc' : '--no-toc');
+  args.push('--toc-levels', String(opts.tocLevels));
   args.push(opts.tof ? '--list-of-figures' : '--no-list-of-figures');
+  args.push('--numbering-levels', String(opts.numberingLevels));
+  args.push('--endnotes-mode', endnotesMode);
+  args.push(opts.includeBibliography ? '--bibliography' : '--no-bibliography');
   args.push(opts.restartFootnotes ? '--no-global-footnotes' : '--global-footnotes');
   args.push(opts.newPageHeadings ? '--new-page-headings' : '--no-new-page-headings');
   if (!opts.generatedDate) args.push('--no-generated-date');
@@ -298,6 +323,27 @@ export async function runDocumentCompiler(
   }
   env.SW_PANDOC = pandoc;
 
+  // Reuse an already compiled markdown instead of recompiling (the export
+  // modal's non-persisted "Skip recompilation" option). Only when the file
+  // still exists; otherwise fall through to a normal compile.
+  if (opts.skipRecompile && opts.compiledMdPath) {
+    const fs = require('fs') as typeof import('fs');
+    if (fs.existsSync(opts.compiledMdPath)) {
+      const converted = convertCitationsInText(
+        fs.readFileSync(opts.compiledMdPath, 'utf-8')
+      );
+      const convPath = `${opts.compiledMdPath}.swcitations.md`;
+      fs.writeFileSync(convPath, converted, 'utf-8');
+      try {
+        return toResult(
+          await execCompiler(buildArgs(opts.compiledMdPath, convPath))
+        );
+      } finally {
+        try { fs.unlinkSync(convPath); } catch { /* ignore */ }
+      }
+    }
+  }
+
   // Preferred path: convert citations IN-PROCESS, so no external Node.js
   // runtime is needed:
   //   1. Python compiles (if the input is an outline) and prints the markdown
@@ -307,8 +353,14 @@ export async function runDocumentCompiler(
   // If any step fails, fall back to the external Node.js converter.
   try {
     const fs = require('fs') as typeof import('fs');
+    // The compile step (--prepare-convert) must see the same format /
+    // numbering / endnotes choices as the export step, so the compiled
+    // markdown matches what the format will render.
     const prepArgs = [
       '--prepare-convert',
+      '--format', opts.format,
+      '--numbering-levels', String(opts.numberingLevels),
+      '--endnotes-mode', endnotesMode,
       opts.restartFootnotes ? '--no-global-footnotes' : '--global-footnotes',
     ];
     if (outputDir) prepArgs.push('--output-dir', outputDir);

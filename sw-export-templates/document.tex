@@ -215,14 +215,14 @@
 \setlist[itemize,3]{label=\textbullet}
 \setlist[itemize,4]{label=\textendash}
 
-% Heading NUMBERING is decided by DocumentCompiler.py, which emits every
-% heading as raw LaTeX: a numbered chapter from "@@" becomes \chapter{…} (so
-% LaTeX supplies the number and the chapter counter increments, which is what
-% figure numbering "chapter.N" relies on), and every other heading becomes the
-% starred form \section*/\subsection*/… carrying whatever literal number the
-% compiler wrote (e.g. "1.1"). There is therefore no titlesec/titletoc
-% configuration here and no secnumdepth juggling: LaTeX's own defaults style
-% the headings, and headings simply never show a counter they weren't given.
+% Heading NUMBERING is decided by DocumentCompiler.py (number_headings +
+% latexize_headings), which emits every heading as raw LaTeX: a numbered
+% heading becomes \section{...}, while every unnumbered heading becomes the
+% starred form \section*/\subsection*/... carrying whatever literal number the
+% compiler wrote (e.g. "1.1"). DocumentCompiler.py also emits
+% \setcounter{secnumdepth}{0} into the body so no heading can be
+% double-numbered. There is therefore no titlesec/titletoc configuration here:
+% LaTeX's own defaults style the headings.
 SWTOKFIGURECOUNTER
 
 \usepackage{fancyhdr}
@@ -250,3 +250,4 @@ SWTOKFIGURECOUNTER
 % DOES reach pandoc's own hypersetup call, since that reads --metadata
 % variables Python passes separately, resolved against swlinkcolor once
 % xcolor's \definecolor above has already run.
+

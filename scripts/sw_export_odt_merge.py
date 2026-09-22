@@ -48,7 +48,9 @@ from sw_merge_helpers import (split_paragraphs, find_bibliography_range,
     is_toc_heading, process_figures, bundled_template, ensure_odt_styles,
     strip_chapter_prefix, parse_chapter_number, append_extra_sections,
     resolve_note_sections,
-    find_page_reset_index,
+    find_page_reset_index, is_note_anchor_target, restyle_notes_sections,
+    move_notes_heading_to_end,
+    NOTE_NUMBER_RE, ENDNOTE_STYLE_NAMES_ODT,
     csl_style_id, zotero_pref_blob, zotero_pref_chunks)
 
 # ── ODF namespace constants ───────────────────────────────────────────────────
@@ -870,6 +872,134 @@ def _merge_auto_styles(tmpl_root, pdc_root, styles_root):
 
 _STYLE_REF_ATTRS = [T('style-name'), T('list-style-name'), T('master-page-name')]
 
+
+def _odt_note_number_tab(p):
+    """In an endnote paragraph, replace the space after the leading "N. " with
+    a real <text:tab/>, so with the Endnote style's hanging indent + tab stop
+    the note text lines up past the number. Works whether the text sits directly
+    on the <text:p> or inside a <text:span> (the {#id} bracket span pandoc
+    emits). No-op without a leading number marker."""
+    # The leading text can sit on the <text:p> itself OR as the .tail of its
+    # first child (pandoc puts a <text:bookmark-start> before the note text):
+    # "N. " is matched in whichever it is.
+    def _split(node, attr):
+        val = getattr(node, attr)
+        m = NOTE_NUMBER_RE.match(val) if val else None
+        if not m:
+            return None
+        setattr(node, attr, m.group(1))
+        return val[m.end():]
+
+    def _strip_after(el):
+        # Drop any space that sat between the number and the text, so the tab is
+        # the only separator. It can live in the NEXT node's .tail: pandoc puts
+        # a <text:bookmark-end> between the number and the note text, and the
+        # separating space lands on its tail.
+        nxt = el.getnext()
+        if nxt is not None and nxt.tail:
+            nxt.tail = nxt.tail.lstrip(' \t')
+
+    for node in p.iter():
+        # .text on the paragraph itself: number leads, then children follow.
+        rest = _split(node, 'text')
+        if rest is not None:
+            if node is p:
+                tab = etree.Element(T('tab'))
+                rest_span = etree.Element(T('span'))
+                rest_span.text = rest.lstrip(' \t')
+                p.insert(0, rest_span)
+                p.insert(0, tab)
+                _strip_after(rest_span)
+                return
+            parent, after = node, node
+        else:
+            rest = _split(node, 'tail')
+            if rest is None:
+                continue
+            parent, after = node.getparent(), node
+        # Insert <text:tab/> then a span carrying the remaining text, directly
+        # after the node that held the number.
+        tab = etree.Element(T('tab'))
+        rest_span = etree.Element(T('span'))
+        rest_span.text = rest.lstrip(' \t')
+        idx = list(parent).index(after) + 1
+        parent.insert(idx, rest_span)
+        parent.insert(idx, tab)
+        _strip_after(rest_span)
+        return
+
+
+def _referenced_style_names(elements):
+    """Every style name referenced by the given elements (style-name,
+    list-style-name) — the set the assembled body actually needs defined."""
+    names = set()
+    for el in elements:
+        for node in el.iter():
+            for attr in (T('style-name'), T('list-style-name')):
+                v = node.get(attr)
+                if v:
+                    names.add(v)
+    return names
+
+
+#: Pandoc's own default ODT styles (a snapshot of the styles.xml pandoc emits
+#: for a bare `pandoc -t odt`), used ONLY as a source of style DEFINITIONS that
+#: the reference-doc merge otherwise loses.
+_PANDOC_DEFAULT_ODT_STYLES = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), 'pandoc-default-odt-styles.xml')
+
+
+def reconcile_body_styles(tmpl_root, styles_root, elements):
+    """Define any pandoc-referenced named style the assembled body needs but
+    the template lacks.
+
+    Pandoc's content.xml references named styles that live in pandoc's OWN
+    default styles.xml — notably `Superscript` (the endnote anchors). When
+    pandoc is run with --reference-doc it keeps the TEMPLATE's styles.xml, so
+    those names are referenced but never defined, and LibreOffice silently
+    substitutes (regular instead of superscript). Copy the missing definitions
+    from the bundled pandoc default snapshot. Returns True when styles.xml
+    changed. The snapshot also carries the list styles pandoc may emit for an
+    ordinary numbered list elsewhere in a document.
+    """
+    if styles_root is None:
+        return False
+    office_styles = styles_root.find(O('styles'))
+    if office_styles is None:
+        return False
+
+    # Both <style:style> and <text:list-style> name themselves with
+    # style:name (a list-style is NOT text:name — reading the wrong attribute
+    # made every list-style invisible to this check).
+    have = {e.get(S('name')) for e in styles_root.iter(S('style'))}
+    have |= {e.get(S('name')) for e in styles_root.iter(T('list-style'))}
+    needed = {n for n in _referenced_style_names(elements) if n and n not in have}
+    if not needed:
+        return False
+
+    try:
+        with open(_PANDOC_DEFAULT_ODT_STYLES, 'rb') as fh:
+            src = etree.fromstring(fh.read())
+    except (OSError, etree.XMLSyntaxError) as e:
+        print(f'WARNING: could not read pandoc default ODT styles: {e}')
+        return False
+
+    by_name = {}
+    for e in src.iter(S('style')):
+        by_name[e.get(S('name'))] = e
+    for e in src.iter(T('list-style')):
+        by_name[e.get(S('name'))] = e
+
+    added = False
+    for name in needed:
+        el = by_name.get(name)
+        if el is None:
+            continue
+        office_styles.append(copy.deepcopy(el))
+        added = True
+    return added
+
+
 def _rewrite_style_refs(elements, name_map):
     """Rewrite style-name references in elements (and all descendants) per name_map."""
     if not name_map:
@@ -1669,8 +1799,8 @@ def _inject_zotero_bibliography_odt(body_elements):
 
 def merge_odt(template_path, input_path, output_path,
               title=None, author=None, subtitle=None, date_val=None,
-              toc=False, tof=False, short_title=None, basename=None,
-              abstract=None, extra_sections=None,
+              toc=False, toc_levels=None, tof=False, endnotes_mode='none',
+              short_title=None, basename=None, abstract=None, extra_sections=None,
               new_page_headings=True, restart_footnotes=True,
               generate_date=True, roman_frontmatter=False, page1_starts_with='',
               static_citations=False, csl_style=None):
@@ -1709,6 +1839,30 @@ def merge_odt(template_path, input_path, output_path,
     pdc_text    = pdc_root.find('.//' + O('text'))
     if pdc_text is None:
         raise ValueError(f'No <office:text> in pandoc output: {input_path}')
+
+    # Native endnote mode: pandoc wrote real ODF footnotes; ODF endnotes are the
+    # same <text:note> element with a different note-class, and the template's
+    # styles.xml already carries the endnote notes-configuration, so this one
+    # attribute is the whole conversion.
+    _native_restyled = 0
+    if endnotes_mode == 'native':
+        _n = 0
+        for note in pdc_root.iter(T('note')):
+            if note.get(T('note-class')) == 'footnote':
+                note.set(T('note-class'), 'endnote')
+                _n += 1
+        # The note bodies keep pandoc's "Footnote" paragraph style, which draws
+        # the footnote separator rule. Restyle them to the template's "Endnote"
+        # style so the endnote stream looks like endnotes, not footnotes.
+        for note in pdc_root.iter(T('note')):
+            for p in note.iter(T('p')):
+                if p.get(T('style-name')) in (
+                        'Footnote', 'Footnote_20_text', 'FootnoteText'):
+                    p.set(T('style-name'), 'Endnote')
+                    _native_restyled += 1
+        print(f'ODT: converted {_n} footnote(s) to native endnotes'
+              + (f', restyled {_native_restyled} as Endnote'
+                 if _native_restyled else ''))
 
     # ── Resolve cover values ───────────────────────────────────────────────
     title, subtitle, author, date_val = resolve_cover(
@@ -1855,6 +2009,16 @@ def merge_odt(template_path, input_path, output_path,
     name_map = _merge_auto_styles(tmpl_root, pdc_root, styles_root)
     _rewrite_style_refs(body_elements, name_map)
 
+    # Pandoc references named styles that it never defines in the
+    # reference-doc-merged output (`Superscript` for the ^N^ endnote anchors,
+    # `Numbering_20_1`/`List_20_Number` for the chapter-divided Notes bodies).
+    # Define them, or LibreOffice silently substitutes — regular instead of
+    # superscript, bullets instead of numbers.
+    if reconcile_body_styles(tmpl_root, styles_root, body_elements):
+        z_data['styles.xml'] = etree.tostring(
+            styles_root, xml_declaration=True, encoding='UTF-8', standalone=True)
+        print('ODT: defined pandoc styles the body references')
+
     # ── Apply page breaks + chapter numbering ───────────────────────────────
     # Named-style mode (see uses_named_style_page_mode): one combined pass —
     # chapter/frontmatter/reset-heading role all decide the same style
@@ -1926,9 +2090,18 @@ def merge_odt(template_path, input_path, output_path,
             # No standalone heading in template — fall back to a blank spacer.
             tmpl_text.append(make_toc_pagebreak_para(tmpl_root))
         _toc_el = copy.deepcopy(layout['toc_element'])
+        # toc-levels (export property, default 2) overrides the template's own
+        # configured depth, for both the cached entries and the source's
+        # text:outline-level so a LibreOffice "Update" agrees.
+        _toc_depth_n = _toc_depth(_toc_el)
+        if toc_levels and toc_levels > 0:
+            _toc_depth_n = toc_levels
+            _toc_src = _toc_el.find(T('table-of-content-source'))
+            if _toc_src is not None:
+                _toc_src.set(T('outline-level'), str(toc_levels))
         _rebuild_index_body(
             _toc_el,
-            _toc_entries(body_elements, _toc_depth(_toc_el),
+            _toc_entries(body_elements, _toc_depth_n,
                          layout['chapter_number_format'] if _chaptered else None),
             lambda lvl: 'Contents_20_%d' % lvl)
         tmpl_text.append(_toc_el)
@@ -2033,9 +2206,57 @@ def merge_odt(template_path, input_path, output_path,
                             'First_20_paragraph', 'Text_20_body', None):
                         _p.set(T('style-name'), _BODY_STYLE)
 
+    # Endnote stream -> the template's own "Endnote" paragraph style (book.odt
+    # defines it; a template without one keeps plain body text). Shared
+    # decision with the DOCX merge via restyle_notes_sections — only the style
+    # names differ.
+    # Always the endnote paragraph style: when the template lacks it, the block
+    # at the end of this function borrows the definition from the bundled
+    # book.odt (ENDNOTE_STYLE_NAMES_ODT).
+    _endnote_para_style = 'Endnote'
+    _n_restyled = restyle_notes_sections(
+        [(None, body_elements)],
+        get_style=lambda p: p.get(T('style-name')) or '',
+        set_style=lambda p, s: p.set(T('style-name'), s),
+        get_text=_elem_text,
+        is_h1=lambda p: p.tag == T('h')
+            and p.get(T('outline-level'), '') == '1',
+        endnote_style=_endnote_para_style,
+        body_styles={_BODY_STYLE, 'First_20_paragraph', 'Standard'},
+        on_note=_odt_note_number_tab)
+    if _n_restyled:
+        print(f'ODT: styled {_n_restyled} endnote paragraph(s) as Endnote')
+    # Native endnote bodies were restyled in place earlier; count them so the
+    # Endnote style set is injected into a template that lacks it.
+    if _native_restyled:
+        _n_restyled += _native_restyled
+
     # 4. Pandoc body elements (moved from pdc_text to tmpl_text).
     for el in body_elements:
         tmpl_text.append(el)
+
+    # Endnote jump links look like web links (blue + underlined) by default
+    # (LibreOffice applies its link formatting to any <text:a>). The body's
+    # superscript number should read like plain text while staying clickable,
+    # so give each note anchor the template's plain "Endnote anchor" character
+    # style (no decoration) and drop the undefined "Definition" span pandoc
+    # wraps link text in. The <text:a> itself is kept, so it still jumps.
+    _has_endnote_anchor_style = (
+        'Endnote_20_anchor' in _collect_defined_names(tmpl_root, styles_root))
+    for a in tmpl_text.iter(T('a')):
+        href = a.get(X('href')) or ''
+        if not is_note_anchor_target(href):
+            continue
+        for _attr in (T('style-name'), T('visited-style-name')):
+            if a.get(_attr):
+                del a.attrib[_attr]
+        if _has_endnote_anchor_style:
+            a.set(T('style-name'), 'Endnote_20_anchor')
+        # Unwrap pandoc's undefined "Definition" span so no bogus style is
+        # referenced (it made LibreOffice fall back to link-like formatting).
+        for span in list(a.iter(T('span'))):
+            if span.get(T('style-name')) == 'Definition':
+                span.attrib.pop(T('style-name'), None)
 
     # 5. Fresh Zotero bibliography section, appended at the end when the pandoc
     #    output contained a bibliography.  Uses SW_Heading1_Pagebreak so the
@@ -2072,6 +2293,20 @@ def merge_odt(template_path, input_path, output_path,
             z_data['styles.xml'] = etree.tostring(
                 styles_root, xml_declaration=True, encoding='UTF-8', standalone=True)
 
+    # Native endnotes restart per chapter too (matching the footnote choice),
+    # instead of numbering continuously 1..N across the whole book.
+    if endnotes_mode == 'native' and restart_footnotes and styles_root is not None:
+        _en_changed = False
+        for cfg in styles_root.iter(T('notes-configuration')):
+            if cfg.get(T('note-class')) == 'endnote' \
+                    and cfg.get(T('start-numbering-at')) != 'chapter':
+                cfg.set(T('start-numbering-at'), 'chapter')
+                _en_changed = True
+        if _en_changed:
+            print('ODT: set endnote numbering to restart per chapter')
+            z_data['styles.xml'] = etree.tostring(
+                styles_root, xml_declaration=True, encoding='UTF-8', standalone=True)
+
     # When the ToF was borrowed from document.odt, make sure the styles its
     # entry template references exist in this template.
     if _tof_from_fallback and 'styles.xml' in z_data:
@@ -2096,6 +2331,19 @@ def merge_odt(template_path, input_path, output_path,
                 z_data['styles.xml'], _extra_style_names_for_aliases, _src)
         except Exception as e:
             print(f'WARNING: could not inject style-alias fallback styles: {e}')
+
+    # Endnote styles: a user template may predate endnote support, so borrow
+    # the whole set (paragraph + char + anchor/symbol) from the bundled book
+    # template whenever the endnote stream was styled — otherwise the paragraphs
+    # would reference an undefined "Endnote" style.
+    if _n_restyled and 'styles.xml' in z_data:
+        try:
+            with zipfile.ZipFile(bundled_template('book.odt')) as _z:
+                _src = _z.read('styles.xml')
+            z_data['styles.xml'] = ensure_odt_styles(
+                z_data['styles.xml'], list(ENDNOTE_STYLE_NAMES_ODT), _src)
+        except Exception as e:
+            print(f'WARNING: could not inject endnote styles: {e}')
 
     # With ODF chapter numbering on, exclude every non-chapter level-1 heading
     # (TOC, ToF, Bibliography, and the frontmatter headings marked earlier) from
@@ -2126,6 +2374,92 @@ def merge_odt(template_path, input_path, output_path,
     n_scaled = resize_images(tmpl_root, 'odt', template_zip_data=z_data)
     if n_scaled:
         print(f'ODT: capped {n_scaled} image(s) to text area')
+
+    # ── Native endnotes: restore order and place the Notes heading ──────────
+    if endnotes_mode == 'native':
+        # (1) LibreOffice renders endnotes in scrambled/reverse order when the
+        #     document contains <text:section> elements — the Zotero
+        #     bibliography is wrapped in one. Endnotes are final, so unwrap
+        #     every section: document order is restored and nothing is lost.
+        _unwrapped = 0
+        for sec in list(tmpl_text.iter(T('section'))):
+            parent = sec.getparent()
+            if parent is None:
+                continue
+            idx = list(parent).index(sec)
+            for i, ch in enumerate(list(sec)):
+                parent.insert(idx + i, ch)
+            parent.remove(sec)
+            _unwrapped += 1
+        # (2) Move the 'Notes' heading to the end so it directly precedes the
+        #     generated endnote stream (shared decision — see the helper).
+        if move_notes_heading_to_end(
+                tmpl_text,
+                get_text=_elem_text,
+                is_h1=lambda h: h.tag == T('h')
+                    and h.get(T('outline-level'), '') == '1'):
+            print('ODT: moved the Notes heading after the bibliography')
+        if _unwrapped:
+            print(f'ODT: unwrapped {_unwrapped} section(s) so endnotes keep order')
+
+    # ── Body endnotes: inline the citation footnotes ────────────────────────
+    # In body mode the notes are already visible paragraphs; the only notes
+    # left are the citation footnotes that citeproc created for the note-style
+    # citations inside them. Inline each at its reference so the citation reads
+    # inside its note paragraph instead of appearing as a page-bottom footnote
+    # on the Notes page.
+    if endnotes_mode == 'body':
+        _inlined = 0
+        for note in list(tmpl_text.iter(T('note'))):
+            if note.get(T('note-class')) != 'footnote':
+                continue
+            nb = note.find(T('note-body'))
+            parent = note.getparent()
+            if nb is None or parent is None:
+                continue
+            idx = list(parent).index(note)
+            tail = note.tail  # text that followed the note in the paragraph
+            # Flatten the note body's inline content — BOTH child elements and
+            # their text (a citation's rendered text is a <text:p>'s .text, not
+            # a child element). Each child is moved WITH its own .tail, so the
+            # tail is not collected separately (that would duplicate it).
+            frags = []
+            for p in list(nb):
+                if p.text:
+                    frags.append(('text', p.text))
+                for ch in list(p):
+                    frags.append(('el', ch))
+            # Drop a leading space on the inlined content so the number tab is
+            # the only separator (pandoc separates the number from the citation
+            # text with a space that would otherwise follow the tab).
+            if frags and frags[0][0] == 'text':
+                frags[0] = ('text', frags[0][1].lstrip(' \t'))
+            pos = idx
+            last_el = None
+            for kind, val in frags:
+                if kind == 'el':
+                    parent.insert(pos, val)
+                    last_el = val
+                    pos += 1
+                elif last_el is not None:
+                    last_el.tail = (last_el.tail or '') + val
+                elif pos > 0:
+                    parent[pos - 1].tail = (parent[pos - 1].tail or '') + val
+                else:
+                    parent.text = (parent.text or '') + val
+            parent.remove(note)
+            # remove() drops the note's tail — re-attach it so the rest of the
+            # sentence survives.
+            if tail:
+                if last_el is not None:
+                    last_el.tail = (last_el.tail or '') + tail
+                elif pos > 0:
+                    parent[pos - 1].tail = (parent[pos - 1].tail or '') + tail
+                else:
+                    parent.text = (parent.text or '') + tail
+            _inlined += 1
+        if _inlined:
+            print(f'ODT: inlined {_inlined} citation note(s) into their paragraph')
 
     # ── Serialize updated content.xml ──────────────────────────────────────
     z_data['content.xml'] = etree.tostring(
@@ -2165,8 +2499,15 @@ def main():
     ap.add_argument('--subtitle', default=None)
     ap.add_argument('--date',     default=None, dest='date_val')
     ap.add_argument('--toc',      action='store_true')
+    ap.add_argument('--toc-levels', type=int, default=None, dest='toc_levels',
+                    help='Deepest heading level the TOC shows (1 = chapters, '
+                         '2 = chapters + sections). Default: the template TOC.')
     ap.add_argument('--list-of-figures', action='store_true', dest='tof',
                     help='Include a table of figures (only when the doc has figures)')
+    ap.add_argument('--endnotes-mode', choices=['none', 'native', 'body'],
+                    default='none', dest='endnotes_mode',
+                    help="'native' converts the notes to real ODF endnotes; "
+                         "'body'/'none' leave the compiled markdown as-is.")
     ap.add_argument('--shorttitle', default=None)
     ap.add_argument('--basename', default=None)
     ap.add_argument('--abstract', default=None)
@@ -2219,7 +2560,8 @@ def main():
     merge_odt(
         args.template, args.input, args.output,
         title=args.title, author=args.author, subtitle=args.subtitle,
-        date_val=args.date_val, toc=args.toc, tof=args.tof,
+        date_val=args.date_val, toc=args.toc, toc_levels=args.toc_levels,
+        tof=args.tof, endnotes_mode=args.endnotes_mode,
         short_title=args.shorttitle,
         basename=args.basename, abstract=args.abstract,
         extra_sections=extra_sections,

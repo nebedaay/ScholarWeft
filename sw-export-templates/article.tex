@@ -125,14 +125,14 @@
 % own default heading spacing is stretchy, so a heading's gap from the text
 % above it can end up much larger on one page than another with no visible
 % cause, whenever the page-breaking algorithm stretches it to fill a page.
-% Heading NUMBERING is decided by DocumentCompiler.py, which emits every
-% heading as raw LaTeX: a numbered chapter from "@@" becomes \chapter{...} (so
-% LaTeX supplies the number and the chapter counter increments, which is what
-% figure numbering "chapter.N" relies on), and every other heading becomes the
-% starred form \section*/\subsection*/... carrying whatever literal number the
-% compiler wrote (e.g. "1.1"). There is therefore no titlesec/titletoc
-% configuration here and no secnumdepth juggling: LaTeX's own defaults style
-% the headings, and headings simply never show a counter they weren't given.
+% Heading NUMBERING is decided by DocumentCompiler.py (number_headings +
+% latexize_headings), which emits every heading as raw LaTeX: a numbered
+% heading becomes \section{...} (or \chapter{...} for a book), while every
+% unnumbered heading becomes the starred form \section*/\subsection*/...
+% carrying whatever literal number the compiler wrote (e.g. "1.1").
+% DocumentCompiler.py also emits \setcounter{secnumdepth}{0} into the body so
+% no heading can be double-numbered. There is therefore no titlesec/titletoc
+% configuration here: LaTeX's own defaults style the headings.
 SWTOKFIGURECOUNTER
 
 \usepackage{fancyhdr}
@@ -152,3 +152,4 @@ SWTOKFIGURECOUNTER
 }
 % See document.tex for why \hypersetup{pdftitle=...} isn't set here, and for
 % how colorlinks/linkcolor above still reaches pandoc's own hypersetup call.
+
