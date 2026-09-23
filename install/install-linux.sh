@@ -14,9 +14,10 @@ step() { printf '  \033[36m…\033[0m %s\n' "$*"; }
 pass() { printf '  \033[32m✓\033[0m %s\n' "$*"; DONE+=("$*"); }
 fail() { printf '  \033[31m✗\033[0m %s%s\n' "$1" "${2:+ — $2}"; FAILED+=("$1${2:+ — $2}"); }
 skip() { SKIPPED+=("$*"); }
+warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-SCRIPT_REV="2026-09-18s"
+SCRIPT_REV="2026-09-23"
 
 DONE=(); FAILED=(); SKIPPED=()
 
@@ -33,6 +34,17 @@ ask() { # <question> [label-for-summary]  → single keypress: y / n / q
       *) printf '  Please press y, n, or q.\n' ;;
     esac
   done
+}
+
+# Remind the user to quit an app (Obsidian/Zotero) and offer to retry while a
+# condition still holds, instead of skipping the step outright.
+_retry_while() {
+  local msg="$1" label="$2"; shift 2
+  while "$@"; do
+    echo "  $msg"
+    ask "  Retry?" "$label" || return 1
+  done
+  return 0
 }
 
 PKG=""
@@ -74,52 +86,79 @@ gh_asset_url() {
 download() { step "Downloading $3…"; curl -fsSL "$1" -o "$2" || { fail "Download $3" "download failed"; return 1; }; }
 
 # ── Obsidian vault discovery ─────────────────────────────────────────────────
-_find_vaults_under() { # <root> <maxdepth>
-  [ -d "$1" ] || return 0
-  find "$1" -maxdepth "$2" \
-    \( -name .Trash -o -name node_modules -o -name .git -o -name .cache \
-       -o -name .local -o -name .npm -o -name .var -o -name snap \
-       -o -name Zotero -o -name storage -o -name .dropbox \
-       -o -name venv -o -name .venv \) -prune -o \
-    -type d -name '.obsidian' -print 2>/dev/null \
-  | sed 's:/.obsidian/*$::'
+# Obsidian keeps its OWN vault list at
+#   ${XDG_CONFIG_HOME:-~/.config}/obsidian/obsidian.json
+# — the same list its "Open another vault" chooser shows. Reading it is instant
+# and authoritative, so it is the ONLY automatic source; we never scan the
+# filesystem. If it lists no vaults, the user simply has none yet, so we ASK.
+# Obsidian's OWN vault registry — the same list its "Open another vault"
+# chooser shows. Instant and authoritative.
+_obsidian_registry_vaults() {
+  local dir="${XDG_CONFIG_HOME:-$HOME/.config}/obsidian"
+  local f="$dir/obsidian.json"
+  [ -f "$f" ] || return 0
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$f" <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    for v in (data.get('vaults') or {}).values():
+        p = v.get('path')
+        if p:
+            print(p)
+except Exception:
+    pass
+PY
+  else
+    grep -o '"path"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null \
+      | sed -e 's/.*"path"[[:space:]]*:[[:space:]]*"//' -e 's/"$//' \
+      | sed -e 's#\\/#/#g' -e 's#\\\\#\\#g'
+  fi
 }
+
 find_vaults() {
-  local list=() v x keep cand
-  _add() { # <root> <maxdepth>
-    [ -d "$1" ] || return 0
-    while IFS= read -r cand; do
-      [ -n "$cand" ] || continue
-      keep=1
-      for x in "${list[@]}"; do case "$cand/" in "$x"/*) keep=0; break ;; esac; done
-      [ "$keep" = 1 ] && list+=("$cand")
-    done < <(_find_vaults_under "$1" "$2" \
-               | grep -viE '(\.bk| copy|\.20[0-9]{2}-[0-9]{2}-[0-9]{2})(/|$)' \
-               | sort -u)
-  }
-  # Common local spots (deeper than a shallow home walk reaches) and the
-  # usual cloud/sync folders.
-  _add "$HOME/Documents" 8
-  _add "$HOME/Desktop" 8
-  _add "$HOME/Downloads" 8
-  _add "$HOME/Nextcloud" 8
-  _add "$HOME/ownCloud" 8
-  _add "$HOME/Dropbox" 8
-  _add "$HOME/OneDrive" 8
-  _add "$HOME/Google Drive" 8
-  # Where the user is standing, then the home folder itself, shallowly.
-  _add "$PWD" 6
-  _add "$HOME" 2
-  for v in "${list[@]}"; do printf '%s\n' "$v"; done
+  local list=() v x cand
+  while IFS= read -r cand; do
+    [ -n "$cand" ] || continue
+    # A registry entry can be stale (vault moved/deleted); keep only real ones.
+    [ -d "$cand/.obsidian" ] || continue
+    cand="${cand%/}"
+    for x in "${list[@]}"; do [ "$cand" = "$x" ] && continue 2; done
+    list+=("$cand")
+  done < <(_obsidian_registry_vaults)
+  [ "${#list[@]}" -gt 0 ] && printf '%s\n' "${list[@]}"
 }
 VAULT=""
 VAULTS=()
 locate_vaults() {
   local v n i
-  step "Searching for Obsidian vaults (a few seconds)…"
+  step "Looking up your Obsidian vaults…"
+  VAULTS=()
   while IFS= read -r v; do [ -n "$v" ] && VAULTS+=("$v"); done < <(find_vaults)
+
+  # No vaults in Obsidian's registry: the user almost certainly has none yet,
+  # so don't scan — ask, or let them type a path for an unregistered vault.
+  if [ "${#VAULTS[@]}" -eq 0 ]; then
+    echo "  Obsidian has no vaults yet (it registers a vault the first time you open it)."
+    if ask "  Do you have an existing Obsidian vault you'd like the script to use?"; then
+      IFS= read -r -p "  Path to the vault: " VAULT
+      VAULT="${VAULT/#\~/$HOME}"; VAULT="${VAULT%/}"
+      if [ -d "$VAULT" ]; then
+        [ -d "$VAULT/.obsidian" ] || warn "That folder has no .obsidian folder — make sure it is a vault."
+        pass "Using vault: $VAULT"
+      else
+        fail "Choose vault" "not a folder: ${VAULT:-<empty>}"; VAULT=""
+      fi
+      return
+    fi
+    echo "  No vault yet: open Obsidian once, create (or open) a vault, quit Obsidian,"
+    echo "  then retry."
+    if ask "  Retry?"; then VAULTS=(); locate_vaults; return; fi
+    echo "  (You can re-run this script once the vault exists.)"
+    return
+  fi
+
   case "${#VAULTS[@]}" in
-    0) echo "  No Obsidian vault found in your home folder — I'll ask for the path only if you choose to install a plugin." ;;
     1) VAULT="${VAULTS[0]}"; pass "Found vault: $VAULT" ;;
     *) echo "  Found ${#VAULTS[@]} Obsidian vaults:"
        i=1; for v in "${VAULTS[@]}"; do printf '    %d) %s\n' "$i" "$v"; i=$((i+1)); done
@@ -254,8 +293,25 @@ PYEOF
   return 2
 }
 
-ZPROFILE=""
-for p in "$HOME/.zotero/zotero"/*/prefs.js; do [ -f "$p" ] && { ZPROFILE="$(dirname "$p")"; break; }; done
+# Recompute on demand: Zotero creates its profile on FIRST LAUNCH, so a Zotero
+# installed during this run has none until the user opens it once.
+zotero_profile() {
+  local p
+  for p in "$HOME/.zotero/zotero"/*/prefs.js; do
+    [ -f "$p" ] && { printf '%s' "$(dirname "$p")"; return 0; }
+  done
+  return 0
+}
+ZPROFILE="$(zotero_profile)"
+ensure_zotero_profile() {
+  while :; do
+    ZPROFILE="$(zotero_profile)"
+    [ -n "$ZPROFILE" ] && return 0
+    echo "  Zotero has no profile yet — it creates one the first time you open it."
+    echo "  Open Zotero once (install it above if needed), then quit it."
+    ask "  Retry?" || return 1
+  done
+}
 zotero_running() { pgrep -x zotero >/dev/null 2>&1; }
 install_zotero_addon() {
   local repo="$1" id="$2" url=""
@@ -320,28 +376,40 @@ echo "  I'll ask before each step — single keypress: y to install/configure, n
 echo "  Safe to re-run; nothing is changed without a yes."
 [ -z "$PKG" ] && printf '  \033[33m!\033[0m Neither apt nor dnf found — package installs will be skipped.\n'
 
-if ! have obsidian || ! have zotero; then
+had_obsidian=0; have obsidian && had_obsidian=1
+had_zotero=0;   have zotero   && had_zotero=1
+if [ "$had_obsidian" = 0 ] || [ "$had_zotero" = 0 ]; then
   if ask "Install the Obsidian and Zotero apps with Flatpak?" "Install apps"; then
     if have flatpak; then
-      step "Installing Obsidian…"; flatpak install -y flathub md.obsidian.Obsidian && pass "Installed Obsidian" || fail "Install Obsidian" "flatpak failed"
-      step "Installing Zotero…";   flatpak install -y flathub org.zotero.Zotero      && pass "Installed Zotero"   || fail "Install Zotero" "flatpak failed"
+      [ "$had_obsidian" = 1 ] || { step "Installing Obsidian…"; flatpak install -y flathub md.obsidian.Obsidian && pass "Installed Obsidian" || fail "Install Obsidian" "flatpak failed"; }
+      [ "$had_zotero" = 1 ]   || { step "Installing Zotero…";   flatpak install -y flathub org.zotero.Zotero      && pass "Installed Zotero"   || fail "Install Zotero" "flatpak failed"; }
     else fail "Install apps" "Flatpak is not installed (get the apps from obsidian.md and zotero.org)"; fi
   fi
+fi
+# A freshly installed app has no vault/profile yet; say so before the steps
+# that need one (the vault search and the Zotero steps pause and offer a retry).
+if [ "$had_obsidian" = 0 ] && have obsidian; then
+  echo "  Obsidian was just installed: open it once, create (or open) a vault,"
+  echo "  then quit it before the plugin step below."
+fi
+if [ "$had_zotero" = 0 ] && have zotero; then
+  echo "  Zotero was just installed: open it once (this creates its profile),"
+  echo "  then quit it before the Zotero steps below."
 fi
 
 # Locate the vault up front, so it's clear where plugins would go before we ask.
 locate_vaults
 
 if ask "Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settings? (Close Obsidian first.)" "Set up Obsidian plugins"; then
-  if pgrep -xi obsidian >/dev/null 2>&1; then
-    fail "Set up Obsidian plugins" "Obsidian was running — quit Obsidian and re-run (the settings writes need it closed)"
-  elif pick_vault; then
-    disable_conflicting_plugins "$VAULT"
-    install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
-    install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"
-    install_obsidian_plugin "TfTHacker/obsidian42-brat" "obsidian42-brat" "$VAULT"
-    brat_register "$VAULT"
-    queue_pending_setup "$VAULT" zotlit
+  if _retry_while "Obsidian is still running — please quit it, then retry." "Set up Obsidian plugins" pgrep -xi obsidian; then
+    if pick_vault; then
+      disable_conflicting_plugins "$VAULT"
+      install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
+      install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"
+      install_obsidian_plugin "TfTHacker/obsidian42-brat" "obsidian42-brat" "$VAULT"
+      brat_register "$VAULT"
+      queue_pending_setup "$VAULT" zotlit
+    fi
   fi
 fi
 
@@ -366,43 +434,47 @@ echo "  If you already have a rule applying another template to new notes in \"/
 echo "  nothing is replaced now: the next time you open Obsidian, ScholarWeft asks"
 echo "  whether to keep that rule or replace it with its own."
 if ask "Install that template and configure Templater to apply it to every new note? (Close Obsidian first.)" "Install note template"; then
-  if pgrep -x Obsidian >/dev/null 2>&1; then
-    fail "Install note template" "Obsidian was running — quit Obsidian and re-run (the settings write needs it closed)"
-  elif pick_vault; then
-    install_obsidian_plugin "SilentVoid13/Templater" "templater-obsidian" "$VAULT"
-    queue_pending_setup "$VAULT" templater
+  if _retry_while "Obsidian is still running — please quit it, then retry." "Install note template" pgrep -xi obsidian; then
+    if pick_vault; then
+      install_obsidian_plugin "SilentVoid13/Templater" "templater-obsidian" "$VAULT"
+      queue_pending_setup "$VAULT" templater
+    fi
   fi
 fi
 
 if ask "Install the Better BibTeX and ZotLit extensions into Zotero? (Close Zotero first.)" "Install Zotero extensions"; then
-  if zotero_running; then fail "Install Zotero extensions" "Zotero was running — quit Zotero and re-run"
-  elif [ -z "$ZPROFILE" ]; then fail "Install Zotero extensions" "Zotero profile not found — open Zotero once, then re-run"
-  else
-    if [ -f "$ZPROFILE/extensions/better-bibtex@iris-advies.com.xpi" ]; then pass "Better BibTeX already installed"
-    else install_zotero_addon "retorquere/zotero-better-bibtex" "better-bibtex@iris-advies.com" && pass "Installed Better BibTeX"; fi
-    if [ -f "$ZPROFILE/extensions/zotlit@aidenlx.site.xpi" ]; then pass "ZotLit Zotero add-on already installed"
-    else install_zotero_addon "zotlit" "zotlit@aidenlx.site" && pass "Installed the ZotLit Zotero add-on"; fi
-    enable_zotero_sideload "$ZPROFILE/prefs.js" && pass "Told Zotero to load the add-ons on next start (start Zotero now)"
+  if _retry_while "Zotero is still running — please quit it, then retry." "Install Zotero extensions" zotero_running; then
+    if ensure_zotero_profile; then
+      if [ -f "$ZPROFILE/extensions/better-bibtex@iris-advies.com.xpi" ]; then pass "Better BibTeX already installed"
+      else install_zotero_addon "retorquere/zotero-better-bibtex" "better-bibtex@iris-advies.com" && pass "Installed Better BibTeX"; fi
+      if [ -f "$ZPROFILE/extensions/zotlit@aidenlx.site.xpi" ]; then pass "ZotLit Zotero add-on already installed"
+      else install_zotero_addon "zotlit" "zotlit@aidenlx.site" && pass "Installed the ZotLit Zotero add-on"; fi
+      enable_zotero_sideload "$ZPROFILE/prefs.js" && pass "Told Zotero to load the add-ons on next start (start Zotero now)"
+    else
+      skip "Install Zotero extensions"
+    fi
   fi
 fi
 
 if ask "Set Zotero's local connection and the Better BibTeX citekey formula? (Close Zotero first.)" "Set Zotero preferences"; then
-  if zotero_running; then fail "Set Zotero preferences" "Zotero was running — quit Zotero and re-run"
-  elif [ -z "$ZPROFILE" ]; then fail "Set Zotero preferences" "Zotero profile not found — open Zotero once, then re-run"
-  else
-    step "Editing Zotero's preferences (a backup is saved)…"
-    cp "$ZPROFILE/prefs.js" "$ZPROFILE/prefs.js.scholarweft.bak.$(date +%s)"
-    if grep -q 'extensions.zotero.httpServer.localAPI.enabled", true' "$ZPROFILE/prefs.js"; then
-      pass "Zotero local connection already enabled"
+  if _retry_while "Zotero is still running — please quit it, then retry." "Set Zotero preferences" zotero_running; then
+    if ensure_zotero_profile; then
+      step "Editing Zotero's preferences (a backup is saved)…"
+      cp "$ZPROFILE/prefs.js" "$ZPROFILE/prefs.js.scholarweft.bak.$(date +%s)"
+      if grep -q 'extensions.zotero.httpServer.localAPI.enabled", true' "$ZPROFILE/prefs.js"; then
+        pass "Zotero local connection already enabled"
+      else
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.enabled" "true"
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.localAPI.enabled" "true"
+        pass "Enabled Zotero's local connection (start Zotero again to apply)"
+      fi
+      if grep -q 'better-bibtex.citekeyFormat"' "$ZPROFILE/prefs.js"; then
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormat" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormatEditing" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
+        pass "Set the Better BibTeX citekey formula"
+      fi
     else
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.enabled" "true"
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.localAPI.enabled" "true"
-      pass "Enabled Zotero's local connection (start Zotero again to apply)"
-    fi
-    if grep -q 'better-bibtex.citekeyFormat"' "$ZPROFILE/prefs.js"; then
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormat" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormatEditing" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
-      pass "Set the Better BibTeX citekey formula"
+      skip "Set Zotero preferences"
     fi
   fi
 fi

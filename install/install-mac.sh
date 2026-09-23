@@ -15,6 +15,7 @@ step() { printf '  \033[36m…\033[0m %s\n' "$*"; }
 pass() { printf '  \033[32m✓\033[0m %s\n' "$*"; DONE+=("$*"); }
 fail() { printf '  \033[31m✗\033[0m %s%s\n' "$1" "${2:+ — $2}"; FAILED+=("$1${2:+ — $2}"); }
 skip() { SKIPPED+=("$*"); }
+warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # Is a font family installed — whether by brew cask OR dragged into a Fonts
@@ -38,11 +39,12 @@ FONT_SPECS=(
 
 # Bump when the script changes, and print it at start-up so it's obvious which
 # copy is running (a stale download has caused confusion).
-SCRIPT_REV="2026-09-23a"
+SCRIPT_REV="2026-09-23c"
 
 DONE=(); FAILED=(); SKIPPED=()
-# Set by _find_vaults_under when find hits a macOS-protected folder (TCC).
-_PERM_DENIED=0
+# Set once the user declines Homebrew, so later brew-needing steps don't keep
+# re-asking.
+_BREW_DECLINED=0
 
 ask() { # <question> [label-for-summary]  → single keypress: y / n / q
   local a
@@ -59,18 +61,43 @@ ask() { # <question> [label-for-summary]  → single keypress: y / n / q
   done
 }
 
+# Remind the user to quit an app (Obsidian/Zotero) and offer to retry while a
+# condition still holds, instead of skipping the step outright.
+#   _retry_while <message> <skip-label> <test-command...>
+_retry_while() {
+  local msg="$1" label="$2"; shift 2
+  while "$@"; do
+    echo "  $msg"
+    ask "  Retry?" "$label" || return 1
+  done
+  return 0
+}
+
 # Homebrew is how the document tools (and optionally the apps) are installed.
 # Offer to install it when it's missing, then put it on PATH for this shell.
 ensure_brew() {
   have brew && return 0
-  if ! ask "Homebrew is not installed — install it now (needed to install the document tools)?" "Install Homebrew"; then
+  [ "${_BREW_DECLINED:-0}" = 1 ] && return 1
+  if ! ask "Homebrew is not installed — install it now (needed to install the apps and document tools)?" "Install Homebrew"; then
+    _BREW_DECLINED=1
     return 1
   fi
   step "Installing Homebrew (the installer asks for your password)…"
   if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
-    # Apple Silicon installs to /opt/homebrew; Intel to /usr/local.
-    if   [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [ -x /usr/local/bin/brew ];   then eval "$(/usr/local/bin/brew shellenv)"; fi
+    # Apple Silicon installs to /opt/homebrew; Intel to /usr/local. Evaluate
+    # shellenv so brew is on PATH for the REST OF THIS RUN, and append the same
+    # line to ~/.zprofile (idempotently) so FUTURE terminals find it too — the
+    # installer only prints that command for you to run by hand.
+    local brewexpr=''
+    if   [ -x /opt/homebrew/bin/brew ]; then
+      brewexpr='eval "$(/opt/homebrew/bin/brew shellenv)"'; eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ]; then
+      brewexpr='eval "$(/usr/local/bin/brew shellenv)"'; eval "$(/usr/local/bin/brew shellenv)"
+    fi
+    if [ -n "$brewexpr" ] && [ -n "${HOME:-}" ]; then
+      grep -qsF "$brewexpr" "$HOME/.zprofile" 2>/dev/null \
+        || printf '\n# Added by the ScholarWeft setup script\n%s\n' "$brewexpr" >> "$HOME/.zprofile"
+    fi
     if have brew; then pass "Installed Homebrew"; return 0; fi
     fail "Install Homebrew" "installed, but brew is not on PATH — open a new terminal and re-run"
   else
@@ -119,66 +146,81 @@ gh_asset_url() {
 download() { step "Downloading $3…"; curl -fsSL "$1" -o "$2" || { fail "Download $3" "download failed"; return 1; }; }
 
 # ── Obsidian vault discovery ─────────────────────────────────────────────────
-# Search ONE root for vault folders (a directory containing .obsidian), bounded
-# by `depth`. Heavy trees are pruned so this stays quick.
-_find_vaults_under() { # <root> <maxdepth>
-  [ -d "$1" ] || return 0
-  local err; err="$(mktemp 2>/dev/null || printf '/tmp/sw-find-%s.err' "$$")"
-  find "$1" -maxdepth "$2" \
-    \( -name .Trash -o -name node_modules -o -name .git -o -name .cache \
-       -o -name .local -o -name .npm -o -name Applications -o -name Zotero \
-       -o -name storage -o -name snap -o -name .var -o -name .dropbox \
-       -o -name venv -o -name .venv -o -name Caches -o -name Containers \
-       -o -name 'Group Containers' -o -name 'Application Support' \
-    \) -prune -o \
-    -type d -name '.obsidian' -print 2>"$err" \
-  | sed 's:/.obsidian/*$::'
-  # macOS (TCC) can block Documents/Desktop/iCloud for a terminal that hasn't
-  # been granted access; note it so the "no vault found" message can explain.
-  if grep -qiE 'Operation not permitted|Permission denied|Read-only file system' \
-        "$err" 2>/dev/null; then _PERM_DENIED=1; fi
-  rm -f "$err"
+# Obsidian keeps its OWN vault list at
+#   ~/Library/Application Support/obsidian/obsidian.json
+# — the same list its "Open another vault" chooser shows. Reading it is instant
+# and authoritative, so it is the ONLY automatic source; we never scan the
+# filesystem. If it lists no vaults, the user simply has none yet (Obsidian was
+# never opened, or no vault was created), so we ASK rather than search.
+
+# Obsidian's OWN vault registry — the same list its "Open another vault"
+# chooser shows. Reading it is instant and authoritative, so it comes first.
+# Contains {"vaults":{"<id>":{"path":"/…", …}, …}, …}.
+_obsidian_registry_vaults() {
+  local f="$HOME/Library/Application Support/obsidian/obsidian.json"
+  [ -f "$f" ] || return 0
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$f" <<'PY'
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    for v in (data.get('vaults') or {}).values():
+        p = v.get('path')
+        if p:
+            print(p)
+except Exception:
+    pass
+PY
+  else
+    grep -o '"path"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null \
+      | sed -e 's/.*"path"[[:space:]]*:[[:space:]]*"//' -e 's/"$//' \
+      | sed -e 's#\\/#/#g' -e 's#\\\\#\\#g'
+  fi
 }
 
 find_vaults() {
-  local list=() v x keep cand
-  _add() { # <root> <maxdepth>
-    [ -d "$1" ] || return 0
-    while IFS= read -r cand; do
-      [ -n "$cand" ] || continue
-      keep=1
-      for x in "${list[@]}"; do case "$cand/" in "$x"/*) keep=0; break ;; esac; done
-      [ "$keep" = 1 ] && list+=("$cand")
-    done < <(_find_vaults_under "$1" "$2" \
-               | grep -viE '(\.bk| copy|\.20[0-9]{2}-[0-9]{2}-[0-9]{2})(/|$)' \
-               | sort -u)
-  }
-  # iCloud Drive lives under ~/Library/Mobile Documents, and the third-party
-  # cloud folders under ~/Library/CloudStorage — both are invisible to a home
-  # walk that prunes Library, so search them explicitly and deeper.
-  _add "$HOME/Library/Mobile Documents/com~apple~CloudDocs" 8
-  for d in "$HOME"/Library/CloudStorage/*; do _add "$d" 8; done
-  # The usual local spots (deeper than a shallow home walk would reach).
-  _add "$HOME/Documents" 8
-  _add "$HOME/Desktop" 8
-  _add "$HOME/Downloads" 8
-  _add "$HOME/Dropbox" 8
-  _add "$HOME/OneDrive" 8
-  _add "$HOME/Google Drive" 8
-  # Where the user is standing (people often run this from the folder that
-  # holds the vault), then the home folder itself, shallowly.
-  _add "$PWD" 6
-  _add "$HOME" 2
-  for v in "${list[@]}"; do printf '%s\n' "$v"; done
+  local list=() v x cand
+  while IFS= read -r cand; do
+    [ -n "$cand" ] || continue
+    # A registry entry can be stale (vault moved/deleted); keep only real ones.
+    [ -d "$cand/.obsidian" ] || continue
+    cand="${cand%/}"
+    for x in "${list[@]}"; do [ "$cand" = "$x" ] && continue 2; done
+    list+=("$cand")
+  done < <(_obsidian_registry_vaults)
+  [ "${#list[@]}" -gt 0 ] && printf '%s\n' "${list[@]}"
 }
 VAULT=""
 VAULTS=()
 locate_vaults() {
   local v n i
-  step "Searching for Obsidian vaults (a few seconds)…"
+  step "Looking up your Obsidian vaults…"
+  VAULTS=()
   while IFS= read -r v; do [ -n "$v" ] && VAULTS+=("$v"); done < <(find_vaults)
+
+  # No vaults in Obsidian's registry: the user almost certainly has none yet,
+  # so don't scan — ask, or let them type a path for an unregistered vault.
+  if [ "${#VAULTS[@]}" -eq 0 ]; then
+    echo "  Obsidian has no vaults yet (it registers a vault the first time you open it)."
+    if ask "  Do you have an existing Obsidian vault you'd like the script to use?"; then
+      IFS= read -r -p "  Path to the vault: " VAULT
+      VAULT="${VAULT/#\~/$HOME}"; VAULT="${VAULT%/}"
+      if [ -d "$VAULT" ]; then
+        [ -d "$VAULT/.obsidian" ] || warn "That folder has no .obsidian folder — make sure it is a vault."
+        pass "Using vault: $VAULT"
+      else
+        fail "Choose vault" "not a folder: ${VAULT:-<empty>}"; VAULT=""
+      fi
+      return
+    fi
+    echo "  No vault yet: open Obsidian once, create (or open) a vault, quit Obsidian,"
+    echo "  then retry."
+    if ask "  Retry?"; then VAULTS=(); locate_vaults; return; fi
+    echo "  (You can re-run this script once the vault exists.)"
+    return
+  fi
+
   case "${#VAULTS[@]}" in
-    0) echo "  No Obsidian vault found automatically — I'll ask for the path only if you choose to install a plugin." ;;
     1) VAULT="${VAULTS[0]}"; pass "Found vault: $VAULT" ;;
     *) echo "  Found ${#VAULTS[@]} Obsidian vaults:"
        i=1; for v in "${VAULTS[@]}"; do printf '    %d) %s\n' "$i" "$v"; i=$((i+1)); done
@@ -186,12 +228,6 @@ locate_vaults() {
        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#VAULTS[@]}" ]; then VAULT="${VAULTS[$((n-1))]}"
        else VAULT="${n/#\~/$HOME}"; VAULT="${VAULT%/}"; fi ;;
   esac
-  if [ "${_PERM_DENIED:-0}" = 1 ]; then
-    echo "  Note: macOS blocked part of the search (Operation not permitted), so a"
-    echo "  vault in Documents, Desktop, or iCloud Drive may have been skipped."
-    echo "  Grant your terminal Full Disk Access (System Settings → Privacy &"
-    echo "  Security → Full Disk Access), or just type the path when asked."
-  fi
   if [ -n "$VAULT" ]; then
     if [ -d "$VAULT" ]; then printf '  Plugins will be installed into: %s\n' "$VAULT"
     else warn "Not a folder: $VAULT — I'll ask again if you choose to install a plugin."; VAULT=""; fi
@@ -335,10 +371,27 @@ PYEOF
 }
 
 # ── Zotero add-ons / prefs ───────────────────────────────────────────────────
-ZPROFILE=""
-for p in "$HOME/Library/Application Support/Zotero/Profiles"/*/prefs.js; do
-  [ -f "$p" ] && { ZPROFILE="$(dirname "$p")"; break; }
-done
+# Recompute on demand: Zotero creates its profile on FIRST LAUNCH, so a Zotero
+# installed during this run has none until the user opens it once.
+zotero_profile() {
+  local p
+  for p in "$HOME/Library/Application Support/Zotero/Profiles"/*/prefs.js; do
+    [ -f "$p" ] && { printf '%s' "$(dirname "$p")"; return 0; }
+  done
+  return 0
+}
+ZPROFILE="$(zotero_profile)"
+# Ensure a Zotero profile exists, pausing for the user to launch Zotero once
+# (which creates it), then offering to retry — instead of failing the step.
+ensure_zotero_profile() {
+  while :; do
+    ZPROFILE="$(zotero_profile)"
+    [ -n "$ZPROFILE" ] && return 0
+    echo "  Zotero has no profile yet — it creates one the first time you open it."
+    echo "  Open Zotero once (install it above if needed), then quit it."
+    ask "  Retry?" || return 1
+  done
+}
 zotero_running() { pgrep -x zotero >/dev/null 2>&1; }
 install_zotero_addon() {
   local repo="$1" id="$2" url=""
@@ -391,7 +444,10 @@ ensure_python() {
     if "$c" -m pip install --quiet lxml python-docx requests >/dev/null 2>&1 \
        && "$c" -c 'import lxml, docx, requests' >/dev/null 2>&1; then PY="$c"; pass "Python libraries installed into $c"; return 0; fi
   done
-  have python3 || { step "Installing Python…"; brew install python || { fail "Install Python" "brew install failed"; return 1; }; }
+  if ! have python3; then
+    if ensure_brew; then step "Installing Python…"; brew install python || { fail "Install Python" "brew install failed"; return 1; }
+    else fail "Install Python" "Homebrew is needed (see https://brew.sh)"; return 1; fi
+  fi
   PY="$HOME/ScholarWeft/venv/bin/python3"
   step "Creating a private Python environment…"
   mkdir -p "$HOME/ScholarWeft"
@@ -408,33 +464,42 @@ echo "  Running: $0"
 echo "  I'll ask before each step — single keypress: y to install/configure, n to skip, q to quit."
 echo "  Safe to re-run; nothing is changed without a yes."
 
-# Homebrew first: every app and document tool below installs through it.
-ensure_brew
-
+# Check the apps first; Homebrew is offered as the means to install them (and
+# again later if a document-tool step needs it), not unconditionally up front.
 OBSIDIAN_APP=0; [ -d /Applications/Obsidian.app ] && OBSIDIAN_APP=1
 ZOTERO_APP=0;   [ -d /Applications/Zotero.app ] && ZOTERO_APP=1
 if [ "$OBSIDIAN_APP" = 0 ] || [ "$ZOTERO_APP" = 0 ]; then
   if ask "Install the Obsidian and Zotero apps with Homebrew?" "Install apps"; then
-    if have brew; then
+    if ensure_brew; then
       [ "$OBSIDIAN_APP" = 1 ] || { step "Installing Obsidian…"; brew install --cask obsidian && pass "Installed Obsidian" || fail "Install Obsidian" "brew install failed"; }
       [ "$ZOTERO_APP" = 1 ]   || { step "Installing Zotero…";   brew install --cask zotero   && pass "Installed Zotero"   || fail "Install Zotero" "brew install failed"; }
-    else fail "Install apps" "Homebrew is not installed — re-run and accept the Homebrew prompt"; fi
+    else fail "Install apps" "Homebrew is needed to install the apps (see https://brew.sh)"; fi
   fi
+fi
+# A freshly installed app has no vault/profile yet; say so before the steps
+# that need one (the vault search and the Zotero steps pause and offer a retry).
+if [ "$OBSIDIAN_APP" = 0 ] && [ -d /Applications/Obsidian.app ]; then
+  echo "  Obsidian was just installed: open it once, create (or open) a vault,"
+  echo "  then quit it before the plugin step below."
+fi
+if [ "$ZOTERO_APP" = 0 ] && [ -d /Applications/Zotero.app ]; then
+  echo "  Zotero was just installed: open it once (this creates its profile),"
+  echo "  then quit it before the Zotero steps below."
 fi
 
 # Locate the vault up front, so it's clear where plugins would go before we ask.
 locate_vaults
 
 if ask "Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settings? (Close Obsidian first.)" "Set up Obsidian plugins"; then
-  if pgrep -x Obsidian >/dev/null 2>&1; then
-    fail "Set up Obsidian plugins" "Obsidian was running — quit Obsidian and re-run (the settings writes need it closed)"
-  elif pick_vault; then
-    disable_conflicting_plugins "$VAULT"
-    install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
-    install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"
-    install_obsidian_plugin "TfTHacker/obsidian42-brat" "obsidian42-brat" "$VAULT"
-    brat_register "$VAULT"
-    queue_pending_setup "$VAULT" zotlit
+  if _retry_while "Obsidian is still running — please quit it (Cmd+Q), then retry." "Set up Obsidian plugins" pgrep -x Obsidian; then
+    if pick_vault; then
+      disable_conflicting_plugins "$VAULT"
+      install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
+      install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"
+      install_obsidian_plugin "TfTHacker/obsidian42-brat" "obsidian42-brat" "$VAULT"
+      brat_register "$VAULT"
+      queue_pending_setup "$VAULT" zotlit
+    fi
   fi
 fi
 
@@ -459,43 +524,47 @@ echo "  If you already have a rule applying another template to new notes in \"/
 echo "  nothing is replaced now: the next time you open Obsidian, ScholarWeft asks"
 echo "  whether to keep that rule or replace it with its own."
 if ask "Install that template and configure Templater to apply it to every new note? (Close Obsidian first.)" "Install note template"; then
-  if pgrep -x Obsidian >/dev/null 2>&1; then
-    fail "Install note template" "Obsidian was running — quit Obsidian and re-run (the settings write needs it closed)"
-  elif pick_vault; then
-    install_obsidian_plugin "SilentVoid13/Templater" "templater-obsidian" "$VAULT"
-    queue_pending_setup "$VAULT" templater
+  if _retry_while "Obsidian is still running — please quit it (Cmd+Q), then retry." "Install note template" pgrep -x Obsidian; then
+    if pick_vault; then
+      install_obsidian_plugin "SilentVoid13/Templater" "templater-obsidian" "$VAULT"
+      queue_pending_setup "$VAULT" templater
+    fi
   fi
 fi
 
 if ask "Install the Better BibTeX and ZotLit extensions into Zotero? (Close Zotero first.)" "Install Zotero extensions"; then
-  if zotero_running; then fail "Install Zotero extensions" "Zotero was running — quit Zotero and re-run"
-  elif [ -z "$ZPROFILE" ]; then fail "Install Zotero extensions" "Zotero profile not found — open Zotero once, then re-run"
-  else
-    if [ -f "$ZPROFILE/extensions/better-bibtex@iris-advies.com.xpi" ]; then pass "Better BibTeX already installed"
-    else install_zotero_addon "retorquere/zotero-better-bibtex" "better-bibtex@iris-advies.com" && pass "Installed Better BibTeX"; fi
-    if [ -f "$ZPROFILE/extensions/zotlit@aidenlx.site.xpi" ]; then pass "ZotLit Zotero add-on already installed"
-    else install_zotero_addon "zotlit" "zotlit@aidenlx.site" && pass "Installed the ZotLit Zotero add-on"; fi
-    enable_zotero_sideload "$ZPROFILE/prefs.js" && pass "Told Zotero to load the add-ons on next start (start Zotero now)"
+  if _retry_while "Zotero is still running — please quit it (Cmd+Q), then retry." "Install Zotero extensions" zotero_running; then
+    if ensure_zotero_profile; then
+      if [ -f "$ZPROFILE/extensions/better-bibtex@iris-advies.com.xpi" ]; then pass "Better BibTeX already installed"
+      else install_zotero_addon "retorquere/zotero-better-bibtex" "better-bibtex@iris-advies.com" && pass "Installed Better BibTeX"; fi
+      if [ -f "$ZPROFILE/extensions/zotlit@aidenlx.site.xpi" ]; then pass "ZotLit Zotero add-on already installed"
+      else install_zotero_addon "zotlit" "zotlit@aidenlx.site" && pass "Installed the ZotLit Zotero add-on"; fi
+      enable_zotero_sideload "$ZPROFILE/prefs.js" && pass "Told Zotero to load the add-ons on next start (start Zotero now)"
+    else
+      skip "Install Zotero extensions"
+    fi
   fi
 fi
 
 if ask "Set Zotero's local connection and the Better BibTeX citekey formula? (Close Zotero first.)" "Set Zotero preferences"; then
-  if zotero_running; then fail "Set Zotero preferences" "Zotero was running — quit Zotero and re-run"
-  elif [ -z "$ZPROFILE" ]; then fail "Set Zotero preferences" "Zotero profile not found — open Zotero once, then re-run"
-  else
-    step "Editing Zotero's preferences (a backup is saved)…"
-    cp "$ZPROFILE/prefs.js" "$ZPROFILE/prefs.js.scholarweft.bak.$(date +%s)"
-    if grep -q 'extensions.zotero.httpServer.localAPI.enabled", true' "$ZPROFILE/prefs.js"; then
-      pass "Zotero local connection already enabled"
+  if _retry_while "Zotero is still running — please quit it (Cmd+Q), then retry." "Set Zotero preferences" zotero_running; then
+    if ensure_zotero_profile; then
+      step "Editing Zotero's preferences (a backup is saved)…"
+      cp "$ZPROFILE/prefs.js" "$ZPROFILE/prefs.js.scholarweft.bak.$(date +%s)"
+      if grep -q 'extensions.zotero.httpServer.localAPI.enabled", true' "$ZPROFILE/prefs.js"; then
+        pass "Zotero local connection already enabled"
+      else
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.enabled" "true"
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.localAPI.enabled" "true"
+        pass "Enabled Zotero's local connection (start Zotero again to apply)"
+      fi
+      if grep -q 'better-bibtex.citekeyFormat"' "$ZPROFILE/prefs.js"; then
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormat" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormatEditing" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
+        pass "Set the Better BibTeX citekey formula"
+      fi
     else
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.enabled" "true"
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.httpServer.localAPI.enabled" "true"
-      pass "Enabled Zotero's local connection (start Zotero again to apply)"
-    fi
-    if grep -q 'better-bibtex.citekeyFormat"' "$ZPROFILE/prefs.js"; then
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormat" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
-      set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormatEditing" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
-      pass "Set the Better BibTeX citekey formula"
+      skip "Set Zotero preferences"
     fi
   fi
 fi
@@ -503,33 +572,38 @@ fi
 if ask "Install Python, its packages, and Pandoc (required for document import/export)?" "Install Python + Pandoc"; then
   ensure_python
   if have pandoc; then pass "Pandoc already installed"
-  else step "Installing Pandoc…"; brew install pandoc && pass "Installed Pandoc" || fail "Install Pandoc" "brew install failed"; fi
+  elif ensure_brew; then step "Installing Pandoc…"; brew install pandoc && pass "Installed Pandoc" || fail "Install Pandoc" "brew install failed"
+  else fail "Install Pandoc" "Homebrew is needed (see https://brew.sh)"; fi
 fi
 
 if ask "Install LibreOffice (required for PDF export using DOCX/ODT templates)?" "Install LibreOffice"; then
   if [ -d /Applications/LibreOffice.app ]; then pass "LibreOffice already installed"
-  else step "Installing LibreOffice (large download)…"; brew install --cask libreoffice && pass "Installed LibreOffice" || fail "Install LibreOffice" "brew install failed"; fi
+  elif ensure_brew; then step "Installing LibreOffice (large download)…"; brew install --cask libreoffice && pass "Installed LibreOffice" || fail "Install LibreOffice" "brew install failed"
+  else fail "Install LibreOffice" "Homebrew is needed (see https://brew.sh)"; fi
 fi
 
 if ask "Install LaTeX (required for PDF export using .tex templates; may be several GB)?" "Install LaTeX"; then
   if have lualatex || [ -x /Library/TeX/texbin/lualatex ]; then pass "LaTeX already installed"
-  else step "Installing MacTeX…"; brew install --cask mactex-no-gui && pass "Installed LaTeX" || fail "Install LaTeX" "brew install failed"; fi
+  elif ensure_brew; then step "Installing MacTeX…"; brew install --cask mactex-no-gui && pass "Installed LaTeX" || fail "Install LaTeX" "brew install failed"
+  else fail "Install LaTeX" "Homebrew is needed (see https://brew.sh)"; fi
 fi
 
 if have lualatex || [ -x /Library/TeX/texbin/lualatex ]; then
   if ask "Install the fonts the LaTeX templates expect (Noto Serif/Sans/Emoji, Scheherazade)?" "Install fonts"; then
-    for spec in "${FONT_SPECS[@]}"; do
-      cask="${spec%%|*}"; rest="${spec#*|*}"; fam="${rest%%|*}"; pat="${rest##*|}"
-      if font_present "$fam" "$pat"; then pass "$fam already installed"
-      else
-        step "Installing $cask…"
-        if out="$(brew install --cask "$cask" 2>&1)"; then pass "Installed $fam"
-        elif printf '%s' "$out" | grep -qi 'already a Font'; then
-          pass "$fam already present (a font file with that name exists — skipped)"
-        else fail "Install $fam" "brew install failed"; fi
-      fi
-    done
-    /Library/TeX/texbin/luaotfload-tool --update 2>/dev/null || true
+    if ensure_brew; then
+      for spec in "${FONT_SPECS[@]}"; do
+        cask="${spec%%|*}"; rest="${spec#*|*}"; fam="${rest%%|*}"; pat="${rest##*|}"
+        if font_present "$fam" "$pat"; then pass "$fam already installed"
+        else
+          step "Installing $cask…"
+          if out="$(brew install --cask "$cask" 2>&1)"; then pass "Installed $fam"
+          elif printf '%s' "$out" | grep -qi 'already a Font'; then
+            pass "$fam already present (a font file with that name exists — skipped)"
+          else fail "Install $fam" "brew install failed"; fi
+        fi
+      done
+      /Library/TeX/texbin/luaotfload-tool --update 2>/dev/null || true
+    else fail "Install fonts" "Homebrew is needed (see https://brew.sh)"; fi
   fi
 fi
 

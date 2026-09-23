@@ -41,28 +41,45 @@ function Download($url, $dest, $label) {
 
 # ── Obsidian vault discovery ─────────────────────────────────────────────────
 function Find-Vaults {
-  # Search only likely roots (Documents/Desktop/OneDrive) to normal depth —
-  # walking all of $HOME (AppData et al.) is slow and finds nothing extra.
-  $roots = @("$HOME\Documents", "$HOME\Desktop", "$HOME", "$HOME\OneDrive\Documents", "$HOME\OneDrive\Desktop") |
-    Where-Object { Test-Path $_ }
-  $hits = foreach ($r in $roots) {
-    Get-ChildItem -Path $r -Directory -Recurse -Depth 3 -Filter '.obsidian' -ErrorAction SilentlyContinue
-  }
-  $hits = $hits |
-    ForEach-Object { $_.Parent.FullName } |
-    Where-Object { $_ -notmatch '(\.bk| copy|\.20\d\d-\d\d-\d\d)$' } |
-    Sort-Object -Unique
+  # 1. Obsidian's OWN vault registry — the same list its "Open another vault"
+  #    chooser shows, so reading it is instant and authoritative.
   $out = @()
-  foreach ($v in $hits) { if (-not ($out | Where-Object { $v -like "$_*" })) { $out += $v } }
+  $reg = Join-Path $env:APPDATA 'obsidian\obsidian.json'
+  if (Test-Path $reg) {
+    try {
+      $data = Get-Content $reg -Raw | ConvertFrom-Json
+      foreach ($v in $data.vaults.PSObject.Properties.Value) {
+        $p = $v.path
+        if ($p -and (Test-Path (Join-Path $p '.obsidian'))) {
+          $p = $p.TrimEnd('\')
+          if ($out -notcontains $p) { $out += $p }
+        }
+      }
+    } catch { }
+  }
+  # Registry is the ONLY automatic source (see the comment above): no scan.
   return $out
 }
 $script:Vault = ''
 function Locate-Vaults {
-  Step 'Searching for Obsidian vaults (a few seconds)...'
+  Step 'Looking up your Obsidian vaults...'
   $vaults = @(Find-Vaults)
   if ($vaults.Count -eq 0) {
-    Write-Host "  No Obsidian vault found in your home folder — I'll ask for the path only if you choose to install a plugin."
-  } elseif ($vaults.Count -eq 1) {
+    Write-Host "  Obsidian has no vaults yet (it registers a vault the first time you open it)."
+    if (Ask "  Do you have an existing Obsidian vault you'd like the script to use?") {
+      $p = (Read-Host "  Path to the vault").TrimEnd('\')
+      if ($p -and (Test-Path $p)) {
+        if (-not (Test-Path (Join-Path $p '.obsidian'))) { Write-Host "  ! That folder has no .obsidian folder — make sure it is a vault." -ForegroundColor Yellow }
+        $script:Vault = $p; Pass "Using vault: $($script:Vault)"
+      } else { Fail 'Choose vault' "not a folder: $p" }
+      return
+    }
+    Write-Host "  No vault yet: open Obsidian once, create (or open) a vault, quit Obsidian, then retry."
+    if (Ask "  Retry?") { Locate-Vaults; return }
+    Write-Host "  (You can re-run this script once the vault exists.)"
+    return
+  }
+  if ($vaults.Count -eq 1) {
     $script:Vault = $vaults[0]; Pass "Found vault: $($script:Vault)"
   } else {
     Write-Host "  Found $($vaults.Count) Obsidian vaults:"
