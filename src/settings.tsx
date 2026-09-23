@@ -3,7 +3,7 @@ import { FuzzySuggestModal, Notice, Platform, PluginSettingTab, Setting, TFile }
 import { t } from './lang/helpers';
 import { findPandoc } from './bib/pandoc';
 import { getBibPath } from './bib/helpers';
-import { isZotLitSuggestActive } from './zotlit';
+import { getZotlitLiteratureFolder, isZotLitSuggestActive } from './zotlit';
 import { installZotlitTemplatesWithNotice } from './zotlitTemplates';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import { installCompanionPluginWithNotice, enableCompanionPlugin } from './companionPlugins';
@@ -48,6 +48,10 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
   createNotesWithZotLit: true,
+  /** Use ZotLit's configured literature-note folder for the plugin's own
+   *  notes too, read live from ZotLit (so it follows a change there). When on,
+   *  `literatureNoteFolder` below is ignored. */
+  useZotlitLiteratureFolder: false,
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default: opening in Zotero already reveals all
    *  attachments, and the lookup costs per-citekey network time. */
@@ -60,6 +64,10 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   defaultOutputDir: '',
   defaultAuthor: '',
   useAccountNameAsAuthor: false,
+  /** Default document language for exports (BCP-47, e.g. "en-US"). Used when
+   *  the note has no `lang` property; sets the LaTeX/babel main language (so
+   *  justified text hyphenates) and the document language for DOCX/ODT. */
+  exportLanguage: 'en-US',
   styleMappings: [],
   styleMappingsEnabled: true,
   zoteroDataDir: '',
@@ -137,6 +145,8 @@ export interface ReferenceListSettings {
   formatLinkAliases?: boolean;
 
   literatureNoteFolder?: string;
+  /** Use ZotLit's literature-note folder (read live) instead of the one above. */
+  useZotlitLiteratureFolder?: boolean;
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default (opening in Zotero shows all attachments; the
    *  PDF lookup costs per-citekey network time). */
@@ -147,6 +157,9 @@ export interface ReferenceListSettings {
   exportTemplatesDir?: string;
   /** Default output folder for compiled/exported documents (blank = source folder). */
   defaultOutputDir?: string;
+  /** Default document language for exports (BCP-47, e.g. "en-US"), used when
+   *  the note has no `lang` property. */
+  exportLanguage?: string;
   /** Last export format chosen in the export modal — remembered across opens. */
   lastExportFormat?: 'md' | 'docx' | 'odt' | 'latex' | 'pdf';
   /** Default author name used when the note has no `author:` frontmatter property. */
@@ -937,23 +950,46 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       t('Creating literature notes needs Zotero for citekey and metadata lookup; ZotLit is optional and adds richer templates.')
     );
 
+    const useZotlitFolder = !!this.plugin.settings.useZotlitLiteratureFolder;
+    const zotlitFolder = getZotlitLiteratureFolder(this.app);
+
     new Setting(containerEl)
-      .setName(t('Literature notes folder'))
+      .setName(t("Use ZotLit's literature note folder"))
       .setDesc(
         t(
-          'Folder where the plugin\'s own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.'
+          "Use ZotLit's configured literature note folder for the plugin's own notes too, so both create notes in the same place. It is read live from ZotLit, so it follows the folder if ZotLit's setting changes. When on, the folder below is ignored." +
+            (useZotlitFolder
+              ? ` ZotLit's folder is currently: ${zotlitFolder || '(not set)'}.`
+              : '')
         )
       )
-      .addText((text) => {
-        text
-          .setPlaceholder('_2 Bibliographic notes')
-          .setValue(this.plugin.settings.literatureNoteFolder ?? '')
-          .onChange((value) => {
-            this.plugin.settings.literatureNoteFolder = value;
-            this.plugin.saveSettings();
-          });
-        new FolderSuggest(this.app, text.inputEl);
-      });
+      .addToggle((toggle) =>
+        toggle.setValue(useZotlitFolder).onChange((value) => {
+          this.plugin.settings.useZotlitLiteratureFolder = value;
+          this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (!useZotlitFolder) {
+      new Setting(containerEl)
+        .setName(t('Literature notes folder'))
+        .setDesc(
+          t(
+            'Folder where the plugin\'s own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.'
+          )
+        )
+        .addText((text) => {
+          text
+            .setPlaceholder('_2 Bibliographic notes')
+            .setValue(this.plugin.settings.literatureNoteFolder ?? '')
+            .onChange((value) => {
+              this.plugin.settings.literatureNoteFolder = value;
+              this.plugin.saveSettings();
+            });
+          new FolderSuggest(this.app, text.inputEl);
+        });
+    }
 
     new Setting(containerEl)
       .setName(t('Create literature notes with ZotLit'))
@@ -979,6 +1015,8 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         readyDesc:
           'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
         actionLabel: 'Install templates',
+        hint:
+          "ZotLit won't enable, or errors when you turn it on? Your Obsidian installer is probably older than the app — the app updates itself, but the installer only updates when you reinstall from a fresh download. Check Settings → About → Installer version, then download the latest installer from obsidian.md/download and reinstall Obsidian; your vault and settings are untouched.",
         run: async () => {
           await installZotlitTemplatesWithNotice(this.plugin);
         },
@@ -1018,6 +1056,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
        *  companion plugin gates behind its own confirmation). */
       openSettingsId?: string;
       openSettingsLabel?: string;
+      /** Optional troubleshooting note shown while the plugin isn't enabled
+       *  (e.g. "update your Obsidian installer if it won't turn on"). */
+      hint?: string;
     }
   ): void {
     const pm = (this.app as any).plugins;
@@ -1105,6 +1146,14 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             })
         );
       }
+    }
+    // Troubleshooting hint, shown until the companion is enabled — the state
+    // in which a user is most likely to hit the problem it describes.
+    if (cfg.hint && !enabled) {
+      containerEl.createEl('p', {
+        cls: 'setting-item-description',
+        text: t(cfg.hint),
+      });
     }
   }
 
@@ -1195,6 +1244,25 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               .setValue(this.plugin.settings.exportTemplatesDir ?? '')
               .onChange((value) => {
                 this.plugin.settings.exportTemplatesDir = value;
+                this.plugin.saveSettings();
+              })
+          );
+        });
+
+      new Setting(containerEl)
+        .setName(t('Default document language'))
+        .setDesc(
+          t(
+            'Language used when a note has no `lang` property (BCP-47, e.g. en-US, de-DE, ar). It sets the LaTeX hyphenation/main language and the document language for DOCX/ODT. Set `lang:` in a note to override it.'
+          )
+        )
+        .then((setting) => {
+          setting.addText((text) =>
+            text
+              .setPlaceholder('en-US')
+              .setValue(this.plugin.settings.exportLanguage ?? '')
+              .onChange((value) => {
+                this.plugin.settings.exportLanguage = value;
                 this.plugin.saveSettings();
               })
           );

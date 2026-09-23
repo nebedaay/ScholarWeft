@@ -4,7 +4,7 @@ ScholarWeft treats each source's literature note (normally `@citekey.md`) as the
 
 ## Folder
 
-**Settings → Literature note import → Literature notes folder** sets where notes are created and found (e.g. `Bibliographic notes`). ScholarWeft looks a note up by its citekey filename.
+**Settings → Literature note import → Literature notes folder** sets where notes are created and found (e.g. `Bibliographic notes`). ScholarWeft looks a note up by its citekey filename. If you use ZotLit, you can turn on **Use ZotLit's literature note folder** instead: ScholarWeft then uses whatever folder ZotLit is configured with (read live, so it follows a change there) and hides this field — no need to set the same folder in both plugins.
 
 Using a dedicated folder keeps citations resolvable and tidy, but any folder works as long as the filename is `@citekey`.
 

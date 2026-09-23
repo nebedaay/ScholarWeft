@@ -2222,13 +2222,25 @@ def merge_odt(template_path, input_path, output_path,
         # Pandoc's citeproc wraps bibliography entries in <text:p
         # style-name="First_20_paragraph"> inside nested <text:section> — and
         # a template may style "First paragraph" distinctively (book.odt gives
-        # it a yellow background). Normalise those entries to plain body text.
+        # it a yellow background). Normalise those entries to plain body text,
+        # EXCEPT the bibliography sections (pandoc names them "refs" / "ref-KEY"):
+        # those get the template's bibliography style so a static/PDF export
+        # matches the live Zotero path (which Zotero styles as "Bibliography 1").
+        _bibl_style = (
+            'Bibliography_20_1'
+            if 'Bibliography_20_1' in _collect_defined_names(tmpl_root, styles_root)
+            else _BODY_STYLE)
         for _el in body_elements:
-            if _el.tag == T('section'):
-                for _p in _el.iter(T('p')):
-                    if _p.get(T('style-name')) in (
-                            'First_20_paragraph', 'Text_20_body', None):
-                        _p.set(T('style-name'), _BODY_STYLE)
+            if _el.tag != T('section'):
+                continue
+            _sec_name = _el.get(T('name')) or ''
+            _target = (_bibl_style
+                       if (_sec_name == 'refs' or _sec_name.startswith('ref-'))
+                       else _BODY_STYLE)
+            for _p in _el.iter(T('p')):
+                if _p.get(T('style-name')) in (
+                        'First_20_paragraph', 'Text_20_body', None):
+                    _p.set(T('style-name'), _target)
 
     # Endnote stream -> the template's own "Endnote" paragraph style (book.odt
     # defines it; a template without one keeps plain body text). Shared
@@ -2407,6 +2419,21 @@ def merge_odt(template_path, input_path, output_path,
                 list(ENDNOTE_STYLE_NAMES_ODT) + [_group_heading_style], _src)
         except Exception as e:
             print(f'WARNING: could not inject endnote styles: {e}')
+
+    # In-body references ([[@key|reference]]) use these styles, and the static
+    # bibliography now reuses "Bibliography 1"; borrow both (and the parent)
+    # from the bundled document.odt for a template that predates them. Harmless
+    # when nothing references them.
+    if 'styles.xml' in z_data:
+        try:
+            with zipfile.ZipFile(bundled_template('document.odt')) as _z:
+                _src = _z.read('styles.xml')
+            z_data['styles.xml'] = ensure_odt_styles(
+                z_data['styles.xml'],
+                ['Bibliographic_20_reference_20_-_20_body', 'Bibliography_20_1'],
+                _src)
+        except Exception as e:
+            print(f'WARNING: could not inject in-body reference styles: {e}')
 
     # With ODF chapter numbering on, exclude every non-chapter level-1 heading
     # (TOC, ToF, Bibliography, and the frontmatter headings marked earlier) from

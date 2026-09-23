@@ -1,0 +1,170 @@
+[
+  {
+    "key": "document-type",
+    "expr": "\"[[zotero-import]]\"",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "created",
+    "expr": "new Date().toISOString().slice(0, 10)",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "added",
+    "expr": "(() => { const d = zt.dateAdded; if (!d) return undefined; const s = typeof d === \"string\" ? d : (typeof d.toISOString === \"function\" ? d.toISOString() : String(d)); return s.slice(0, 10); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "up",
+    "expr": "[\"[[Bibliographic Notes]]\"]",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "related",
+    "expr": "(() => { const out = (zt.relatedItems || []).filter(x => x.citationKey).map(x => \"[[@\" + x.citationKey + \"]]\").concat((zt.tags || []).map(x => \"[[\" + x.name + \"]]\")); return out.length ? out : undefined; })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "item-type",
+    "expr": "zt.itemType",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "title",
+    "expr": "(() => { const t = zt.title; if (!t) return undefined; return t.replace(/<i>/gi, \"*\").replace(/<\\/i>/gi, \"*\").replace(/<b>/gi, \"**\").replace(/<\\/b>/gi, \"**\").replace(/<em>/gi, \"*\").replace(/<\\/em>/gi, \"*\").replace(/<strong>/gi, \"**\").replace(/<\\/strong>/gi, \"**\").replace(/<[^>]+>/g, \"\").replace(/&amp;/g, \"&\").replace(/&lt;/g, \"<\").replace(/&gt;/g, \">\").replace(/&#39;/g, \"'\").replace(/&nbsp;/g, \" \").trim(); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "shorttitle",
+    "expr": "zt.shortTitle ? zt.shortTitle.replace(/\"/g, \"'\") : (zt.title && zt.title.includes(\":\") ? zt.title.split(\":\")[0].trim().replace(/\"/g, \"'\") : undefined)",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "authors",
+    "expr": "(() => { const c = (zt.creators || []).filter(x => x.role === \"author\"); if (!c.length) return undefined; return c.map(x => \"[[\" + (x.literal || (x.family || \"\") + (x.given ? \", \" + x.given : \"\")) + \"]]\"); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "editors",
+    "expr": "(() => { const c = (zt.creators || []).filter(x => x.role === \"editor\"); if (!c.length) return undefined; return c.map(x => \"[[\" + (x.literal || (x.family || \"\") + (x.given ? \", \" + x.given : \"\")) + \"]]\"); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "translators",
+    "expr": "(() => { const c = (zt.creators || []).filter(x => x.role === \"translator\"); if (!c.length) return undefined; return c.map(x => \"[[\" + (x.literal || (x.family || \"\") + (x.given ? \", \" + x.given : \"\")) + \"]]\"); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "abstract",
+    "expr": "(() => { const a = zt.abstract; if (!a) return undefined; return a.replace(/<i>/gi, \"*\").replace(/<\\/i>/gi, \"*\").replace(/<b>/gi, \"**\").replace(/<\\/b>/gi, \"**\").replace(/<em>/gi, \"*\").replace(/<\\/em>/gi, \"*\").replace(/<strong>/gi, \"**\").replace(/<\\/strong>/gi, \"**\").replace(/<br\\s*\\/?>/gi, \"\\n\").replace(/<\\/p>/gi, \"\\n\").replace(/<[^>]+>/g, \"\").replace(/&amp;/g, \"&\").replace(/&lt;/g, \"<\").replace(/&gt;/g, \">\").replace(/&#39;/g, \"'\").replace(/&nbsp;/g, \" \").replace(/[ \\t]+\\n/g, \"\\n\").replace(/\\n{2,}/g, \"\\n\").trim(); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "series",
+    "expr": "zt.series ? \"[[\" + zt.series + \"]]\" : undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "series-number",
+    "expr": "zt.seriesNumber || undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "edition",
+    "expr": "zt.edition || undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "contributors",
+    "expr": "(() => { const c = (zt.creators || []).filter(x => x.role === \"contributor\"); if (!c.length) return undefined; return c.map(x => \"[[\" + (x.literal || (x.family || \"\") + (x.given ? \", \" + x.given : \"\")) + \"]]\"); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "year",
+    "expr": "zt.date ? \"[[\" + (typeof zt.date === \"string\" ? zt.date.slice(0, 4) : String(zt.date).slice(0, 4)) + \"]]\" : undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "issue",
+    "expr": "zt.issue || undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "volume",
+    "expr": "zt.volume || undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "publication",
+    "expr": "zt.containerTitle ? \"[[\" + zt.containerTitle + \"]]\" : undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "place",
+    "expr": "zt.place || undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "publisher",
+    "expr": "zt.publisher ? \"[[\" + zt.publisher + \"]]\" : undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "volumes",
+    "expr": "zt.numberOfVolumes || undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "doi",
+    "expr": "zt.DOI || undefined",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "citekey",
+    "expr": "zt.citationKey",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "zotero-link",
+    "expr": "zt.backlink",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "attachments",
+    "expr": "(() => { const a = zt.attachments || []; if (!a.length) return undefined; return a.map(x => \"[\" + (x.filename || x.key) + \"](\" + x.backlink + \")\"); })()",
+    "merge": "replace",
+    "language": "javascript"
+  },
+  {
+    "key": "aliases",
+    "expr": "(() => { const short = zt.shortTitle || zt.title; const auths = zt.authors || []; const first = auths[0]; const out = []; if (first) { let auth = (first.family || first.literal || first.fullName || \"\").replace(/\"/g, \"'\"); if (auths.length === 2) auth += \" and \" + (auths[1].family || auths[1].literal || auths[1].fullName || \"\").replace(/\"/g, \"'\"); else if (auths.length > 2) auth += \" et al.\"; const year = zt.date ? (typeof zt.date === \"string\" ? zt.date.slice(0, 4) : String(zt.date).slice(0, 4)) : null; out.push(auth + (year ? \" - \" + year : \"\") + \" - \" + String(short || \"\").replace(/\"/g, \"'\")); } out.push(String(zt.title || \"\").replace(/\"/g, \"'\")); if (zt.shortTitle && zt.shortTitle !== zt.title) out.push(zt.shortTitle.replace(/\"/g, \"'\")); return out; })()",
+    "merge": "replace",
+    "language": "javascript"
+  }
+]

@@ -107,6 +107,26 @@ function BlockQuote(el)
   return pandoc.Div(body, pandoc.Attr('', {}, {['custom-style'] = 'Callout heading'}))
 end
 
+-- ── In-body references ([[@key|reference]]) ─────────────────────────────────
+--
+-- The export pre-render (src/convertCitations.ts) emits each full-reference
+-- entry as a Div carrying custom-style="Bibliographic reference - body". For
+-- DOCX/ODT pandoc maps that attribute straight onto the template's paragraph
+-- style, so nothing is needed here. LaTeX has no custom paragraph styles, so
+-- wrap the Div in the `swrefbody` environment defined in the .tex templates
+-- (the LaTeX equivalent of that style: 1cm first line + 0.75cm hanging indent).
+local REFERENCE_BODY_STYLE = 'Bibliographic reference - body'
+
+function Div(el)
+  if el.attributes['custom-style'] ~= REFERENCE_BODY_STYLE then return nil end
+  if FORMAT ~= 'latex' then return nil end
+  local out = pandoc.List()
+  out:insert(pandoc.RawBlock('latex', '\\begin{swrefbody}'))
+  out:extend(el.content)
+  out:insert(pandoc.RawBlock('latex', '\\end{swrefbody}'))
+  return out
+end
+
 -- The former "Notes-section suppression" lived here. It dropped a "# Notes"
 -- organizational section that DocumentCompiler.py used to emit and that showed
 -- up as an empty chapter. That heading is no longer emitted for DOCX/ODT: the
@@ -116,4 +136,4 @@ end
 -- Markdown/LaTeX; DOCX/ODT never receive that scaffold. Either way the decision
 -- belongs to the compiler, not to any single writer.
 
-return { { Meta = Meta, BlockQuote = BlockQuote } }
+return { { Meta = Meta, BlockQuote = BlockQuote, Div = Div } }

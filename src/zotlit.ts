@@ -34,6 +34,17 @@ export function isZotLitSuggestActive(app: App): boolean {
   return setting !== false;
 }
 
+/** ZotLit's configured literature-note folder, read LIVE from its settings
+ *  (so it follows a change there), or '' when ZotLit is absent/unset. */
+export function getZotlitLiteratureFolder(app: App): string {
+  const zotlit = (app as any)?.plugins?.plugins?.['zotlit'];
+  const raw =
+    zotlit?.services?.settings?.current?.['note.literature-folder'] ??
+    zotlit?.settings?.current?.['note.literature-folder'] ??
+    '';
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
 // Find the literature note for a citekey, preferring ZotLit's frontmatter-based
 // index over our filename-guessing approach.
 export function getLitNoteForCitekey(

@@ -74,24 +74,42 @@ gh_asset_url() {
 download() { step "Downloading $3…"; curl -fsSL "$1" -o "$2" || { fail "Download $3" "download failed"; return 1; }; }
 
 # ── Obsidian vault discovery ─────────────────────────────────────────────────
+_find_vaults_under() { # <root> <maxdepth>
+  [ -d "$1" ] || return 0
+  find "$1" -maxdepth "$2" \
+    \( -name .Trash -o -name node_modules -o -name .git -o -name .cache \
+       -o -name .local -o -name .npm -o -name .var -o -name snap \
+       -o -name Zotero -o -name storage -o -name .dropbox \
+       -o -name venv -o -name .venv \) -prune -o \
+    -type d -name '.obsidian' -print 2>/dev/null \
+  | sed 's:/.obsidian/*$::'
+}
 find_vaults() {
-  local list=() v x keep
-  while IFS= read -r v; do
-    [ -n "$v" ] || continue
-    keep=1
-    for x in "${list[@]}"; do case "$v/" in "$x"/*) keep=0; break ;; esac; done
-    [ "$keep" = 1 ] && list+=("$v")
-  done < <(
-    find "$HOME" -maxdepth 4 \
-      \( -name .Trash -o -name node_modules -o -name .git -o -name .cache \
-         -o -name .local -o -name .npm -o -name .var -o -name snap \
-         -o -name Zotero -o -name storage -o -name Dropbox -o -name .dropbox \
-         -o -name venv -o -name .venv \) -prune -o \
-      -type d -name '.obsidian' -print 2>/dev/null \
-    | sed 's:/.obsidian/*$::' \
-    | grep -viE '(\.bk| copy|\.20[0-9]{2}-[0-9]{2}-[0-9]{2})(/|$)' \
-    | sort -u
-  )
+  local list=() v x keep cand
+  _add() { # <root> <maxdepth>
+    [ -d "$1" ] || return 0
+    while IFS= read -r cand; do
+      [ -n "$cand" ] || continue
+      keep=1
+      for x in "${list[@]}"; do case "$cand/" in "$x"/*) keep=0; break ;; esac; done
+      [ "$keep" = 1 ] && list+=("$cand")
+    done < <(_find_vaults_under "$1" "$2" \
+               | grep -viE '(\.bk| copy|\.20[0-9]{2}-[0-9]{2}-[0-9]{2})(/|$)' \
+               | sort -u)
+  }
+  # Common local spots (deeper than a shallow home walk reaches) and the
+  # usual cloud/sync folders.
+  _add "$HOME/Documents" 8
+  _add "$HOME/Desktop" 8
+  _add "$HOME/Downloads" 8
+  _add "$HOME/Nextcloud" 8
+  _add "$HOME/ownCloud" 8
+  _add "$HOME/Dropbox" 8
+  _add "$HOME/OneDrive" 8
+  _add "$HOME/Google Drive" 8
+  # Where the user is standing, then the home folder itself, shallowly.
+  _add "$PWD" 6
+  _add "$HOME" 2
   for v in "${list[@]}"; do printf '%s\n' "$v"; done
 }
 VAULT=""
@@ -442,6 +460,11 @@ echo "  plugins): the plugins are already installed and listed, so they'll load 
 echo "  Then: start Zotero if it was closed; restart Obsidian and enable any plugins"
 echo "  in Settings → Community plugins; click Retry in ScholarWeft's settings if it"
 echo "  says \"Cannot connect to Zotero\"."
+echo "  If a plugin won't turn on (ZotLit is the usual one), your Obsidian installer"
+echo "  is probably older than the app: the app updates itself, but the installer only"
+echo "  updates when you reinstall from a fresh download. Check Settings → About →"
+echo "  Installer version, then reinstall from https://obsidian.md/download — your vault"
+echo "  and settings are untouched."
 echo "  If you installed ZotLit: ScholarWeft installs its import templates and"
 echo "  points ZotLit's \"Template folder\" at sw-zotlit-templates/ the next time you"
 echo "  open Obsidian — no manual step needed."

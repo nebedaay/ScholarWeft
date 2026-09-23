@@ -38,9 +38,11 @@ FONT_SPECS=(
 
 # Bump when the script changes, and print it at start-up so it's obvious which
 # copy is running (a stale download has caused confusion).
-SCRIPT_REV="2026-09-18s"
+SCRIPT_REV="2026-09-23a"
 
 DONE=(); FAILED=(); SKIPPED=()
+# Set by _find_vaults_under when find hits a macOS-protected folder (TCC).
+_PERM_DENIED=0
 
 ask() { # <question> [label-for-summary]  → single keypress: y / n / q
   local a
@@ -55,6 +57,26 @@ ask() { # <question> [label-for-summary]  → single keypress: y / n / q
       *) printf '  Please press y, n, or q.\n' ;;
     esac
   done
+}
+
+# Homebrew is how the document tools (and optionally the apps) are installed.
+# Offer to install it when it's missing, then put it on PATH for this shell.
+ensure_brew() {
+  have brew && return 0
+  if ! ask "Homebrew is not installed — install it now (needed to install the document tools)?" "Install Homebrew"; then
+    return 1
+  fi
+  step "Installing Homebrew (the installer asks for your password)…"
+  if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; then
+    # Apple Silicon installs to /opt/homebrew; Intel to /usr/local.
+    if   [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ];   then eval "$(/usr/local/bin/brew shellenv)"; fi
+    if have brew; then pass "Installed Homebrew"; return 0; fi
+    fail "Install Homebrew" "installed, but brew is not on PATH — open a new terminal and re-run"
+  else
+    fail "Install Homebrew" "the installer failed"
+  fi
+  return 1
 }
 
 # ── JSON settings writers (for other plugins' data.json) ─────────────────────
@@ -97,27 +119,56 @@ gh_asset_url() {
 download() { step "Downloading $3…"; curl -fsSL "$1" -o "$2" || { fail "Download $3" "download failed"; return 1; }; }
 
 # ── Obsidian vault discovery ─────────────────────────────────────────────────
+# Search ONE root for vault folders (a directory containing .obsidian), bounded
+# by `depth`. Heavy trees are pruned so this stays quick.
+_find_vaults_under() { # <root> <maxdepth>
+  [ -d "$1" ] || return 0
+  local err; err="$(mktemp 2>/dev/null || printf '/tmp/sw-find-%s.err' "$$")"
+  find "$1" -maxdepth "$2" \
+    \( -name .Trash -o -name node_modules -o -name .git -o -name .cache \
+       -o -name .local -o -name .npm -o -name Applications -o -name Zotero \
+       -o -name storage -o -name snap -o -name .var -o -name .dropbox \
+       -o -name venv -o -name .venv -o -name Caches -o -name Containers \
+       -o -name 'Group Containers' -o -name 'Application Support' \
+    \) -prune -o \
+    -type d -name '.obsidian' -print 2>"$err" \
+  | sed 's:/.obsidian/*$::'
+  # macOS (TCC) can block Documents/Desktop/iCloud for a terminal that hasn't
+  # been granted access; note it so the "no vault found" message can explain.
+  if grep -qiE 'Operation not permitted|Permission denied|Read-only file system' \
+        "$err" 2>/dev/null; then _PERM_DENIED=1; fi
+  rm -f "$err"
+}
+
 find_vaults() {
-  local list=() v x keep
-  while IFS= read -r v; do
-    [ -n "$v" ] || continue
-    keep=1
-    for x in "${list[@]}"; do case "$v/" in "$x"/*) keep=0; break ;; esac; done
-    [ "$keep" = 1 ] && list+=("$v")
-  done < <(
-    # Depth 4 is enough for normal nests (e.g. ~/Documents/KIN/KIN), and we
-    # PRUNE the heavy trees (macOS Library, Zotero storage, node_modules, …)
-    # so this is quick instead of walking the whole home folder.
-    find "$HOME" -maxdepth 4 \
-      \( -name Library -o -name .Trash -o -name node_modules -o -name .git \
-         -o -name .cache -o -name .local -o -name .npm -o -name Applications \
-         -o -name Zotero -o -name storage -o -name snap -o -name .var \
-         -o -name Dropbox -o -name .dropbox -o -name venv -o -name .venv \) -prune -o \
-      -type d -name '.obsidian' -print 2>/dev/null \
-    | sed 's:/.obsidian/*$::' \
-    | grep -viE '(\.bk| copy|\.20[0-9]{2}-[0-9]{2}-[0-9]{2})(/|$)' \
-    | sort -u
-  )
+  local list=() v x keep cand
+  _add() { # <root> <maxdepth>
+    [ -d "$1" ] || return 0
+    while IFS= read -r cand; do
+      [ -n "$cand" ] || continue
+      keep=1
+      for x in "${list[@]}"; do case "$cand/" in "$x"/*) keep=0; break ;; esac; done
+      [ "$keep" = 1 ] && list+=("$cand")
+    done < <(_find_vaults_under "$1" "$2" \
+               | grep -viE '(\.bk| copy|\.20[0-9]{2}-[0-9]{2}-[0-9]{2})(/|$)' \
+               | sort -u)
+  }
+  # iCloud Drive lives under ~/Library/Mobile Documents, and the third-party
+  # cloud folders under ~/Library/CloudStorage — both are invisible to a home
+  # walk that prunes Library, so search them explicitly and deeper.
+  _add "$HOME/Library/Mobile Documents/com~apple~CloudDocs" 8
+  for d in "$HOME"/Library/CloudStorage/*; do _add "$d" 8; done
+  # The usual local spots (deeper than a shallow home walk would reach).
+  _add "$HOME/Documents" 8
+  _add "$HOME/Desktop" 8
+  _add "$HOME/Downloads" 8
+  _add "$HOME/Dropbox" 8
+  _add "$HOME/OneDrive" 8
+  _add "$HOME/Google Drive" 8
+  # Where the user is standing (people often run this from the folder that
+  # holds the vault), then the home folder itself, shallowly.
+  _add "$PWD" 6
+  _add "$HOME" 2
   for v in "${list[@]}"; do printf '%s\n' "$v"; done
 }
 VAULT=""
@@ -127,7 +178,7 @@ locate_vaults() {
   step "Searching for Obsidian vaults (a few seconds)…"
   while IFS= read -r v; do [ -n "$v" ] && VAULTS+=("$v"); done < <(find_vaults)
   case "${#VAULTS[@]}" in
-    0) echo "  No Obsidian vault found in your home folder — I'll ask for the path only if you choose to install a plugin." ;;
+    0) echo "  No Obsidian vault found automatically — I'll ask for the path only if you choose to install a plugin." ;;
     1) VAULT="${VAULTS[0]}"; pass "Found vault: $VAULT" ;;
     *) echo "  Found ${#VAULTS[@]} Obsidian vaults:"
        i=1; for v in "${VAULTS[@]}"; do printf '    %d) %s\n' "$i" "$v"; i=$((i+1)); done
@@ -135,6 +186,12 @@ locate_vaults() {
        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#VAULTS[@]}" ]; then VAULT="${VAULTS[$((n-1))]}"
        else VAULT="${n/#\~/$HOME}"; VAULT="${VAULT%/}"; fi ;;
   esac
+  if [ "${_PERM_DENIED:-0}" = 1 ]; then
+    echo "  Note: macOS blocked part of the search (Operation not permitted), so a"
+    echo "  vault in Documents, Desktop, or iCloud Drive may have been skipped."
+    echo "  Grant your terminal Full Disk Access (System Settings → Privacy &"
+    echo "  Security → Full Disk Access), or just type the path when asked."
+  fi
   if [ -n "$VAULT" ]; then
     if [ -d "$VAULT" ]; then printf '  Plugins will be installed into: %s\n' "$VAULT"
     else warn "Not a folder: $VAULT — I'll ask again if you choose to install a plugin."; VAULT=""; fi
@@ -351,6 +408,9 @@ echo "  Running: $0"
 echo "  I'll ask before each step — single keypress: y to install/configure, n to skip, q to quit."
 echo "  Safe to re-run; nothing is changed without a yes."
 
+# Homebrew first: every app and document tool below installs through it.
+ensure_brew
+
 OBSIDIAN_APP=0; [ -d /Applications/Obsidian.app ] && OBSIDIAN_APP=1
 ZOTERO_APP=0;   [ -d /Applications/Zotero.app ] && ZOTERO_APP=1
 if [ "$OBSIDIAN_APP" = 0 ] || [ "$ZOTERO_APP" = 0 ]; then
@@ -358,7 +418,7 @@ if [ "$OBSIDIAN_APP" = 0 ] || [ "$ZOTERO_APP" = 0 ]; then
     if have brew; then
       [ "$OBSIDIAN_APP" = 1 ] || { step "Installing Obsidian…"; brew install --cask obsidian && pass "Installed Obsidian" || fail "Install Obsidian" "brew install failed"; }
       [ "$ZOTERO_APP" = 1 ]   || { step "Installing Zotero…";   brew install --cask zotero   && pass "Installed Zotero"   || fail "Install Zotero" "brew install failed"; }
-    else fail "Install apps" "Homebrew is not installed (see https://brew.sh)"; fi
+    else fail "Install apps" "Homebrew is not installed — re-run and accept the Homebrew prompt"; fi
   fi
 fi
 
@@ -491,6 +551,11 @@ echo "  plugins): the plugins are already installed and listed, so they'll load 
 echo "  Then: start Zotero if it was closed; restart Obsidian and enable any plugins"
 echo "  in Settings → Community plugins; click Retry in ScholarWeft's settings if it"
 echo "  says \"Cannot connect to Zotero\"."
+echo "  If a plugin won't turn on (ZotLit is the usual one), your Obsidian installer"
+echo "  is probably older than the app: the app updates itself, but the installer only"
+echo "  updates when you reinstall from a fresh download. Check Settings → About →"
+echo "  Installer version, then reinstall from https://obsidian.md/download — your vault"
+echo "  and settings are untouched."
 echo "  If you installed ZotLit: ScholarWeft installs its import templates and"
 echo "  points ZotLit's \"Template folder\" at sw-zotlit-templates/ the next time you"
 echo "  open Obsidian — no manual step needed."

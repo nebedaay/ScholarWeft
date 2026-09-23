@@ -150,6 +150,31 @@
 \else
   \newenvironment{swcalloutbox}[2]{}{}%
 \fi
+% ── In-body references ([[@key|reference]]) ──────────────────────────────────
+% scripts/sw-export.lua wraps the pre-rendered entry in this environment; it
+% mirrors the "Bibliographic reference - body" paragraph style in the DOCX/ODT
+% templates: a 1cm first line with a 0.75cm hanging indent (continuation lines
+% at 1.75cm), no font change. Tune the indents here.
+% A list environment (not \leftskip/\parindent) so the FIRST reference still
+% hangs when the list directly follows a heading: LaTeX suppresses a
+% paragraph's \parindent right after a heading, which silently flattened the
+% first entry's hanging indent. leftmargin 1.75cm + itemindent -0.75cm gives a
+% first line at 1cm and continuation lines at 1.75cm.
+\newenvironment{swrefbody}{%
+  \begin{list}{}{%
+    \setlength{\leftmargin}{1.75cm}%
+    \setlength{\labelwidth}{0pt}%
+    \setlength{\labelsep}{0pt}%
+    \setlength{\itemindent}{-0.75cm}%
+    \setlength{\listparindent}{-0.75cm}%
+    \setlength{\itemsep}{0pt}%
+    \setlength{\parsep}{0.4\baselineskip}%
+    \setlength{\topsep}{0.4\baselineskip}%
+    \setlength{\partopsep}{0pt}%
+  }\item\relax
+}{%
+  \end{list}%
+}
 \usepackage{setspace}\setstretch{1.25}         % paragraph line spacing — a setspace MULTIPLE (1 = single); this is NOT the same number as the DOCX/ODT 1.15 line-spacing multiple (they measure from a different baseline reference), so tune it by eye.
 \SetSinglespace{1.25}                          % FOOTNOTE/FLOAT line spacing — setspace forces footnotes and floats to SINGLE spacing regardless of \setstretch, so they look cramped next to the body; set this to match \setstretch (or lower). Affects footnotes & floats only, not body text.
 \raggedbottom                                  % let pages end wherever content naturally does, instead of
@@ -215,6 +240,13 @@
 
 \ifluatex
   \makeatletter
+  % Load babel bare. Pandoc passes the document language as a \documentclass
+  % option (from the note's `lang` property, or the export default the plugin
+  % supplies), and LaTeX forwards unknown class options to babel — so the main
+  % language (and its hyphenation) is set without naming it here. Loading babel
+  % with NO language at all leaves \language at nohyphenation, which disables
+  % hyphenation and stretches justified text, so the export always passes a
+  % `lang` (see exportCompiler.ts / the "Default document language" setting).
   \@ifpackageloaded{babel}{}{\usepackage[bidi=basic,shorthands=off]{babel}}
   \makeatother
   \babelprovide[import,onchar=ids fonts]{arabic}

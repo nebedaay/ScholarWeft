@@ -840,3 +840,147 @@ describe('BibManager CSL rendering pipeline', () => {
     );
   });
 });
+
+// ─── Cited-keys index reconciliation ────────────────────────────────────────
+//
+// Regression guard for the startup stall: the index must read only files whose
+// mtime is newer than the persisted scan watermark, never the whole vault.
+
+describe('cited-keys index reconciliation', () => {
+  const tfile = (path: string, mtime: number) => {
+    const name = path.split('/').pop()!;
+    return Object.assign(new (require('obsidian').TFile)(), {
+      path,
+      extension: 'md',
+      basename: name.replace(/\.md$/, ''),
+      name,
+      stat: { mtime },
+    });
+  };
+
+  function setVault(
+    files: ReturnType<typeof tfile>[],
+    contents: Record<string, string> = {}
+  ) {
+    const vault = (global as any).app.vault;
+    vault.getMarkdownFiles = jest.fn(() => files);
+    vault.read = jest.fn(async (f: any) => contents[f.path] ?? '');
+  }
+
+  it('reads every indexable file when no watermark is persisted (v1/migration)', async () => {
+    const { manager } = makeManager([]);
+    setVault(
+      [
+        tfile('_1 Notes/a.md', 1000),
+        tfile('_2 Bib/b.md', 1000),
+        tfile('root.md', 1000), // not in an _N folder — never indexed
+      ],
+      {
+        '_1 Notes/a.md': 'cite [@smith2020]',
+        '_2 Bib/b.md': 'no citations here',
+      }
+    );
+
+    const read = await manager.reconcileCitedKeysIndex();
+
+    expect(read).toBe(2);
+    expect(manager.citedKeysByFile.get('_1 Notes/a.md')).toEqual(
+      new Set(['smith2020'])
+    );
+    // Files with no citations are not stored (only cited notes are tracked).
+    expect(manager.citedKeysByFile.has('_2 Bib/b.md')).toBe(false);
+    expect(manager.citedKeysByFile.has('root.md')).toBe(false);
+    expect(manager.citedKeysBuiltAt).toBeGreaterThan(0);
+  });
+
+  it('re-reads only files newer than the watermark and trusts the rest', async () => {
+    const { manager } = makeManager([]);
+    manager.deserializeCitedKeysIndex({
+      version: 2,
+      mdCount: 2,
+      builtAt: 5000,
+      files: { '_1 Notes/a.md': ['smith2020'] },
+    });
+    setVault(
+      [tfile('_1 Notes/a.md', 1000), tfile('_1 Notes/new.md', 9000)],
+      { '_1 Notes/new.md': '[@doe2021]' }
+    );
+
+    const read = await manager.reconcileCitedKeysIndex();
+
+    expect(read).toBe(1); // only the newer file
+    expect(manager.citedKeysByFile.get('_1 Notes/a.md')).toEqual(
+      new Set(['smith2020']) // trusted from the persisted index, not re-read
+    );
+    expect(manager.citedKeysByFile.get('_1 Notes/new.md')).toEqual(
+      new Set(['doe2021'])
+    );
+    expect((global as any).app.vault.read).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops entries for files that no longer exist', async () => {
+    const { manager } = makeManager([]);
+    manager.deserializeCitedKeysIndex({
+      version: 2,
+      builtAt: 5000,
+      files: { '_1 Notes/gone.md': ['smith2020'] },
+    });
+    setVault([tfile('_1 Notes/a.md', 1000)]);
+
+    await manager.reconcileCitedKeysIndex();
+
+    expect(manager.citedKeysByFile.has('_1 Notes/gone.md')).toBe(false);
+  });
+
+  it('treats a v1 index (no builtAt) as stale and rescans it once', async () => {
+    const { manager } = makeManager([]);
+    manager.deserializeCitedKeysIndex({
+      mdCount: 1,
+      files: { '_1 Notes/a.md': ['oldkey'] },
+    });
+    expect(manager.citedKeysBuiltAt).toBe(0);
+
+    setVault([tfile('_1 Notes/a.md', 1000)], {
+      '_1 Notes/a.md': '[@newkey]',
+    });
+    const read = await manager.reconcileCitedKeysIndex();
+
+    expect(read).toBe(1);
+    expect(manager.citedKeysByFile.get('_1 Notes/a.md')).toEqual(
+      new Set(['newkey'])
+    );
+  });
+
+  it('shares a single scan across concurrent reconcile calls', async () => {
+    const { manager } = makeManager([]);
+    setVault([tfile('_1 Notes/a.md', 1000)], { '_1 Notes/a.md': '[@x]' });
+
+    const [r1, r2] = await Promise.all([
+      manager.reconcileCitedKeysIndex(),
+      manager.reconcileCitedKeysIndex(),
+    ]);
+
+    expect(r1).toBe(1);
+    expect(r2).toBe(1);
+    expect((global as any).app.vault.read).toHaveBeenCalledTimes(1);
+  });
+
+  it('serializes and restores version + builtAt', () => {
+    const { manager } = makeManager([]);
+    manager.citedKeysByFile.set('_1 Notes/a.md', new Set(['smith2020']));
+    manager.indexMdCount = 3;
+    manager.citedKeysBuiltAt = 12345;
+
+    const data = manager.serializeCitedKeysIndex();
+    expect(data.version).toBe(2);
+    expect(data.builtAt).toBe(12345);
+    expect(data.files['_1 Notes/a.md']).toEqual(['smith2020']);
+
+    const { manager: restored } = makeManager([]);
+    restored.deserializeCitedKeysIndex(data);
+    expect(restored.citedKeysBuiltAt).toBe(12345);
+    expect(restored.citedKeysByFile.get('_1 Notes/a.md')).toEqual(
+      new Set(['smith2020'])
+    );
+  });
+});

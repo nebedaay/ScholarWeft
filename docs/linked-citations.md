@@ -55,3 +55,9 @@ Pandoc and Zotero have no equivalent for a full reference in the body of the
 text, so on export the plugin pre-renders each entry from its own citation engine
 and writes it as plain (formatted) text. The exported document therefore contains
 the reference as ordinary text, not as a Zotero field.
+
+To set the reference apart from the surrounding text, exports use a dedicated
+reference style: in Obsidian the entry carries a hanging indent and slightly
+smaller type; in DOCX/ODT it uses the **Bibliographic reference - body** paragraph
+style (a 1cm first line with a 0.75cm hanging indent); and in LaTeX the same
+indents come from the `swrefbody` environment.

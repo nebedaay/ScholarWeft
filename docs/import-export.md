@@ -137,6 +137,7 @@ Lookup order: your configured templates directory → `<vault>/Export Templates/
 | `note` | Cover/near-cover note block |
 | `author` | Author — a string, a `- Name` list (joined with `, `), or a `\|-` block scalar. The title block prints the **whole block** (line breaks preserved: name / affiliation / date); the running header ("Author — Short Title") uses only its **first line** |
 | `csl` / `citation-style` | Citation style for this note (a Zotero style name, `.csl` path, or URL) |
+| `lang` / `language` | Document language (BCP-47, e.g. `en-US`, `de-DE`, `fr-FR`, `ar`). Sets the LaTeX/babel main language — and therefore **hyphenation** for justified text — and the document language for DOCX/ODT. Defaults to the **Default document language** setting (initially `en-US`) when absent |
 | `bibliography` | Override the bibliography source(s) for this note |
 | `numbering-levels` | Levels to auto-number: `0` (default) = only `@@` headings; `1` = chapters; `2` = chapters + sections. Above `0`, `@@` is ignored and `* ` marks an unnumbered exception |
 | `toc-levels` | TOC depth: `1` = chapters, `2` (default) = chapters + sections |

@@ -16,8 +16,28 @@ export interface ZotlitInstallResult {
   folder: string;
   zotlitDetected: boolean;
   folderConfigured: boolean;
+  /** ZotLit's `note.frontmatter-fields` was written from the bundled mappings. */
+  fieldsConfigured: boolean;
   reloadedZotlit: boolean;
   error?: string;
+}
+
+/**
+ * The frontmatter field mappings that make ZotLit's import produce
+ * ScholarWeft's note shape (the `zt.*` → property expressions the templates
+ * rely on). Bundled as JSON so the install button can write them into ZotLit's
+ * settings — a template folder alone does NOT reproduce them.
+ */
+function bundledFrontmatterFields(): unknown[] | null {
+  const asset =
+    BUNDLED_ASSETS['sw-zotlit-settings/frontmatter-fields.json'];
+  if (!asset) return null;
+  try {
+    const parsed = JSON.parse(asset.content);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -35,6 +55,7 @@ export async function installZotlitTemplates(
     folder: SW_ZOTLIT_FOLDER,
     zotlitDetected: false,
     folderConfigured: false,
+    fieldsConfigured: false,
     reloadedZotlit: false,
   };
 
@@ -109,8 +130,16 @@ export async function installZotlitTemplates(
       }
       // ZotLit stores settings as flat dot-keys.
       data['template.folder'] = SW_ZOTLIT_FOLDER;
-      await adapter.write(dataPath, JSON.stringify(data, null, 2));
       result.folderConfigured = true;
+      // Frontmatter is driven by ZotLit's SETTINGS, not its templates, so the
+      // template folder alone doesn't reproduce the import output. Write the
+      // bundled field mappings too (a .scholarweft.bak backup is kept above).
+      const fields = bundledFrontmatterFields();
+      if (fields) {
+        data['note.frontmatter-fields'] = fields;
+        result.fieldsConfigured = true;
+      }
+      await adapter.write(dataPath, JSON.stringify(data, null, 2));
     } catch (e) {
       result.error = `Templates installed, but could not update ZotLit's setting: ${(e as Error).message}`;
     } finally {
@@ -145,6 +174,12 @@ export async function installZotlitTemplatesWithNotice(
         r.reloadedZotlit
           ? `ZotLit's Template folder set to ${r.folder} (ZotLit reloaded).`
           : `ZotLit's Template folder set to ${r.folder} — restart Obsidian to apply.`
+      );
+    }
+    if (r.fieldsConfigured) {
+      lines.push(
+        "ZotLit's frontmatter field mappings set (the previous settings were " +
+          'backed up as data.json.scholarweft.bak).'
       );
     }
     if (r.error) lines.push(r.error);

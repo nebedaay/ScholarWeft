@@ -191,6 +191,18 @@ export function convertCitationsInText(text: string): string {
  * in-process export path.
  */
 
+/** Paragraph style applied to in-body references in the exported document.
+ *  Must match the style name defined in the DOCX/ODT templates (and copied to
+ *  book/article by tools/add-bibref-body-style.py) and the LaTeX environment
+ *  emitted by sw-export.lua. Keep the three in sync. */
+export const REFERENCE_BODY_STYLE = 'Bibliographic reference - body';
+
+/** Wrap one reference entry in a fenced Div carrying the reference-body style.
+ *  Preceded/followed by blank lines so pandoc always parses it as a block. */
+function referenceBlock(entry: string): string {
+  return `::: {custom-style="${REFERENCE_BODY_STYLE}"}\n${entry}\n:::`;
+}
+
 /** Citekeys used by full-reference insertions, in document order (deduped). */
 export function collectReferenceKeys(text: string): string[] {
   const groups = (getCitationSegments(text, false, true) as CitationSegments[])
@@ -203,7 +215,9 @@ export function collectReferenceKeys(text: string): string[] {
 }
 
 /** Replace each full-reference insertion with text from `lookup` (by citekey).
- *  A container renders one entry per paragraph; unresolvable keys are dropped. */
+ *  Each entry becomes its own `Bibliographic reference - body` block, so the
+ *  exported document sets it apart from the surrounding text; unresolvable
+ *  keys are dropped. */
 export function substituteReferenceInsertions(
   text: string,
   lookup: (key: string) => string | undefined
@@ -221,7 +235,11 @@ export function substituteReferenceInsertions(
       return {
         from: g.referenceRange?.[0] ?? group.from,
         to: g.referenceRange?.[1] ?? group.to,
-        text: parts.join('\n\n'),
+        // Blank lines around the fenced Div(s) so pandoc parses them as blocks
+        // even when the insertion sat inline in a paragraph.
+        text: parts.length
+          ? '\n\n' + parts.map(referenceBlock).join('\n\n') + '\n\n'
+          : '',
       };
     })
     .filter((e) => e.text)

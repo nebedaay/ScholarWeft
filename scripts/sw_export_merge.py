@@ -1596,6 +1596,10 @@ def merge(template_path, input_path, output_path, title=None, author=None,
     if _n_restyled:
         _extra_ids += list(ENDNOTE_STYLE_IDS_DOCX)
         _extra_ids.append(_group_heading_style_id)
+    # In-body references ([[@key|reference]]) are emitted in this style; borrow
+    # it (and its "Bibliography" parent) from the bundled document.docx for a
+    # template that predates it. Harmless when nothing references it.
+    _extra_ids.append('Bibliographicreference-body')
     _write_docx(template_path, output_path, tmpl_doc, new_footnotes,
                 new_endnotes_xml=new_endnotes,
                 short_title=short_title, author=author, title=title,

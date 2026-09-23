@@ -3,39 +3,60 @@ import type ReferenceList from './main';
 import { BUNDLED_ASSETS } from 'bundled:assets';
 
 /**
- * Extract bundled scripts and templates into the plugin's own directory.
+ * Extract bundled scripts, templates, and icons into the plugin's own directory.
  *
  * Files live at  <vault>/<plugin.manifest.dir>/scripts/  and  .../sw-export-templates/
  * — the same relative locations they occupy in the source repo — so all
  * existing paths in the Python scripts and plugin settings continue to work
  * without modification.
  *
- * `scripts/` and `sw-export-templates/` are BOTH rewritten on every load, to always
- * match this exact main.js — the previous "skip when .asset-version matches
- * manifest.version" optimisation silently left stale scripts (and, later,
- * stale templates) on disk after a BRAT update whose extraction didn't fire.
- * `sw-export-templates/` used to be "only written when missing", on the theory that
- * users hand-edit the installed copies directly — but that meant a plugin
- * update could never ship a template fix to anyone who'd ever had that file
- * on disk (which is everyone, since it's written on first install). The
- * supported customization path is instead to copy a template out of this
- * folder into the user's own Export Templates folder (a different directory
- * entirely — see `exportTemplatesDir` in settings) and edit the copy there;
- * this folder itself is treated as plugin-managed content, exactly like
- * scripts/, and any local edit made directly here will be overwritten on the
- * next reload.
+ * Extraction is content-aware: a small stamp file (`.sw-assets.json`) records
+ * the hash of every asset we last wrote, and an asset is rewritten only when
+ * its bundled bytes change (a new plugin build) or the file has gone missing.
+ * This replaces the old "rewrite everything on every load" behaviour, which
+ * churned ~5 MB on each Obsidian start for no gain. Unlike the even older
+ * "only write when the version changed" scheme, a changed asset always
+ * rewrites, so a BRAT update can never leave stale scripts/templates behind.
+ *
+ * The folders are plugin-managed output, not a place to hand-edit: the
+ * supported customization path is to copy a template out of this folder into
+ * the user's own Export Templates folder (see `exportTemplatesDir` in
+ * settings) and edit the copy there. A local edit made directly here is left
+ * in place until the bundled asset next changes, at which point it is
+ * overwritten.
  */
 export async function setupAssets(plugin: ReferenceList): Promise<void> {
   const { app, manifest } = plugin;
   const pluginDir = manifest.dir; // e.g. ".obsidian/plugins/scholar-weft"
 
+  // Only these live in the plugin dir; docs/README/images and the opt-in
+  // template folders (written into the vault by settings buttons) are used
+  // straight from the bundle and never extracted.
+  const extractable = Object.entries(BUNDLED_ASSETS).filter(
+    ([relativePath]) =>
+      !relativePath.startsWith('sw-markdown-templates/') &&
+      !relativePath.startsWith('sw-zotlit-templates/') &&
+      !relativePath.startsWith('docs/') &&
+      !relativePath.startsWith('images/') &&
+      relativePath !== 'README.md' &&
+      relativePath !== 'NOTICE.md'
+  );
+
+  // What we last extracted, so unchanged assets aren't rewritten every load.
+  const stampPath = normalizePath(`${pluginDir}/.sw-assets.json`);
+  let stamp: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(await app.vault.adapter.read(stampPath));
+    if (parsed?.version === 1 && parsed.hashes) stamp = parsed.hashes;
+  } catch {
+    // no stamp yet — first run, or it was removed
+  }
+
   // Create the subdirectories we need.
   const dirs = new Set<string>();
-  for (const relativePath of Object.keys(BUNDLED_ASSETS)) {
+  for (const [relativePath] of extractable) {
     const slash = relativePath.lastIndexOf('/');
-    if (slash > 0) {
-      dirs.add(normalizePath(`${pluginDir}/${relativePath.slice(0, slash)}`));
-    }
+    if (slash > 0) dirs.add(normalizePath(`${pluginDir}/${relativePath.slice(0, slash)}`));
   }
   for (const dir of dirs) {
     try {
@@ -45,24 +66,20 @@ export async function setupAssets(plugin: ReferenceList): Promise<void> {
     }
   }
 
+  const nextStamp: Record<string, string> = {};
   let written = 0;
+  let unchanged = 0;
   let failed = 0;
-  for (const [relativePath, { content, binary }] of Object.entries(BUNDLED_ASSETS)) {
+  for (const [relativePath, { content, binary, hash }] of extractable) {
     const fullPath = normalizePath(`${pluginDir}/${relativePath}`);
+    // Skip when this exact content was already written and the file is still
+    // present (so a hand-deleted asset is restored).
+    if (stamp[relativePath] === hash && (await app.vault.adapter.exists(fullPath))) {
+      nextStamp[relativePath] = hash;
+      unchanged++;
+      continue;
+    }
     try {
-      if (relativePath.startsWith('sw-markdown-templates/')) {
-        continue; // opt-in only — written into the vault by the settings button
-      }
-      if (relativePath.startsWith('sw-zotlit-templates/')) {
-        continue; // opt-in only — written into the vault by the settings button
-      }
-      if (relativePath.startsWith('docs/')) {
-        continue; // rendered in-app from the bundle (src/docs.ts), never extracted
-      }
-      if (relativePath.startsWith('images/') || relativePath === 'README.md'
-          || relativePath === 'NOTICE.md') {
-        continue; // docs-only assets (README overview, notice, images), never extracted
-      }
       if (binary) {
         const raw = atob(content);
         const buf = new Uint8Array(raw.length);
@@ -71,15 +88,29 @@ export async function setupAssets(plugin: ReferenceList): Promise<void> {
       } else {
         await app.vault.adapter.write(fullPath, content);
       }
+      nextStamp[relativePath] = hash;
       written++;
     } catch (e) {
+      // Leave this asset out of the stamp so it is retried on the next load.
       failed++;
       console.warn(`ScholarWeft: failed to write bundled asset "${relativePath}":`, e);
     }
   }
+
+  if (JSON.stringify(nextStamp) !== JSON.stringify(stamp)) {
+    try {
+      await app.vault.adapter.write(
+        stampPath,
+        JSON.stringify({ version: 1, hashes: nextStamp })
+      );
+    } catch (e) {
+      console.warn('ScholarWeft: failed to write the asset stamp:', e);
+    }
+  }
+
   console.log(
-    `ScholarWeft ${manifest.version}: extracted ${written} bundled asset(s)`
-      + (failed ? `, ${failed} failed` : ''),
+    `ScholarWeft ${manifest.version}: assets ${written} written, ${unchanged} unchanged`
+      + (failed ? `, ${failed} failed` : '')
   );
 
   // Legacy stamp file from older versions — remove it so nothing keys off it.

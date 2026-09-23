@@ -3,6 +3,7 @@ import process from "process";
 import builtins from "builtin-modules";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,12 @@ const bundleAssetsPlugin = {
 			const skipPrefixes = ['__', '.'];
 			const assets = {};
 
+			// Content hash, embedded alongside each asset so the runtime can
+			// extract only the files whose bytes actually changed instead of
+			// rewriting the whole asset set on every plugin load.
+			const hashOf = (buf) =>
+				crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
+
 			const readFile = async (rel) => {
 				const fullPath = path.resolve(__dirname, rel);
 				if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) return;
@@ -46,6 +53,7 @@ const bundleAssetsPlugin = {
 				assets[rel] = {
 					content: binaryExts.has(ext) ? buf.toString('base64') : buf.toString('utf-8'),
 					binary: binaryExts.has(ext),
+					hash: hashOf(buf),
 				};
 			};
 
@@ -61,6 +69,7 @@ const bundleAssetsPlugin = {
 					assets[`${subdir}/${file}`] = {
 						content: binaryExts.has(ext) ? buf.toString('base64') : buf.toString('utf-8'),
 						binary: binaryExts.has(ext),
+						hash: hashOf(buf),
 					};
 				}
 			};
@@ -83,6 +92,11 @@ const bundleAssetsPlugin = {
 			// ZotLit templates" button in settings can write them into the
 			// vault. NOT auto-extracted to the plugin dir (see assetSetup.ts).
 			await readDir('sw-zotlit-templates');
+			// ZotLit import SETTINGS (frontmatter field mappings). ZotLit's
+			// frontmatter is driven by its data.json, not by the templates, so
+			// the templates alone don't reproduce the import output; the install
+			// button writes these mappings into ZotLit's settings.
+			await readDir('sw-zotlit-settings');
 			// Basic note template — bundled so the "Install the Basic note
 			// template and set up Templater" button in settings can write it
 			// into the vault. NOT auto-extracted to the plugin dir.

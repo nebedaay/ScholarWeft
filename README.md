@@ -71,7 +71,7 @@ Basic citation work needs nothing installed. Document import/export and live Zot
 
 ScholarWeft works alongside [ZotLit](https://github.com/PKM-er/obsidian-zotlit): when ZotLit is present, literature note creation uses ZotLit's templates and `@@` autocomplete draws on ZotLit's full-text database. Neither plugin requires the other.
 
-**One-click ZotLit templates:** *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies a curated set of templates into `sw-zotlit-templates/` and points ZotLit's *Template folder* setting there (ZotLit reloads automatically), leaving your own templates untouched. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
+**One-click ZotLit templates:** *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies a curated set of templates into `sw-zotlit-templates/` and points ZotLit's *Template folder* setting there (ZotLit reloads automatically), leaving your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** — ZotLit builds each note's frontmatter from its settings, not from the templates — so imported notes get the same properties. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
 
 ## Plugin API
 

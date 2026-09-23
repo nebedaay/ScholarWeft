@@ -4,9 +4,9 @@ This page walks through **everything**, in order, with the exact menu items and 
 
 ## The easy way: run the setup script
 
-**The script does all of the following steps for you, except those you’ve already done or opt out of.** It installs/updates the Obsidian and Zotero apps, adds the ScholarWeft and ZotLit plugins to Obsidian and the Better BibTeX and ZotLit add-ons to Zotero, switches on Zotero's local connection, and installs the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts) — asking before each step and skipping anything you’ve already done. Run it first; the numbered steps below are the manual equivalent, and your fallback if a step fails.
+**The script does all of the following steps for you, except those you’ve already done or opt out of.** It installs/updates the Obsidian and Zotero apps, adds the ScholarWeft and ZotLit plugins to Obsidian and the Better BibTeX and ZotLit add-ons to Zotero, switches on Zotero's local connection, and installs the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts) — asking before each step and skipping anything you’ve already done. It offers to install **Homebrew** first if it's missing (the apps and tools are installed through it), and finds your vault on its own, including vaults inside iCloud Drive or another cloud folder. Run it first; the numbered steps below are the manual equivalent, and your fallback if a step fails.
 
-The script installs plugin **files**; anything that needs another plugin's **settings** is finished from inside Obsidian the first time you open it (that's the only safe way to change another plugin's settings). So after running the script, open Obsidian once and it will finish setting up ScholarWeft's ZotLit import templates — no manual step needed. It also offers the optional **Basic note template + Templater** step (see [Step 6b](#6b-optional-basic-note-template--templater)).
+The script installs plugin **files**; anything that needs another plugin's **settings** is finished from inside Obsidian the first time you open it (that's the only safe way to change another plugin's settings). So after running the script, open Obsidian once and it will finish setting up ScholarWeft's ZotLit import templates **and their frontmatter field mappings** — no manual step needed. It also offers the optional **Basic note template + Templater** step (see [Step 6b](#6b-optional-basic-note-template--templater)).
 
 If you have more than one Obsidian vault on your machine, you'll have to run the script for each vault you want to use them with, just repeating Obsidian plugin steps (installing and configuring ScholarWeft and ZotLit).
 
@@ -41,6 +41,8 @@ It is **interactive** (`y` / `n` / `q` as single keypresses before each step), s
 ## 1. Install Obsidian
 
 Download: <https://obsidian.md/download>
+
+> **Already have Obsidian? Update its *installer*, not just the app.** Obsidian has two version numbers. The **app** version updates itself automatically, but the **installer** version only changes when you install Obsidian again from a fresh download — and some plugins (ZotLit in particular) need a recent installer. Check **Settings → About** (or run **Show debug info** from the command palette) and look at **Installer version**. If it is behind your app version, or a plugin won't turn on, download the latest installer from <https://obsidian.md/download> and reinstall Obsidian; your vaults, plugins, and settings are untouched.
 
 **macOS**
 1. Open the downloaded `.dmg`, drag **Obsidian** into the **Applications** folder, then open it from Applications.
@@ -97,10 +99,12 @@ BBT generates citekeys automatically. If an item has no citekey yet, right-click
 
 ZotLit creates rich literature notes from Zotero items (annotations, metadata) and powers ScholarWeft's `@@` full-text search. It needs Better BibTeX from Step 3, and it has **two halves**: the Obsidian plugin below, and a small add-on inside Zotero (you'll see `zotlit@aidenlx.site` in Zotero's Add-ons). The [setup script](#the-easy-way-run-the-setup-script) can download and install the Zotero half for you when Zotero is closed; otherwise follow ZotLit's own instructions (<https://zotlit.aidenlx.top/>).
 
+> **ZotLit won't enable, or errors when you turn it on?** This is almost always an out-of-date Obsidian **installer** (not the app). Re-download the latest installer from <https://obsidian.md/download>, reinstall Obsidian, and try again — see [Step 1](#1-install-obsidian). Your vault and settings are untouched.
+
 1. In **Obsidian**: **Settings** (gear, bottom-left) → **Community plugins**.
 2. If you see **Restricted mode** / **Turn on community plugins**, click **Turn on community plugins** and confirm.
 3. Click **Browse**, type `ZotLit`, click **Install**, then **Enable**.
-4. In **Settings → ScholarWeft → Literature note import**, click **Install and use ScholarWeft's ZotLit import templates** (or just open Obsidian if you ran the setup script — it does this for you). This copies ScholarWeft's ZotLit templates into a dedicated `sw-zotlit-templates/` folder and points ZotLit's **Template folder** setting at it, leaving your own templates untouched.
+4. In **Settings → ScholarWeft → Literature note import**, click **Install and use ScholarWeft's ZotLit import templates** (or just open Obsidian if you ran the setup script — it does this for you). This copies ScholarWeft's ZotLit templates into a dedicated `sw-zotlit-templates/` folder and points ZotLit's **Template folder** setting at it, leaving your own templates untouched. It also writes ScholarWeft's **frontmatter field mappings** into ZotLit's settings — ZotLit builds each note's frontmatter from its settings, not from the templates, so the mappings are what make the imported properties (title, authors, `up`, `related`, …) come out the same way. ZotLit's previous settings are backed up as `data.json.scholarweft.bak`.
 
 > If ScholarWeft can't see ZotLit, install and **enable** it first, then click the button again.
 
@@ -281,6 +285,8 @@ Open **Settings → ScholarWeft**.
 ---
 
 ## Troubleshooting
+
+**A plugin (e.g. ZotLit) won't enable, or errors when you enable it.** Your Obsidian **installer** is probably older than the app. The app updates itself, but the installer only updates when you reinstall from a fresh download. Check **Settings → About** (or run **Show debug info**) for the **Installer version**, then download the latest installer from <https://obsidian.md/download> and reinstall Obsidian — your vault and settings are untouched.
 
 **“Cannot connect to Zotero.”** Open Zotero → Settings (**Zotero → Settings…** on macOS, **Edit → Settings…** on Windows/Linux) → **Advanced** → tick **“Allow other applications on this computer to communicate with Zotero”**. Make sure Zotero itself is running, then click **Retry**.
 

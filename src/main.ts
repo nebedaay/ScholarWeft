@@ -169,7 +169,12 @@ export default class ReferenceList extends Plugin {
   tooltipManager: TooltipManager;
   bibManager: BibManager;
   private citeSuggest: CiteSuggest;
-  private _pendingCitedKeysIndex?: { mdCount?: number; files?: Record<string, string[]> };
+  private _pendingCitedKeysIndex?: {
+    version?: number;
+    mdCount?: number;
+    builtAt?: number;
+    files?: Record<string, string[]>;
+  };
   cacheDir = '.pandoc';
   _initPromise: PromiseCapability<void>;
   private processReferencesRun = 0;
@@ -1114,10 +1119,27 @@ export default class ReferenceList extends Plugin {
     // cited-keys.json) — NOT from data.json, which saveSettings() rewrites and
     // would otherwise clobber the index. Loaded lazily after bibManager exists.
     try {
-      const cached = await this.app.vault.adapter.read(
-        normalizePath(`${this.cacheDir}/cited-keys.json`)
-      );
-      this._pendingCitedKeysIndex = JSON.parse(cached);
+      const indexPath = normalizePath(`${this.cacheDir}/cited-keys.json`);
+      const cached = await this.app.vault.adapter.read(indexPath);
+      const parsed = JSON.parse(cached);
+      // A v1 index (no `builtAt`) predates the incremental reconciler. Infer a
+      // scan watermark from the index file's own mtime — it was last written
+      // after every entry was scanned — so the first reconcile after upgrading
+      // reads only files changed since, instead of re-reading the whole vault
+      // once. If the stat is unavailable, builtAt stays 0 and one full scan
+      // runs, which is still correct.
+      if (parsed && typeof parsed === 'object' && !parsed.builtAt) {
+        try {
+          const stat = await this.app.vault.adapter.stat?.(indexPath);
+          if (stat?.mtime) {
+            parsed.builtAt = stat.mtime;
+            parsed.version = 2;
+          }
+        } catch {
+          // leave builtAt at 0 — forces a single full scan
+        }
+      }
+      this._pendingCitedKeysIndex = parsed;
     } catch {
       // no persisted index yet — first build will populate it
     }
@@ -1258,21 +1280,15 @@ export default class ReferenceList extends Plugin {
   }, 5000);
 
   /**
-   * Verify the persisted citation index is usable and rebuild it once at
-   * startup if it is missing, empty, or stale (file count changed while
-   * Obsidian was closed). Guards against a transient read/parse failure
-   * leaving a near-empty index that would otherwise overwrite the good one
-   * via incremental modify/create events.
+   * Bring the persisted citation index up to date at startup. This is
+   * incremental: only files newer than the index's scan watermark are read
+   * (plus the one-time full scan when no v2 index exists yet). Guards against
+   * a transient read/parse failure leaving a near-empty index that would
+   * otherwise overwrite the good one via incremental modify/create events.
    */
   async ensureCitedKeysIndex() {
     const { bibManager } = this;
-    const mdCount = this.app.vault
-      .getMarkdownFiles()
-      .filter((f) => bibManager.isIndexablePath(f.path)).length;
-    const healthy =
-      bibManager.indexMdCount > 0 && bibManager.indexMdCount === mdCount;
-    if (healthy) return;
-    await bibManager.buildCitedKeysIndex();
+    await bibManager.reconcileCitedKeysIndex();
     this.persistCitedKeysIndex();
   }
 

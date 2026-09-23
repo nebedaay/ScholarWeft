@@ -348,7 +348,9 @@ body {
   vertical-align: top;
   max-width: 100%;
   margin: 0;
-  font-size: var(--lc-font-size);
+  /* Inherit the note's own text size (not the sidebar's --lc-font-size); the
+     entries then render slightly smaller below. */
+  font-size: 1em;
   /* Restore normal leading: a sole-reference paragraph has line-height:0 (so
      its empty line box collapses), and the entries must not inherit that. */
   line-height: var(--line-height-normal, 1.5);
@@ -361,11 +363,14 @@ p.lc-reference-paragraph {
 }
 .pandoc-reference-entry {
   display: block;
-  padding-left: 2em;
-  text-indent: -2em; /* hanging indent, like a bibliography */
+  /* Slightly smaller than the surrounding note text, with the body of each
+     entry indented .75cm and the first line hanging back by the same amount. */
+  font-size: 0.95em;
+  padding-left: 0.75cm;
+  text-indent: -0.75cm;
 }
 .pandoc-reference.is-list .pandoc-reference-entry + .pandoc-reference-entry {
-  margin-top: 0.5em;
+  margin-top: 0.4em;
 }
 .pandoc-reference .csl-entry {
   display: inline;

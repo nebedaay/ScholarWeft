@@ -31,6 +31,7 @@ import {
   createLitNoteViaZotLit,
   createLitNotesViaZotLitBulk,
   getLitNoteForCitekey,
+  getZotlitLiteratureFolder,
 } from 'src/zotlit';
 import { cite } from 'src/parser/citeproc';
 import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
@@ -76,6 +77,14 @@ function cslEntryHtmlToMarkdown(html: string): string {
  * and reading mode keep serving stale citations from before a code fix.
  */
 const RENDER_CACHE_VERSION = 3;
+
+/**
+ * Persisted citation-index format version. v2 adds `builtAt` (a scan
+ * watermark) so startup can read only files changed since the last scan
+ * instead of re-reading every `_N` markdown file. A v1 index (no watermark)
+ * is treated as stale and rebuilt once, then persisted as v2.
+ */
+const CITED_KEYS_INDEX_VERSION = 2;
 
 // Fuse getFn wrapper that strips diacritics from indexed string fields.
 const fuseFn = (obj: any, path: string | string[]) => {
@@ -311,6 +320,15 @@ export class BibManager {
   citedKeysIndexDirty = false;
   /** Number of indexable (_N) markdown files when the index was last built. */
   indexMdCount = 0;
+  /**
+   * Wall-clock ms at which the full set of indexable files was last scanned.
+   * Any file whose mtime is newer than this is (re)read on the next
+   * reconcile; older files are trusted from the persisted index. 0 means
+   * "never fully scanned" → the next reconcile reads every file once.
+   */
+  citedKeysBuiltAt = 0;
+  /** In-flight reconcile, so concurrent startup callers share one pass. */
+  private citedKeysReconcile: Promise<number> | null = null;
 
   /** Persistent per-note rendered-citation cache, keyed by note path.
    *  Speeds up restarts: notes whose content + settings + bib source are
@@ -1697,12 +1715,9 @@ export class BibManager {
     this.warmingSkipLRU = true;
     try {
       await this.loadRenderedCache();
-      const mdCount = app.vault
-        .getMarkdownFiles()
-        .filter((f) => this.isIndexablePath(f.path)).length;
-      const stale =
-        this.citedKeysByFile.size === 0 || this.indexMdCount !== mdCount;
-      if (stale) await this.buildCitedKeysIndex();
+      // Startup already reconciled the index (see main.ts ensureCitedKeysIndex);
+      // this is a cheap no-op unless the index was never built.
+      if (this.citedKeysBuiltAt === 0) await this.reconcileCitedKeysIndex();
 
       const openPaths = new Set<string>();
       app.workspace.getLeavesOfType('markdown').forEach((l) => {
@@ -1711,7 +1726,8 @@ export class BibManager {
       });
 
       const candidates: TFile[] = [];
-      for (const [path] of this.citedKeysByFile) {
+      for (const [path, keys] of this.citedKeysByFile) {
+        if (!keys.size) continue; // no citations — nothing to warm
         if (openPaths.has(path)) continue; // already open — rendered on demand
         if (this.renderedCache.has(path)) continue; // already cached
         const file = app.vault.getAbstractFileByPath(path);
@@ -1949,17 +1965,15 @@ export class BibManager {
           : zoteroItemKey;
     }
 
-    // Default to ZotLit's configured literature-note folder so notes land in
-    // the same place whether created by ZotLit or by this fallback.
-    const zotlitFolderRaw =
-      (app as any).plugins?.plugins?.['zotlit']?.services?.settings?.current?.[
-        'note.literature-folder'
-      ] ?? (app as any).plugins?.plugins?.['zotlit']?.settings?.current?.[
-        'note.literature-folder'
-      ] ?? '';
-    const zotlitFolder = zotlitFolderRaw.trim();
+    // ZotLit's configured literature-note folder (read live). With the "Use
+    // ZotLit's literature note folder" setting on it takes priority over the
+    // plugin's own; either way it is the default fallback, so notes land in the
+    // same place whether created by ZotLit or by this fallback.
+    const zotlitFolder = getZotlitLiteratureFolder(app);
     const settingsFolder = (this.plugin.settings.literatureNoteFolder ?? '').trim();
-    const folder = settingsFolder || zotlitFolder || '_2 Bibliographic notes';
+    const folder = this.plugin.settings.useZotlitLiteratureFolder
+      ? zotlitFolder || settingsFolder || '_2 Bibliographic notes'
+      : settingsFolder || zotlitFolder || '_2 Bibliographic notes';
     const filename = `@${citekey}.md`;
     const notePath = folder ? normalizePath(`${folder}/${filename}`) : filename;
 
@@ -2038,10 +2052,17 @@ export class BibManager {
     return /^_[0-9]/.test(first);
   }
 
-  /** Parse ONE file and record its cited citekeys in the index. */
+  /**
+   * Parse ONE file and record its cited citekeys in the index. Files with no
+   * citations are removed rather than stored as empty sets, so the in-memory
+   * index holds only cited notes (matching what `serializeCitedKeysIndex`
+   * persists) and warm-up never walks the whole vault.
+   */
   private async indexFileCitekeys(file: TFile) {
     if (!this.isIndexablePath(file.path)) return;
-    this.citedKeysByFile.set(file.path, await this.citekeysInFile(file));
+    const keys = await this.citekeysInFile(file);
+    if (keys.size) this.citedKeysByFile.set(file.path, keys);
+    else this.citedKeysByFile.delete(file.path);
     this.citedKeysIndexDirty = true;
   }
 
@@ -2068,15 +2089,68 @@ export class BibManager {
     return keys;
   }
 
-  /** Build the citation index from scratch over the numbered content folders. */
-  async buildCitedKeysIndex() {
-    this.citedKeysByFile.clear();
-    const files = app.vault.getMarkdownFiles().filter((f) =>
-      this.isIndexablePath(f.path)
-    );
+  /**
+   * Bring the index in line with the vault without re-reading unchanged files.
+   *
+   * The index records a scan watermark (`citedKeysBuiltAt`). On startup every
+   * indexable file whose mtime is newer than the watermark is read; files at
+   * or below it are trusted from the persisted index; entries for paths that
+   * no longer exist are dropped. A watermark of 0 (no persisted index, or a
+   * v1 index with no watermark) makes the first pass read everything once.
+   *
+   * This replaces the old "rebuild when the file count changed" check, which
+   * re-read the entire vault (10k+ notes) on nearly every startup whenever a
+   * single note had been added or removed.
+   *
+   * Returns the number of files actually read.
+   */
+  async reconcileCitedKeysIndex(): Promise<number> {
+    // Share one pass across concurrent startup callers.
+    if (this.citedKeysReconcile) return this.citedKeysReconcile;
+    this.citedKeysReconcile = this.doReconcileCitedKeysIndex().finally(() => {
+      this.citedKeysReconcile = null;
+    });
+    return this.citedKeysReconcile;
+  }
+
+  private async doReconcileCitedKeysIndex(): Promise<number> {
+    // Capture the watermark BEFORE scanning: a file edited while this pass is
+    // running gets an mtime later than `scanStart`, so it is re-read next time
+    // rather than being wrongly trusted.
+    const scanStart = Date.now();
+    const watermark = this.citedKeysBuiltAt;
+
+    const files = app.vault
+      .getMarkdownFiles()
+      .filter((f) => this.isIndexablePath(f.path));
     this.indexMdCount = files.length;
-    for (const f of files) await this.indexFileCitekeys(f);
-    this.citedKeysIndexDirty = true;
+
+    const present = new Set<string>();
+    let read = 0;
+    for (const f of files) {
+      present.add(f.path);
+      // Trusted: scanned at or before the watermark and unchanged since. A
+      // missing/zero mtime is treated as "changed" so the file is still read.
+      const mtime = f.stat?.mtime ?? 0;
+      if (mtime !== 0 && mtime <= watermark) continue;
+      await this.indexFileCitekeys(f);
+      read++;
+    }
+
+    // Drop files deleted/renamed away while Obsidian was closed.
+    let dropped = 0;
+    for (const p of [...this.citedKeysByFile.keys()]) {
+      if (present.has(p)) continue;
+      this.citedKeysByFile.delete(p);
+      dropped++;
+    }
+
+    this.citedKeysBuiltAt = scanStart;
+    if (read > 0 || dropped > 0) this.citedKeysIndexDirty = true;
+    if (read > 0) {
+      debugLog(`[lc:index] reconciled citation index: ${read} file(s) read of ${files.length}`);
+    }
+    return read;
   }
 
   /** Update the index for a changed/created/renamed file. */
@@ -2099,18 +2173,36 @@ export class BibManager {
     return out;
   }
 
-  /** Serialize the index for persistence: {mdCount, files}. */
-  serializeCitedKeysIndex(): { mdCount: number; files: Record<string, string[]> } {
+  /** Serialize the index for persistence: {version, mdCount, builtAt, files}. */
+  serializeCitedKeysIndex(): {
+    version: number;
+    mdCount: number;
+    builtAt: number;
+    files: Record<string, string[]>;
+  } {
     const files: Record<string, string[]> = {};
     for (const [p, keys] of this.citedKeysByFile) {
       if (keys.size) files[p] = [...keys];
     }
-    return { mdCount: this.indexMdCount, files };
+    return {
+      version: CITED_KEYS_INDEX_VERSION,
+      mdCount: this.indexMdCount,
+      builtAt: this.citedKeysBuiltAt,
+      files,
+    };
   }
 
   /** Restore a previously persisted index. */
   deserializeCitedKeysIndex(
-    data: { mdCount?: number; files?: Record<string, string[]> } | null | undefined
+    data:
+      | {
+          version?: number;
+          mdCount?: number;
+          builtAt?: number;
+          files?: Record<string, string[]>;
+        }
+      | null
+      | undefined
   ) {
     this.citedKeysByFile.clear();
     if (data?.files) {
@@ -2119,6 +2211,11 @@ export class BibManager {
       }
     }
     this.indexMdCount = data?.mdCount ?? 0;
+    // Only a v2 index carries a trustworthy watermark. A v1 index (or a
+    // version mismatch) leaves it 0, forcing one full scan on the next
+    // reconcile, after which it is persisted as v2.
+    this.citedKeysBuiltAt =
+      data?.version === CITED_KEYS_INDEX_VERSION ? data.builtAt ?? 0 : 0;
   }
 
   // ── persistent rendered-citation cache ────────────────────────────────────
@@ -2372,16 +2469,10 @@ export class BibManager {
       await this.indexFileCitekeys(opts.file);
       (await this.citekeysInFile(opts.file)).forEach((k) => citekeys.add(k));
     } else if (opts.allVault) {
-      // Vault-wide: use the maintained index. Rebuild only when the index is
-      // missing, or the number of _N markdown files changed since it was built
-      // (files added/removed — the main way the index can drift outside the
-      // in-session modify/create/delete events).
-      const mdCount = app.vault
-        .getMarkdownFiles()
-        .filter((f) => this.isIndexablePath(f.path)).length;
-      const stale =
-        this.citedKeysByFile.size === 0 || this.indexMdCount !== mdCount;
-      if (stale) await this.buildCitedKeysIndex();
+      // Vault-wide: use the maintained index. Reconcile first (cheap — only
+      // new/changed files are read) so notes added or edited while Obsidian
+      // was closed are included, then read the aggregate.
+      await this.reconcileCitedKeysIndex();
       for (const k of this.getCitedKeys()) citekeys.add(k);
     } else {
       // default: active note

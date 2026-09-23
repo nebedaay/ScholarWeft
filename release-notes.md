@@ -1,40 +1,44 @@
 Install/update via BRAT.
 
-### Insert full references in the text
+### Much faster startup on large vaults
 
-For reading lists and syllabi, the linked-citation alias can now insert a formatted bibliography entry instead of an in-text citation.
+ScholarWeft no longer re-reads your whole vault on launch. The citation index — which powers "create literature notes for cited works", vault-wide citekey lookups, and citation warm-up — is now updated **incrementally**: on startup it reads only the notes that changed since it last ran, and trusts the rest from its persisted index. Previously any single note added or removed triggered a full re-scan, which on a vault with 10,000+ notes meant a minute or more of disk work on nearly every launch. (After this update the index migrates once, then ordinary restarts read only what changed.)
 
-- `[[@key|reference]]` — or the short form `[[@key|ref]]` — renders the **full reference** for that work in your configured citation style.
-- Containers insert a list: `[ [[@a|reference]] [[@b]] [[@c]] ]` or `⟦[[@a|reference]]; [[@b]]⟧`. Mark any one member and the whole container becomes a reference list; the enclosing brackets and anything written between the links is discarded.
-- References are still citations — the works appear in the reference sidebar alongside the rest — and they render live in both reading mode and live preview.
+Bundled scripts and templates are also extracted only when their contents actually change, instead of being rewritten on every load.
 
-Pandoc and Zotero have no equivalent for a full reference in the body of a document, so on export the entries are pre-rendered as plain formatted text. That is exactly what is wanted for a reading list or syllabus: the exported file contains the references themselves, not Zotero fields.
+### Document language (hyphenation and DOCX/ODT language)
 
-### Callouts render like Obsidian (DOCX, ODT, LaTeX)
+A new note property and setting control the export's language:
 
-Standard Obsidian callouts now come through the export pipeline as they look in Obsidian: a box in the type's colour with a Lucide icon, the callout title (its own text, or the type name), and the content.
+- **`lang`** (or `language`) in a note's frontmatter, e.g. `lang: de-DE`.
+- **Default document language** in *Settings → ScholarWeft → Document import/export*, used when a note has no `lang` (initially `en-US`).
 
-- Every standard type and alias (`summary`, `hint`, `check`, `faq`, …) is recognised.
-- DOCX/ODT use `Callout <Type>` paragraph styles (children of the base `callout` style); LaTeX uses a `tcolorbox`.
-- Poetry callouts are still handled separately, and custom callout types can still be mapped to named paragraph styles in Settings.
-- Fixed: a callout written with its title on the marker line and no blank line before the content (`> [!note] Title` followed directly by the body) was dropped from the output entirely.
+The language sets the LaTeX/babel main language — and therefore **hyphenation for justified text** — and the document language for DOCX/ODT. LaTeX now always gets a language, so justified text hyphenates instead of being stretched across the line.
 
-### Clickable citations in exported documents
+### In-body full references are set apart from the text
 
-- In-text citations now link to their bibliography entry (pandoc's `link-citations`).
-- Internal links — citations, note numbers, cross-references and TOC/ToF entries — are set as plain **black** body text, while external web links keep the template's link colour. These are print documents; only real URLs should look like links.
-- In DOCX, hovering a citation shows the **full reference** as a tooltip, instead of Word's default "Go to page N".
-- Fixed citation links being silently dropped by the **LibreOffice PDF** route — the bibliography bookmarks pandoc emits are now made resolvable for LibreOffice.
+`[[@key|reference]]` insertions (a formatted bibliography entry inside the body, for reading lists and syllabi) now render as a distinct reference block rather than plain paragraphs:
+
+- In Obsidian: a hanging indent and slightly smaller type.
+- In DOCX/ODT: the **Bibliographic reference - body** paragraph style (1 cm first line, 0.75 cm hanging indent).
+- In LaTeX: the equivalent `swrefbody` environment.
+
+### ZotLit: shared literature-note folder and frontmatter mappings
+
+- New setting **Use ZotLit's literature note folder** (*Settings → Literature note import*). When on, ScholarWeft creates its notes in whatever folder ZotLit is configured with — read live, so it follows a change there — and hides its own folder field. No need to set the same folder in both plugins.
+- **Install and use ScholarWeft's ZotLit import templates** now also writes ScholarWeft's **frontmatter field mappings** into ZotLit's settings. ZotLit builds each note's frontmatter from its *settings*, not from the templates, so a template folder alone did not reproduce the imported properties — the mappings are what turn Zotero fields into `title`, `authors`, `up`, `related`, and the rest. ZotLit's previous settings are backed up as `data.json.scholarweft.bak` first.
+
+### Obsidian installer warning
+
+A recurring support issue: a plugin (ZotLit especially) won't enable or errors on enable because Obsidian's **installer** is older than the app. The app updates itself, but the installer only updates when you reinstall Obsidian from a fresh download. The setup scripts, the in-app settings, and the [setup guide](https://github.com/nebedaay/ScholarWeft/blob/main/docs/setup.md) now say so — check **Settings → About → Installer version**, then reinstall from <https://obsidian.md/download> (your vault and settings are untouched).
 
 ### Fixed
 
-- **Phantom bibliography entries.** A citation in YAML navigation metadata (`up: [[@key|Alias]]`, `related:`) was picked up by pandoc's `--citeproc` and added a "cited but never in the text" bibliography entry. Citation syntax is now stripped from the frontmatter block before export; the note body is untouched.
-- **Heading-less notes no longer export an empty body.** When a note has no `#` heading the DOCX merge treated the cover and the body as one section and skipped both; it now drops only the leading cover paragraphs and keeps the body.
-- **Exported titles no longer inherit working-file suffixes.** An untitled note is titled by the note's own name, not the intermediate "… - export" / "… - compiled" file.
-- **Multi-citation and multi-reference containers** with adjacent links or stray text between members now merge correctly. Container parsing for the bracket `[ … ]` and multi-work `⟦…⟧` forms is unified into one parser, so both forms behave identically.
+- **Static/PDF bibliography styling.** ODT exports now set the bibliography in the template's own bibliography style, so a PDF export matches the live Zotero path.
+- **Spurious `ENOENT` log noise.** The transient citation-conversion file is now written with a leading dot, so Obsidian's file indexer ignores it while it is rewritten and deleted.
 
 ### Internal
 
-- Container parsing is now a single function (`mergeContainerExpression`) shared by the document parser, reading mode, and the export converter.
-- Callout icons are bundled by esbuild and referenced by the Lua filters via `SW_ICONS_DIR`.
-- `RENDER_CACHE_VERSION` bumped, so notes re-render once after upgrading.
+- `esbuild` embeds a content hash per bundled asset; `src/assetSetup.ts` keeps a `.sw-assets.json` stamp and rewrites an asset only when its hash changed or the file is missing.
+- The citation index is now reconciled from a persisted scan watermark (`citedKeysBuiltAt`); the old "rebuild when the file count changed" path is gone.
+- Bundled `book`/`article`/`document` templates carry the in-body reference style (see `tools/add-bibref-body-style.py`).

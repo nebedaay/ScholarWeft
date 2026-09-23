@@ -64,6 +64,15 @@ function pluginScriptsDir(plugin: ReferenceList): string | null {
   return `${base}/${dir}/scripts`;
 }
 
+/** A hidden sibling path ("<dir>/.<name><suffix>") for a transient sidecar.
+ *  The leading dot keeps Obsidian's file indexer away from files we create and
+ *  delete mid-export — it otherwise races the deletion with an async read and
+ *  logs a spurious ENOENT. */
+function hiddenSidecar(p: string, suffix: string): string {
+  const path = require('path') as typeof import('path');
+  return path.join(path.dirname(p), `.${path.basename(p)}${suffix}`);
+}
+
 /** Expand a leading ~ or ~/ in a user-supplied path to the home directory. */
 function expandTilde(p: string): string {
   if (p === '~') return require('os').homedir();
@@ -204,16 +213,28 @@ export async function runDocumentCompiler(
   const absMaster = `${vaultBase}/${file.path}`;
   const isExport = opts.format !== 'md';
 
+  const cache = plugin.app.metadataCache.getFileCache(file);
+  const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+
   // Template name: modal selection takes priority over frontmatter.
   // Fall back to frontmatter for callers that don't supply opts.template.
   let templateName = opts.template ?? '';
   if (!templateName) {
-    const cache = plugin.app.metadataCache.getFileCache(file);
-    const rawTpl = (cache?.frontmatter as Record<string, unknown> | undefined)
-      ?.template;
+    const rawTpl = fm?.template;
     templateName =
       typeof rawTpl === 'string' ? rawTpl.replace(/\.(docx|odt|tex)$/i, '') : '';
   }
+
+  // Document language: the note's `lang` (or `language`) property, else the
+  // plugin's default, else en-US. Pandoc turns it into the babel class option
+  // (LaTeX, which controls hyphenation) and the document language (DOCX/ODT).
+  // LaTeX strips the YAML frontmatter before pandoc runs, so it must be passed
+  // explicitly rather than relying on pandoc reading `lang:`.
+  const rawLang = fm?.lang ?? fm?.language;
+  const exportLang =
+    typeof rawLang === 'string' && rawLang.trim()
+      ? rawLang.trim()
+      : plugin.settings.exportLanguage?.trim() || 'en-US';
 
   const outputDir = resolveFolder(opts.outputDir, vaultBase);
   const buildArgs = (input: string, citationsInput?: string): string[] => {
@@ -315,6 +336,10 @@ export async function runDocumentCompiler(
       plugin.settings.cslStylePath || plugin.settings.cslStyleURL || '';
     if (configured) env.SW_DEFAULT_CSL = configured;
   }
+  // Document language for the export (note `lang` → plugin default → en-US).
+  // Consumed by DocumentCompiler.py as `--metadata lang=…`, which pandoc turns
+  // into the babel class option (LaTeX hyphenation) / the DOCX-ODT language.
+  env.SW_DOC_LANGUAGE = exportLang;
   const execCompiler = (args: string[]) =>
     execFileAsync(py, [script, ...args], { env });
 
@@ -361,7 +386,7 @@ export async function runDocumentCompiler(
         plugin,
         fs.readFileSync(opts.compiledMdPath, 'utf-8')
       );
-      const convPath = `${opts.compiledMdPath}.swcitations.md`;
+      const convPath = hiddenSidecar(opts.compiledMdPath, '.swcitations.md');
       fs.writeFileSync(convPath, converted, 'utf-8');
       try {
         return toResult(
@@ -403,7 +428,7 @@ export async function runDocumentCompiler(
       plugin,
       fs.readFileSync(mdPath, 'utf-8')
     );
-    const convPath = `${mdPath}.swcitations.md`;
+    const convPath = hiddenSidecar(mdPath, '.swcitations.md');
     fs.writeFileSync(convPath, converted, 'utf-8');
     try {
       return toResult(await execCompiler(buildArgs(mdPath, convPath)));

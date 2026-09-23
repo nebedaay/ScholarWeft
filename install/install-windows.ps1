@@ -373,6 +373,11 @@ Write-Host "  plugins): the plugins are already installed and listed, so they wi
 Write-Host "`n  Then: start Zotero if it was closed; restart Obsidian and enable any plugins"
 Write-Host "  in Settings → Community plugins; click Retry in ScholarWeft's settings if it"
 Write-Host '  says "Cannot connect to Zotero".'
+Write-Host "  If a plugin won't turn on (ZotLit is the usual one), your Obsidian installer"
+Write-Host "  is probably older than the app: the app updates itself, but the installer only"
+Write-Host "  updates when you reinstall from a fresh download. Check Settings -> About ->"
+Write-Host "  Installer version, then reinstall from https://obsidian.md/download - your vault"
+Write-Host "  and settings are untouched."
 Write-Host "  If you installed ZotLit: ScholarWeft installs its import templates and"
 Write-Host "  points ZotLit's 'Template folder' at sw-zotlit-templates/ the next time you"
 Write-Host '  open Obsidian - no manual step needed.'

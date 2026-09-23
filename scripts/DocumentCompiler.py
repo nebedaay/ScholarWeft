@@ -1477,6 +1477,18 @@ def _yaml_block(text, pos, indicator):
         return '\n'.join(block_lines)
 
 
+def _document_language(text):
+    """Export document language: the note's `lang` (or `language`) property,
+    else SW_DOC_LANGUAGE (the plugin's configured default), else `en-US`.
+
+    Passed to pandoc as `--metadata lang=…`, which turns it into babel's main
+    language — and thus the hyphenation patterns for justified text — for
+    LaTeX, and the document language for DOCX/ODT. LaTeX strips the YAML
+    frontmatter before pandoc sees it, so this must be set explicitly."""
+    return (_yaml_scalar(text, 'lang') or _yaml_scalar(text, 'language')
+            or os.environ.get('SW_DOC_LANGUAGE') or 'en-US')
+
+
 def _yaml_scalar(text, key):
     """Read a top-level YAML property `key` from frontmatter `text`, handling
     ALL three forms a hand-edited (or importer-written) property can take:
@@ -3220,7 +3232,10 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
     out_path   = out_dir / f"{out_stem}{ext}"
 
     # ── Citation conversion (identical for both formats) ───────────────────────
-    citations_md = compiled_md.with_suffix('.citations.md')
+    # Hidden (leading dot) so Obsidian's file indexer ignores this transient
+    # file: it is rewritten several times and deleted at the end, and the
+    # indexer raced the deletion with an async read -> spurious ENOENT logs.
+    citations_md = compiled_md.parent / ('.' + compiled_md.stem + '.citations.md')
     if citations_input:
         # The caller already converted citations (the plugin does this
         # in-process, so no external Node.js is required); use its output.
@@ -3371,6 +3386,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
             '--citeproc',
             '--bibliography', str(biblio_path),
             '--metadata', 'reference-section-title=Bibliography',
+            '--metadata', f'lang={_document_language(text)}',
             # Link each in-text citation to its bibliography entry.  The DOCX/
             # ODT merges make INTERNAL links invisible (they strip the Hyperlink
             # style / "Definition" span), so the citation reads as plain body
@@ -3843,7 +3859,10 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
     template_path = _resolve_template_path(tpl, '.tex', template_dir)
 
     # ── Citation conversion + markdown pre-processing (shared with DOCX/ODT) ──
-    citations_md = compiled_md.with_suffix('.citations.md')
+    # Hidden (leading dot) so Obsidian's file indexer ignores this transient
+    # file: it is rewritten several times and deleted at the end, and the
+    # indexer raced the deletion with an async read -> spurious ENOENT logs.
+    citations_md = compiled_md.parent / ('.' + compiled_md.stem + '.citations.md')
     if citations_input:
         # The caller already converted citations (plugin path; no external Node).
         cit_text = Path(citations_input).read_text(encoding='utf-8')
@@ -4215,6 +4234,7 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                *filter_args,
                '--citeproc', '--bibliography', str(biblio_path),
                '--metadata', 'reference-section-title=Bibliography',
+               '--metadata', f'lang={_document_language(text)}',
                # Link each in-text citation to its bibliography entry; with
                # citecolor=black (below) the link is invisible but clickable.
                '--metadata', 'link-citations=true',
