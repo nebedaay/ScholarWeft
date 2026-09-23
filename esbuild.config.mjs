@@ -67,6 +67,10 @@ const bundleAssetsPlugin = {
 
 			await readDir('scripts');
 			await readDir('sw-export-templates');
+			// Callout icon PNGs (one neutral black/transparent icon per type),
+			// extracted to the plugin dir so sw-callouts.lua can reference them
+			// as images. See tools/gen-callout-icons.py.
+			await readDir('icons');
 			// User-facing docs — bundled as UTF-8 strings so the settings modal
 			// can render them in-app (src/docs.ts). NOT extracted to the plugin
 			// dir (see assetSetup.ts).

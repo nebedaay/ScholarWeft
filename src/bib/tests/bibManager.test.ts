@@ -374,6 +374,23 @@ describe('BibManager CSL rendering pipeline', () => {
     expect(cache.citeBibMap.get('smith2020')).toContain('A Test Article');
   });
 
+  it('pre-renders full reference entries as plain markdown text', async () => {
+    const { manager } = makeManager(entries);
+    await manager.buildGlobalEngine();
+
+    const map = await manager.renderReferenceMarkdown([
+      'smith2020',
+      'doe2021',
+      'missing2024',
+    ]);
+
+    expect(map.has('missing2024')).toBe(false);
+    const smith = map.get('smith2020') ?? '';
+    expect(smith).toContain('A Test Article');
+    // Tags are stripped; emphasis survives as markdown.
+    expect(smith).not.toMatch(/[<>]/);
+  });
+
   it('does not render unresolved citekeys but records them in the file cache', async () => {
     const { manager } = makeManager(entries);
     const file = makeFile();
@@ -738,7 +755,7 @@ describe('BibManager CSL rendering pipeline', () => {
 
     expect(writes.length).toBeGreaterThanOrEqual(1);
     const parsed = JSON.parse(writes[writes.length - 1]);
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(parsed.notes['notes/io.md']).toBeTruthy();
 
     // Round-trip through loadRenderedCache into a fresh map.

@@ -31,6 +31,7 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 ### Citations
 
 - **Linked citations** — `[[@smith1992|see @, p. 6]]` → (see Smith 1992, 6): real Obsidian wikilinks *and* publication-ready formatted citations. See [Linked Citations](./docs/linked-citations.md).
+- **Full references in the text** — `[[@key|reference]]`, or a container such as `[ [[@a|reference]] [[@b]] [[@c]] ]`, inserts the formatted bibliography entry (or a list of them) — for reading lists and syllabi. They render live in Obsidian and export as plain formatted text. See [Inserting full references](./docs/linked-citations.md#inserting-full-references).
 - **Conventional pandoc citations** — `[@key]`, `[see @key, p. 25]` render too, and commands convert between formats losslessly.
 - **Live reference sidebar** — a searchable list of every citation in the current note, with copy and jump buttons.
 - **Insert bibliography at cursor** and **bibliography snapshot** (save a note's citations as a `.bib`, colour-coded by sync status).

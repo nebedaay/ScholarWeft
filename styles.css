@@ -335,6 +335,71 @@ body {
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
+/* Full-reference insertion: [[@key|reference]] / [[@key|ref]]. Reuses the
+   sidebar's .csl-entry markup but renders as bibliography-style entries in the
+   note body.
+   The wrapper is INLINE-BLOCK, not block: Obsidian wraps each line in a <p>,
+   and a block-level child would make the paragraph open an empty line box
+   above and below the reference (a blank line each side). An atomic
+   inline-level box keeps the entries as block children internally without
+   disturbing the surrounding paragraph flow. */
+.pandoc-reference {
+  display: inline-block;
+  vertical-align: top;
+  max-width: 100%;
+  margin: 0;
+  font-size: var(--lc-font-size);
+  /* Restore normal leading: a sole-reference paragraph has line-height:0 (so
+     its empty line box collapses), and the entries must not inherit that. */
+  line-height: var(--line-height-normal, 1.5);
+}
+/* A paragraph holding nothing but a reference: collapse its empty line box so
+   there is no blank line above/below the block. (The JS pass adds this class
+   only when the paragraph contains nothing but the reference.) */
+p.lc-reference-paragraph {
+  line-height: 0;
+}
+.pandoc-reference-entry {
+  display: block;
+  padding-left: 2em;
+  text-indent: -2em; /* hanging indent, like a bibliography */
+}
+.pandoc-reference.is-list .pandoc-reference-entry + .pandoc-reference-entry {
+  margin-top: 0.5em;
+}
+.pandoc-reference .csl-entry {
+  display: inline;
+  flex: none;
+  min-width: 0;
+  font-size: inherit;
+}
+.pandoc-reference .csl-entry em,
+.pandoc-reference .csl-entry em em em,
+.pandoc-reference .csl-entry em em em em em {
+  font-style: italic;
+}
+.pandoc-reference .csl-entry em em,
+.pandoc-reference .csl-entry em em em em {
+  font-style: normal;
+}
+.pandoc-reference .csl-entry span.smallcaps {
+  font-variant: small-caps;
+}
+.pandoc-reference .csl-entry span.underline {
+  text-decoration: underline;
+}
+.pandoc-reference .csl-entry q {
+  quotes: '“' '”' '‘' '’';
+}
+.pandoc-reference .csl-entry div.column {
+  display: inline-block;
+  vertical-align: top;
+  width: 50%;
+}
+.pandoc-reference-entry.is-unresolved {
+  color: var(--text-faint);
+}
+
 .lc-entry-btns {
   display: flex;
   flex-direction: column;

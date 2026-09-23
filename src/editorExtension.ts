@@ -79,6 +79,8 @@ class CiteWidget extends WidgetType {
   hasLitNote: boolean;
   isWikilink: boolean;
   memberStates: { key: string; isWikilink: boolean; hasLitNote: boolean }[];
+  /** Per-citekey raw `.csl-entry` HTML for full-reference groups. */
+  referenceHtml: string[];
 
   constructor(
     cite: RenderedCitation,
@@ -86,7 +88,8 @@ class CiteWidget extends WidgetType {
     linkText?: string,
     hasLitNote = false,
     isWikilink = false,
-    memberStates: { key: string; isWikilink: boolean; hasLitNote: boolean }[] = []
+    memberStates: { key: string; isWikilink: boolean; hasLitNote: boolean }[] = [],
+    referenceHtml: string[] = []
   ) {
     super();
     this.cite = cite;
@@ -95,6 +98,7 @@ class CiteWidget extends WidgetType {
     this.hasLitNote = hasLitNote;
     this.isWikilink = isWikilink;
     this.memberStates = memberStates;
+    this.referenceHtml = referenceHtml;
   }
 
   // Obsidian 1.13.x / CM: when eq() compares equal, RangeSet.compare treats
@@ -119,10 +123,34 @@ class CiteWidget extends WidgetType {
 
     return createSpan(
       {
-        cls: 'pandoc-citation is-resolved',
+        cls: this.cite.reference
+          ? 'pandoc-reference' + (this.cite.citations.length > 1 ? ' is-list' : '')
+          : 'pandoc-citation is-resolved',
         attr,
       },
       (span) => {
+        if (this.cite.reference) {
+          this.cite.citations.forEach((c, i) => {
+            const item = document.createElement('span');
+            item.className = 'pandoc-reference-entry';
+            item.setAttribute('data-citekey', c.id);
+            const html = this.referenceHtml[i];
+            const parsed = html
+              ? new DOMParser().parseFromString(html, 'text/html')
+              : null;
+            const entry =
+              parsed?.querySelector('.csl-entry') ??
+              parsed?.body.firstElementChild;
+            if (entry) {
+              item.appendChild(entry.cloneNode(true));
+            } else {
+              item.classList.add('is-unresolved');
+              item.textContent = c.id;
+            }
+            span.appendChild(item);
+          });
+          return;
+        }
         if (this.linkText) {
           span.addClass('is-link');
           // Use mousedown instead of click: in live preview CM synchronously
@@ -202,7 +230,8 @@ const citeDeco = (
   linkText?: string,
   hasLitNote = false,
   isWikilink = false,
-  memberStates: { key: string; isWikilink: boolean; hasLitNote: boolean }[] = []
+  memberStates: { key: string; isWikilink: boolean; hasLitNote: boolean }[] = [],
+  referenceHtml: string[] = []
 ) =>
   Decoration.replace({
     widget: new CiteWidget(
@@ -211,7 +240,8 @@ const citeDeco = (
       linkText,
       hasLitNote,
       isWikilink,
-      memberStates
+      memberStates,
+      referenceHtml
     ),
   });
 
@@ -378,6 +408,13 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                   );
                 })
               ) {
+                // Full-reference groups render the CSL entry text (from the
+                // file's cached bibliography) instead of the citation string.
+                const referenceHtml = rendered.reference
+                  ? rendered.citations.map(
+                      (c) => citekeyCache?.citeBibMap?.get(c.id) ?? ''
+                    )
+                  : [];
                 b.add(
                   start,
                   end,
@@ -387,7 +424,8 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                     linkText,
                     hasLitNote,
                     isWikilink,
-                    memberStates
+                    memberStates,
+                    referenceHtml
                   )
                 );
                 continue;

@@ -1105,14 +1105,26 @@ def build_body(template_body, layout, sections, used, has_figures, toc=False,
         if layout['title_block'] and content_sections == [] and blocks \
                 and blocks[0].tag == tag('p') \
                 and get_style(blocks[0]) in ('Title', 'Author'):
-            # Collect any bookmarkStart ids from the skipped block so we can
-            # remove orphaned bookmarkEnds from the remaining content.
-            for b in blocks:
-                for el in b.iter(tag('bookmarkStart')):
+            # The template supplies the cover, so drop pandoc's own leading
+            # Title/Author/Date/Subtitle/Abstract paragraphs.  Drop ONLY that
+            # leading run — a heading-less note has no Heading 1 to split the
+            # cover from the body, so they share this section, and skipping the
+            # whole section used to delete the ENTIRE body (leaving only the
+            # cover and bibliography).
+            _cover = ('Title', 'Subtitle', 'Author', 'Date', 'Abstract')
+            cut = 0
+            while (cut < len(blocks) and blocks[cut].tag == tag('p')
+                   and get_style(blocks[cut]) in _cover):
+                # Collect bookmarkStart ids from the dropped paragraphs so we
+                # can remove orphaned bookmarkEnds from the remaining content.
+                for el in blocks[cut].iter(tag('bookmarkStart')):
                     bid = el.get(tag('id'))
                     if bid:
                         skipped_bookmark_ids.add(bid)
-            continue
+                cut += 1
+            blocks = blocks[cut:]
+            if not blocks:
+                continue
         content_sections.append((kind, blocks))
 
     # Remove bookmarkEnd elements whose starts were in the skipped block;
@@ -1527,10 +1539,16 @@ def merge(template_path, input_path, output_path, title=None, author=None,
             _remap_footnote_refs(tmpl_doc, fn_id_map)
 
     # Endnote jump links look like web links (blue + underlined) by default.
-    # The body's superscript number should read as plain text while staying
-    # clickable, so drop the Hyperlink run style from hyperlinks whose target is
-    # a '#notes-…' anchor.
-    _unlink_note_anchors_docx(tmpl_doc)
+    # Internal links — the superscript note numbers, citation links to the
+    # bibliography, and cross-references — should read as plain body text while
+    # staying clickable, so drop the Hyperlink run style from hyperlinks whose
+    # target is an internal w:anchor (external r:id links keep it).
+    _unlink_internal_anchors_docx(tmpl_doc)
+    # Make the citation targets resolvable for LibreOffice (see the function).
+    _fix_ref_bookmarks_docx(tmpl_doc)
+    # Citations additionally get a ScreenTip with the full reference, so the
+    # hover tooltip is useful instead of Word's default "Go to page N".
+    _set_citation_tooltips_docx(tmpl_doc)
 
     # Every paragraph needs a w14:paraId + w14:textId, and Word expects
     # w:rsidR/w:rsidRDefault on paragraphs (it adds them to all 256 on
@@ -2099,18 +2117,18 @@ def _docx_note_number_tab(p):
         return
 
 
-def _unlink_note_anchors_docx(doc):
-    """Remove the Hyperlink run style from every w:hyperlink whose w:anchor is
-    a '#notes-…' endnote jump target, so the superscript anchor looks like body
-    text (pandoc gives every link the blue/underlined Hyperlink style). The
-    hyperlink element is kept, so it stays clickable; for external hyperlinks
-    (which carry r:id, not w:anchor) nothing changes."""
+def _unlink_internal_anchors_docx(doc):
+    """Remove the Hyperlink run style from every w:hyperlink whose target is an
+    INTERNAL w:anchor (a '#notes-…' endnote jump target, a '#ref-…' citation
+    link, or any cross-reference), so it reads as plain body text — pandoc
+    gives every link the blue/underlined Hyperlink style. The hyperlink element
+    is kept, so it stays clickable; EXTERNAL hyperlinks (which carry r:id, not
+    w:anchor) keep the Hyperlink style."""
     W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     def tag(n): return '{%s}%s' % (W_NS, n)
     for hl in doc.iter(tag('hyperlink')):
-        anchor = hl.get(tag('anchor'))
-        if not is_note_anchor_target(anchor):
-            continue
+        if not hl.get(tag('anchor')):
+            continue   # external link (r:id) — leave its styling alone
         for r in hl.iter(tag('r')):
             rpr = r.find(tag('rPr'))
             if rpr is None:
@@ -2118,6 +2136,67 @@ def _unlink_note_anchors_docx(doc):
             for rs in list(rpr.findall(tag('rStyle'))):
                 if rs.get(tag('val')) == 'Hyperlink':
                     rpr.remove(rs)
+
+
+def _fix_ref_bookmarks_docx(doc):
+    """Move each bibliography entry's `ref-…` bookmarkStart from the body level
+    (where pandoc emits it, BETWEEN paragraphs) into the following paragraph.
+
+    Word resolves a body-level bookmark target, but LibreOffice does not — so
+    its DOCX→PDF export silently DROPS the citation link. Moving the bookmark
+    into the entry paragraph makes it a resolvable target for both."""
+    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    def tag(n): return '{%s}%s' % (W_NS, n)
+    body = doc.find(tag('body'))
+    if body is None:
+        return
+    for bm in list(body.findall(tag('bookmarkStart'))):
+        if not (bm.get(tag('name')) or '').startswith('ref-'):
+            continue
+        nxt = bm.getnext()
+        while nxt is not None and nxt.tag != tag('p'):
+            nxt = nxt.getnext()
+        if nxt is None:
+            continue
+        body.remove(bm)
+        ppr = nxt.find(tag('pPr'))
+        (ppr.addnext(bm) if ppr is not None else nxt.insert(0, bm))
+
+
+def _set_citation_tooltips_docx(doc):
+    """Give each citation hyperlink (w:anchor 'ref-…') a ScreenTip containing
+    the full bibliography entry text, so hovering a citation shows the reference
+    — replacing Word's default "Go to page N" tooltip. The entry text is read
+    from the paragraph that carries the matching 'ref-…' bookmark (pandoc's
+    bibliography entry)."""
+    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    def tag(n): return '{%s}%s' % (W_NS, n)
+    entry = {}
+    for bm in doc.iter(tag('bookmarkStart')):
+        name = bm.get(tag('name')) or ''
+        if not name.startswith('ref-'):
+            continue
+        # Pandoc emits the bibliography bookmark as a direct child of the body
+        # (BETWEEN paragraphs), with the entry paragraph following it — but it
+        # can also be nested inside the paragraph. Try the enclosing paragraph
+        # first, then the next paragraph sibling.
+        p = bm.getparent()
+        while p is not None and p.tag != tag('p'):
+            p = p.getparent()
+        if p is None:
+            node = bm.getnext()
+            while node is not None and node.tag != tag('p'):
+                node = node.getnext()
+            p = node
+        if p is None:
+            continue
+        text = ''.join(t.text or '' for t in p.iter(tag('t'))).strip()
+        if text:
+            entry.setdefault(name, text)
+    for hl in doc.iter(tag('hyperlink')):
+        anchor = hl.get(tag('anchor')) or ''
+        if anchor in entry:
+            hl.set(tag('tooltip'), entry[anchor])
 
 
 def _remap_footnote_refs(doc, id_map):

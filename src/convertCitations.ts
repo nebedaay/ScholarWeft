@@ -18,7 +18,13 @@
  *
  * Non-citation wikilinks ([[note name]]) are left untouched.
  */
-import { expandAlias } from './parser/parser';
+import {
+  expandAlias,
+  getCitationSegments,
+  getCitations,
+  mergeContainerExpression,
+} from './parser/parser';
+import type { CitationSegments } from './parser/parser';
 
 // Matches [[@key|alias]] / [[@key]] / ⟦ (from transformLinkAliases specialRe).
 const SPECIAL_RE = new RegExp(
@@ -27,10 +33,6 @@ const SPECIAL_RE = new RegExp(
     '\u27e6',
   'g'
 );
-
-// Container member: [[@key|alias]] OR plain [@key, suffix] (plugin linkRe).
-const LINK_RE =
-  /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
 
 /**
  * The plugin's author-in-text flag: a trailing whitespace-separated '-' in an
@@ -50,9 +52,10 @@ function splitAuthorInText(expanded: string): { text: string; narrative: boolean
 
 /**
  * Rewrite outer-bracket containers "[ ... [[@k1]] ... [[@k2]] ... ]" into a
- * single merged pandoc citation, using the plugin's exact scanning logic and
- * linkRe. Any text between the outer brackets and the wikilinks (e.g. "see
- * also") is dropped per the plugin (it emits only the merged parts).
+ * single merged pandoc citation. Member parsing is delegated to the shared
+ * `mergeContainerExpression` (the single container parser), so the export
+ * converter and the in-app parser can't drift. Text between the outer brackets
+ * is dropped (only the members are emitted).
  */
 function rewriteContainers(str: string): string {
   const containers: { open: number; close: number; merged: string }[] = [];
@@ -91,23 +94,12 @@ function rewriteContainers(str: string): string {
     }
     if (close === -1) break;
 
-    const inside = str.slice(open + 1, close);
-    const links: { key: string; alias: string | undefined }[] = [];
-    let lm: RegExpExecArray | null;
-    LINK_RE.lastIndex = 0;
-    while ((lm = LINK_RE.exec(inside))) {
-      if (lm[1] !== undefined) {
-        links.push({ key: lm[1], alias: lm[2] });
-      } else {
-        const key = lm[3];
-        const tail = (lm[4] ?? '').trim();
-        links.push({ key, alias: tail ? `@@${tail}` : undefined });
-      }
-    }
-    if (links.length >= 1) {
+    // Member parsing is shared with the plugin parser (single source of truth).
+    const container = mergeContainerExpression(str.slice(open, close + 1));
+    if (container) {
       const mergedParts: string[] = [];
       let firstNarrative = false;
-      for (const link of links) {
+      for (const link of container.members) {
         const aliasText = link.alias ?? '@' + link.key;
         const a = splitAuthorInText(expandAlias(aliasText, link.key));
         if (mergedParts.length === 0 && a.narrative) firstNarrative = true;
@@ -189,4 +181,56 @@ export function convertCitationsInText(text: string): string {
     /\[\[@/.test(line) ? rewriteContainers(line) : line
   );
   return outLines.join('\n');
+}
+
+/**
+ * Full-reference insertions (`[[@key|reference]]` / `[[@key|ref]]`, or a
+ * bracket container with such a member) have no pandoc/Zotero equivalent, so
+ * the export pre-renders each entry to plain text and substitutes it here
+ * before the standard conversion. These helpers are shared by the plugin's
+ * in-process export path.
+ */
+
+/** Citekeys used by full-reference insertions, in document order (deduped). */
+export function collectReferenceKeys(text: string): string[] {
+  const groups = (getCitationSegments(text, false, true) as CitationSegments[])
+    .filter((g) => g.reference);
+  const keys = new Set<string>();
+  for (const g of groups) {
+    for (const c of getCitations(g).citations) keys.add(c.id);
+  }
+  return [...keys];
+}
+
+/** Replace each full-reference insertion with text from `lookup` (by citekey).
+ *  A container renders one entry per paragraph; unresolvable keys are dropped. */
+export function substituteReferenceInsertions(
+  text: string,
+  lookup: (key: string) => string | undefined
+): string {
+  const groups = (getCitationSegments(text, false, true) as CitationSegments[])
+    .filter((g) => g.reference);
+  if (!groups.length) return text;
+
+  const edits = groups
+    .map((g) => {
+      const group = getCitations(g);
+      const parts = group.citations
+        .map((c) => lookup(c.id))
+        .filter((v): v is string => !!v);
+      return {
+        from: g.referenceRange?.[0] ?? group.from,
+        to: g.referenceRange?.[1] ?? group.to,
+        text: parts.join('\n\n'),
+      };
+    })
+    .filter((e) => e.text)
+    // Replace from the end so earlier ranges stay valid.
+    .sort((a, b) => b.from - a.from);
+
+  let out = text;
+  for (const e of edits) {
+    out = out.slice(0, e.from) + e.text + out.slice(e.to);
+  }
+  return out;
 }

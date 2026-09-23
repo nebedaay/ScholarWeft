@@ -154,7 +154,7 @@ All of these accept the usual YAML forms: an inline value, a `- item` list (join
 
 ScholarWeft converts Obsidian-specific markdown into DOCX/ODT styles rather than dropping it.
 
-**Callouts** (`> [!note]`) can be mapped to named paragraph styles in Settings; poetry callouts (`[!poetry]`, `[!arabic-poetry]`) are handled automatically.
+**Callouts** (`> [!note] Title`) render like Obsidian in every format: each standard type — and every alias (summary, hint, check, …) — gets a box in the type's colour with a Lucide icon, the callout title (its own text, or the type name), and the content. In DOCX/ODT they use the `Callout <Type>` paragraph styles (children of the base `callout` style); in LaTeX they use a `tcolorbox`. Custom callout types can still be mapped to named paragraph styles in Settings; poetry callouts (`[!poetry]`, `[!arabic-poetry]`) are handled separately.
 
 **Markdown Attributes** and **Extended Markdown Syntax** are recognised without configuration:
 

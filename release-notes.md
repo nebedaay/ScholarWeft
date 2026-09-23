@@ -1,30 +1,40 @@
 Install/update via BRAT.
 
-### LaTeX / PDF endnotes
+### Insert full references in the text
 
-Endnote exports (`endnotes: native` or `body`) rendered through a `.tex` template now produce a proper endnote apparatus:
+For reading lists and syllabi, the linked-citation alias can now insert a formatted bibliography entry instead of an in-text citation.
 
-- **Per-chapter group headings are correct** — *Notes for Preface*, *Notes for Introduction*, *Notes for Chapter 1*, *Notes for Chapter 2*, *Notes for Conclusion*. Previously an unnumbered chapter (`\chapter*`) shared its counter with the next one, so Preface and Introduction collided and Chapter 2's notes were mislabelled "Notes for Conclusion".
-- **Notes now come before the Bibliography** — the usual academic order, and what the DOCX/ODT body-endnote pipeline already did.
-- **The *Notes* TOC entry points to the first page of the notes**, not the last, and the per-chapter group headings stay out of the TOC.
-- **Notes are set at body size (10pt, was 8pt)** with a small (~6pt) gap between notes instead of a full blank line; **bibliography entries are spaced to match**.
+- `[[@key|reference]]` — or the short form `[[@key|ref]]` — renders the **full reference** for that work in your configured citation style.
+- Containers insert a list: `[ [[@a|reference]] [[@b]] [[@c]] ]` or `⟦[[@a|reference]]; [[@b]]⟧`. Mark any one member and the whole container becomes a reference list; the enclosing brackets and anything written between the links is discarded.
+- References are still citations — the works appear in the reference sidebar alongside the rest — and they render live in both reading mode and live preview.
 
-### Notes headings out of the TOC (DOCX/ODT)
+Pandoc and Zotero have no equivalent for a full reference in the body of a document, so on export the entries are pre-rendered as plain formatted text. That is exactly what is wanted for a reading list or syllabus: the exported file contains the references themselves, not Zotero fields.
 
-The per-chapter group headings in body-endnote exports now use a dedicated **Heading 2 - exclude from TOC** style — they still look like headings but no longer appear in the table of contents. The style ships in the bundled templates and is borrowed automatically for older user templates.
+### Callouts render like Obsidian (DOCX, ODT, LaTeX)
 
-### Templates: consistent fonts and headings
+Standard Obsidian callouts now come through the export pipeline as they look in Obsidian: a box in the type's colour with a Lucide icon, the callout title (its own text, or the type name), and the content.
 
-- **One font root per role.** The `book` and `article` templates now declare **Noto Serif** as the heading *and* body font; `document` declares **Noto Sans**; **Scheherazade New** is the complex-script (Arabic) font in every template. Fonts are declared once at the style root and inherited, instead of being repeated (and drifting) across styles.
-- **Heading 3–10 styles are aligned** across the book/article templates — black, consistent sizes, and hierarchical indents — with Heading 1/2 left as each format needs them (chapter numbering and page breaks).
+- Every standard type and alias (`summary`, `hint`, `check`, `faq`, …) is recognised.
+- DOCX/ODT use `Callout <Type>` paragraph styles (children of the base `callout` style); LaTeX uses a `tcolorbox`.
+- Poetry callouts are still handled separately, and custom callout types can still be mapped to named paragraph styles in Settings.
+- Fixed: a callout written with its title on the marker line and no blank line before the content (`> [!note] Title` followed directly by the body) was dropped from the output entirely.
+
+### Clickable citations in exported documents
+
+- In-text citations now link to their bibliography entry (pandoc's `link-citations`).
+- Internal links — citations, note numbers, cross-references and TOC/ToF entries — are set as plain **black** body text, while external web links keep the template's link colour. These are print documents; only real URLs should look like links.
+- In DOCX, hovering a citation shows the **full reference** as a tooltip, instead of Word's default "Go to page N".
+- Fixed citation links being silently dropped by the **LibreOffice PDF** route — the bibliography bookmarks pandoc emits are now made resolvable for LibreOffice.
 
 ### Fixed
 
-- The export dialogue now always offers the **body-Notes** endnote form (it was hidden when continuous numbering was selected).
-- Endnote content is no longer misassigned when note names collide.
-- `sync-plugin.sh` no longer copies editor lock files into the plugin folder.
+- **Phantom bibliography entries.** A citation in YAML navigation metadata (`up: [[@key|Alias]]`, `related:`) was picked up by pandoc's `--citeproc` and added a "cited but never in the text" bibliography entry. Citation syntax is now stripped from the frontmatter block before export; the note body is untouched.
+- **Heading-less notes no longer export an empty body.** When a note has no `#` heading the DOCX merge treated the cover and the body as one section and skipped both; it now drops only the leading cover paragraphs and keeps the body.
+- **Exported titles no longer inherit working-file suffixes.** An untitled note is titled by the note's own name, not the intermediate "… - export" / "… - compiled" file.
+- **Multi-citation and multi-reference containers** with adjacent links or stray text between members now merge correctly. Container parsing for the bracket `[ … ]` and multi-work `⟦…⟧` forms is unified into one parser, so both forms behave identically.
 
 ### Internal
 
-- LaTeX endnotes use the `enotez` package (`split=chapter` + `reset`); the group-label lookup is keyed on enotez's own per-chapter counter, and `\printendnotes` runs before pandoc's bibliography.
-- Template fonts normalised and heading styles synced from `article.odt`; docs updated for the new endnote behaviour.
+- Container parsing is now a single function (`mergeContainerExpression`) shared by the document parser, reading mode, and the export converter.
+- Callout icons are bundled by esbuild and referenced by the Lua filters via `SW_ICONS_DIR`.
+- `RENDER_CACHE_VERSION` bumped, so notes re-render once after upgrading.

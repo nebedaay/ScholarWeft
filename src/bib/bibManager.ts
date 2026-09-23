@@ -45,12 +45,37 @@ export const normalizeDiacritics = (s: string): string =>
   s.normalize('NFD').replace(/\p{Mn}/gu, '');
 
 /**
+ * Convert a CSL bibliography entry's HTML (as citeproc emits it) to inline
+ * markdown for the export pipeline. Emphasis is preserved (`<i>`/`<em>` →
+ * `*…*`, `<b>`/`<strong>` → `**…**`); every other tag (links, spans, columns,
+ * small-caps) is stripped, leaving the entry's text. Used by
+ * `renderReferenceMarkdown` — pandoc/Zotero cannot render an in-body full
+ * reference, so the plugin pre-renders it as plain text.
+ */
+function cslEntryHtmlToMarkdown(html: string): string {
+  let s = html.trim();
+  const wrap = /^<div\b[^>]*class="[^"]*\bcsl-entry\b[^"]*"[^>]*>([\s\S]*)<\/div>\s*$/i.exec(
+    s
+  );
+  if (wrap) s = wrap[1];
+  s = s
+    .replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, '*$1*')
+    .replace(/<em\b[^>]*>([\s\S]*?)<\/em>/gi, '*$1*')
+    .replace(/<b\b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**')
+    .replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
+    .replace(/<[^>]+>/g, '');
+  const txt = document.createElement('textarea');
+  txt.innerHTML = s;
+  return txt.value.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Bump whenever rendering behaviour changes (parser fixes, CSL changes, …)
  * so a persisted rendered-citation cache from an older version is discarded
  * and every note re-renders with the new code. Without this, live preview
  * and reading mode keep serving stale citations from before a code fix.
  */
-const RENDER_CACHE_VERSION = 2;
+const RENDER_CACHE_VERSION = 3;
 
 // Fuse getFn wrapper that strips diacritics from indexed string fields.
 const fuseFn = (obj: any, path: string | string[]) => {
@@ -1164,6 +1189,59 @@ export class BibManager {
       return this.prepBibHTML(el, file, true);
     }
     return el;
+  }
+
+  /**
+   * Pre-render full bibliography entries as inline markdown, keyed by citekey.
+   * Used by the export pipeline: `[[@key|reference]]` has no pandoc/Zotero
+   * equivalent (neither can emit an in-body full reference), so the plugin
+   * renders the text itself and the exported document carries it as plain text
+   * rather than a Zotero field.
+   *
+   * A throwaway CSL engine is built so the live citation state (numbering and
+   * disambiguation) is not disturbed by rendering extra items.
+   */
+  async renderReferenceMarkdown(keys: string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const resolved = [...new Set(keys)].filter((k) => this.bibCache.has(k));
+    if (!resolved.length) return out;
+
+    await this.plugin.initPromise.promise;
+    await this.initPromise.promise;
+
+    const { settings } = this.plugin;
+    const style =
+      settings.cslStylePath ||
+      settings.cslStyleURL ||
+      'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
+    const lang = settings.cslLang || 'en-US';
+
+    let engine: any;
+    try {
+      engine = this.buildEngine(
+        lang,
+        this.langCache,
+        style,
+        this.styleCache,
+        this.bibCache
+      );
+    } catch {
+      engine = this.engine;
+    }
+    if (!engine) return out;
+
+    engine.updateItems(resolved);
+    for (const key of resolved) engine.retrieveItem(key);
+
+    const bib = engine.makeBibliography();
+    if (bib?.length) {
+      const ids: string[][] = bib[0].entry_ids ?? [];
+      bib[1].forEach((entry: string, i: number) => {
+        const key = ids[i]?.[0];
+        if (key) out.set(key, cslEntryHtmlToMarkdown(entry));
+      });
+    }
+    return out;
   }
 
   async getReferenceList(

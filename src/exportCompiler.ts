@@ -3,8 +3,36 @@ import type ReferenceList from './main';
 import type { ExportFormat } from './exportModal';
 import type { StyleMapping } from './settings';
 import { findPandoc } from './bib/pandoc';
-import { convertCitationsInText } from './convertCitations';
+import {
+  collectReferenceKeys,
+  convertCitationsInText,
+  substituteReferenceInsertions,
+} from './convertCitations';
 import { findPython3, findNode } from './tools';
+
+/**
+ * Convert linked citations to pandoc syntax, pre-rendering any full-reference
+ * insertions (`[[@key|reference]]` / `[[@key|ref]]`, or a bracket container
+ * with such a member) into plain text first.
+ *
+ * Pandoc and Zotero have no in-body full-reference citation, so the plugin
+ * renders each entry from its own CSL engine and substitutes the text; the
+ * export then carries it as plain text rather than a Zotero field.
+ */
+async function convertCitationsForExport(
+  plugin: ReferenceList,
+  text: string
+): Promise<string> {
+  const keys = collectReferenceKeys(text);
+  if (!keys.length) return convertCitationsInText(text);
+
+  const rendered = await plugin.bibManager.renderReferenceMarkdown(keys);
+  if (!rendered.size) return convertCitationsInText(text);
+
+  return convertCitationsInText(
+    substituteReferenceInsertions(text, (key) => rendered.get(key))
+  );
+}
 
 // esbuild outputs this file in CJS format where `require` is available at
 // runtime, but TypeScript's project-level `module: ESNext` doesn't declare it.
@@ -329,7 +357,8 @@ export async function runDocumentCompiler(
   if (opts.skipRecompile && opts.compiledMdPath) {
     const fs = require('fs') as typeof import('fs');
     if (fs.existsSync(opts.compiledMdPath)) {
-      const converted = convertCitationsInText(
+      const converted = await convertCitationsForExport(
+        plugin,
         fs.readFileSync(opts.compiledMdPath, 'utf-8')
       );
       const convPath = `${opts.compiledMdPath}.swcitations.md`;
@@ -370,7 +399,10 @@ export async function runDocumentCompiler(
     if (!mdPath || !fs.existsSync(mdPath)) {
       throw new Error('prepare-convert did not return a usable markdown path');
     }
-    const converted = convertCitationsInText(fs.readFileSync(mdPath, 'utf-8'));
+    const converted = await convertCitationsForExport(
+      plugin,
+      fs.readFileSync(mdPath, 'utf-8')
+    );
     const convPath = `${mdPath}.swcitations.md`;
     fs.writeFileSync(convPath, converted, 'utf-8');
     try {

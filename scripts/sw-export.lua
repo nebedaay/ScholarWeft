@@ -75,17 +75,33 @@ function BlockQuote(el)
   if #el.content == 0 then return nil end
   local first = el.content[1]
   if first.t ~= 'Para' and first.t ~= 'Header' then return nil end
-  local marker = pandoc.utils.stringify(first.content):match('^%[!([^%]]+)%]')
+  local marker = pandoc.utils.stringify(first.content):match('^%[!([%w_%-]+)%]')
   if not marker then return nil end
   marker = marker:lower()
 
   -- Skip poetry callouts — sw-poetry.lua handles them.
   if POETRY_CALLOUT_TYPES[marker] then return nil end
 
-  -- Strip the marker paragraph; keep the body blocks.
+  -- Collect the body. A callout whose title line and content are consecutive
+  -- (no blank line) is ONE Para: the marker, the title and the body are joined
+  -- by a SoftBreak, so content[2:] is empty. Keep what follows the first
+  -- SoftBreak/LineBreak in that case — returning an empty list here used to
+  -- DROP the whole callout (title and body) from the output.
   local body = pandoc.List()
-  for i = 2, #el.content do body:insert(el.content[i]) end
-  if #body == 0 then return pandoc.List{} end
+  if #el.content == 1 then
+    local after, past = pandoc.List(), false
+    for _, inl in ipairs(first.content) do
+      if not past then
+        if inl.t == 'SoftBreak' or inl.t == 'LineBreak' then past = true end
+      else
+        after:insert(inl)
+      end
+    end
+    if #after > 0 then body:insert(pandoc.Plain(after)) end
+  else
+    for i = 2, #el.content do body:insert(el.content[i]) end
+  end
+  if #body == 0 then return nil end
 
   -- Wrap body in a Div carrying the "Callout heading" custom Word/ODT style.
   return pandoc.Div(body, pandoc.Attr('', {}, {['custom-style'] = 'Callout heading'}))

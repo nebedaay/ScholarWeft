@@ -57,6 +57,33 @@
 \fi
 \usepackage[letterpaper,margin=1.3in]{geometry}  % page size + margins (try a4paper, or a per-side margin like "top=1in,bottom=1in,left=1.25in,right=1in")
 \definecolor{swlinkcolor}{HTML}{467886}        % link/citation color, as a hex RRGGBB (no '#') — matches article.docx/.odt's Hyperlink style
+% ── Obsidian callout boxes ──────────────────────────────────────────────────
+% scripts/sw-callouts.lua wraps standard Obsidian callouts in this environment,
+% passing the type's background colour (a 10% tint, as in Obsidian) and border
+% colour. Needs tcolorbox; when it is absent the environment degrades to an
+% unboxed block so the content still appears. Tune the padding/rule here.
+\IfFileExists{tcolorbox.sty}{\usepackage{tcolorbox}\tcbuselibrary{breakable}}{}
+\IfFileExists{changepage.sty}{\usepackage{changepage}}{}
+\newif\ifswcalloutindent
+\ifcsname adjustwidth\endcsname\swcalloutindenttrue\else\swcalloutindentfalse\fi
+\ifcsname newtcolorbox\endcsname
+  \newtcolorbox{swcalloutinner}[2]{%
+    colback=#1, colframe=#2, boxrule=0.4pt, arc=1.5pt,
+    left=6pt, right=6pt, top=4pt, bottom=4pt, boxsep=0pt,
+    breakable, before skip=0.3cm, after skip=0.3cm,
+  }%
+  % Indent the whole box 1.5cm from each margin (matching the DOCX/ODT callout
+  % styles' left/right indent), with 0.2cm above/below to set it apart.
+  \newenvironment{swcalloutbox}[2]{%
+    \ifswcalloutindent\begin{adjustwidth}{1.5cm}{1.5cm}\fi
+    \begin{swcalloutinner}{#1}{#2}%
+  }{%
+    \end{swcalloutinner}%
+    \ifswcalloutindent\end{adjustwidth}\fi
+  }%
+\else
+  \newenvironment{swcalloutbox}[2]{}{}%
+\fi
 \usepackage{setspace}\setstretch{1.35}         % paragraph line spacing — a setspace MULTIPLE (1 = single); this is NOT the same number as the DOCX/ODT 1.15 line-spacing multiple (they measure from a different baseline reference), so tune it by eye.
 \SetSinglespace{1.35}                          % FOOTNOTE/FLOAT line spacing — setspace forces footnotes and floats to SINGLE spacing regardless of \setstretch, so they look cramped next to the body; set this to match \setstretch (or lower). Affects footnotes & floats only, not body text.
 \raggedbottom                                  % let pages end wherever content naturally does — see document.tex

@@ -107,6 +107,15 @@ _VAULT_ABS = _find_vault_root()
 # Propagate to child processes (pandoc + sw-export.lua read SW_VAULT).
 os.environ.setdefault('SW_VAULT', str(_VAULT_ABS))
 
+# Callout icon PNGs live next to the scripts (…/scripts/ → …/icons/), in both
+# the source checkout and the extracted plugin dir.  sw-callouts.lua reads this
+# to place the per-type icon image.  Computed from THIS file's location so it
+# works for the plugin and for a bare CLI run alike.
+os.environ.setdefault(
+    'SW_ICONS_DIR',
+    os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  '..', 'icons')))
+
 def vault_rel(*parts):
     """Return a vault path (absolute, anchored at the vault root).
     The name is historical; the path is absolute so rglob/reads work
@@ -156,12 +165,34 @@ def get_indent_level(line: str) -> int:
     return spaces // 4
 
 def extract_yaml(text: str):
+    """Split a leading YAML frontmatter block from the body."""
     # Normalise CRLF → LF so the regex works on Windows-edited files.
     text = text.replace('\r\n', '\n')
     yaml_match = re.match(r"(?s)^---\n(.*?)\n---\n", text)
     if yaml_match:
         return yaml_match.group(1), text[yaml_match.end():]
     return None, text
+
+
+def strip_frontmatter_citations(text: str) -> str:
+    """Remove pandoc citation syntax from the leading YAML frontmatter block.
+
+    Pandoc's --citeproc processes citations found in METADATA as well as the
+    body, so a citation in a navigation property (e.g. `up: [[@key|Alias]]`,
+    which the converter rewrites to `[@key]`) adds a bibliography entry for a
+    work that is never cited in the document body — the phantom "in the
+    references but not cited" bug. Only the leading `---` block is touched; the
+    body keeps its citations.
+    """
+    m = re.match(r'(?s)^(---\n.*?\n---\n)(.*)$', text)
+    if not m:
+        return text
+    head, body = m.group(1), m.group(2)
+    # Bracketed citations: [@key], [-@key], [see @key, p. 5], [@a; @b].
+    head = re.sub(r'\[[^\[\]]*@[^\[\]]*\]', '', head)
+    # Narrative/bare citations: @key (not part of an email address).
+    head = re.sub(r'(?<![\w@])@[A-Za-z][\w:.#$%&+\-?<>~/]*', '', head)
+    return head + body
 
 def sanitize_title(title: str) -> str:
     # Keep alphanumeric and underscores only
@@ -1567,7 +1598,7 @@ def find_user_lua_filters(template_dir):
     """Return sorted list of *.lua files in template_dir, skipping built-in names."""
     if not template_dir or not os.path.isdir(template_dir):
         return []
-    builtin = {'sw-doc-title.lua', 'sw-export.lua', 'sw-poetry.lua', 'sw-bidi.lua', 'sw-zotero.lua'}
+    builtin = {'sw-doc-title.lua', 'sw-callouts.lua', 'sw-export.lua', 'sw-poetry.lua', 'sw-bidi.lua', 'sw-zotero.lua'}
     result = []
     for f in sorted(os.listdir(template_dir)):
         if f.lower().endswith('.lua') and f not in builtin:
@@ -3009,6 +3040,20 @@ def resolve_note_citation_style(text, template_path, fmt, override=None,
     return _csl_is_note_style(csl_path)
 
 
+#: The suffix(es) DocumentCompiler appends to a working copy's filename
+#: ("<note> - export", "<note> - compiled"). Stripped before using a stem as a
+#: title/short-title fallback, so an untitled note is titled by its NOTE name,
+#: not by the working file ("Rule of 3s - export - export").
+_INTERMEDIATE_SUFFIX_RE = re.compile(
+    r'(?:\s+[-–]\s+(?:export|compiled))+$', re.IGNORECASE)
+
+
+def _source_stem(stem):
+    """The source note's stem, with any intermediate-file suffix removed."""
+    cleaned = _INTERMEDIATE_SUFFIX_RE.sub('', stem or '').strip()
+    return cleaned or (stem or '')
+
+
 def _parse_yaml_metadata(text, stem):
     """Parse all YAML frontmatter properties used by the export pipeline.
 
@@ -3029,7 +3074,7 @@ def _parse_yaml_metadata(text, stem):
         # it into the Title and Subtitle slots.
         lines = [l.strip() for l in title.split('\n') if l.strip()]
         title = ': '.join(lines) if len(lines) == 2 else ' '.join(lines)
-    title = title or stem
+    title = title or _source_stem(stem)
 
     author = _yaml_scalar(text, 'author')
     if author:
@@ -3071,7 +3116,7 @@ def _parse_yaml_metadata(text, stem):
     if not short_title and title:
         short_title = title.split(':')[0].strip()
     if not short_title:
-        short_title = stem
+        short_title = _source_stem(stem)
 
     return {
         'tpl':            tpl,
@@ -3195,6 +3240,10 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
     cit_text = resolve_embed_links(cit_text)  # fixes images in direct-note exports
     cit_text = strip_wikilinks(cit_text)       # strips vault-internal wikilinks
     cit_text = linkify_bare_urls(cit_text)     # converts bare URLs to markdown links
+    # Drop citation syntax from the YAML block: pandoc's --citeproc processes
+    # metadata citations too, which would add a bibliography entry for a work
+    # cited only in navigation metadata (up:/related:), never in the body.
+    cit_text = strip_frontmatter_citations(cit_text)
     citations_md.write_text(cit_text, encoding='utf-8')
 
     # A caller-provided CSL-JSON bibliography (the plugin's loaded library) means
@@ -3205,6 +3254,7 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
     # ── Lua filter construction (identical for both formats) ───────────────────
     filters = [
         plugin_script_path('sw-doc-title.lua'),
+        plugin_script_path('sw-callouts.lua'),
         plugin_script_path('sw-export.lua'),
         plugin_script_path('sw-poetry.lua'),
         plugin_script_path('sw-bidi.lua'),
@@ -3321,6 +3371,11 @@ def export_document(fmt, compiled_md, vault_root=None, template=None, toc=False,
             '--citeproc',
             '--bibliography', str(biblio_path),
             '--metadata', 'reference-section-title=Bibliography',
+            # Link each in-text citation to its bibliography entry.  The DOCX/
+            # ODT merges make INTERNAL links invisible (they strip the Hyperlink
+            # style / "Definition" span), so the citation reads as plain body
+            # text but is still clickable.
+            '--metadata', 'link-citations=true',
         ]
         if not include_bibliography:
             # Static path: let citeproc render citations but emit no
@@ -3966,6 +4021,7 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
     # sw-zotero.lua (always static) and no style-mappings filter (no LaTeX
     # equivalent for a named custom style).
     filters = [
+        plugin_script_path('sw-callouts.lua'),
         plugin_script_path('sw-export.lua'),
         plugin_script_path('sw-poetry.lua'),
         plugin_script_path('sw-bidi.lua'),
@@ -4159,6 +4215,9 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                *filter_args,
                '--citeproc', '--bibliography', str(biblio_path),
                '--metadata', 'reference-section-title=Bibliography',
+               # Link each in-text citation to its bibliography entry; with
+               # citecolor=black (below) the link is invisible but clickable.
+               '--metadata', 'link-citations=true',
                *(['--metadata', 'suppress-bibliography=true']
                  if not include_bibliography else []),
                '--include-in-header', str(preamble_path),
@@ -4181,8 +4240,12 @@ def export_latex(compiled_md, vault_root=None, template=None, toc=False,
                # --include-in-header content, so it can already see
                # swlinkcolor) to the template-defined color name.
                '--metadata', 'colorlinks=true',
-               '--metadata', 'linkcolor=swlinkcolor',
-               '--metadata', 'citecolor=swlinkcolor',
+               # Internal links — TOC/ToF entries, cross-references, footnote
+               # marks and citations — are BLACK: these are print documents,
+               # and only EXTERNAL internet links should carry the link colour
+               # (swlinkcolor, below).
+               '--metadata', 'linkcolor=black',
+               '--metadata', 'citecolor=black',
                '--metadata', 'urlcolor=swlinkcolor',
                '--metadata', f'source-note={compiled_md.stem}']
         if is_book:

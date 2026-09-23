@@ -9,9 +9,11 @@
  * citation via the inner anchor's `color: inherit` (cases 1–7 showed
  * bluegreen while container spans 8–9 showed black).
  */
-jest.mock('obsidian', () => ({ parseYaml: (s: string) => JSON.parse(s) }), {
-  virtual: true,
-});
+jest.mock(
+  'obsidian',
+  () => ({ parseYaml: (s: string) => JSON.parse(s), TFile: class TFile {} }),
+  { virtual: true }
+);
 
 // Obsidian extends HTMLElement with helpers that jsdom lacks.
 beforeAll(() => {
@@ -44,7 +46,9 @@ jest.mock('../zotlit', () => ({
   getLitNoteForCitekey: jest.fn((): undefined => undefined),
 }));
 
+import { TFile } from 'obsidian';
 import { processCiteKeys } from '../markdownPostprocessor';
+import { getCitationSegments, getCitations } from '../parser/parser';
 
 function makePlugin(overrides: Record<string, unknown> = {}): any {
   const settings = {
@@ -64,6 +68,26 @@ function makePlugin(overrides: Record<string, unknown> = {}): any {
       getResolution: jest.fn((): undefined => undefined),
     },
   } as any;
+}
+
+/** Plugin whose bibManager can render reference entries from a citekey map. */
+function makeRefPlugin(entries: Record<string, string>): any {
+  const plugin = makePlugin();
+  plugin.app = {
+    vault: { getAbstractFileByPath: () => new (TFile as any)() },
+  };
+  plugin.bibManager.getBibForCiteKey = jest.fn((_file: any, key: string) => {
+    const html = entries[key];
+    if (!html) return null;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'csl-entry-wrapper';
+    const entry = document.createElement('div');
+    entry.className = 'csl-entry';
+    entry.textContent = html;
+    wrapper.appendChild(entry);
+    return wrapper;
+  });
+  return plugin;
 }
 
 /**
@@ -845,5 +869,194 @@ describe('container pre-pass tolerant walk', () => {
     const spans = p.querySelectorAll('span.pandoc-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].textContent).toBe('(A; C)');
+  });
+});
+
+describe('reading-mode full-reference insertion', () => {
+  it('replaces a [[@key|reference]] anchor with the full entry', () => {
+    const p = document.createElement('p');
+    p.innerHTML =
+      '<a class="internal-link" data-href="@key" href="@key">reference</a>';
+    document.body.appendChild(p);
+
+    const plugin = makeRefPlugin({ key: 'Smith, J. 2020. A Work.' });
+    plugin.bibManager.getCitationsForSection.mockReturnValue([
+      {
+        data: [],
+        citations: [{ id: 'key' }],
+        from: 0,
+        to: 0,
+        val: '',
+        reference: true,
+      },
+    ]);
+
+    processCiteKeys(plugin)(p, {
+      sourcePath: 'test.md',
+      getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
+    } as any);
+
+    const span = p.querySelector('span.pandoc-reference');
+    expect(span).not.toBeNull();
+    expect(span!.textContent).toContain('A Work');
+    // The original Obsidian anchor is gone (replaced, not nested).
+    expect(p.querySelector('a.internal-link')).toBeNull();
+  });
+
+  it('renders a whole reference list from an outer-bracket container', () => {
+    const p = document.createElement('p');
+    p.innerHTML =
+      '[ <a class="internal-link" data-href="@a" href="@a">reference</a> ' +
+      '<a class="internal-link" data-href="@b" href="@b">@b</a> ]';
+    document.body.appendChild(p);
+
+    const plugin = makeRefPlugin({
+      a: 'Entry A.',
+      b: 'Entry B.',
+    });
+    // Cache group carries the parser's reference marker segment.
+    plugin.bibManager.getCitationsForSection.mockReturnValue([
+      {
+        data: [
+          { type: 'bracket', val: '[' },
+          { type: 'at', val: '@' },
+          { type: 'key', val: 'a' },
+          { type: 'separator', val: ';' },
+          { type: 'prefix', val: ' ' },
+          { type: 'at', val: '@' },
+          { type: 'key', val: 'b' },
+          { type: 'bracket', val: ']' },
+          { type: 'reference', val: '' },
+        ],
+        citations: [{ id: 'a' }, { id: 'b' }],
+        from: 0,
+        to: 0,
+        val: '',
+        reference: true,
+      },
+    ]);
+
+    processCiteKeys(plugin)(p, {
+      sourcePath: 'test.md',
+      getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
+    } as any);
+
+    const span = p.querySelector('span.pandoc-reference');
+    expect(span).not.toBeNull();
+    expect(span!.className).toContain('is-list');
+    expect(span!.querySelectorAll('.pandoc-reference-entry').length).toBe(2);
+    expect(span!.textContent).toContain('Entry A.');
+    expect(span!.textContent).toContain('Entry B.');
+  });
+
+  // Round-trip against the REAL parser output (regression: the ⟦…⟧ container
+  // previously never merged, so the second member rendered as a citation).
+  it.each([
+    [
+      '[ [[@a|reference]] [[@b]] ]',
+      '[ <a class="internal-link" data-href="@a" href="@a">reference</a> <a class="internal-link" data-href="@b" href="@b">@b</a> ]',
+    ],
+    [
+      '⟦[[@a|reference]]; [[@b]]⟧',
+      '⟦<a class="internal-link" data-href="@a" href="@a">reference</a>; <a class="internal-link" data-href="@b" href="@b">@b</a>⟧',
+    ],
+    // Stray text between the links is discarded.
+    [
+      '[ [[@a|reference]] and also [[@b]] ]',
+      '[ <a class="internal-link" data-href="@a" href="@a">reference</a> and also <a class="internal-link" data-href="@b" href="@b">@b</a> ]',
+    ],
+    // Adjacent anchors with no text node between them.
+    [
+      '[ [[@a|reference]][[@b]] ]',
+      '[ <a class="internal-link" data-href="@a" href="@a">reference</a><a class="internal-link" data-href="@b" href="@b">@b</a> ]',
+    ],
+  ])('renders every member of %s as a reference', (src, html) => {
+    const p = document.createElement('p');
+    p.innerHTML = html;
+    document.body.appendChild(p);
+
+    const plugin = makeRefPlugin({ a: 'Entry A.', b: 'Entry B.' });
+    const cache = getCitationSegments(src, false, true).map((g) =>
+      getCitations(g)
+    );
+    plugin.bibManager.getCitationsForSection.mockReturnValue(cache);
+
+    processCiteKeys(plugin)(p, {
+      sourcePath: 'test.md',
+      getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
+    } as any);
+
+    expect(p.querySelectorAll('span.pandoc-citation').length).toBe(0);
+    const span = p.querySelector('span.pandoc-reference');
+    expect(span).not.toBeNull();
+    expect(span!.querySelectorAll('.pandoc-reference-entry').length).toBe(2);
+    expect(span!.textContent).toContain('Entry A.');
+    expect(span!.textContent).toContain('Entry B.');
+  });
+});
+
+describe('container replacement is bounded to the enclosing brackets', () => {
+  it('citation container: keeps surrounding prose, discards between members', () => {
+    const p = document.createElement('p');
+    p.innerHTML =
+      'Before [ <a class="internal-link" data-href="@a" href="@a">@a</a>; see also ' +
+      '<a class="internal-link" data-href="@b" href="@b">@b</a> ] after.';
+    document.body.appendChild(p);
+
+    const plugin = makePlugin();
+    plugin.bibManager.getCitationsForSection.mockReturnValue([
+      {
+        data: [
+          { type: 'bracket', val: '[' },
+          { type: 'at', val: '@' },
+          { type: 'key', val: 'a' },
+          { type: 'separator', val: ';' },
+          { type: 'prefix', val: ' ' },
+          { type: 'at', val: '@' },
+          { type: 'key', val: 'b' },
+          { type: 'bracket', val: ']' },
+        ],
+        citations: [{ id: 'a' }, { id: 'b' }],
+        from: 0,
+        to: 0,
+        val: '(A; B)',
+      },
+    ]);
+
+    processCiteKeys(plugin)(p, {
+      sourcePath: 'test.md',
+      getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
+    } as any);
+
+    expect(p.querySelector('span.pandoc-citation')).not.toBeNull();
+    // Only the bracketed container is replaced; the rest of the paragraph stays.
+    expect(p.textContent).toBe('Before (A; B) after.');
+    expect(p.textContent).not.toContain('see also');
+  });
+
+  it('reference container: keeps surrounding prose too', () => {
+    const p = document.createElement('p');
+    p.innerHTML =
+      'Before [ <a class="internal-link" data-href="@a" href="@a">reference</a> ' +
+      '<a class="internal-link" data-href="@b" href="@b">@b</a> ] after.';
+    document.body.appendChild(p);
+
+    const plugin = makeRefPlugin({ a: 'Entry A.', b: 'Entry B.' });
+    plugin.bibManager.getCitationsForSection.mockReturnValue(
+      getCitationSegments('[ [[@a|reference]] [[@b]] ]', false, true).map((g) =>
+        getCitations(g)
+      )
+    );
+
+    processCiteKeys(plugin)(p, {
+      sourcePath: 'test.md',
+      getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
+    } as any);
+
+    expect(p.querySelector('span.pandoc-reference')).not.toBeNull();
+    expect(p.textContent.startsWith('Before ')).toBe(true);
+    expect(p.textContent.endsWith(' after.')).toBe(true);
+    expect(p.textContent).toContain('Entry A.');
+    expect(p.textContent).toContain('Entry B.');
   });
 });

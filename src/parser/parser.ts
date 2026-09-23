@@ -14,7 +14,25 @@ export enum SegmentType {
   locator = 'locator',
   locatorLabel = 'locatorLabel',
   separator = 'separator',
+
+  // A `[[@key|reference]]` / `[[@key|ref]]` (or a bracket container with such a
+  // member) inserts the full bibliography entry instead of an in-text citation.
+  // The marker segment is zero-value and only distinguishes the group's data
+  // from an otherwise-identical plain citation.
+  reference = 'reference',
 }
+
+/** The alias values that switch a linked citation into a full-reference
+ *  insertion. Matched case-insensitively against the trimmed alias. */
+export const referenceAliasRe = /^(reference|ref)$/i;
+
+/** A parsed citation group plus out-of-band reference metadata. */
+export type CitationSegments = Segment[] & {
+  /** True when this group inserts full reference(s) rather than a citation. */
+  reference?: boolean;
+  /** Original-text range of the driving `[[…]]` link / bracket container. */
+  referenceRange?: [number, number];
+};
 
 export interface Segment {
   type: SegmentType;
@@ -341,6 +359,9 @@ export interface CitationGroup {
   citations: Citation[];
   from: number;
   to: number;
+  /** True when the group inserts the full bibliography entry (the
+   *  `[[@key|reference]]` / `ref` form) rather than an in-text citation. */
+  reference?: boolean;
 }
 
 export interface RenderedCitation extends CitationGroup {
@@ -354,6 +375,10 @@ export function getCitations(
   locale: string = 'en-US'
 ): CitationGroup {
   const cites: Citation[] = [];
+  // Reference groups carry their flag out-of-band (the marker segment is added
+  // by getCitationSegments). Reading it here keeps getCitations usable on plain
+  // segment arrays in tests.
+  const reference = (segments as CitationSegments)?.reference === true;
 
   let key: string;
   let prefix: string;
@@ -469,6 +494,7 @@ export function getCitations(
     citations: cites,
     from: segments[0].from,
     to: segments[segments.length - 1].to,
+    reference: reference || undefined,
   };
 }
 
@@ -526,48 +552,140 @@ export function expandAlias(alias: string, linkKey: string): string {
 const containerOpen = '\u27E6'; // ⟦
 const containerClose = '\u27E7'; // ⟧
 
+export interface ContainerMember {
+  key: string;
+  alias?: string;
+}
+
+export interface MergedContainer {
+  /** The merged citation expression, e.g. `[@a; @b]`. */
+  expr: string;
+  /** Members in document order (the renderer decides how to display them). */
+  members: ContainerMember[];
+  /** True when at least one member uses the `reference`/`ref` alias, so the
+   *  whole container inserts full references rather than a citation. */
+  reference: boolean;
+}
+
+/** Members inside a container: wikilinks `[[@key|alias]]` and plain
+ *  `[@key, suffix]` citations, in order. */
+const containerMemberRe =
+  /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
+
 /**
- * Merge a multi-work citation container of the form
+ * Parse ONE multi-member container — the outer-bracket form
+ *
+ *   [ [[@a|see also @@, 3]]; [[@b]]; [[@c]] ]
+ *
+ * or the multi-work form
  *
  *   ⟦[[@a|see also @@, 3]]; [[@b]]; [[@c]]⟧
  *
- * into a single bracketed citation expression "[see also @a, 3; @b; @c]".
- * Members are separated by whitespace and/or ';'. Returns null when the
- * container is not a valid multi-citation group (fewer than two links,
- * plain-label members, or stray text between members).
+ * — into its members plus a merged citation expression `[see also @a, 3; @b; @c]`.
+ * This is the single source of truth for container parsing: `transformLinkAliases`
+ * (parsing/live preview) and the reading-mode post-processor both call it, and
+ * renderers branch on `reference` rather than re-detecting the alias.
+ *
+ * A `reference`/`ref` member marks the whole container as a REFERENCE list.
+ * Reference containers are permissive in BOTH delimiters: everything between
+ * the members (`;`, labels, prose) is discarded and each member contributes its
+ * own citekey, so `[[@a|reference]] [[@b]]`, `[[@a|reference]]; see [[@b]]`,
+ * etc. all parse the same way. Renderers then show the full entries instead of
+ * the in-text citation.
+ *
+ * A container with no reference member keeps its historical rules:
+ *   - `[ … ]` is permissive (text between members ignored, plain `[@key]`
+ *     members allowed, a single member collapses to `[@a]`);
+ *   - `⟦ … ⟧` is strict (only whitespace/`;` between members, ';' required,
+ *     plain-label members rejected) and returns null otherwise.
  */
-export function mergeContainerExpression(containerText: string): string | null {
-  if (
-    !containerText.startsWith(containerOpen) ||
-    !containerText.endsWith(containerClose)
-  ) {
-    return null;
-  }
+export function mergeContainerExpression(
+  containerText: string
+): MergedContainer | null {
+  const isUnicode =
+    containerText.startsWith(containerOpen) &&
+    containerText.endsWith(containerClose);
+  const isBracket =
+    !isUnicode &&
+    containerText.startsWith('[') &&
+    containerText.endsWith(']') &&
+    containerText[1] !== '[';
+  if (!isUnicode && !isBracket) return null;
+  const strict = isUnicode;
+  const openLen = isUnicode ? containerOpen.length : 1;
+  const closeLen = isUnicode ? containerClose.length : 1;
   const content = containerText.slice(
-    containerOpen.length,
-    containerText.length - containerClose.length
+    openLen,
+    containerText.length - closeLen
   );
-  const anyLinkRe = /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]/g;
-  let expr = '';
-  let members = 0;
-  let lastEnd = 0;
+
+  // Collect the members first so a reference member can make the whole
+  // container permissive regardless of what surrounds it.
+  const members: {
+    key: string;
+    alias?: string;
+    ref: boolean;
+    start: number;
+    end: number;
+  }[] = [];
+  containerMemberRe.lastIndex = 0;
   let m: RegExpExecArray;
-  while ((m = anyLinkRe.exec(content))) {
-    const [full, key, alias] = m;
-    const between = content.slice(lastEnd, m.index);
-    if (!/^[\s;]*$/.test(between)) return null;
-    if (members > 0 && !/;/.test(between)) return null;
-    if (members === 0 && /;/.test(between)) return null;
-    if (alias !== undefined && !alias.includes('@')) return null;
-    const aliasText = alias ?? '@' + key;
-    if (members > 0) expr += '; ';
-    expr += expandAlias(aliasText, key);
-    members++;
-    lastEnd = m.index + full.length;
+  while ((m = containerMemberRe.exec(content))) {
+    if (m[1] !== undefined) {
+      // [[@key|alias]] member.
+      const alias = m[2];
+      members.push({
+        key: m[1],
+        alias,
+        ref: alias !== undefined && referenceAliasRe.test(alias.trim()),
+        start: m.index,
+        end: m.index + m[0].length,
+      });
+    } else {
+      // Plain [@key, suffix] member; the suffix becomes an alias-style suffix.
+      const tail = (m[4] ?? '').trim();
+      members.push({
+        key: m[3],
+        alias: tail ? `@@${tail}` : undefined,
+        ref: false,
+        start: m.index,
+        end: m.index + m[0].length,
+      });
+    }
   }
-  if (members < 2) return null;
-  if (!/^[\s;]*$/.test(content.slice(lastEnd))) return null;
-  return '[' + expr + ']';
+  const minMembers = strict ? 2 : 1;
+  if (members.length < minMembers) return null;
+
+  const publicMembers: ContainerMember[] = members.map((x) => ({
+    key: x.key,
+    alias: x.alias,
+  }));
+
+  if (members.some((x) => x.ref)) {
+    // Reference container: strip everything between the members.
+    const expr = members.map((x) => '@' + x.key).join('; ');
+    return { expr: '[' + expr + ']', members: publicMembers, reference: true };
+  }
+
+  // Citation container.
+  let expr = '';
+  let lastEnd = 0;
+  for (let i = 0; i < members.length; i++) {
+    const mem = members[i];
+    if (strict) {
+      const between = content.slice(lastEnd, mem.start);
+      if (!/^[\s;]*$/.test(between)) return null;
+      if (i > 0 && !/;/.test(between)) return null;
+      if (i === 0 && /;/.test(between)) return null;
+      if (mem.alias !== undefined && !mem.alias.includes('@')) return null;
+    }
+    const aliasText = mem.alias ?? '@' + mem.key;
+    if (i > 0) expr += '; ';
+    expr += expandAlias(aliasText, mem.key);
+    lastEnd = mem.end;
+  }
+  if (strict && !/^[\s;]*$/.test(content.slice(lastEnd))) return null;
+  return { expr: '[' + expr + ']', members: publicMembers, reference: false };
 }
 
 /**
@@ -599,9 +717,12 @@ export function mergeContainerExpression(containerText: string): string | null {
 function transformLinkAliases(
   str: string,
   linkCiteKey?: string
-): { text: string; map: number[] } {
+): { text: string; map: number[]; referenceRanges: Array<[number, number]> } {
   const out: string[] = [];
   const map: number[] = [];
+  // Original-text ranges of `[[@key|reference]]` links and bracket containers
+  // that contain one, so getCitationSegments can flag the parsed group.
+  const referenceRanges: Array<[number, number]> = [];
   let last = 0;
 
   const push = (ch: string, src: number) => {
@@ -684,39 +805,17 @@ function transformLinkAliases(
       }
       if (close === -1) break;
 
-      const inside = str.slice(open + 1, close);
-      const links: { key: string; alias?: string }[] = [];
-      let lm: RegExpExecArray;
-      // Accept BOTH wikilink members ([[@key|alias]]) and plain pandoc
-      // citations ([@key, p. 5]) inside the outer brackets, in order. This
-      // makes mixed containers ("[ [[@a]]; [@b] ]") and all-plain containers
-      // ("[ [@a]; [@b] ]") merge correctly instead of dropping the plain
-      // members or leaking stray inner brackets.
-      const linkRe =
-        /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
-      while ((lm = linkRe.exec(inside))) {
-        if (lm[1] !== undefined) {
-          links.push({ key: lm[1], alias: lm[2] });
-        } else {
-          // Plain [@key, suffix] member: key is lm[3], trailing text lm[4]
-          // (e.g. ", p. 5") becomes an alias-style suffix after @@.
-          const key = lm[3];
-          const tail = (lm[4] ?? '').trim();
-          links.push({ key, alias: tail ? `@@${tail}` : undefined });
-        }
-      }
-
-      if (links.length >= 1) {
-        const mergedParts: string[] = [];
-        for (const link of links) {
-          const aliasText = link.alias ?? '@' + link.key;
-          mergedParts.push(expandAlias(aliasText, link.key));
-        }
+      // Delegate member parsing (and the reference rule) to the single shared
+      // container parser — the same function the reading-mode post-processor
+      // uses — so citations and references stay in lock-step.
+      const container = mergeContainerExpression(str.slice(open, close + 1));
+      if (container) {
         bracketContainers.push({
           open,
           close,
-          merged: '[' + mergedParts.join('; ') + ']',
+          merged: container.expr,
         });
+        if (container.reference) referenceRanges.push([open, close + 1]);
         scan = close + 1;
         continue;
       }
@@ -762,17 +861,19 @@ function transformLinkAliases(
     }
 
     if (m[0] === containerOpen) {
-      // Multi-work container: ⟦ … ⟧ -> single merged citation
+      // Multi-work container: ⟦ … ⟧ -> single merged citation (or reference
+      // list when a member uses the reference/ref alias).
       const close = str.indexOf(containerClose, m.index + 1);
       if (close === -1) continue;
       const merged = mergeContainerExpression(str.slice(m.index, close + 1));
       if (merged === null) continue;
       copyRange(last, m.index);
-      for (let k = 0; k < merged.length; k++) {
+      for (let k = 0; k < merged.expr.length; k++) {
         // First char maps to '⟦', last to '⟧' so the widget/span covers the
         // whole container; interior chars map to the open delimiter.
-        push(merged[k], k === merged.length - 1 ? close : m.index);
+        push(merged.expr[k], k === merged.expr.length - 1 ? close : m.index);
       }
+      if (merged.reference) referenceRanges.push([m.index, close + 1]);
       specialRe.lastIndex = close + 1;
       last = close + 1;
       continue;
@@ -796,6 +897,20 @@ function transformLinkAliases(
 
     if (alias !== undefined) {
       const aliasStart = start + 4 + key.length; // after '[[@key|'
+
+      if (referenceAliasRe.test(alias.trim())) {
+        // `[[@key|reference]]` → a plain `[@key]` group flagged as a full
+        // reference. Emit from the link's own target (not the alias) so the
+        // position map stays valid regardless of alias/key lengths.
+        referenceRanges.push([start, end]);
+        const keyStart = start + 2; // after '[['
+        for (let k = 0; k < key.length + 1; k++) {
+          push(str[keyStart + k], keyStart + k); // '@' + key
+        }
+        push(']', end - 2);
+        last = end;
+        continue;
+      }
 
       // Copy the alias, expanding every '@'-token to the link's key. A
       // trailing ' -' flag is kept so getCitations can mark the group as
@@ -854,11 +969,11 @@ function transformLinkAliases(
       push(str[i], i);
       i++;
     }
-    return { text: out.join(''), map };
+    return { text: out.join(''), map, referenceRanges };
   }
 
   copyRange(last, str.length);
-  return { text: out.join(''), map };
+  return { text: out.join(''), map, referenceRanges };
 }
 
 export function getCitationSegments(
@@ -866,20 +981,41 @@ export function getCitationSegments(
   ignoreLinks: boolean = false,
   expandLinkAliases: boolean = false,
   linkCiteKey?: string
-): Segment[][] {
+): CitationSegments[] {
   // Aliased-link citations only apply when link citations are processed at
   // all (ignoreLinks === false means renderLinkCitations is on).
   if (expandLinkAliases && !ignoreLinks) {
-    const { text, map } = transformLinkAliases(str, linkCiteKey);
+    const { text, map, referenceRanges } = transformLinkAliases(str, linkCiteKey);
     const groups = getCitationSegments(text, ignoreLinks);
-    if (!groups.length) return groups;
-    return groups.map((group) =>
-      group.map((seg) => ({
+    if (!groups.length) return groups as CitationSegments[];
+    return groups.map((group) => {
+      const remapped = group.map((seg) => ({
         ...seg,
         from: map[seg.from],
         to: map[seg.to - 1] + 1,
-      }))
-    );
+      })) as CitationSegments;
+      // Flag a group that came from a `[[@key|reference]]` link (or a bracket
+      // container with such a member). Match by range overlap so the group owns
+      // the whole original link, and add a zero-value marker segment so the
+      // group's data differs from an otherwise-identical plain citation.
+      const groupTo =
+        remapped.length > 0 ? remapped[remapped.length - 1].to : remapped[0]?.to ?? 0;
+      const groupFrom = remapped.length > 0 ? remapped[0].from : 0;
+      const range = referenceRanges.find(
+        ([f, t]) => f < groupTo && t > groupFrom
+      );
+      if (range) {
+        remapped.reference = true;
+        remapped.referenceRange = range;
+        remapped.push({
+          type: SegmentType.reference,
+          from: range[0],
+          to: range[1],
+          val: '',
+        });
+      }
+      return remapped;
+    });
   }
 
   const segments: Segment[][] = [];

@@ -1,14 +1,15 @@
-import { MarkdownPostProcessorContext } from 'obsidian';
+import { MarkdownPostProcessorContext, TFile } from 'obsidian';
 
 import ReferenceList from './main';
 import {
   Segment,
   SegmentType,
   RenderedCitation,
-  expandAlias,
   getCitationSegments,
   mergeContainerExpression,
+  referenceAliasRe,
 } from './parser/parser';
+import type { CitationSegments } from './parser/parser';
 import equal from 'fast-deep-equal';
 import { getLitNoteForCitekey } from './zotlit';
 
@@ -89,12 +90,58 @@ function isCalloutSection(el: HTMLElement): boolean {
  *
  * Callers must NOT wrap the result in their own <a> — the span is the unit.
  */
+function buildReferenceSpan(
+  plugin: ReferenceList,
+  rendered: RenderedCitation,
+  ctx: MarkdownPostProcessorContext
+): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className =
+    'pandoc-reference' + (rendered.citations.length > 1 ? ' is-list' : '');
+  span.setAttribute(
+    'data-citekey',
+    rendered.citations.map((c) => c.id).join('|')
+  );
+  span.setAttribute('data-source', ctx.sourcePath);
+
+  const abstract = plugin.app?.vault?.getAbstractFileByPath?.(ctx.sourcePath);
+  const file =
+    typeof TFile === 'function' && abstract instanceof TFile ? abstract : null;
+
+  for (const cite of rendered.citations) {
+    const item = document.createElement('span');
+    item.className = 'pandoc-reference-entry';
+    item.setAttribute('data-citekey', cite.id);
+
+    const entryEl = file
+      ? plugin.bibManager.getBibForCiteKey(file, cite.id)
+      : null;
+    if (entryEl) {
+      // Drop the sidebar button row; keep only the formatted CSL entry.
+      const entry = entryEl.querySelector('.csl-entry') ?? entryEl;
+      item.appendChild(entry.cloneNode(true));
+    } else {
+      item.classList.add('is-unresolved');
+      item.textContent = cite.id;
+    }
+    span.appendChild(item);
+  }
+
+  return span;
+}
+
 function buildCitationSpan(
   plugin: ReferenceList,
   rendered: RenderedCitation,
   ctx: MarkdownPostProcessorContext,
   sourceText?: Node
 ): HTMLSpanElement {
+  // Full-reference insertion: render the bibliography entry (or the whole
+  // list) instead of the in-text citation text.
+  if (rendered.reference) {
+    return buildReferenceSpan(plugin, rendered, ctx);
+  }
+
   const attr: Record<string, string> = {
     'data-citekey': rendered.citations.map((c) => c.id).join('|'),
     'data-source': ctx.sourcePath,
@@ -202,6 +249,15 @@ export function processCiteKeys(plugin: ReferenceList) {
         sectionCites.find((c) => equal(onlyValType(c.data), want)) ??
         cache?.citations?.find((c) => equal(onlyValType(c.data), want))
       );
+    };
+
+    // Reading mode gives us only the anchor text for a `[[@key|reference]]`
+    // link (no `[[…]]` markup), and "reference" contains no '@' for the parser
+    // to expand — so locate the rendered group by citekey + reference flag.
+    const findReference = (key: string): RenderedCitation | undefined => {
+      const matches = (c: RenderedCitation) =>
+        !!c.reference && c.citations.some((x) => x.id === key);
+      return sectionCites.find(matches) ?? cache?.citations?.find(matches);
     };
 
     // Multi-work containers (⟦…⟧): Obsidian renders each [[…]] inside the run
@@ -325,7 +381,18 @@ export function processCiteKeys(plugin: ReferenceList) {
           if (closed && valid && anchors >= 2) {
             const merged = mergeContainerExpression(pieces.join(''));
             if (merged !== null) {
-              const segs = getCitationSegments(merged, false, false);
+              const segs = getCitationSegments(merged.expr, false, false);
+              // Mirror the parser's reference marker so findRendered can match
+              // the cache group (whose data carries it).
+              if (merged.reference && segs.length) {
+                (segs[0] as CitationSegments).reference = true;
+                segs[0].push({
+                  type: SegmentType.reference,
+                  from: 0,
+                  to: 0,
+                  val: '',
+                });
+              }
               if (segs.length) {
                 const rendered = findRendered(segs[0]);
                 if (rendered) {
@@ -441,7 +508,11 @@ export function processCiteKeys(plugin: ReferenceList) {
                 break;
               }
               innerText += nodeText;
-              if (!first) runNodes.push(cursor);
+              // Don't re-push the node we just handled (the anchor branch below
+              // advances the cursor to the anchor itself, not past it).
+              if (!first && runNodes[runNodes.length - 1] !== cursor) {
+                runNodes.push(cursor);
+              }
               first = false;
 
               // Walk forward through siblings, tolerating ANY structure:
@@ -477,15 +548,16 @@ export function processCiteKeys(plugin: ReferenceList) {
                       : `[[@${key}|${aText}]]`;
                 }
                 runNodes.push(next);
-                const after = next.nextSibling;
-                if (!after) {
-                  valid = false;
-                  break;
-                }
-                // Advance past the anchor to whatever follows.
-                cursor = after;
-                textNode = after as Text;
-                nodeText = (after as Text).nodeValue ?? '';
+                // Advance to the anchor ITSELF (not past it) so the next
+                // iteration inspects its following sibling. Advancing past it
+                // skipped every other member when two anchors are adjacent with
+                // no text node between them ([[@a|reference]][[@b]][[@c]]),
+                // leaving the container unmerged and its members rendered as
+                // separate citations. The duplicate-push guard above keeps the
+                // anchor out of runNodes twice.
+                cursor = next;
+                textNode = next as Text;
+                nodeText = '';
                 continue;
               }
               // Unrelated element: skip it and keep scanning.
@@ -496,34 +568,25 @@ export function processCiteKeys(plugin: ReferenceList) {
             }
 
             if (closed && valid) {
-              // Collect the members inside and merge into [@k1; @k2; …],
-              // ignoring any text between the outer brackets and the links.
-              // Tolerant of whitespace around [[ ]]/@ (Obsidian's reading-mode
-              // anchor text can carry stray newlines inside list items).
-              // Accept BOTH wikilinks ([[@key|alias]]) and plain pandoc
-              // citations ([@key, p. 5]) so mixed containers merge correctly
-              // instead of dropping the plain members.
-              const links: { key: string; alias?: string }[] = [];
-              let lm: RegExpExecArray;
-              const linkRe =
-                /\[\[\s*@([^|\]\s]+)(?:\|\s*([\s\S]*?))?\s*\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
-              while ((lm = linkRe.exec(innerText))) {
-                if (lm[1] !== undefined) {
-                  links.push({ key: lm[1], alias: lm[2]?.trim() });
-                } else {
-                  const key = lm[3];
-                  const tail = (lm[4] ?? '').trim();
-                  links.push({ key, alias: tail ? `@@${tail}` : undefined });
+              // Parse the container with the shared parser (the same function
+              // the document parser uses, so citations and references stay in
+              // lock-step); everything between the brackets is discarded.
+              // `innerText` already includes the opening '[' but not the
+              // closing one.
+              const container = mergeContainerExpression(innerText + ']');
+              if (container && container.members.length >= 2) {
+                const segs = getCitationSegments(container.expr, false, false);
+                // Mirror the parser's reference marker so findRendered can
+                // match the cache group (whose data carries it).
+                if (container.reference && segs.length) {
+                  (segs[0] as CitationSegments).reference = true;
+                  segs[0].push({
+                    type: SegmentType.reference,
+                    from: 0,
+                    to: 0,
+                    val: '',
+                  });
                 }
-              }
-              if (links.length >= 2) {
-                const mergedParts: string[] = [];
-                for (const link of links) {
-                  const aliasText = link.alias ?? '@' + link.key;
-                  mergedParts.push(expandAlias(aliasText, link.key));
-                }
-                const merged = '[' + mergedParts.join('; ') + ']';
-                const segs = getCitationSegments(merged, false, false);
                 if (segs.length) {
                   const rendered = findRendered(segs[0]);
                   if (rendered) {
@@ -580,6 +643,20 @@ export function processCiteKeys(plugin: ReferenceList) {
         content = `[${content}]`;
         if (plugin.settings.formatLinkAliases) {
           linkCiteKey = getLinkCiteKey(node.parentElement);
+        }
+        // Single `[[@key|reference]]`: the anchor text is the literal alias.
+        if (
+          linkCiteKey &&
+          referenceAliasRe.test(content.replace(/^\[|\]$/g, '').trim())
+        ) {
+          const rendered = findReference(linkCiteKey);
+          if (rendered) {
+            const span = buildCitationSpan(plugin, rendered, ctx, node);
+            const anchor = node.parentElement;
+            anchor.parentNode.insertBefore(span, anchor);
+            toRemove.push(anchor); // detaches the text node too
+            continue;
+          }
         }
       }
 
@@ -695,5 +772,25 @@ export function processCiteKeys(plugin: ReferenceList) {
     }
 
     toRemove.forEach((n) => n.parentNode.removeChild(n));
+
+    // A reference insertion on its own line is block-level content wrapped in
+    // Obsidian's <p>. Mark such paragraphs (only when they hold nothing but the
+    // reference) so CSS can collapse the paragraph's empty line box, which
+    // otherwise shows as a blank line above and below. Inline references mixed
+    // with text are left untouched.
+    el.querySelectorAll('.pandoc-reference').forEach((node) => {
+      const span = node as HTMLElement;
+      const p = span.closest('p');
+      if (!p || p === el) return;
+      const text = (span.textContent ?? '').trim();
+      if (!text || (p.textContent ?? '').trim() !== text) return;
+      if (
+        Array.from(p.children).some(
+          (c) => c !== span && (c.textContent ?? '').trim()
+        )
+      )
+        return;
+      p.classList.add('lc-reference-paragraph');
+    });
   };
 }

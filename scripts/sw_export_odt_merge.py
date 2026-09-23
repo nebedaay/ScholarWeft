@@ -831,6 +831,30 @@ def _collect_defined_names(tmpl_root, styles_root):
                 names.add(n)
     return names
 
+def _ensure_internal_link_style(styles_root):
+    """Ensure a plain (black, no-underline) character style exists for INTERNAL
+    links — the citation links to the bibliography. LibreOffice applies its blue
+    "Internet Link" formatting to any styleless <text:a>, so the citation needs
+    a style that overrides colour and underline. No-op when already defined."""
+    if styles_root is None:
+        return
+    for el in styles_root.iter(S('style')):
+        if el.get(S('name')) == 'sw_internal_link':
+            return
+    office = styles_root.find(O('styles'))
+    if office is None:
+        return
+    FO = '{urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0}'
+    st = etree.SubElement(office, S('style'))
+    st.set(S('name'), 'sw_internal_link')
+    st.set(S('display-name'), 'Internal link')
+    st.set(S('family'), 'text')
+    st.set(S('parent-style-name'), 'Default_20_Paragraph_20_Font')
+    tp = etree.SubElement(st, S('text-properties'))
+    tp.set(FO + 'color', '#000000')
+    tp.set(S('text-underline-style'), 'none')
+
+
 def _merge_auto_styles(tmpl_root, pdc_root, styles_root):
     """Merge pandoc's <office:automatic-styles> into the template's, renaming
     any conflicting style names (generated names like P1, T1 may collide with
@@ -2246,28 +2270,55 @@ def merge_odt(template_path, input_path, output_path,
     for el in body_elements:
         tmpl_text.append(el)
 
-    # Endnote jump links look like web links (blue + underlined) by default
-    # (LibreOffice applies its link formatting to any <text:a>). The body's
-    # superscript number should read like plain text while staying clickable,
-    # so give each note anchor the template's plain "Endnote anchor" character
-    # style (no decoration) and drop the undefined "Definition" span pandoc
-    # wraps link text in. The <text:a> itself is kept, so it still jumps.
+    # Internal links look like web links (blue + underlined) by default
+    # (LibreOffice applies its link formatting to any <text:a>). The superscript
+    # note numbers and the citation links to the bibliography should read as
+    # plain body text while staying clickable, so drop the link styling from
+    # every INTERNAL link (href="#…"). The note numbers keep the template's
+    # plain "Endnote anchor" (superscript) character style; citations get no
+    # style at all, so they inherit the paragraph's plain body formatting.
+    # EXTERNAL links (http…) keep the template's link style.
     _has_endnote_anchor_style = (
         'Endnote_20_anchor' in _collect_defined_names(tmpl_root, styles_root))
+    # A plain (black, no-underline) character style for citation links, so
+    # LibreOffice doesn't fall back to its blue "Internet Link" formatting.
+    _ensure_internal_link_style(styles_root)
+    _has_internal_link_style = (
+        'sw_internal_link' in _collect_defined_names(tmpl_root, styles_root))
+    if _has_internal_link_style and styles_root is not None:
+        z_data['styles.xml'] = etree.tostring(
+            styles_root, xml_declaration=True, encoding='UTF-8', standalone=True)
     for a in tmpl_text.iter(T('a')):
         href = a.get(X('href')) or ''
-        if not is_note_anchor_target(href):
-            continue
+        if not href.startswith('#'):
+            continue   # external link — leave its styling alone
         for _attr in (T('style-name'), T('visited-style-name')):
             if a.get(_attr):
                 del a.attrib[_attr]
-        if _has_endnote_anchor_style:
+        if is_note_anchor_target(href) and _has_endnote_anchor_style:
             a.set(T('style-name'), 'Endnote_20_anchor')
+        elif _has_internal_link_style:
+            a.set(T('style-name'), 'sw_internal_link')
         # Unwrap pandoc's undefined "Definition" span so no bogus style is
         # referenced (it made LibreOffice fall back to link-like formatting).
         for span in list(a.iter(T('span'))):
             if span.get(T('style-name')) == 'Definition':
                 span.attrib.pop(T('style-name'), None)
+
+    # Pandoc's ODT citeproc names each bibliography entry as a
+    # <text:section text:name="ref-KEY"> but emits NO bookmark there, so the
+    # citation <text:a href="#ref-KEY"> has no resolvable target and
+    # LibreOffice DROPS the link when exporting to PDF. Add a point bookmark at
+    # the start of each entry so the citation link resolves and survives.
+    for _sec in tmpl_text.iter(T('section')):
+        _name = _sec.get(T('name')) or ''
+        if not _name.startswith('ref-'):
+            continue
+        if any(b.get(T('name')) == _name for b in _sec.iter(T('bookmark'))):
+            continue
+        _bm = etree.Element(T('bookmark'))
+        _bm.set(T('name'), _name)
+        _sec.insert(0, _bm)
 
     # 5. Fresh Zotero bibliography section, appended at the end when the pandoc
     #    output contained a bibliography.  Uses SW_Heading1_Pagebreak so the
