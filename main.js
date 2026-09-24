@@ -27715,7 +27715,7 @@ function processCiteKeys(plugin) {
 }
 
 // src/settings.tsx
-var import_obsidian15 = __toModule(require("obsidian"));
+var import_obsidian16 = __toModule(require("obsidian"));
 
 // src/bib/pandoc.ts
 var import_obsidian4 = __toModule(require("obsidian"));
@@ -68404,7 +68404,7 @@ async function searchZoteroBBT(port = DEFAULT_ZOTERO_PORT, conditions, groupIds 
 }
 
 // src/zotlitTemplates.ts
-var import_obsidian7 = __toModule(require("obsidian"));
+var import_obsidian8 = __toModule(require("obsidian"));
 
 // bundled-assets-ns:bundled:assets
 var BUNDLED_ASSETS = { "scripts/ARCHITECTURE.md": { "content": "# Export pipeline architecture (`scripts/`)\n\nThe DOCX/ODT export & import pipeline is Python, invoked by `src/exportCompiler.ts`\n/ `src/importCompiler.ts` via `child_process` (desktop only; needs `python3` with\n`lxml` + `python-docx`, plus `pandoc`).\n\n```\noutline / note.md\n   \u2502  DocumentCompiler.compile_book / compile_note   (outline \u2192 one markdown doc)\n   \u25BC\ncompiled.md\n   \u2502  convert-citations.mjs        (citation wikilinks \u2192 native pandoc citations)\n   \u2502  DocumentCompiler markdown pre-processing:\n   \u2502     rewrite_poetry_callouts \xB7 preprocess_md_syntax \xB7 resolve_embed_links\n   \u2502     (image embeds + Obsidian |WIDTH size syntax) \xB7 strip_wikilinks\n   \u2502     (code-span aware) \xB7 linkify_bare_urls\n   \u2502  pandoc  -t docx|odt  + sw-*.lua filters\n   \u25BC\nclean.docx / clean.odt        (styled content, no template structure)\n   \u2502  sw_export_merge.merge()          sw_export_odt_merge.merge_odt()\n   \u25BC\nfinal.docx / final.odt\n   \u2502  DocumentCompiler.inject_missing_{docx,odt}_styles   (belt-and-braces)\n   \u25BC\noutput\n```\n\n## The three-way split\n\n| file | role |\n|---|---|\n| `DocumentCompiler.py` | orchestrator: outline compilation, markdown pre-processing, pandoc invocation, template lookup, merge-script invocation. `export_document(fmt, \u2026)` is the single entry point for both formats. |\n| `sw_export_merge.py` (DOCX), `sw_export_odt_merge.py` (ODT) | **serializers.** Take pandoc's clean output + the export template, produce the final file. Contain only format XML mechanics \u2014 building `<w:p>` vs `<text:p>`, sectPr vs master pages, OOXML fields vs `<text:sequence>`. |\n| `sw_merge_helpers.py` | **the shared layer.** Every decision about *what content appears, in what order, with what numbering / labels / structure* lives here and is consumed by both merge scripts. |\n\n## The rule (this is why the shared layer exists)\n\nPast work repeatedly forked DOCX and ODT into divergent logic \u2014 one format would\ngain a feature the other silently lacked. So:\n\n- A substantive content/structure decision goes in `sw_merge_helpers.py`, **never**\n  in a single merge script.\n- Before adding a function to a merge script, check whether the other format\n  already implements the same idea. If it does, lift the shared logic into\n  `sw_merge_helpers.py` first, then call it from both.\n- Shared functions stay format-neutral: they take **accessor callbacks**\n  (`get_style` / `set_style` / `get_text`, element builders) rather than importing\n  OOXML or ODF constants.\n\n## Shared functions and their per-format callers\n\n| `sw_merge_helpers` | DOCX caller | ODT caller |\n|---|---|---|\n| `resolve_cover`, `title_case`, `strip_markdown` | direct | direct |\n| `is_main_start` / `is_toc_heading` / `is_tof_heading` | `classify_blocks`, `extract_template_layout` | `_looks_like_toc_heading` |\n| `STYLE_REMAP['docx' \\| 'odt']` | inline in `build_body` | `_STYLE_REMAPS` |\n| `process_figures(\u2026, accessors)` \u2014 the figure-caption walk (find the vault \"Figure. \u2026\" line after an image, drop pandoc's filename caption, strip the old number, compute the real one, consume `Alt-text:`, track chapter, `has_figures`) | `transform_figures` | inline in `merge_odt` |\n| `strip_figure_prefix`, `parse_chapter_number`, `strip_chapter_prefix` | `apply_chapter_numbering` | `apply_chapter_numbering_odt` |\n| `append_extra_sections(\u2026, make_heading, make_body)` | `_append_extra_sections` (AKH + BodyText) | `_append_extra_sections` (AKH + Text_20_body) |\n| `resize_images(root, fmt)` | `merge` | `merge_odt` |\n| `ensure_docx_styles` / `ensure_odt_styles` | ToF style borrow in `_write_docx` | ToF style borrow in `merge_odt` |\n| `bundled_template(name)` | ToF fallback source | ToF fallback source |\n| `split_paragraphs`, `find_bibliography_range`, `strip_bibliography`, `ZOTERO_BIBL_INSTR` | direct | direct |\n\n## Deliberately per-format (irreducible)\n\n- **`_fill_title_block`** \u2014 DOCX detects title/author/date by placeholder text +\n  position; ODT by style name (+ book.odt's P1/P2 convention). The *abstract*\n  policy (drop every placeholder slot, re-inject via `append_extra_sections`) is\n  now identical.\n- **Chapter numbering** \u2014 DOCX adds `<w:numPr>` (template numId); ODT wraps the\n  heading in `<text:list style=\"WWNum13\">`. Same trigger (`Chapter N:` prefix,\n  stripped by the shared helper), same gate (template must define the mechanism).\n- **Page-break / section-break mechanics**, **footnote restart**, **field XML**.\n\n## Open feature work (not consolidation)\n\n- Format-agnostic page numbering: roman frontmatter \u2192 arabic at\n  Introduction/Chapter 1, driven by settings + document structure, independent of\n  the template. book.odt does this with per-heading `style:master-page-name`.\n- ODT book figure captions render \"Figure 1\" not \"Figure C.N\" \u2014 `display-outline-level`\n  can't see the `<text:list>` chapter numbers.\n", "binary": false, "hash": "83ee91e6f8622fb9" }, "scripts/DocumentCompiler.py": { "content": `## Started with ChatGPT, ironed out with DeepSeek, OpenWork, and Claude
@@ -85192,8 +85192,142 @@ SWTOKFIGURECOUNTER
 ]
 `, "binary": false, "hash": "68c1516a9f7da1a9" }, "sw-markdown-templates/sw-basic-note-template.md": { "content": '---\ncreated: <% tp.file.creation_date() %>\nup:\n  - "[[Unassigned]]"\nrelated:\naliases:\n---\n', "binary": false, "hash": "6121f12af7527481" } };
 
-// src/zotlitTemplates.ts
+// src/assetSetup.ts
+var import_obsidian7 = __toModule(require("obsidian"));
 var SW_ZOTLIT_FOLDER = "sw-zotlit-templates";
+var SW_MARKDOWN_FOLDER = "sw-markdown-templates";
+async function recordTemplateOptIn(plugin, folder) {
+  var _a;
+  const stampPath = (0, import_obsidian7.normalizePath)(`${plugin.manifest.dir}/.sw-assets.json`);
+  let data = {
+    version: 1,
+    hashes: {},
+    templateOptIns: []
+  };
+  try {
+    const parsed = JSON.parse(await plugin.app.vault.adapter.read(stampPath));
+    if ((parsed == null ? void 0 : parsed.version) === 1) {
+      data = {
+        version: 1,
+        hashes: (_a = parsed.hashes) != null ? _a : {},
+        templateOptIns: Array.isArray(parsed.templateOptIns) ? parsed.templateOptIns : []
+      };
+    }
+  } catch (e3) {
+  }
+  if (!data.templateOptIns.includes(folder)) {
+    data.templateOptIns.push(folder);
+  }
+  try {
+    await plugin.app.vault.adapter.write(stampPath, JSON.stringify(data));
+  } catch (e3) {
+    console.warn("ScholarWeft: failed to record template opt-in:", e3);
+  }
+}
+async function setupAssets(plugin) {
+  const { app: app2, manifest } = plugin;
+  const pluginDir = manifest.dir;
+  const extractable = Object.entries(BUNDLED_ASSETS).filter(([relativePath]) => !relativePath.startsWith("sw-markdown-templates/") && !relativePath.startsWith("sw-zotlit-templates/") && !relativePath.startsWith("docs/") && !relativePath.startsWith("images/") && relativePath !== "README.md" && relativePath !== "NOTICE.md");
+  const stampPath = (0, import_obsidian7.normalizePath)(`${pluginDir}/.sw-assets.json`);
+  let stamp = {};
+  let optedIn = [];
+  let originalStampJson = "";
+  try {
+    const raw = await app2.vault.adapter.read(stampPath);
+    originalStampJson = raw;
+    const parsed = JSON.parse(raw);
+    if ((parsed == null ? void 0 : parsed.version) === 1 && parsed.hashes)
+      stamp = parsed.hashes;
+    if ((parsed == null ? void 0 : parsed.version) === 1 && Array.isArray(parsed.templateOptIns)) {
+      optedIn = parsed.templateOptIns;
+    }
+  } catch (e3) {
+  }
+  const dirs = new Set();
+  for (const [relativePath] of extractable) {
+    const slash = relativePath.lastIndexOf("/");
+    if (slash > 0)
+      dirs.add((0, import_obsidian7.normalizePath)(`${pluginDir}/${relativePath.slice(0, slash)}`));
+  }
+  for (const dir of dirs) {
+    try {
+      await app2.vault.adapter.mkdir(dir);
+    } catch (e3) {
+    }
+  }
+  let written = 0;
+  let unchanged = 0;
+  let failed = 0;
+  for (const [relativePath, { content, binary, hash }] of extractable) {
+    const fullPath = (0, import_obsidian7.normalizePath)(`${pluginDir}/${relativePath}`);
+    if (stamp[relativePath] === hash && await app2.vault.adapter.exists(fullPath)) {
+      unchanged++;
+      continue;
+    }
+    try {
+      if (binary) {
+        const raw = atob(content);
+        const buf = new Uint8Array(raw.length);
+        for (let i3 = 0; i3 < raw.length; i3++)
+          buf[i3] = raw.charCodeAt(i3);
+        await app2.vault.adapter.writeBinary(fullPath, buf.buffer);
+      } else {
+        await app2.vault.adapter.write(fullPath, content);
+      }
+      stamp[relativePath] = hash;
+      written++;
+    } catch (e3) {
+      failed++;
+      console.warn(`ScholarWeft: failed to write bundled asset "${relativePath}":`, e3);
+    }
+  }
+  debugLog(`ScholarWeft ${manifest.version}: assets ${written} written, ${unchanged} unchanged` + (failed ? `, ${failed} failed` : ""));
+  for (const folder of [SW_ZOTLIT_FOLDER, SW_MARKDOWN_FOLDER]) {
+    if (!optedIn.includes(folder))
+      continue;
+    const dir = (0, import_obsidian7.normalizePath)(folder);
+    if (!await app2.vault.adapter.exists(dir)) {
+      optedIn = optedIn.filter((f3) => f3 !== folder);
+      continue;
+    }
+    const templates = Object.entries(BUNDLED_ASSETS).filter(([p4]) => p4.startsWith(`${folder}/`));
+    for (const [relativePath, asset] of templates) {
+      const key = `template:${relativePath}`;
+      const fullPath = (0, import_obsidian7.normalizePath)(relativePath);
+      if (stamp[key] === asset.hash && await app2.vault.adapter.exists(fullPath)) {
+        unchanged++;
+        continue;
+      }
+      try {
+        await app2.vault.adapter.write(fullPath, asset.content);
+        stamp[key] = asset.hash;
+        written++;
+      } catch (e3) {
+        failed++;
+        console.warn(`ScholarWeft: failed to update template "${relativePath}":`, e3);
+      }
+    }
+  }
+  const stampJson = JSON.stringify({
+    version: 1,
+    hashes: stamp,
+    templateOptIns: optedIn
+  });
+  if (stampJson !== originalStampJson) {
+    try {
+      await app2.vault.adapter.write(stampPath, stampJson);
+    } catch (e3) {
+      console.warn("ScholarWeft: failed to write the asset stamp:", e3);
+    }
+  }
+  try {
+    await app2.vault.adapter.remove((0, import_obsidian7.normalizePath)(`${pluginDir}/.asset-version`));
+  } catch (e3) {
+  }
+}
+
+// src/zotlitTemplates.ts
+var SW_ZOTLIT_FOLDER2 = "sw-zotlit-templates";
 var ZOTLIT_PLUGIN_ID = "zotlit";
 function bundledFrontmatterFields() {
   const asset = BUNDLED_ASSETS["sw-zotlit-settings/frontmatter-fields.json"];
@@ -85225,7 +85359,7 @@ async function installZotlitTemplates(plugin) {
   const adapter = app2.vault.adapter;
   const result = {
     written: [],
-    folder: SW_ZOTLIT_FOLDER,
+    folder: SW_ZOTLIT_FOLDER2,
     zotlitDetected: false,
     folderConfigured: false,
     fieldsConfigured: false,
@@ -85239,14 +85373,15 @@ async function installZotlitTemplates(plugin) {
     return result;
   }
   try {
-    if (!await adapter.exists(SW_ZOTLIT_FOLDER)) {
-      await adapter.mkdir(SW_ZOTLIT_FOLDER);
+    if (!await adapter.exists(SW_ZOTLIT_FOLDER2)) {
+      await adapter.mkdir(SW_ZOTLIT_FOLDER2);
     }
     for (const [relativePath, asset] of entries) {
       const name = relativePath.slice("sw-zotlit-templates/".length);
-      await adapter.write((0, import_obsidian7.normalizePath)(`${SW_ZOTLIT_FOLDER}/${name}`), asset.content);
+      await adapter.write((0, import_obsidian8.normalizePath)(`${SW_ZOTLIT_FOLDER2}/${name}`), asset.content);
       result.written.push(name);
     }
+    await recordTemplateOptIn(plugin, SW_ZOTLIT_FOLDER2);
   } catch (e3) {
     result.error = `Could not write templates: ${e3.message}`;
     return result;
@@ -85255,7 +85390,7 @@ async function installZotlitTemplates(plugin) {
   const zotlit = (_b = (_a = anyApp.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b[ZOTLIT_PLUGIN_ID];
   result.zotlitDetected = !!zotlit;
   if (zotlit) {
-    const dataPath = (0, import_obsidian7.normalizePath)(`${app2.vault.configDir}/plugins/${ZOTLIT_PLUGIN_ID}/data.json`);
+    const dataPath = (0, import_obsidian8.normalizePath)(`${app2.vault.configDir}/plugins/${ZOTLIT_PLUGIN_ID}/data.json`);
     let disabled = false;
     try {
       await anyApp.plugins.disablePlugin(ZOTLIT_PLUGIN_ID);
@@ -85269,7 +85404,7 @@ async function installZotlitTemplates(plugin) {
         try {
           data = JSON.parse(existing);
         } catch (e3) {
-          result.error = `ZotLit's settings file couldn't be parsed, so it was left untouched \u2014 set ZotLit's "Template folder" to ${SW_ZOTLIT_FOLDER} manually.`;
+          result.error = `ZotLit's settings file couldn't be parsed, so it was left untouched \u2014 set ZotLit's "Template folder" to ${SW_ZOTLIT_FOLDER2} manually.`;
           return result;
         }
       } else {
@@ -85278,7 +85413,7 @@ async function installZotlitTemplates(plugin) {
       if (existing !== null) {
         await adapter.write(`${dataPath}.scholarweft.bak`, existing);
       }
-      data["template.folder"] = SW_ZOTLIT_FOLDER;
+      data["template.folder"] = SW_ZOTLIT_FOLDER2;
       result.folderConfigured = true;
       const fields = bundledFrontmatterFields();
       if (fields) {
@@ -85321,10 +85456,77 @@ async function ensureZotlitJavaScriptTemplatesLive(app2) {
     return false;
   }
 }
+async function uninstallZotlitTemplates(plugin) {
+  var _a, _b;
+  const anyApp = plugin.app;
+  const adapter = plugin.app.vault.adapter;
+  const result = { removed: false, reverted: false, error: void 0 };
+  try {
+    if (await adapter.exists(SW_ZOTLIT_FOLDER2)) {
+      await adapter.rmdir(SW_ZOTLIT_FOLDER2, true);
+      result.removed = true;
+    }
+  } catch (e3) {
+    result.error = `Could not remove ${SW_ZOTLIT_FOLDER2}/: ${e3.message}`;
+  }
+  const zotlit = (_b = (_a = anyApp.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b[ZOTLIT_PLUGIN_ID];
+  if (!zotlit)
+    return result;
+  const dataPath = (0, import_obsidian8.normalizePath)(`${plugin.app.vault.configDir}/plugins/${ZOTLIT_PLUGIN_ID}/data.json`);
+  const bakPath = `${dataPath}.scholarweft.bak`;
+  let disabled = false;
+  try {
+    await anyApp.plugins.disablePlugin(ZOTLIT_PLUGIN_ID);
+    disabled = true;
+  } catch (e3) {
+  }
+  try {
+    const raw = await adapter.exists(dataPath) ? await adapter.read(dataPath) : null;
+    if (!(raw == null ? void 0 : raw.trim()))
+      return result;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e3) {
+      result.error = "ZotLit's settings file couldn't be parsed \u2014 left untouched.";
+      return result;
+    }
+    let reverted = false;
+    if (data["template.folder"] === SW_ZOTLIT_FOLDER2) {
+      let prior;
+      try {
+        if (await adapter.exists(bakPath)) {
+          prior = JSON.parse(await adapter.read(bakPath))["template.folder"];
+        }
+      } catch (e3) {
+      }
+      data["template.folder"] = typeof prior === "string" && prior ? prior : "templates";
+      reverted = true;
+    }
+    if (data["note.frontmatter-fields"] !== void 0) {
+      delete data["note.frontmatter-fields"];
+      reverted = true;
+    }
+    if (reverted) {
+      await adapter.write(dataPath, JSON.stringify(data, null, 2));
+      result.reverted = true;
+    }
+  } catch (e3) {
+    result.error = `Could not restore ZotLit's settings: ${e3.message}`;
+  } finally {
+    if (disabled) {
+      try {
+        await anyApp.plugins.enablePlugin(ZOTLIT_PLUGIN_ID);
+      } catch (e3) {
+      }
+    }
+  }
+  return result;
+}
 async function installZotlitTemplatesWithNotice(plugin) {
   const r3 = await installZotlitTemplates(plugin);
   if (r3.error && r3.written.length === 0) {
-    new import_obsidian7.Notice(`ScholarWeft: ${r3.error}`, 8e3);
+    new import_obsidian8.Notice(`ScholarWeft: ${r3.error}`, 8e3);
     return;
   }
   const lines = [`Installed ${r3.written.length} ZotLit template(s) to ${r3.folder}/`];
@@ -85347,15 +85549,15 @@ async function installZotlitTemplatesWithNotice(plugin) {
   } else {
     lines.push(`ZotLit not detected \u2014 set its "Template folder" to ${r3.folder} manually.`);
   }
-  new import_obsidian7.Notice(`ScholarWeft: ${lines.join("\n")}`, 9e3);
+  new import_obsidian8.Notice(`ScholarWeft: ${lines.join("\n")}`, 9e3);
 }
 
 // src/templaterTemplates.ts
-var import_obsidian9 = __toModule(require("obsidian"));
+var import_obsidian10 = __toModule(require("obsidian"));
 
 // src/modals/templaterRuleModal.ts
-var import_obsidian8 = __toModule(require("obsidian"));
-var TemplaterRuleModal = class extends import_obsidian8.Modal {
+var import_obsidian9 = __toModule(require("obsidian"));
+var TemplaterRuleModal = class extends import_obsidian9.Modal {
   constructor(app2, existing, ours, decide) {
     super(app2);
     this.existing = existing;
@@ -85378,7 +85580,7 @@ var TemplaterRuleModal = class extends import_obsidian8.Modal {
     contentEl.createEl("p", {
       text: t(`You already have a rule to apply "${this.existing}" to new notes in "/". What should ScholarWeft do?`)
     });
-    new import_obsidian8.Setting(contentEl).addButton((btn) => btn.setButtonText(t(`Keep ${this.existing}`)).onClick(() => this.choose(false))).addButton((btn) => btn.setButtonText(t(`Replace with ${this.ours}`)).setCta().onClick(() => this.choose(true)));
+    new import_obsidian9.Setting(contentEl).addButton((btn) => btn.setButtonText(t(`Keep ${this.existing}`)).onClick(() => this.choose(false))).addButton((btn) => btn.setButtonText(t(`Replace with ${this.ours}`)).setCta().onClick(() => this.choose(true)));
   }
   onClose() {
     this.choose(false);
@@ -85387,9 +85589,9 @@ var TemplaterRuleModal = class extends import_obsidian8.Modal {
 };
 
 // src/templaterTemplates.ts
-var SW_MARKDOWN_FOLDER = "sw-markdown-templates";
+var SW_MARKDOWN_FOLDER2 = "sw-markdown-templates";
 var SW_BASIC_NOTE = "sw-basic-note-template.md";
-var SW_BASIC_NOTE_PATH = `${SW_MARKDOWN_FOLDER}/${SW_BASIC_NOTE}`;
+var SW_BASIC_NOTE_PATH = `${SW_MARKDOWN_FOLDER2}/${SW_BASIC_NOTE}`;
 var TEMPLATER_PLUGIN_ID = "templater-obsidian";
 var normFolder = (f3) => typeof f3 === "string" ? f3.replace(/^\/+|\/+$/g, "") : "";
 var isRootRule = (r3) => !!r3 && typeof r3 === "object" && normFolder(r3.folder) === "";
@@ -85417,7 +85619,7 @@ async function installTemplaterTemplates(plugin, ruleMode = "default") {
   const adapter = app2.vault.adapter;
   const result = {
     written: [],
-    folder: SW_MARKDOWN_FOLDER,
+    folder: SW_MARKDOWN_FOLDER2,
     templaterDetected: false,
     folderConfigured: false,
     reloadedTemplater: false,
@@ -85430,14 +85632,15 @@ async function installTemplaterTemplates(plugin, ruleMode = "default") {
     return result;
   }
   try {
-    if (!await adapter.exists(SW_MARKDOWN_FOLDER)) {
-      await adapter.mkdir(SW_MARKDOWN_FOLDER);
+    if (!await adapter.exists(SW_MARKDOWN_FOLDER2)) {
+      await adapter.mkdir(SW_MARKDOWN_FOLDER2);
     }
     for (const [relativePath, asset] of entries) {
       const name = relativePath.slice("sw-markdown-templates/".length);
-      await adapter.write((0, import_obsidian9.normalizePath)(`${SW_MARKDOWN_FOLDER}/${name}`), asset.content);
+      await adapter.write((0, import_obsidian10.normalizePath)(`${SW_MARKDOWN_FOLDER2}/${name}`), asset.content);
       result.written.push(name);
     }
+    await recordTemplateOptIn(plugin, SW_MARKDOWN_FOLDER2);
   } catch (e3) {
     result.error = `Could not write templates: ${e3.message}`;
     return result;
@@ -85446,7 +85649,7 @@ async function installTemplaterTemplates(plugin, ruleMode = "default") {
   const templater = (_b = (_a = anyApp.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b[TEMPLATER_PLUGIN_ID];
   result.templaterDetected = !!templater;
   if (templater) {
-    const dataPath = (0, import_obsidian9.normalizePath)(`${app2.vault.configDir}/plugins/${TEMPLATER_PLUGIN_ID}/data.json`);
+    const dataPath = (0, import_obsidian10.normalizePath)(`${app2.vault.configDir}/plugins/${TEMPLATER_PLUGIN_ID}/data.json`);
     let disabled = false;
     try {
       await anyApp.plugins.disablePlugin(TEMPLATER_PLUGIN_ID);
@@ -85524,13 +85727,13 @@ async function installTemplaterTemplatesWithNotice(plugin) {
       new TemplaterRuleModal(plugin.app, existing, SW_BASIC_NOTE_PATH, resolve).open();
     });
     if (!replace) {
-      new import_obsidian9.Notice(`ScholarWeft: kept your existing "/" rule ("${existing}"). The Basic note template is installed, but not applied at the root.`, 9e3);
+      new import_obsidian10.Notice(`ScholarWeft: kept your existing "/" rule ("${existing}"). The Basic note template is installed, but not applied at the root.`, 9e3);
       return;
     }
     r3 = await installTemplaterTemplates(plugin, "replace");
   }
   if (r3.error && r3.written.length === 0) {
-    new import_obsidian9.Notice(`ScholarWeft: ${r3.error}`, 8e3);
+    new import_obsidian10.Notice(`ScholarWeft: ${r3.error}`, 8e3);
     return;
   }
   const lines = [
@@ -85548,11 +85751,86 @@ async function installTemplaterTemplatesWithNotice(plugin) {
   } else {
     lines.push(`Templater not detected \u2014 install and enable it, then click again.`);
   }
-  new import_obsidian9.Notice(`ScholarWeft: ${lines.join("\n")}`, 9e3);
+  new import_obsidian10.Notice(`ScholarWeft: ${lines.join("\n")}`, 9e3);
+}
+async function uninstallTemplaterTemplates(plugin) {
+  var _a, _b, _c;
+  const anyApp = plugin.app;
+  const adapter = plugin.app.vault.adapter;
+  const result = { removed: false, reverted: false };
+  try {
+    if (await adapter.exists(SW_MARKDOWN_FOLDER2)) {
+      await adapter.rmdir(SW_MARKDOWN_FOLDER2, true);
+      result.removed = true;
+    }
+  } catch (e3) {
+    result.error = `Could not remove ${SW_MARKDOWN_FOLDER2}/: ${e3.message}`;
+  }
+  const templater = (_b = (_a = anyApp.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b[TEMPLATER_PLUGIN_ID];
+  if (!templater)
+    return result;
+  const dataPath = (0, import_obsidian10.normalizePath)(`${plugin.app.vault.configDir}/plugins/${TEMPLATER_PLUGIN_ID}/data.json`);
+  const bakPath = `${dataPath}.scholarweft.bak`;
+  let disabled = false;
+  try {
+    await anyApp.plugins.disablePlugin(TEMPLATER_PLUGIN_ID);
+    disabled = true;
+  } catch (e3) {
+  }
+  try {
+    const raw = await adapter.exists(dataPath) ? await adapter.read(dataPath) : null;
+    if (!(raw == null ? void 0 : raw.trim()))
+      return result;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e3) {
+      result.error = "Templater's settings file couldn't be parsed \u2014 left untouched.";
+      return result;
+    }
+    let changed = false;
+    const rules = Array.isArray(data["folder_templates"]) ? data["folder_templates"].slice() : [];
+    const withoutOurs = rules.filter((r3) => !isOurRule(r3));
+    if (withoutOurs.length !== rules.length)
+      changed = true;
+    const hasRootNow = withoutOurs.some((r3) => isRootRule(r3));
+    if (!hasRootNow && await adapter.exists(bakPath)) {
+      try {
+        const prior = JSON.parse(await adapter.read(bakPath));
+        const priorRules = Array.isArray(prior == null ? void 0 : prior["folder_templates"]) ? prior["folder_templates"] : [];
+        const priorRoot = priorRules.find((r3) => isRootRule(r3) && !isOurRule(r3));
+        if (priorRoot) {
+          withoutOurs.push(priorRoot);
+          result.restoredRule = String((_c = priorRoot.template) != null ? _c : "");
+          changed = true;
+        }
+        if ((prior == null ? void 0 : prior["trigger_on_file_creation"]) !== true) {
+          data["trigger_on_file_creation"] = false;
+          changed = true;
+        }
+      } catch (e3) {
+      }
+    }
+    data["folder_templates"] = withoutOurs;
+    if (changed) {
+      await adapter.write(dataPath, JSON.stringify(data, null, 2));
+      result.reverted = true;
+    }
+  } catch (e3) {
+    result.error = `Could not restore Templater's settings: ${e3.message}`;
+  } finally {
+    if (disabled) {
+      try {
+        await anyApp.plugins.enablePlugin(TEMPLATER_PLUGIN_ID);
+      } catch (e3) {
+      }
+    }
+  }
+  return result;
 }
 
 // src/companionPlugins.ts
-var import_obsidian10 = __toModule(require("obsidian"));
+var import_obsidian11 = __toModule(require("obsidian"));
 var COMPANIONS = {
   zotlit: { id: "zotlit", repo: "PKM-er/obsidian-zotlit", name: "ZotLit" },
   templater: {
@@ -85565,7 +85843,7 @@ var GH_HEADERS = { Accept: "application/vnd.github+json" };
 async function latestStable(repo) {
   var _a, _b;
   try {
-    const res = await (0, import_obsidian10.requestUrl)({
+    const res = await (0, import_obsidian11.requestUrl)({
       url: `https://api.github.com/repos/${repo}/releases/latest`,
       headers: GH_HEADERS,
       throw: false
@@ -85576,7 +85854,7 @@ async function latestStable(repo) {
   } catch (e3) {
   }
   try {
-    const res = await (0, import_obsidian10.requestUrl)({
+    const res = await (0, import_obsidian11.requestUrl)({
       url: `https://api.github.com/repos/${repo}/releases?per_page=20`,
       headers: GH_HEADERS,
       throw: false
@@ -85603,7 +85881,7 @@ async function installCompanionPlugin(plugin, key) {
       error: `Could not read ${companion.name}'s releases (no network, or GitHub rate limit). Install it from Settings \u2192 Community plugins instead.`
     };
   }
-  const dir = (0, import_obsidian10.normalizePath)(`${app2.vault.configDir}/plugins/${companion.id}`);
+  const dir = (0, import_obsidian11.normalizePath)(`${app2.vault.configDir}/plugins/${companion.id}`);
   try {
     await adapter.mkdir(dir);
   } catch (e3) {
@@ -85619,10 +85897,10 @@ async function installCompanionPlugin(plugin, key) {
       };
     }
     try {
-      const res = await (0, import_obsidian10.requestUrl)({ url: asset.browser_download_url, throw: false });
+      const res = await (0, import_obsidian11.requestUrl)({ url: asset.browser_download_url, throw: false });
       if (res.status >= 400)
         throw new Error(`HTTP ${res.status}`);
-      await adapter.writeBinary((0, import_obsidian10.normalizePath)(`${dir}/${name}`), res.arrayBuffer);
+      await adapter.writeBinary((0, import_obsidian11.normalizePath)(`${dir}/${name}`), res.arrayBuffer);
     } catch (e3) {
       return {
         ok: false,
@@ -85663,10 +85941,10 @@ async function installCompanionPluginWithNotice(plugin, key) {
   const companion = COMPANIONS[key];
   const r3 = await installCompanionPlugin(plugin, key);
   if (r3.ok) {
-    new import_obsidian10.Notice(`ScholarWeft: installed and enabled ${companion.name}${r3.version ? ` (${r3.version})` : ""}. Click the button again to finish setting it up.`, 9e3);
+    new import_obsidian11.Notice(`ScholarWeft: installed and enabled ${companion.name}${r3.version ? ` (${r3.version})` : ""}. Click the button again to finish setting it up.`, 9e3);
     return true;
   }
-  new import_obsidian10.Notice(`ScholarWeft: ${r3.error}`, 12e3);
+  new import_obsidian11.Notice(`ScholarWeft: ${r3.error}`, 12e3);
   return false;
 }
 
@@ -86752,8 +87030,8 @@ function searchCSLLangs(query) {
 }
 
 // src/settings/FolderSuggest.ts
-var import_obsidian11 = __toModule(require("obsidian"));
-var FolderSuggest = class extends import_obsidian11.AbstractInputSuggest {
+var import_obsidian12 = __toModule(require("obsidian"));
+var FolderSuggest = class extends import_obsidian12.AbstractInputSuggest {
   constructor(app2, inputEl) {
     super(app2, inputEl);
     this.textInputEl = inputEl;
@@ -86762,7 +87040,7 @@ var FolderSuggest = class extends import_obsidian11.AbstractInputSuggest {
     const lower = inputStr.toLowerCase();
     const folders = [];
     this.app.vault.getAllLoadedFiles().forEach((f3) => {
-      if (f3 instanceof import_obsidian11.TFolder && f3.path.toLowerCase().includes(lower)) {
+      if (f3 instanceof import_obsidian12.TFolder && f3.path.toLowerCase().includes(lower)) {
         folders.push(f3);
       }
     });
@@ -86779,9 +87057,9 @@ var FolderSuggest = class extends import_obsidian11.AbstractInputSuggest {
 };
 
 // src/settings/BibFileSuggest.ts
-var import_obsidian12 = __toModule(require("obsidian"));
+var import_obsidian13 = __toModule(require("obsidian"));
 var BIB_EXTENSIONS = new Set(["bib", "json", "yaml", "yml"]);
-var BibFileSuggest = class extends import_obsidian12.AbstractInputSuggest {
+var BibFileSuggest = class extends import_obsidian13.AbstractInputSuggest {
   constructor(app2, inputEl) {
     super(app2, inputEl);
     this.textInputEl = inputEl;
@@ -86790,7 +87068,7 @@ var BibFileSuggest = class extends import_obsidian12.AbstractInputSuggest {
     const lower = inputStr.toLowerCase();
     const files = [];
     this.app.vault.getAllLoadedFiles().forEach((f3) => {
-      if (f3 instanceof import_obsidian12.TFile && BIB_EXTENSIONS.has(f3.extension) && f3.path.toLowerCase().includes(lower)) {
+      if (f3 instanceof import_obsidian13.TFile && BIB_EXTENSIONS.has(f3.extension) && f3.path.toLowerCase().includes(lower)) {
         files.push(f3);
       }
     });
@@ -86933,7 +87211,7 @@ function ZoteroPullSetting({ plugin }) {
 }
 
 // src/settings/ZoteroStylePicker.ts
-var import_obsidian13 = __toModule(require("obsidian"));
+var import_obsidian14 = __toModule(require("obsidian"));
 function zoteroStyleDirs(customDataDir) {
   var _a, _b;
   if (typeof require !== "function")
@@ -87024,7 +87302,7 @@ function resolveZoteroStylePath(value, customDataDir) {
   }
   return null;
 }
-var ZoteroStylePicker = class extends import_obsidian13.FuzzySuggestModal {
+var ZoteroStylePicker = class extends import_obsidian14.FuzzySuggestModal {
   constructor(app2, plugin, onPick) {
     super(app2);
     this.plugin = plugin;
@@ -87033,7 +87311,7 @@ var ZoteroStylePicker = class extends import_obsidian13.FuzzySuggestModal {
     const loaded = listZoteroInstalledStyles(plugin.settings.zoteroDataDir);
     this.styles = loaded;
     if (loaded.length === 0) {
-      new import_obsidian13.Notice("No Zotero styles found. Make sure Zotero is installed and has styles in ~/Zotero/styles/.", 6e3);
+      new import_obsidian14.Notice("No Zotero styles found. Make sure Zotero is installed and has styles in ~/Zotero/styles/.", 6e3);
     }
   }
   getItems() {
@@ -87048,7 +87326,7 @@ var ZoteroStylePicker = class extends import_obsidian13.FuzzySuggestModal {
 };
 
 // src/docs.ts
-var import_obsidian14 = __toModule(require("obsidian"));
+var import_obsidian15 = __toModule(require("obsidian"));
 var GITHUB_DOCS_BASE = "https://github.com/nebedaay/ScholarWeft/blob/main/docs/";
 var DOC_ORDER = [
   ["setup.md", "Setup"],
@@ -87108,12 +87386,12 @@ function getDocs() {
 function githubDocUrl(name) {
   return GITHUB_DOCS_BASE + name;
 }
-var DocsModal = class extends import_obsidian14.Modal {
+var DocsModal = class extends import_obsidian15.Modal {
   constructor(app2, initial = "README.md") {
     super(app2);
     this.initial = initial;
     this.navItems = new Map();
-    this.component = new import_obsidian14.Component();
+    this.component = new import_obsidian15.Component();
   }
   onOpen() {
     this.component.load();
@@ -87164,7 +87442,7 @@ var DocsModal = class extends import_obsidian14.Modal {
         this.show(m3[1]);
       }
     });
-    void import_obsidian14.MarkdownRenderer.render(this.app, doc.markdown, content, "", this.component);
+    void import_obsidian15.MarkdownRenderer.render(this.app, doc.markdown, content, "", this.component);
     this.body.scrollTop = 0;
   }
   onClose() {
@@ -87388,7 +87666,8 @@ var DEFAULT_SETTINGS = {
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
   createNotesWithZotLit: true,
-  useZotlitLiteratureFolder: false,
+  insertZoteroNotesOnCreate: true,
+  useZotlitLiteratureFolder: true,
   showPdfLinks: false,
   pathToPython: "",
   exportTemplatesDir: "",
@@ -87409,7 +87688,7 @@ var PAGE_TITLES = {
   "literature-notes": "Literature note import",
   documents: "Document import/export and compilation"
 };
-var BibFilePickerModal = class extends import_obsidian15.FuzzySuggestModal {
+var BibFilePickerModal = class extends import_obsidian16.FuzzySuggestModal {
   constructor(onChoose) {
     super(app);
     this.onChoose = onChoose;
@@ -87425,7 +87704,7 @@ var BibFilePickerModal = class extends import_obsidian15.FuzzySuggestModal {
     this.onChoose(file.path);
   }
 };
-var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab {
+var ReferenceListSettingsTab = class extends import_obsidian16.PluginSettingTab {
   constructor(plugin) {
     super(app, plugin);
     this.page = "home";
@@ -87533,7 +87812,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
     renderDependencyNote(containerEl, ["zotero"], t("Reading a bibliography file needs nothing installed. Connect Zotero to resolve and insert live citations."));
     const zoteroStatusEl = containerEl.createDiv({ cls: "sw-tool-status" });
     void this.renderZoteroStatus(zoteroStatusEl);
-    new import_obsidian15.Setting(containerEl).setName(t("Bibliography files")).setDesc(t('One or more bibliography files (.bib, .json, or .yaml). Vault-relative paths work on all platforms; absolute paths work on desktop only. All files are merged \u2014 Zotero wins on conflict. Can be overridden per-note via the "bibliography" frontmatter key.')).addButton((btn) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Bibliography files")).setDesc(t('One or more bibliography files (.bib, .json, or .yaml). Vault-relative paths work on all platforms; absolute paths work on desktop only. All files are merged \u2014 Zotero wins on conflict. Can be overridden per-note via the "bibliography" frontmatter key.')).addButton((btn) => {
       btn.setButtonText(t("Add file")).onClick(() => {
         this.plugin.settings.bibliographyPaths.push("");
         this.plugin.saveSettings();
@@ -87541,7 +87820,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
       });
     });
     this.plugin.settings.bibliographyPaths.forEach((bibPath, index) => {
-      const setting = new import_obsidian15.Setting(containerEl);
+      const setting = new import_obsidian16.Setting(containerEl);
       setting.setClass("sw-bib-path-entry");
       let inputEl;
       setting.addText((text) => {
@@ -87569,7 +87848,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
       setting.addExtraButton((btn) => {
         btn.setIcon("folder-open").setTooltip(t("Browse\u2026"));
         btn.onClick(() => {
-          if (import_obsidian15.Platform.isDesktop) {
+          if (import_obsidian16.Platform.isDesktop) {
             const fileInput = document.createElement("input");
             fileInput.type = "file";
             fileInput.accept = ".bib,.json,.yaml,.yml";
@@ -87612,8 +87891,8 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
     Cn.render(/* @__PURE__ */ Cn.createElement(ZoteroPullSetting, {
       plugin: this.plugin
     }), containerEl.createDiv("setting-item sw-setting-item-wrapper"));
-    if (import_obsidian15.Platform.isDesktop) {
-      new import_obsidian15.Setting(containerEl).setName(t("Zotero data folder")).setDesc(t(`Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note's "csl" frontmatter and to list styles for export.`)).addText((text) => {
+    if (import_obsidian16.Platform.isDesktop) {
+      new import_obsidian16.Setting(containerEl).setName(t("Zotero data folder")).setDesc(t(`Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note's "csl" frontmatter and to list styles for export.`)).addText((text) => {
         var _a;
         return text.setPlaceholder("~/Zotero").setValue((_a = this.plugin.settings.zoteroDataDir) != null ? _a : "").onChange((value) => {
           this.plugin.settings.zoteroDataDir = value.trim();
@@ -87639,7 +87918,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
         this.plugin.saveSettings(() => this.plugin.bibManager.reinit(false));
       }
     })), containerEl.createDiv("sw-setting-item setting-item"));
-    new import_obsidian15.Setting(containerEl).setName(t("Custom citation style")).setDesc(t('Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key \u2014 a bare Zotero style name, a path, or a URL.')).then((setting) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Custom citation style")).setDesc(t('Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key \u2014 a bare Zotero style name, a path, or a URL.')).then((setting) => {
       let pathText;
       setting.addText((text) => {
         var _a2;
@@ -87649,7 +87928,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
           this.plugin.saveSettings(() => this.plugin.bibManager.reinit(false));
         });
       });
-      if (import_obsidian15.Platform.isDesktop) {
+      if (import_obsidian16.Platform.isDesktop) {
         setting.addButton((btn) => {
           btn.setButtonText(t("Browse Zotero styles\u2026")).onClick(() => {
             new ZoteroStylePicker(this.app, this.plugin, (style) => {
@@ -87683,38 +87962,38 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
         }
       }
     })), containerEl.createDiv("sw-setting-item setting-item"));
-    new import_obsidian15.Setting(containerEl).setName(t("Process linked citations")).setDesc(t("Recognize [[@key]] and [[@key|see @, p. 6]] linked citations: include them in the reference list and render them as formatted inline citations in live preview. The @ placeholder inside an alias expands to the link's own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. On by default \u2014 this is the plugin's core feature.")).addToggle((text) => text.setValue(this.plugin.settings.renderLinkCitations !== false).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Process linked citations")).setDesc(t("Recognize [[@key]] and [[@key|see @, p. 6]] linked citations: include them in the reference list and render them as formatted inline citations in live preview. The @ placeholder inside an alias expands to the link's own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. On by default \u2014 this is the plugin's core feature.")).addToggle((text) => text.setValue(this.plugin.settings.renderLinkCitations !== false).onChange((value) => {
       this.plugin.settings.renderLinkCitations = value;
       this.plugin.settings.formatLinkAliases = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian15.Setting(containerEl).setName(t("Render live preview inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in live preview mode.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitations).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Render live preview inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in live preview mode.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitations).onChange((value) => {
       this.plugin.settings.renderCitations = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian15.Setting(containerEl).setName(t("Render reading mode inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in reading mode.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitationsReadingMode).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Render reading mode inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in reading mode.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitationsReadingMode).onChange((value) => {
       this.plugin.settings.renderCitationsReadingMode = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian15.Setting(containerEl).setName(t("Link citations to literature notes")).setDesc(t("Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitationsAsLinks).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Link citations to literature notes")).setDesc(t("Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitationsAsLinks).onChange((value) => {
       this.plugin.settings.renderCitationsAsLinks = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian15.Setting(containerEl).setName(t("Hide links in references")).setDesc(t("Replace links with link icons to save space.")).addToggle((text) => text.setValue(!!this.plugin.settings.hideLinks).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Hide links in references")).setDesc(t("Replace links with link icons to save space.")).addToggle((text) => text.setValue(!!this.plugin.settings.hideLinks).onChange((value) => {
       this.plugin.settings.hideLinks = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian15.Setting(containerEl).setName(t("Show PDF links in references")).setDesc(t('Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.')).addToggle((text) => text.setValue(!!this.plugin.settings.showPdfLinks).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Show PDF links in references")).setDesc(t('Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.')).addToggle((text) => text.setValue(!!this.plugin.settings.showPdfLinks).onChange((value) => {
       this.plugin.settings.showPdfLinks = value;
       this.plugin.saveSettings();
       this.plugin.processReferences();
     }));
     const zotlitActive = isZotLitSuggestActive(this.app);
-    new import_obsidian15.Setting(containerEl).setName(t("Show citekey suggestions")).setDesc(zotlitActive ? t("ZotLit detected \u2014 [@key completions are handled by ZotLit. This plugin still provides bare @key suggestions (outside brackets) and for .bib file entries.") : t("When enabled, an autocomplete dialog will display when typing citation keys.")).addToggle((text) => text.setValue(!!this.plugin.settings.enableCiteKeyCompletion).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Show citekey suggestions")).setDesc(zotlitActive ? t("ZotLit detected \u2014 [@key completions are handled by ZotLit. This plugin still provides bare @key suggestions (outside brackets) and for .bib file entries.") : t("When enabled, an autocomplete dialog will display when typing citation keys.")).addToggle((text) => text.setValue(!!this.plugin.settings.enableCiteKeyCompletion).onChange((value) => {
       this.plugin.settings.enableCiteKeyCompletion = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian15.Setting(containerEl).setName(t("Prioritize citation completion")).setDesc(t(`Use this plugin's citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin's suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian's link search can't see unimported references.`)).addToggle((toggle) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Prioritize citation completion")).setDesc(t(`Use this plugin's citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin's suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian's link search can't see unimported references.`)).addToggle((toggle) => {
       var _a2;
       return toggle.setValue((_a2 = this.plugin.settings.prioritizeCiteKeyCompletion) != null ? _a2 : true).onChange((value) => {
         this.plugin.settings.prioritizeCiteKeyCompletion = value;
@@ -87722,14 +88001,14 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
       });
     });
     const showDeco = (_a = this.plugin.settings.showCitationDecorations) != null ? _a : true;
-    new import_obsidian15.Setting(containerEl).setName(t("Citation decoration")).setDesc(t("Underline citation keys in the editor to show their status at a glance: pandoc citations get a faint dotted underline, [[@linked]] citations with a literature note get a coloured underline, and [[@linked]] citations without one get a different colour. Use the colour pickers below to customise each state.")).addToggle((toggle) => toggle.setValue(showDeco).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Citation decoration")).setDesc(t("Underline citation keys in the editor to show their status at a glance: pandoc citations get a faint dotted underline, [[@linked]] citations with a literature note get a coloured underline, and [[@linked]] citations without one get a different colour. Use the colour pickers below to customise each state.")).addToggle((toggle) => toggle.setValue(showDeco).onChange((value) => {
       this.plugin.settings.showCitationDecorations = value;
       this.plugin.saveSettings();
       this.display();
     }));
     if (showDeco) {
       const makeColorPicker = (name, desc, settingKey, cssVar) => {
-        new import_obsidian15.Setting(containerEl).setName(t(name)).setDesc(t(desc)).then((setting) => {
+        new import_obsidian16.Setting(containerEl).setName(t(name)).setDesc(t(desc)).then((setting) => {
           const savedVal = this.plugin.settings[settingKey];
           const cssVal = savedVal != null ? savedVal : getComputedStyle(document.body).getPropertyValue(cssVar).trim();
           const m3 = cssVal.match(/^(#[0-9a-fA-F]{3,8})/);
@@ -87815,17 +88094,17 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
       addRow("[[", "@sanchez2001|@, no note", "]]", "sw-prev-unimported", "(Sanchez 2001, no note)");
       addRow("[[", "@nothing1899", "]]", "sw-prev-unresolved-key", "@nothing1899", "sw-prev-unresolved-val");
     }
-    new import_obsidian15.Setting(containerEl).setName(t("Show citekey tooltips")).setDesc(t("Hovering over a citekey opens a tooltip showing the formatted citation, an abstract preview, and buttons to open the item in Zotero, open its PDF, and create or navigate to its literature note.")).addToggle((text) => text.setValue(!!this.plugin.settings.showCitekeyTooltips).onChange((value) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Show citekey tooltips")).setDesc(t("Hovering over a citekey opens a tooltip showing the formatted citation, an abstract preview, and buttons to open the item in Zotero, open its PDF, and create or navigate to its literature note.")).addToggle((text) => text.setValue(!!this.plugin.settings.showCitekeyTooltips).onChange((value) => {
       this.plugin.settings.showCitekeyTooltips = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian15.Setting(containerEl).setName(t("Tooltip delay")).setDesc(t("Set the amount of time (in milliseconds) to wait before displaying tooltips.")).addSlider((slider) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Tooltip delay")).setDesc(t("Set the amount of time (in milliseconds) to wait before displaying tooltips.")).addSlider((slider) => {
       slider.setDynamicTooltip().setLimits(0, 7e3, 100).setValue(this.plugin.settings.tooltipDelay).onChange((value) => {
         this.plugin.settings.tooltipDelay = value;
         this.plugin.saveSettings();
       });
     });
-    new import_obsidian15.Setting(containerEl).setName(t("Mobile tap action")).setDesc(t("What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.")).addDropdown((dd) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Mobile tap action")).setDesc(t("What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.")).addDropdown((dd) => {
       var _a2;
       return dd.addOption("show", t("Show citation info")).addOption("copy", t("Copy citation to clipboard")).addOption("link", t("Open link (Zotero \u2192 PDF \u2192 URL)")).setValue((_a2 = this.plugin.settings.mobileClickAction) != null ? _a2 : "show").onChange((value) => {
         this.plugin.settings.mobileClickAction = value;
@@ -87837,13 +88116,23 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
     renderDependencyNote(containerEl, ["zotero", "zotlit"], t("Creating literature notes needs Zotero for citekey and metadata lookup; ZotLit is optional and adds richer templates."));
     const useZotlitFolder = !!this.plugin.settings.useZotlitLiteratureFolder;
     const zotlitFolder = getZotlitLiteratureFolder(this.app);
-    new import_obsidian15.Setting(containerEl).setName(t("Use ZotLit's literature note folder")).setDesc(t("Use ZotLit's configured literature note folder for the plugin's own notes too, so both create notes in the same place. It is read live from ZotLit, so it follows the folder if ZotLit's setting changes. When on, the folder below is ignored." + (useZotlitFolder ? ` ZotLit's folder is currently: ${zotlitFolder || "(not set)"}.` : ""))).addToggle((toggle) => toggle.setValue(useZotlitFolder).onChange((value) => {
-      this.plugin.settings.useZotlitLiteratureFolder = value;
+    const useZotlitForNotes = this.plugin.settings.createNotesWithZotLit !== false;
+    new import_obsidian16.Setting(containerEl).setName(t("Create literature notes with ZotLit")).setDesc(t(`When ZotLit is available, the tooltip's "Create literature note" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.`)).addToggle((toggle) => toggle.setValue(useZotlitForNotes).onChange((value) => {
+      this.plugin.settings.createNotesWithZotLit = value;
+      if (value)
+        this.plugin.settings.useZotlitLiteratureFolder = true;
       this.plugin.saveSettings();
       this.display();
     }));
+    if (useZotlitForNotes) {
+      new import_obsidian16.Setting(containerEl).setName(t("Use ZotLit's literature note folder")).setDesc(t("Use ZotLit's configured literature note folder for the plugin's own notes too, so both create notes in the same place. It is read live from ZotLit, so it follows the folder if ZotLit's setting changes." + (useZotlitFolder ? ` ZotLit's folder is currently: ${zotlitFolder || "(not set)"}.` : ""))).addToggle((toggle) => toggle.setValue(useZotlitFolder).onChange((value) => {
+        this.plugin.settings.useZotlitLiteratureFolder = value;
+        this.plugin.saveSettings();
+        this.display();
+      }));
+    }
     if (!useZotlitFolder) {
-      new import_obsidian15.Setting(containerEl).setName(t("Literature notes folder")).setDesc(t(`Folder where the plugin's own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.`)).addText((text) => {
+      new import_obsidian16.Setting(containerEl).setName(t("Literature notes folder")).setDesc(t(`Folder where the plugin's own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.`)).addText((text) => {
         var _a;
         text.setPlaceholder("_2 Bibliographic notes").setValue((_a = this.plugin.settings.literatureNoteFolder) != null ? _a : "").onChange((value) => {
           this.plugin.settings.literatureNoteFolder = value;
@@ -87852,20 +88141,30 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
         new FolderSuggest(this.app, text.inputEl);
       });
     }
-    new import_obsidian15.Setting(containerEl).setName(t("Create literature notes with ZotLit")).setDesc(t(`When ZotLit is available, the tooltip's "Create literature note" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.`)).addToggle((toggle) => toggle.setValue(this.plugin.settings.createNotesWithZotLit !== false).onChange((value) => {
-      this.plugin.settings.createNotesWithZotLit = value;
+    new import_obsidian16.Setting(containerEl).setName(t("If a Zotero reference contains notes, insert them into all literature notes created.")).setDesc(t(`Whenever a literature note is created \u2014 by ScholarWeft or by ZotLit (for example an export from the Zotero\u2013ZotLit companion) \u2014 insert the Zotero item's child notes into the note's "Notes" section automatically, instead of leaving it as a separate step. Notes that already contain them are left alone; you can still re-run "Insert Zotero notes into literature notes (vault)" at any time.`)).addToggle((toggle) => toggle.setValue(this.plugin.settings.insertZoteroNotesOnCreate !== false).onChange((value) => {
+      this.plugin.settings.insertZoteroNotesOnCreate = value;
       this.plugin.saveSettings();
     }));
-    if (import_obsidian15.Platform.isDesktop) {
+    if (import_obsidian16.Platform.isDesktop) {
       this.renderCompanionSetting(containerEl, {
         pluginId: "zotlit",
         companionKey: "zotlit",
         name: "Install and use ScholarWeft's ZotLit import templates",
         readyDesc: `Copies ScholarWeft's ZotLit templates into "sw-zotlit-templates/" and points ZotLit's "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.`,
         actionLabel: "Install templates",
+        reinstallLabel: "Reinstall templates",
+        isInstalled: () => this.templatesInstalled(SW_ZOTLIT_FOLDER2),
         hint: "ZotLit won't enable, or errors when you turn it on? Your Obsidian installer is probably older than the app \u2014 the app updates itself, but the installer only updates when you reinstall from a fresh download. Check Settings \u2192 About \u2192 Installer version, then download the latest installer from obsidian.md/download and reinstall Obsidian; your vault and settings are untouched.",
         run: async () => {
           await installZotlitTemplatesWithNotice(this.plugin);
+        },
+        uninstall: async () => {
+          const r3 = await uninstallZotlitTemplates(this.plugin);
+          if (r3.error)
+            new import_obsidian16.Notice(`ScholarWeft: ${r3.error}`, 8e3);
+          else {
+            new import_obsidian16.Notice(r3.reverted ? "ScholarWeft: removed the ZotLit templates and restored ZotLit's own settings." : "ScholarWeft: removed the ZotLit templates." + (r3.reverted ? "" : " (ZotLit's settings were left as they are.)"), 8e3);
+          }
         }
       });
       this.renderCompanionSetting(containerEl, {
@@ -87874,20 +88173,37 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
         name: "Install the Basic note template and apply it to new notes",
         readyDesc: `Installs the Basic note template and sets Templater to apply it by default to every note you manually create in your vault. The template adds four properties at the top of each note that help you situate and connect all notes in your vault: created date, larger category ("up"), related notes, and alternative names ("aliases"). It lives in its own folder ("sw-markdown-templates/"), so your own templates and other Templater rules are left untouched. If new notes still start empty, open Templater's settings, turn on "Trigger Templater on new file creation", and confirm its warning.`,
         actionLabel: "Install and set up",
+        reinstallLabel: "Reinstall and set up",
+        isInstalled: () => this.templatesInstalled(SW_MARKDOWN_FOLDER2),
         openSettingsId: "templater-obsidian",
         openSettingsLabel: "Open Templater settings",
         run: async () => {
           await installTemplaterTemplatesWithNotice(this.plugin);
+        },
+        uninstall: async () => {
+          const r3 = await uninstallTemplaterTemplates(this.plugin);
+          if (r3.error)
+            new import_obsidian16.Notice(`ScholarWeft: ${r3.error}`, 8e3);
+          else {
+            const extra = r3.restoredRule ? ` Your own "/" template rule (${r3.restoredRule}) was restored.` : "";
+            new import_obsidian16.Notice(`ScholarWeft: removed the Basic note template.${extra}`, 8e3);
+          }
         }
       });
     }
   }
+  templatesInstalled(folder) {
+    const dir = this.app.vault.getAbstractFileByPath(folder);
+    if (!(dir instanceof import_obsidian16.TFolder))
+      return false;
+    return dir.children.some((c3) => c3 instanceof import_obsidian16.TFile && c3.extension === "md");
+  }
   renderCompanionSetting(containerEl, cfg) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const pm = this.app.plugins;
     const installed = !!((_a = pm == null ? void 0 : pm.manifests) == null ? void 0 : _a[cfg.pluginId]);
     const enabled = !!((_b = pm == null ? void 0 : pm.plugins) == null ? void 0 : _b[cfg.pluginId]);
-    const setting = new import_obsidian15.Setting(containerEl).setName(t(cfg.name));
+    const setting = new import_obsidian16.Setting(containerEl).setName(t(cfg.name));
     const rerender = () => {
       try {
         this.display();
@@ -87914,7 +88230,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
           if (await enableCompanionPlugin(this.plugin, cfg.companionKey)) {
             rerender();
           } else {
-            new import_obsidian15.Notice(t("Couldn't enable it \u2014 turn off Restricted mode and enable it in Settings \u2192 Community plugins."), 1e4);
+            new import_obsidian16.Notice(t("Couldn't enable it \u2014 turn off Restricted mode and enable it in Settings \u2192 Community plugins."), 1e4);
           }
         } finally {
           btn.setDisabled(false);
@@ -87922,14 +88238,43 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
       }));
     } else {
       setting.setDesc(t(cfg.readyDesc));
-      setting.addButton((btn) => btn.setButtonText(t(cfg.actionLabel)).onClick(async () => {
-        btn.setDisabled(true);
+      if (cfg.uninstall) {
+        let on2 = false;
         try {
-          await cfg.run();
-        } finally {
-          btn.setDisabled(false);
+          on2 = !!((_c = cfg.isInstalled) == null ? void 0 : _c.call(cfg));
+        } catch (e3) {
         }
-      }));
+        setting.addToggle((toggle) => toggle.setValue(on2).onChange(async (value) => {
+          toggle.setDisabled(true);
+          try {
+            if (value)
+              await cfg.run();
+            else
+              await cfg.uninstall();
+          } finally {
+            toggle.setDisabled(false);
+            rerender();
+          }
+        }));
+        return;
+      }
+      let alreadyDone = false;
+      try {
+        alreadyDone = !!((_d = cfg.isInstalled) == null ? void 0 : _d.call(cfg));
+      } catch (e3) {
+      }
+      setting.addButton((btn) => {
+        var _a2;
+        return btn.setButtonText(alreadyDone ? t((_a2 = cfg.reinstallLabel) != null ? _a2 : "Reinstall") : t(cfg.actionLabel)).onClick(async () => {
+          btn.setDisabled(true);
+          try {
+            await cfg.run();
+          } finally {
+            btn.setDisabled(false);
+            rerender();
+          }
+        });
+      });
       if (cfg.openSettingsId) {
         setting.addButton((btn) => {
           var _a2;
@@ -87953,8 +88298,8 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
     renderDependencyNote(containerEl, ["python", "pandoc", "libreoffice", "latex", "zotero", "bbt"], t("Compiling, exporting, and importing call external tools. PDF via an ODT/DOCX template needs LibreOffice; PDF via a .tex template needs LuaLaTeX; live citation fields need Zotero (and Better BibTeX for automatic citekeys)."));
     const toolStatusEl = containerEl.createDiv({ cls: "sw-tool-status" });
     void this.renderToolStatus(toolStatusEl);
-    if (import_obsidian15.Platform.isDesktop) {
-      new import_obsidian15.Setting(containerEl).setName(t("Path to Pandoc (optional)")).setDesc(t("Absolute path to the Pandoc executable. Used for document import/export, and (when set) to convert .bib/.yaml files instead of the built-in parser. Leave blank to use the built-in parser for .bib files (works on all platforms).")).then((setting) => {
+    if (import_obsidian16.Platform.isDesktop) {
+      new import_obsidian16.Setting(containerEl).setName(t("Path to Pandoc (optional)")).setDesc(t("Absolute path to the Pandoc executable. Used for document import/export, and (when set) to convert .bib/.yaml files instead of the built-in parser. Leave blank to use the built-in parser for .bib files (works on all platforms).")).then((setting) => {
         let inputEl;
         setting.addText((text) => {
           var _a;
@@ -87979,8 +88324,8 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
         });
       });
     }
-    if (import_obsidian15.Platform.isDesktop) {
-      new import_obsidian15.Setting(containerEl).setName(t("Path to Python 3 (for Document Compiler)")).setDesc(t('Absolute path to the python3 interpreter used by "Compile and export a book, article, or other document" and "Import a Word or ODT document". It must have the lxml and python-docx packages. Leave blank to auto-detect (python3 on PATH, then common install locations).')).then((setting) => {
+    if (import_obsidian16.Platform.isDesktop) {
+      new import_obsidian16.Setting(containerEl).setName(t("Path to Python 3 (for Document Compiler)")).setDesc(t('Absolute path to the python3 interpreter used by "Compile and export a book, article, or other document" and "Import a Word or ODT document". It must have the lxml and python-docx packages. Leave blank to auto-detect (python3 on PATH, then common install locations).')).then((setting) => {
         let inputEl;
         setting.addText((text) => {
           var _a;
@@ -87992,7 +88337,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
           });
         });
       });
-      new import_obsidian15.Setting(containerEl).setName(t("Export templates directory (optional)")).setDesc(t("Directory of your export templates (.docx, .odt, .tex). Vault-relative (e.g. Export Templates) or absolute. Leave blank to use <vault>/Export Templates/, then the templates bundled with the plugin.")).then((setting) => {
+      new import_obsidian16.Setting(containerEl).setName(t("Export templates directory (optional)")).setDesc(t("Directory of your export templates (.docx, .odt, .tex). Vault-relative (e.g. Export Templates) or absolute. Leave blank to use <vault>/Export Templates/, then the templates bundled with the plugin.")).then((setting) => {
         setting.addText((text) => {
           var _a;
           return text.setPlaceholder("Export Templates").setValue((_a = this.plugin.settings.exportTemplatesDir) != null ? _a : "").onChange((value) => {
@@ -88001,7 +88346,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
           });
         });
       });
-      new import_obsidian15.Setting(containerEl).setName(t("Default document language")).setDesc(t("Language used when a note has no `lang` property (BCP-47, e.g. en-US, de-DE, ar). It sets the LaTeX hyphenation/main language and the document language for DOCX/ODT. Set `lang:` in a note to override it.")).then((setting) => {
+      new import_obsidian16.Setting(containerEl).setName(t("Default document language")).setDesc(t("Language used when a note has no `lang` property (BCP-47, e.g. en-US, de-DE, ar). It sets the LaTeX hyphenation/main language and the document language for DOCX/ODT. Set `lang:` in a note to override it.")).then((setting) => {
         setting.addText((text) => {
           var _a;
           return text.setPlaceholder("en-US").setValue((_a = this.plugin.settings.exportLanguage) != null ? _a : "").onChange((value) => {
@@ -88010,7 +88355,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
           });
         });
       });
-      new import_obsidian15.Setting(containerEl).setName(t("Default output folder for compiled/exported documents (optional)")).setDesc(t(`Vault-relative folder where "Compile and export a book, article, or other document" puts the compiled markdown and the exported file. Leave blank to use the source file's own folder. Can be changed per-export in the modal.`)).then((setting) => {
+      new import_obsidian16.Setting(containerEl).setName(t("Default output folder for compiled/exported documents (optional)")).setDesc(t(`Vault-relative folder where "Compile and export a book, article, or other document" puts the compiled markdown and the exported file. Leave blank to use the source file's own folder. Can be changed per-export in the modal.`)).then((setting) => {
         setting.addText((text) => {
           var _a;
           return text.setPlaceholder("Export Compiled").setValue((_a = this.plugin.settings.defaultOutputDir) != null ? _a : "").onChange((value) => {
@@ -88020,14 +88365,14 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
         });
       });
     }
-    new import_obsidian15.Setting(containerEl).setName(t("Default author name (optional)")).setDesc(t("Used as the document author when the note has no `author:` frontmatter property. Leave blank to omit the author field in exported documents.")).addText((text) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Default author name (optional)")).setDesc(t("Used as the document author when the note has no `author:` frontmatter property. Leave blank to omit the author field in exported documents.")).addText((text) => {
       var _a;
       return text.setPlaceholder("First Last").setValue((_a = this.plugin.settings.defaultAuthor) != null ? _a : "").onChange((value) => {
         this.plugin.settings.defaultAuthor = value;
         this.plugin.saveSettings();
       });
     });
-    new import_obsidian15.Setting(containerEl).setName(t("Use Obsidian account name as author fallback")).setDesc(t("If enabled and no `author:` property or default author name is set, the display name from your Obsidian account (if signed in) is used instead.")).addToggle((toggle) => {
+    new import_obsidian16.Setting(containerEl).setName(t("Use Obsidian account name as author fallback")).setDesc(t("If enabled and no `author:` property or default author name is set, the display name from your Obsidian account (if signed in) is used instead.")).addToggle((toggle) => {
       var _a;
       return toggle.setValue((_a = this.plugin.settings.useAccountNameAsAuthor) != null ? _a : false).onChange((value) => {
         this.plugin.settings.useAccountNameAsAuthor = value;
@@ -88084,7 +88429,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
           });
         }
       };
-      new import_obsidian15.Setting(containerEl).setName(t("Custom style mappings")).setDesc(t("Map callout types (e.g. arabic-poetry) to word-processor style names. Applied during DOCX and ODT export. For multi-style or per-line formatting, add a .lua filter to your Export Templates folder instead.")).addToggle((toggle) => {
+      new import_obsidian16.Setting(containerEl).setName(t("Custom style mappings")).setDesc(t("Map callout types (e.g. arabic-poetry) to word-processor style names. Applied during DOCX and ODT export. For multi-style or per-line formatting, add a .lua filter to your Export Templates folder instead.")).addToggle((toggle) => {
         var _a;
         return toggle.setValue((_a = this.plugin.settings.styleMappingsEnabled) != null ? _a : true).onChange((value) => {
           this.plugin.settings.styleMappingsEnabled = value;
@@ -88114,7 +88459,7 @@ var ReferenceListSettingsTab = class extends import_obsidian15.PluginSettingTab 
 };
 
 // src/tooltip.ts
-var import_obsidian16 = __toModule(require("obsidian"));
+var import_obsidian17 = __toModule(require("obsidian"));
 var import_text_clipper = __toModule(require_dist());
 var TooltipManager = class {
   constructor(plugin) {
@@ -88133,7 +88478,7 @@ var TooltipManager = class {
     if (!el.dataset.source)
       return;
     const file = app.vault.getAbstractFileByPath(el.dataset.source);
-    if (!file && !(file instanceof import_obsidian16.TFile)) {
+    if (!file && !(file instanceof import_obsidian17.TFile)) {
       return;
     }
     const view = el.win || ((_a = el.ownerDocument) == null ? void 0 : _a.defaultView) || window;
@@ -88225,7 +88570,7 @@ var TooltipManager = class {
   showMobileCard(el) {
     var _a, _b, _c, _d, _e;
     const file = app.vault.getAbstractFileByPath((_a = el.dataset.source) != null ? _a : "");
-    if (!(file instanceof import_obsidian16.TFile))
+    if (!(file instanceof import_obsidian17.TFile))
       return;
     const keys = ((_b = el.dataset.citekey) != null ? _b : "").split("|").filter(Boolean);
     if (!keys.length)
@@ -88248,7 +88593,7 @@ var TooltipManager = class {
     const card = backdrop.createDiv({ cls: "sw-mobile-card sw-reference-list" });
     const header = card.createDiv({ cls: "sw-mobile-card-header" });
     const closeBtn = header.createDiv({ cls: "clickable-icon" });
-    (0, import_obsidian16.setIcon)(closeBtn, "x");
+    (0, import_obsidian17.setIcon)(closeBtn, "x");
     closeBtn.setAttribute("aria-label", t("Close"));
     closeBtn.onClickEvent(() => backdrop.remove());
     if (content) {
@@ -88267,7 +88612,7 @@ var TooltipManager = class {
     var _a, _b, _c;
     const action = (_a = this.plugin.settings.mobileClickAction) != null ? _a : "show";
     const file = app.vault.getAbstractFileByPath((_b = el.dataset.source) != null ? _b : "");
-    if (!(file instanceof import_obsidian16.TFile))
+    if (!(file instanceof import_obsidian17.TFile))
       return;
     const keys = ((_c = el.dataset.citekey) != null ? _c : "").split("|").filter(Boolean);
     if (!keys.length)
@@ -88320,7 +88665,7 @@ var TooltipManager = class {
     }
   }
   bindPreviewTooltipHandler(el) {
-    if (import_obsidian16.Platform.isMobile) {
+    if (import_obsidian17.Platform.isMobile) {
       el.addEventListener("click", () => this.handleMobileTap(el));
       return;
     }
@@ -88400,7 +88745,7 @@ var TooltipManager = class {
       },
       touchstart: (evt) => {
         var _a, _b, _c;
-        if (!import_obsidian16.Platform.isMobile)
+        if (!import_obsidian17.Platform.isMobile)
           return;
         const target = evt.target;
         if (!((_a = target == null ? void 0 : target.dataset) == null ? void 0 : _a.citekey) || target.classList.contains("is-link"))
@@ -88444,7 +88789,7 @@ var TooltipManager = class {
           lpCancel((_a = evt.view) != null ? _a : window);
       },
       click: (evt) => {
-        if (!import_obsidian16.Platform.isMobile)
+        if (!import_obsidian17.Platform.isMobile)
           return;
         if (lpFired) {
           lpFired = false;
@@ -88452,7 +88797,7 @@ var TooltipManager = class {
         }
       },
       pointerover: (evt) => {
-        if (import_obsidian16.Platform.isMobile)
+        if (import_obsidian17.Platform.isMobile)
           return;
         const target = evt.targetNode;
         if (target.instanceOf(HTMLElement)) {
@@ -88495,9 +88840,9 @@ var TooltipManager = class {
 };
 
 // src/view.ts
-var import_obsidian17 = __toModule(require("obsidian"));
+var import_obsidian18 = __toModule(require("obsidian"));
 var viewType = "scholar-weft-reference-list";
-var ReferenceListView = class extends import_obsidian17.ItemView {
+var ReferenceListView = class extends import_obsidian18.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -88509,7 +88854,7 @@ var ReferenceListView = class extends import_obsidian17.ItemView {
     var _a, _b;
     if (bib && this.contentEl.firstChild !== bib) {
       let count = 0;
-      const activeView = this.plugin.app.workspace.getActiveViewOfType(import_obsidian17.MarkdownView);
+      const activeView = this.plugin.app.workspace.getActiveViewOfType(import_obsidian18.MarkdownView);
       const fileCache = (activeView == null ? void 0 : activeView.file) ? this.plugin.bibManager.fileCache.get(activeView.file) : null;
       const unresolvedCount = (_a = fileCache == null ? void 0 : fileCache.unresolvedKeys.size) != null ? _a : 0;
       const globalOnlyCount = (_b = fileCache == null ? void 0 : fileCache.globalOnlyKeys.size) != null ? _b : 0;
@@ -88563,7 +88908,7 @@ var ReferenceListView = class extends import_obsidian17.ItemView {
               "aria-label": t("Copy list")
             }
           }, (btn) => {
-            (0, import_obsidian17.setIcon)(btn, "lucide-copy");
+            (0, import_obsidian18.setIcon)(btn, "lucide-copy");
             btn.onClickEvent(() => copyElToClipboard(bib));
           });
           if (activeView == null ? void 0 : activeView.file) {
@@ -88573,7 +88918,7 @@ var ReferenceListView = class extends import_obsidian17.ItemView {
                 "aria-label": t("Save bibliography snapshot")
               }
             }, (btn) => {
-              (0, import_obsidian17.setIcon)(btn, "lucide-camera");
+              (0, import_obsidian18.setIcon)(btn, "lucide-camera");
               btn.onClickEvent(() => {
                 const file = activeView.file;
                 const entries = this.plugin.bibManager.snapshotEntries(file);
@@ -89991,7 +90336,7 @@ var SimpleLRU = class {
 };
 
 // src/bib/bibManager.ts
-var import_obsidian19 = __toModule(require("obsidian"));
+var import_obsidian20 = __toModule(require("obsidian"));
 
 // src/parser/citeproc.ts
 function genUid(length) {
@@ -90157,7 +90502,7 @@ function cite(engine, group, uncitedItemIDs) {
 }
 
 // src/zoteroNotes.ts
-var import_obsidian18 = __toModule(require("obsidian"));
+var import_obsidian19 = __toModule(require("obsidian"));
 var DEFAULT_ZOTERO_PORT2 = "23119";
 var SW_ZN_MARK = "<!-- sw-zn -->";
 function zoteroHtmlToMarkdown(html) {
@@ -90175,7 +90520,7 @@ function zoteroHtmlToMarkdown(html) {
   return s3;
 }
 async function getJson(port, path) {
-  const resp = await (0, import_obsidian18.requestUrl)({
+  const resp = await (0, import_obsidian19.requestUrl)({
     url: `http://127.0.0.1:${port}${path}`,
     method: "GET",
     headers: {
@@ -90245,10 +90590,10 @@ function recordedKeys(content) {
   return out;
 }
 async function zoteroKeyOf(app2, file) {
-  var _a;
+  var _a, _b;
   const cache2 = app2.metadataCache.getFileCache(file);
   const fm = cache2 == null ? void 0 : cache2.frontmatter;
-  const k4 = (_a = fm == null ? void 0 : fm["zotero-key"]) != null ? _a : fm == null ? void 0 : fm.zoteroKey;
+  const k4 = (_b = (_a = fm == null ? void 0 : fm["zotero-key"]) != null ? _a : fm == null ? void 0 : fm.zoteroKey) != null ? _b : fm == null ? void 0 : fm.citekey;
   return typeof k4 === "string" && k4.trim() ? k4.trim() : null;
 }
 async function insertIntoNote(app2, file, notes) {
@@ -90325,7 +90670,7 @@ async function insertZoteroNotesForFiles(app2, files, opts = {}) {
   for (const f3 of files) {
     try {
       const fresh = app2.vault.getAbstractFileByPath(f3.path);
-      const file = fresh instanceof import_obsidian18.TFile ? fresh : f3;
+      const file = fresh instanceof import_obsidian19.TFile ? fresh : f3;
       const key = await zoteroKeyOf(app2, file);
       if (!key) {
         result.noNotes.push(file.path);
@@ -90333,6 +90678,9 @@ async function insertZoteroNotesForFiles(app2, files, opts = {}) {
       }
       const notes = await fetchChildNotes(port, key);
       const r3 = await insertIntoNote(app2, file, notes);
+      if (r3 === "inserted") {
+        console.log(`ScholarWeft: inserted ${notes.length} Zotero note(s) into ${file.path}`);
+      }
       if (r3 === "inserted")
         result.inserted++;
       else if (r3 === "skipped")
@@ -90409,7 +90757,7 @@ function resolveScopedPath(file, scopedPath) {
   if (isAbsolutePath(scopedPath))
     return scopedPath;
   const noteDir = file.path.split("/").slice(0, -1).join("/");
-  return (0, import_obsidian19.normalizePath)(noteDir ? `${noteDir}/${scopedPath}` : scopedPath);
+  return (0, import_obsidian20.normalizePath)(noteDir ? `${noteDir}/${scopedPath}` : scopedPath);
 }
 function fastHash(input) {
   let h3 = 2166136261;
@@ -90485,7 +90833,7 @@ var ZoteroOfflineAlert = class {
       return;
     const el = createDiv({ cls: "sw-zotero-alert" });
     const icon = el.createSpan({ cls: "sw-zotero-alert-icon" });
-    (0, import_obsidian19.setIcon)(icon, "lucide-plug-zap");
+    (0, import_obsidian20.setIcon)(icon, "lucide-plug-zap");
     el.createSpan({
       cls: "sw-zotero-alert-text",
       text: "ScholarWeft: can\u2019t connect to Zotero. Make sure Zotero is open, and that no other vault is connected to it (only one vault can connect at a time). Citations format automatically once it connects."
@@ -90493,7 +90841,7 @@ var ZoteroOfflineAlert = class {
     const retry = el.createEl("button", { cls: "sw-zotero-alert-retry", text: "Retry now" });
     retry.onClickEvent(() => (onRetryExternal != null ? onRetryExternal : this.onRetry)());
     const dismiss = el.createSpan({ cls: "sw-zotero-alert-dismiss clickable-icon" });
-    (0, import_obsidian19.setIcon)(dismiss, "lucide-x");
+    (0, import_obsidian20.setIcon)(dismiss, "lucide-x");
     dismiss.setAttr("aria-label", "Dismiss");
     dismiss.onClickEvent(() => this.hide());
     anchor.prepend(el);
@@ -90528,7 +90876,7 @@ function promptZotLitFallback(reason) {
       settled = true;
       resolve(v3);
     };
-    class Prompt extends import_obsidian19.Modal {
+    class Prompt extends import_obsidian20.Modal {
       onOpen() {
         this.titleEl.setText("ZotLit could not create this note");
         this.contentEl.createEl("p", {
@@ -90596,14 +90944,14 @@ var BibManager = class {
     this.warming = false;
     this.warmingSkipPDFs = false;
     this.warmingSkipLRU = false;
-    this.scheduleRenderedCacheSave = (0, import_obsidian19.debounce)(() => {
+    this.scheduleRenderedCacheSave = (0, import_obsidian20.debounce)(() => {
       void this.saveRenderedCache();
     }, 2500);
     this.plugin = plugin;
     this.initPromise = new PromiseCapability();
     this.fileCache = new SimpleLRU({ max: 10 });
     plugin.registerEvent(plugin.app.vault.on("modify", (file) => {
-      const p4 = (0, import_obsidian19.normalizePath)(file.path);
+      const p4 = (0, import_obsidian20.normalizePath)(file.path);
       if (!this.watchedBibPaths.has(p4))
         return;
       const { settings } = plugin;
@@ -90860,8 +91208,8 @@ var BibManager = class {
     const paths = (_a = settings.bibliographyPaths) != null ? _a : [];
     if (!paths.length)
       return;
-    const CACHE_DIR2 = (0, import_obsidian19.normalizePath)(SW_CACHE_DIR);
-    const BIB_CACHE_PATH = (0, import_obsidian19.normalizePath)(`${CACHE_DIR2}/bib-parsed.json`);
+    const CACHE_DIR2 = (0, import_obsidian20.normalizePath)(SW_CACHE_DIR);
+    const BIB_CACHE_PATH = (0, import_obsidian20.normalizePath)(`${CACHE_DIR2}/bib-parsed.json`);
     const pandoc = (_b = settings.pathToPandoc) != null ? _b : "";
     const cacheMap = new Map();
     try {
@@ -90895,7 +91243,7 @@ var BibManager = class {
       let bib = null;
       if (!isAbsolutePath(resolved)) {
         try {
-          const stat = await app.vault.adapter.stat((0, import_obsidian19.normalizePath)(resolved));
+          const stat = await app.vault.adapter.stat((0, import_obsidian20.normalizePath)(resolved));
           const cached = cacheMap.get(resolved);
           if (stat && cached && cached.mtime === stat.mtime && cached.size === stat.size && cached.pandoc === pandoc) {
             bib = cached.entries;
@@ -90914,7 +91262,7 @@ var BibManager = class {
         }
         if (!isAbsolutePath(resolved)) {
           try {
-            const stat = await app.vault.adapter.stat((0, import_obsidian19.normalizePath)(resolved));
+            const stat = await app.vault.adapter.stat((0, import_obsidian20.normalizePath)(resolved));
             if (stat) {
               cacheMap.set(resolved, { mtime: stat.mtime, size: stat.size, pandoc, entries: bib });
               cacheModified = true;
@@ -90924,7 +91272,7 @@ var BibManager = class {
         }
       }
       if (!isAbsolutePath(resolved)) {
-        this.globalWatchedBibPaths.add((0, import_obsidian19.normalizePath)(resolved));
+        this.globalWatchedBibPaths.add((0, import_obsidian20.normalizePath)(resolved));
       }
       for (const entry of bib) {
         this.bibCache.set(entry.id, { ...entry, _source: "bib" });
@@ -91575,10 +91923,10 @@ var BibManager = class {
       try {
         let text;
         if (isAbsolutePath(p4)) {
-          const buf = await import_obsidian19.FileSystemAdapter.readLocalFile(p4);
+          const buf = await import_obsidian20.FileSystemAdapter.readLocalFile(p4);
           text = new TextDecoder().decode(buf);
         } else {
-          text = await app.vault.adapter.read((0, import_obsidian19.normalizePath)(p4));
+          text = await app.vault.adapter.read((0, import_obsidian20.normalizePath)(p4));
         }
         for (const m3 of text.matchAll(/@\w+\s*\{\s*([^,\s\n]+)\s*,/gm)) {
           keys.add(m3[1].trim());
@@ -91661,11 +92009,11 @@ var BibManager = class {
   }
   async saveZLinks() {
     try {
-      const dir = (0, import_obsidian19.normalizePath)(SW_CACHE_DIR);
+      const dir = (0, import_obsidian20.normalizePath)(SW_CACHE_DIR);
       if (!await app.vault.adapter.exists(dir)) {
         await app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write((0, import_obsidian19.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`), JSON.stringify({
+      await app.vault.adapter.write((0, import_obsidian20.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`), JSON.stringify({
         links: Object.fromEntries(this.zCitekeyToLinks),
         pdfs: Object.fromEntries(this.zCitekeyToPDFLinks)
       }));
@@ -91675,7 +92023,7 @@ var BibManager = class {
   }
   async loadZLinks() {
     try {
-      const raw = await app.vault.adapter.read((0, import_obsidian19.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`));
+      const raw = await app.vault.adapter.read((0, import_obsidian20.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`));
       const data = JSON.parse(raw);
       if (data == null ? void 0 : data.links) {
         for (const [k4, v3] of Object.entries(data.links)) {
@@ -91716,7 +92064,7 @@ var BibManager = class {
         if (this.renderedCache.has(path))
           continue;
         const file = app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian19.TFile)
+        if (file instanceof import_obsidian20.TFile)
           candidates.push(file);
       }
       candidates.sort((a3, b3) => {
@@ -91767,7 +92115,7 @@ var BibManager = class {
           });
           e3.oncontextmenu = (evt) => {
             evt.preventDefault();
-            new import_obsidian19.Menu().addItem((item) => item.setTitle(t("Copy citekey")).setIcon("lucide-copy").onClick(() => copyTextToClipboard(`@${citekey}`))).addItem((item) => item.setTitle(t("Copy reference")).setIcon("lucide-copy").onClick(() => copyElToClipboard(e3))).showAtMouseEvent(evt);
+            new import_obsidian20.Menu().addItem((item) => item.setTitle(t("Copy citekey")).setIcon("lucide-copy").onClick(() => copyTextToClipboard(`@${citekey}`))).addItem((item) => item.setTitle(t("Copy reference")).setIcon("lucide-copy").onClick(() => copyElToClipboard(e3))).showAtMouseEvent(evt);
           };
         }
         this.ensureZLink(citekey);
@@ -91784,22 +92132,22 @@ var BibManager = class {
         wrapper.createDiv({ cls: "sw-entry-btns" }, (div) => {
           if (hasConflict) {
             div.createDiv("clickable-icon sw-conflict-icon", (div2) => {
-              (0, import_obsidian19.setIcon)(div2, "lucide-alert-triangle");
+              (0, import_obsidian20.setIcon)(div2, "lucide-alert-triangle");
               div2.setAttr("aria-label", t("This entry exists in both your .bib file and Zotero. Zotero data is shown."));
             });
           }
           if (litNote) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian19.setIcon)(div2, "sticky-note");
+              (0, import_obsidian20.setIcon)(div2, "sticky-note");
               div2.setAttr("aria-label", t("Open literature note"));
               div2.onClickEvent((evt) => {
-                const newPane = import_obsidian19.Keymap.isModEvent(evt);
+                const newPane = import_obsidian20.Keymap.isModEvent(evt);
                 app.workspace.openLinkText(litNote.linkText, file.path, newPane);
               });
             });
           } else if (canCreateNote) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian19.setIcon)(div2, "lucide-file-plus");
+              (0, import_obsidian20.setIcon)(div2, "lucide-file-plus");
               div2.setAttr("aria-label", t("Create literature note"));
               div2.onClickEvent(async () => {
                 await this.createLiteratureNote(citekey, file);
@@ -91808,7 +92156,7 @@ var BibManager = class {
           }
           if (zLink) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian19.setIcon)(div2, "lucide-external-link");
+              (0, import_obsidian20.setIcon)(div2, "lucide-external-link");
               div2.setAttr("aria-label", t("Open in Zotero"));
               div2.onClickEvent(() => {
                 activeWindow.open(zLink, "_blank");
@@ -91818,7 +92166,7 @@ var BibManager = class {
           if (zPDFLinks) {
             zPDFLinks.forEach((link) => {
               div.createDiv("clickable-icon", (div2) => {
-                (0, import_obsidian19.setIcon)(div2, "lucide-file-text");
+                (0, import_obsidian20.setIcon)(div2, "lucide-file-text");
                 div2.setAttr("aria-label", pathBasename(link));
                 div2.onClickEvent(() => {
                   activeWindow.open(`file://${encodeURI(link)}`, "_blank");
@@ -91844,7 +92192,7 @@ var BibManager = class {
     });
     if (!targetView) {
       await this.plugin.app.workspace.openLinkText(sourceFile.path, "", false);
-      targetView = (_a = this.plugin.app.workspace.getActiveViewOfType(import_obsidian19.MarkdownView)) != null ? _a : null;
+      targetView = (_a = this.plugin.app.workspace.getActiveViewOfType(import_obsidian20.MarkdownView)) != null ? _a : null;
     }
     if (!(targetView == null ? void 0 : targetView.editor))
       return;
@@ -91888,7 +92236,7 @@ var BibManager = class {
     const settingsFolder = ((_g = this.plugin.settings.literatureNoteFolder) != null ? _g : "").trim();
     const folder = this.plugin.settings.useZotlitLiteratureFolder ? zotlitFolder || settingsFolder || "_2 Bibliographic notes" : settingsFolder || zotlitFolder || "_2 Bibliographic notes";
     const filename = `@${citekey}.md`;
-    const notePath = folder ? (0, import_obsidian19.normalizePath)(`${folder}/${filename}`) : filename;
+    const notePath = folder ? (0, import_obsidian20.normalizePath)(`${folder}/${filename}`) : filename;
     if (await app.vault.adapter.exists(notePath)) {
       await app.workspace.openLinkText(notePath, sourceFile.path, true);
       return;
@@ -91907,45 +92255,80 @@ var BibManager = class {
 # ${title}
 
 `;
-    if (folder && !await app.vault.adapter.exists((0, import_obsidian19.normalizePath)(folder))) {
-      await app.vault.adapter.mkdir((0, import_obsidian19.normalizePath)(folder));
+    if (folder && !await app.vault.adapter.exists((0, import_obsidian20.normalizePath)(folder))) {
+      await app.vault.adapter.mkdir((0, import_obsidian20.normalizePath)(folder));
     }
     await app.vault.create(notePath, content);
     await app.workspace.openLinkText(notePath, sourceFile.path, true);
     void this.fillZoteroNotesForCitekey(citekey, sourceFile);
   }
-  async fillZoteroNotesForCitekey(citekey, sourceFile, expectCreation = true) {
-    var _a, _b, _c;
-    const sourcePath = (_c = (_b = sourceFile == null ? void 0 : sourceFile.path) != null ? _b : (_a = app.workspace.getActiveFile()) == null ? void 0 : _a.path) != null ? _c : "";
-    const attempts = expectCreation ? 6 : 1;
-    let file = null;
-    for (let i3 = 0; i3 < attempts; i3++) {
-      await new Promise((r3) => setTimeout(r3, i3 === 0 ? 1e3 : 1e3));
-      const hit = getLitNoteForCitekey(citekey, sourcePath, app);
-      if (hit == null ? void 0 : hit.file) {
-        file = hit.file;
-        break;
-      }
-    }
-    if (!file)
+  async fillZoteroNotesForFile(citekey, file) {
+    if (this.plugin.settings.insertZoteroNotesOnCreate === false)
       return;
     try {
       const res = await insertZoteroNotesForFiles(app, [file], {
         zoteroPort: this.plugin.settings.zoteroPort
       });
+      debugLog("[sw:notes] fill result for", file.path, {
+        inserted: res.inserted,
+        noNotes: res.noNotes,
+        skipped: res.skipped,
+        failed: res.failed
+      });
       if (res.inserted) {
-        new import_obsidian19.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
+        new import_obsidian20.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
       }
     } catch (e3) {
+      console.warn("[sw:notes] fill threw for", file.path, e3);
+    }
+  }
+  async fillZoteroNotesForCitekey(citekey, sourceFile, expectCreation = true) {
+    var _a, _b, _c, _d, _e, _f;
+    if (this.plugin.settings.insertZoteroNotesOnCreate === false)
+      return;
+    debugLog("[sw:notes] fill start", citekey, "expectCreation=", expectCreation);
+    let file = sourceFile && ((_a = this.plugin) == null ? void 0 : _a.app.vault.getAbstractFileByPath(sourceFile.path)) instanceof import_obsidian20.TFile ? sourceFile : null;
+    if (!file) {
+      const sourcePath = (_d = (_c = sourceFile == null ? void 0 : sourceFile.path) != null ? _c : (_b = app.workspace.getActiveFile()) == null ? void 0 : _b.path) != null ? _d : "";
+      const attempts = Math.max(expectCreation ? 6 : 4, 4);
+      for (let i3 = 0; i3 < attempts; i3++) {
+        await new Promise((r3) => setTimeout(r3, 1e3));
+        const hit = getLitNoteForCitekey(citekey, sourcePath, app);
+        debugLog("[sw:notes] resolve attempt", i3 + 1, "/", attempts, "for", citekey, "\u2192", (_f = (_e = hit == null ? void 0 : hit.file) == null ? void 0 : _e.path) != null ? _f : "not found");
+        if (hit == null ? void 0 : hit.file) {
+          file = hit.file;
+          break;
+        }
+      }
+    }
+    if (!file) {
+      console.warn("[sw:notes] could not resolve a literature note for", citekey);
+      return;
+    }
+    try {
+      const res = await insertZoteroNotesForFiles(app, [file], {
+        zoteroPort: this.plugin.settings.zoteroPort
+      });
+      debugLog("[sw:notes] fill result for", citekey, {
+        inserted: res.inserted,
+        noNotes: res.noNotes,
+        skipped: res.skipped,
+        failed: res.failed
+      });
+      if (res.inserted) {
+        new import_obsidian20.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
+      }
+    } catch (e3) {
+      console.warn("[sw:notes] fill threw for", citekey, e3);
     }
   }
   async syncLitNoteFilenames(folder = "_2 Bibliographic notes") {
     var _a;
     const results = [];
     const dir = app.vault.getAbstractFileByPath(folder);
-    if (!(dir instanceof import_obsidian19.TFolder))
+    if (!(dir instanceof import_obsidian20.TFolder))
       return results;
-    const files = dir.children.filter((f3) => f3 instanceof import_obsidian19.TFile && /^@.+\.md$/.test(f3.name));
+    const files = dir.children.filter((f3) => f3 instanceof import_obsidian20.TFile && /^@.+\.md$/.test(f3.name));
     for (const file of files) {
       try {
         const content = await app.vault.read(file);
@@ -91956,7 +92339,7 @@ var BibManager = class {
         const stem = file.basename.startsWith("@") ? file.basename.slice(1) : file.basename;
         if (stem === citekey)
           continue;
-        const newPath = (0, import_obsidian19.normalizePath)(file.path.replace(/[^/]+$/, `@${citekey}.md`));
+        const newPath = (0, import_obsidian20.normalizePath)(file.path.replace(/[^/]+$/, `@${citekey}.md`));
         if (app.vault.getAbstractFileByPath(newPath))
           continue;
         await app.vault.rename(file, newPath);
@@ -92077,7 +92460,7 @@ var BibManager = class {
     this.citedKeysBuiltAt = (data == null ? void 0 : data.version) === CITED_KEYS_INDEX_VERSION ? (_b = data.builtAt) != null ? _b : 0 : 0;
   }
   renderedCachePath() {
-    return (0, import_obsidian19.normalizePath)(`${SW_CACHE_DIR}/rendered-citations.json`);
+    return (0, import_obsidian20.normalizePath)(`${SW_CACHE_DIR}/rendered-citations.json`);
   }
   async loadRenderedCache() {
     if (this.renderedCacheLoaded)
@@ -92103,7 +92486,7 @@ var BibManager = class {
     for (const [p4, v3] of this.renderedCache)
       notes[p4] = v3;
     try {
-      const dir = (0, import_obsidian19.normalizePath)(SW_CACHE_DIR);
+      const dir = (0, import_obsidian20.normalizePath)(SW_CACHE_DIR);
       if (!await app.vault.adapter.exists(dir)) {
         await app.vault.adapter.mkdir(dir);
       }
@@ -92243,7 +92626,7 @@ var BibManager = class {
       for (const k4 of this.getCitedKeys())
         citekeys.add(k4);
     } else {
-      const view = app.workspace.getActiveViewOfType(import_obsidian19.MarkdownView);
+      const view = app.workspace.getActiveViewOfType(import_obsidian20.MarkdownView);
       if (view == null ? void 0 : view.file) {
         await this.indexFileCitekeys(view.file);
         (await this.citekeysInFile(view.file)).forEach((k4) => citekeys.add(k4));
@@ -92354,7 +92737,7 @@ var BibManager = class {
     if ((_a = settings == null ? void 0 : settings.bibliography) == null ? void 0 : _a.length) {
       for (const scopedBibPath of settings.bibliography) {
         if (!isAbsolutePath(scopedBibPath)) {
-          paths.add((0, import_obsidian19.normalizePath)(scopedBibPath));
+          paths.add((0, import_obsidian20.normalizePath)(scopedBibPath));
         }
       }
     }
@@ -92398,11 +92781,11 @@ var BibManager = class {
   }
   getCacheForPath(filePath) {
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian19.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian20.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       return cache2;
     }
-    if (file instanceof import_obsidian19.TFile) {
+    if (file instanceof import_obsidian20.TFile) {
       const entry = this.renderedCache.get(file.path);
       if (entry && this.persistedEntryIsCurrent(file, entry)) {
         const result = this.fileCacheFromPersisted(file, entry);
@@ -92416,7 +92799,7 @@ var BibManager = class {
   }
   getResolution(filePath, key) {
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian19.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian20.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       return {
         isResolved: cache2.resolvedKeys.has(key),
@@ -92431,7 +92814,7 @@ var BibManager = class {
   getCitationsForSection(filePath, lineStart, lineEnd) {
     var _a, _b, _c, _d;
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian19.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian20.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       const mCache = app.metadataCache.getCache(filePath);
       const exact = (_a = mCache.sections) == null ? void 0 : _a.find((s3) => s3.position.start.line === lineStart && s3.position.end.line === lineEnd);
@@ -92450,7 +92833,7 @@ var BibManager = class {
 };
 
 // src/citeSuggest/citeSuggest.ts
-var import_obsidian20 = __toModule(require("obsidian"));
+var import_obsidian21 = __toModule(require("obsidian"));
 var SUGGEST_DEBUG = false;
 var LOG = SUGGEST_DEBUG ? (...args) => console.log("[sw:suggest]", ...args) : (..._args) => {
 };
@@ -92516,7 +92899,7 @@ function isLoadingSuggestion(s3) {
 var triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 var doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
 var DOUBLE_AT_PREFIX = "\0";
-var CiteSuggest = class extends import_obsidian20.EditorSuggest {
+var CiteSuggest = class extends import_obsidian21.EditorSuggest {
   constructor(app2, plugin) {
     super(app2);
     this.limit = 20;
@@ -92531,7 +92914,7 @@ var CiteSuggest = class extends import_obsidian20.EditorSuggest {
     });
     this.setInstructions([
       {
-        command: import_obsidian20.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
+        command: import_obsidian21.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
         purpose: "Wrap cite key with brackets"
       }
     ]);
@@ -92794,7 +93177,7 @@ var CiteSuggest = class extends import_obsidian20.EditorSuggest {
 };
 
 // src/exportModal.ts
-var import_obsidian21 = __toModule(require("obsidian"));
+var import_obsidian22 = __toModule(require("obsidian"));
 
 // src/convertCitations.ts
 var SPECIAL_RE = new RegExp("\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|\\[\\[@([^|\\]\\s]+)\\]\\]|\u27E6", "g");
@@ -93228,7 +93611,7 @@ var DEFAULT_BIBLIOGRAPHY = true;
 var MAX_LEVEL = 6;
 var FOOTNOTE_RESTART_LABEL = "Restart footnote and figure numbering per chapter";
 var FOOTNOTE_RESTART_ODT_NOTE = " (not available for ODT exports with native word-processor endnotes)";
-var ZoteroWarningModal = class extends import_obsidian21.Modal {
+var ZoteroWarningModal = class extends import_obsidian22.Modal {
   constructor(app2, needCount, liveFields, decide) {
     super(app2);
     this.needCount = needCount;
@@ -93269,7 +93652,7 @@ var ZoteroWarningModal = class extends import_obsidian21.Modal {
 function askZotero(app2, needCount, liveFields) {
   return new Promise((resolve) => new ZoteroWarningModal(app2, needCount, liveFields, resolve).open());
 }
-var ExportModal = class extends import_obsidian21.Modal {
+var ExportModal = class extends import_obsidian22.Modal {
   constructor(app2, plugin, file) {
     super(app2);
     this.cslStyleHasList = false;
@@ -94059,9 +94442,9 @@ var ExportModal = class extends import_obsidian21.Modal {
     }
     if (applied > 0) {
       void this.plugin.saveSettings();
-      new import_obsidian21.Notice("Reset to this note's properties.");
+      new import_obsidian22.Notice("Reset to this note's properties.");
     } else {
-      new import_obsidian21.Notice("This note has no export properties to reset to.");
+      new import_obsidian22.Notice("This note has no export properties to reset to.");
     }
     this.syncFormatState(this.formatSelect.value);
   }
@@ -94113,7 +94496,7 @@ var ExportModal = class extends import_obsidian21.Modal {
         this.sameSourceCb.checked = false;
       }
     } catch (e3) {
-      new import_obsidian21.Notice("Directory picker unavailable \u2014 type the path into the box above.");
+      new import_obsidian22.Notice("Directory picker unavailable \u2014 type the path into the box above.");
     }
   }
   effectiveNotesMode() {
@@ -94150,14 +94533,14 @@ var ExportModal = class extends import_obsidian21.Modal {
   }
   async run() {
     var _a, _b, _c;
-    if (!import_obsidian21.Platform.isDesktop) {
-      new import_obsidian21.Notice("Document compile/export is only available on desktop.");
+    if (!import_obsidian22.Platform.isDesktop) {
+      new import_obsidian22.Notice("Document compile/export is only available on desktop.");
       return;
     }
     const opts = this.options();
     const missing = this.formatMissing(opts.format);
     if (missing.length > 0) {
-      new import_obsidian21.Notice(`This export needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
+      new import_obsidian22.Notice(`This export needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
       return;
     }
     let tempBiblio = null;
@@ -94229,7 +94612,7 @@ var ExportModal = class extends import_obsidian21.Modal {
     await this.plugin.saveSettings();
     this.close();
     const label = opts.format === "md" ? "Compiling outline\u2026" : opts.format === "odt" ? "Compiling + exporting to ODT\u2026" : opts.format === "latex" ? "Compiling + exporting to LaTeX\u2026" : opts.format === "pdf" ? "Compiling + exporting to PDF\u2026" : "Compiling + exporting to DOCX\u2026";
-    const progress = new import_obsidian21.Notice(label, 0);
+    const progress = new import_obsidian22.Notice(label, 0);
     const res = await runDocumentCompiler(this.plugin, this.file, opts).finally(() => {
       if (tempBiblio) {
         try {
@@ -94240,14 +94623,14 @@ var ExportModal = class extends import_obsidian21.Modal {
     });
     progress.hide();
     if (!res.ok) {
-      new import_obsidian21.Notice(`Document compiler failed:
+      new import_obsidian22.Notice(`Document compiler failed:
 ${res.stderr}`, 8e3);
       console.error("[scholar-weft] DocumentCompiler failed:", res.stderr);
       return;
     }
     const outPath = (_c = (_b = res.outputPath) != null ? _b : res.stdout.trim().split("\n").pop()) != null ? _c : "";
     const doneLabel = opts.format === "md" ? `Compiled: ${outPath}` : `Exported: ${outPath}`;
-    new import_obsidian21.Notice(doneLabel, 6e3);
+    new import_obsidian22.Notice(doneLabel, 6e3);
   }
   async writeStaticBibliography(keys) {
     const entries = [];
@@ -94287,7 +94670,7 @@ ${res.stderr}`, 8e3);
 };
 
 // src/importModal.ts
-var import_obsidian23 = __toModule(require("obsidian"));
+var import_obsidian24 = __toModule(require("obsidian"));
 
 // src/importCompiler.ts
 function execFileAsync2(file, args, options) {
@@ -94341,7 +94724,7 @@ async function runImportScript(plugin, inputPath, outputPath) {
 }
 
 // src/pandocToLinked.ts
-var import_obsidian22 = __toModule(require("obsidian"));
+var import_obsidian23 = __toModule(require("obsidian"));
 function aliasFor(a3) {
   let alias = (a3.prefix || "") + "@" + (a3.suffix || "");
   alias = alias.trim();
@@ -94490,11 +94873,11 @@ function rewritePandocToLinked(body, resolvable, allowUnresolved = false) {
 async function convertVault(plugin) {
   const resolvable = new Set(plugin.bibManager.bibCache.keys());
   if (!resolvable.size) {
-    new import_obsidian22.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
+    new import_obsidian23.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
     return;
   }
   const files = plugin.app.vault.getMarkdownFiles().filter((f3) => !f3.path.endsWith(".bk") && !f3.path.endsWith(".bk.md"));
-  const progress = new import_obsidian22.Notice(`Converting citations across ${files.length} files\u2026`, 0);
+  const progress = new import_obsidian23.Notice(`Converting citations across ${files.length} files\u2026`, 0);
   let convertedFiles = 0;
   let totalSkipped = 0;
   try {
@@ -94526,13 +94909,13 @@ async function convertVault(plugin) {
   }
   const skippedNote = totalSkipped > 0 ? `
 Skipped ${totalSkipped} citations (unresolved/unparseable \u2014 see console)` : "";
-  new import_obsidian22.Notice(convertedFiles > 0 ? `Converted citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.${skippedNote}` : `No pandoc citations found in vault.`, 6e3);
+  new import_obsidian23.Notice(convertedFiles > 0 ? `Converted citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.${skippedNote}` : `No pandoc citations found in vault.`, 6e3);
 }
 async function convertActiveNote(plugin, file, { allowUnresolved = false } = {}) {
   const content = await plugin.app.vault.read(file);
   const resolvable = new Set(plugin.bibManager.bibCache.keys());
   if (!allowUnresolved && !resolvable.size) {
-    new import_obsidian22.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
+    new import_obsidian23.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
     return { converted: 0, skipped: [] };
   }
   let body = content;
@@ -94544,7 +94927,7 @@ async function convertActiveNote(plugin, file, { allowUnresolved = false } = {})
   }
   const { out, report } = rewritePandocToLinked(body, resolvable, allowUnresolved);
   if (out === body) {
-    new import_obsidian22.Notice(`No pandoc citations found in ${file.basename}.`, 4e3);
+    new import_obsidian23.Notice(`No pandoc citations found in ${file.basename}.`, 4e3);
     return report;
   }
   const bkPath = `${file.path}.bk`;
@@ -94554,7 +94937,7 @@ async function convertActiveNote(plugin, file, { allowUnresolved = false } = {})
   await plugin.app.vault.modify(file, frontmatter + out);
   const skippedNote = report.skipped.length > 0 ? `
 Skipped ${report.skipped.length} (unresolved/unparseable \u2014 see console)` : "";
-  new import_obsidian22.Notice(`Converted citations in ${file.basename}.${skippedNote}`, 6e3);
+  new import_obsidian23.Notice(`Converted citations in ${file.basename}.${skippedNote}`, 6e3);
   if (report.skipped.length) {
     console.warn("[scholar-weft] skipped pandoc citations:", report.skipped.map((s3) => `${s3.text} (${s3.reason})`));
   }
@@ -94592,7 +94975,7 @@ function pathForDroppedFile(file) {
   }
   return file.path;
 }
-var ImportModal = class extends import_obsidian23.Modal {
+var ImportModal = class extends import_obsidian24.Modal {
   constructor(app2, plugin) {
     super(app2);
     this.inputPath = "";
@@ -94715,12 +95098,12 @@ var ImportModal = class extends import_obsidian23.Modal {
         return;
       const filePath = pathForDroppedFile(file);
       if (!filePath) {
-        new import_obsidian23.Notice("[ScholarWeft] Could not read the file path from the dropped file.");
+        new import_obsidian24.Notice("[ScholarWeft] Could not read the file path from the dropped file.");
         return;
       }
       const lower = filePath.toLowerCase();
       if (!lower.endsWith(".docx") && !lower.endsWith(".odt")) {
-        new import_obsidian23.Notice("[ScholarWeft] Please drop a .docx or .odt file.");
+        new import_obsidian24.Notice("[ScholarWeft] Please drop a .docx or .odt file.");
         return;
       }
       this.selectFile(filePath, file.name);
@@ -94823,13 +95206,13 @@ var ImportModal = class extends import_obsidian23.Modal {
   async run() {
     if (!this.inputPath)
       return;
-    if (!import_obsidian23.Platform.isDesktop) {
-      new import_obsidian23.Notice("Document import is only available on desktop.");
+    if (!import_obsidian24.Platform.isDesktop) {
+      new import_obsidian24.Notice("Document import is only available on desktop.");
       return;
     }
     const missing = this.importMissing();
     if (missing.length > 0) {
-      new import_obsidian23.Notice(`Document import needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
+      new import_obsidian24.Notice(`Document import needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
       return;
     }
     const doConvert = this.convertCb.checked;
@@ -94844,11 +95227,11 @@ var ImportModal = class extends import_obsidian23.Modal {
     const os = require("os");
     const basename = nodePath.basename(this.inputPath).replace(/\.(docx|odt)$/i, "");
     const tmpOutput = nodePath.join(os.tmpdir(), `${basename}.sw-import.md`);
-    const progress = new import_obsidian23.Notice("Importing document\u2026 Zotero must be running.", 0);
+    const progress = new import_obsidian24.Notice("Importing document\u2026 Zotero must be running.", 0);
     const result = await runImportScript(this.plugin, this.inputPath, tmpOutput);
     if (!result.ok) {
       progress.hide();
-      new import_obsidian23.Notice(`[ScholarWeft] Import failed:
+      new import_obsidian24.Notice(`[ScholarWeft] Import failed:
 ${result.stderr}`, 1e4);
       console.error("[scholar-weft] Import failed:", result.stderr);
       return;
@@ -94862,7 +95245,7 @@ ${result.stderr}`, 1e4);
       }
     } catch (e3) {
       progress.hide();
-      new import_obsidian23.Notice(`[ScholarWeft] Import failed: could not read converted file.
+      new import_obsidian24.Notice(`[ScholarWeft] Import failed: could not read converted file.
 ${e3}`, 8e3);
       return;
     }
@@ -94890,7 +95273,7 @@ ${e3}`, 8e3);
     let newFile;
     try {
       const existing = this.app.vault.getAbstractFileByPath(vaultRelPath);
-      if (existing instanceof import_obsidian23.TFile && overwrite) {
+      if (existing instanceof import_obsidian24.TFile && overwrite) {
         await this.app.vault.modify(existing, mdContent);
         newFile = existing;
       } else if (existing) {
@@ -94907,15 +95290,15 @@ ${e3}`, 8e3);
       }
     } catch (e3) {
       progress.hide();
-      new import_obsidian23.Notice(`[ScholarWeft] Import failed: could not create note in vault.
+      new import_obsidian24.Notice(`[ScholarWeft] Import failed: could not create note in vault.
 ${e3}`, 8e3);
       return;
     }
     await this.app.workspace.getLeaf(false).openFile(newFile);
     progress.hide();
-    new import_obsidian23.Notice(`Imported: ${newFile.basename}`, 5e3);
+    new import_obsidian24.Notice(`Imported: ${newFile.basename}`, 5e3);
     if (doLitNotes) {
-      const litProgress = new import_obsidian23.Notice("Creating missing literature notes\u2026", 0);
+      const litProgress = new import_obsidian24.Notice("Creating missing literature notes\u2026", 0);
       try {
         const { created, missingKeys } = await this.plugin.bibManager.createMissingLitNotes({ file: newFile }, (done, total) => {
           var _a;
@@ -94923,11 +95306,11 @@ ${e3}`, 8e3);
         });
         litProgress.hide();
         if (missingKeys.length) {
-          new import_obsidian23.Notice(`Created ${created} of ${missingKeys.length} missing literature note(s).`, 5e3);
+          new import_obsidian24.Notice(`Created ${created} of ${missingKeys.length} missing literature note(s).`, 5e3);
         }
       } catch (e3) {
         litProgress.hide();
-        new import_obsidian23.Notice(`[ScholarWeft] Literature note creation failed: ${e3}`, 6e3);
+        new import_obsidian24.Notice(`[ScholarWeft] Literature note creation failed: ${e3}`, 6e3);
         console.error("[scholar-weft] lit note creation error:", e3);
       }
     }
@@ -94939,8 +95322,8 @@ ${e3}`, 8e3);
 };
 
 // src/modals/citekeyRenameModal.ts
-var import_obsidian24 = __toModule(require("obsidian"));
-var CitekeyRenameModal = class extends import_obsidian24.Modal {
+var import_obsidian25 = __toModule(require("obsidian"));
+var CitekeyRenameModal = class extends import_obsidian25.Modal {
   constructor(app2, plan, onConfirm, showLitNotesOption = true, alsoUnresolved = []) {
     super(app2);
     this.plan = plan;
@@ -95068,8 +95451,8 @@ var CitekeyRenameModal = class extends import_obsidian24.Modal {
 };
 
 // src/modals/conflictModal.ts
-var import_obsidian25 = __toModule(require("obsidian"));
-var ConflictModal = class extends import_obsidian25.Modal {
+var import_obsidian26 = __toModule(require("obsidian"));
+var ConflictModal = class extends import_obsidian26.Modal {
   constructor(app2, conflicts, onResolve) {
     super(app2);
     this.conflicts = conflicts;
@@ -95084,7 +95467,7 @@ var ConflictModal = class extends import_obsidian25.Modal {
       text: `${names} also ${this.conflicts.length > 1 ? "provide" : "provides"} a reference list. ScholarWeft has its own, so with ${this.conflicts.length > 1 ? "them" : "it"} enabled you'll see more than one. Disable ${this.conflicts.length > 1 ? "them" : "it"}, or keep both and stop this prompt.`
     });
     const disableLabel = this.conflicts.length === 1 ? `Disable \u201C${this.conflicts[0].name}\u201D` : "Disable these plugins";
-    new import_obsidian25.Setting(contentEl).addButton((b3) => b3.setButtonText(disableLabel).setCta().onClick(() => {
+    new import_obsidian26.Setting(contentEl).addButton((b3) => b3.setButtonText(disableLabel).setCta().onClick(() => {
       this.onResolve(this.conflicts.map((c3) => c3.id), false);
       this.close();
     })).addButton((b3) => b3.setButtonText("Keep both and don't ask again").onClick(() => {
@@ -95098,7 +95481,7 @@ var ConflictModal = class extends import_obsidian25.Modal {
 };
 
 // src/linkedToPandoc.ts
-var import_obsidian26 = __toModule(require("obsidian"));
+var import_obsidian27 = __toModule(require("obsidian"));
 function singleToPandoc(key, alias) {
   const a3 = (alias != null ? alias : "").trim();
   if (!a3 || a3 === "@")
@@ -95170,7 +95553,7 @@ async function convertNoteToPandoc(plugin, file) {
   }
   const { out, changed } = rewriteLinkedToPandoc(body);
   if (!changed) {
-    new import_obsidian26.Notice(`No linked citations found in ${file.basename}.`, 4e3);
+    new import_obsidian27.Notice(`No linked citations found in ${file.basename}.`, 4e3);
     return;
   }
   const bkPath = `${file.path}.bk`;
@@ -95178,11 +95561,11 @@ async function convertNoteToPandoc(plugin, file) {
     await plugin.app.vault.adapter.write(bkPath, content);
   }
   await plugin.app.vault.modify(file, frontmatter + out);
-  new import_obsidian26.Notice(`Reverted linked citations to pandoc-style in ${file.basename}.`, 5e3);
+  new import_obsidian27.Notice(`Reverted linked citations to pandoc-style in ${file.basename}.`, 5e3);
 }
 async function convertVaultToPandoc(plugin) {
   const files = plugin.app.vault.getMarkdownFiles().filter((f3) => !f3.path.endsWith(".bk") && !f3.path.endsWith(".bk.md"));
-  const progress = new import_obsidian26.Notice(`Reverting citations across ${files.length} files\u2026`, 0);
+  const progress = new import_obsidian27.Notice(`Reverting citations across ${files.length} files\u2026`, 0);
   let convertedFiles = 0;
   try {
     for (const file of files) {
@@ -95207,75 +95590,7 @@ async function convertVaultToPandoc(plugin) {
   } finally {
     progress.hide();
   }
-  new import_obsidian26.Notice(convertedFiles > 0 ? `Reverted linked citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.` : `No linked citations found in vault.`, 6e3);
-}
-
-// src/assetSetup.ts
-var import_obsidian27 = __toModule(require("obsidian"));
-async function setupAssets(plugin) {
-  const { app: app2, manifest } = plugin;
-  const pluginDir = manifest.dir;
-  const extractable = Object.entries(BUNDLED_ASSETS).filter(([relativePath]) => !relativePath.startsWith("sw-markdown-templates/") && !relativePath.startsWith("sw-zotlit-templates/") && !relativePath.startsWith("docs/") && !relativePath.startsWith("images/") && relativePath !== "README.md" && relativePath !== "NOTICE.md");
-  const stampPath = (0, import_obsidian27.normalizePath)(`${pluginDir}/.sw-assets.json`);
-  let stamp = {};
-  try {
-    const parsed = JSON.parse(await app2.vault.adapter.read(stampPath));
-    if ((parsed == null ? void 0 : parsed.version) === 1 && parsed.hashes)
-      stamp = parsed.hashes;
-  } catch (e3) {
-  }
-  const dirs = new Set();
-  for (const [relativePath] of extractable) {
-    const slash = relativePath.lastIndexOf("/");
-    if (slash > 0)
-      dirs.add((0, import_obsidian27.normalizePath)(`${pluginDir}/${relativePath.slice(0, slash)}`));
-  }
-  for (const dir of dirs) {
-    try {
-      await app2.vault.adapter.mkdir(dir);
-    } catch (e3) {
-    }
-  }
-  const nextStamp = {};
-  let written = 0;
-  let unchanged = 0;
-  let failed = 0;
-  for (const [relativePath, { content, binary, hash }] of extractable) {
-    const fullPath = (0, import_obsidian27.normalizePath)(`${pluginDir}/${relativePath}`);
-    if (stamp[relativePath] === hash && await app2.vault.adapter.exists(fullPath)) {
-      nextStamp[relativePath] = hash;
-      unchanged++;
-      continue;
-    }
-    try {
-      if (binary) {
-        const raw = atob(content);
-        const buf = new Uint8Array(raw.length);
-        for (let i3 = 0; i3 < raw.length; i3++)
-          buf[i3] = raw.charCodeAt(i3);
-        await app2.vault.adapter.writeBinary(fullPath, buf.buffer);
-      } else {
-        await app2.vault.adapter.write(fullPath, content);
-      }
-      nextStamp[relativePath] = hash;
-      written++;
-    } catch (e3) {
-      failed++;
-      console.warn(`ScholarWeft: failed to write bundled asset "${relativePath}":`, e3);
-    }
-  }
-  if (JSON.stringify(nextStamp) !== JSON.stringify(stamp)) {
-    try {
-      await app2.vault.adapter.write(stampPath, JSON.stringify({ version: 1, hashes: nextStamp }));
-    } catch (e3) {
-      console.warn("ScholarWeft: failed to write the asset stamp:", e3);
-    }
-  }
-  debugLog(`ScholarWeft ${manifest.version}: assets ${written} written, ${unchanged} unchanged` + (failed ? `, ${failed} failed` : ""));
-  try {
-    await app2.vault.adapter.remove((0, import_obsidian27.normalizePath)(`${pluginDir}/.asset-version`));
-  } catch (e3) {
-  }
+  new import_obsidian27.Notice(convertedFiles > 0 ? `Reverted linked citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.` : `No linked citations found in vault.`, 6e3);
 }
 
 // src/main.ts
@@ -95347,6 +95662,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
     super(...arguments);
     this.cacheDir = SW_CACHE_DIR;
     this.processReferencesRun = 0;
+    this._fillingLitNotes = new Set();
     this.statusBarText = null;
     this.suggestPosition = null;
     this.persistCitedKeysIndex = (0, import_obsidian28.debounce)(async () => {
@@ -95782,6 +96098,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         this.bibManager.invalidateFile(file);
         this.processReferences();
       }
+      void this.maybeFillNewLiteratureNote(file);
     }, 150, true)));
     this.registerEvent(app2.vault.on("create", (0, import_obsidian28.debounce)(async (file) => {
       if (!(file instanceof import_obsidian28.TFile))
@@ -95789,10 +96106,19 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       await this.bibManager.updateCitedKeysIndex(file);
       this.persistCitedKeysIndex();
       this.persistRenderedCache();
+      void this.maybeFillNewLiteratureNote(file);
     }, 150, true)));
     this.registerEvent(app2.vault.on("delete", (file) => {
       this.bibManager.removeFromCitedKeysIndex(file.path);
       this.persistCitedKeysIndex();
+    }));
+    this.registerEvent(app2.vault.on("create", (file) => {
+      if (file instanceof import_obsidian28.TFile)
+        this.maybeFillIfInLitNoteFolder(file);
+    }));
+    this.registerEvent(app2.vault.on("modify", (file) => {
+      if (file instanceof import_obsidian28.TFile)
+        this.maybeFillIfInLitNoteFolder(file);
     }));
     (async () => {
       this.initStatusBar();
@@ -95841,6 +96167,119 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         }
       }
     }).open();
+  }
+  maybeFillIfInLitNoteFolder(file) {
+    var _a;
+    if (this.settings.insertZoteroNotesOnCreate === false)
+      return;
+    if (file.extension !== "md")
+      return;
+    if (this._fillingLitNotes.has(file.path))
+      return;
+    const folder = (getZotlitLiteratureFolder(this.app) || (this.settings.useZotlitLiteratureFolder ? "" : ((_a = this.settings.literatureNoteFolder) != null ? _a : "").trim())).replace(/\/+$/, "");
+    if (folder && !file.path.startsWith(`${folder}/`))
+      return;
+    void this.maybeFillNewLiteratureNote(file);
+  }
+  async onZotLitNoteAction(params) {
+    if (this.settings.insertZoteroNotesOnCreate === false)
+      return;
+    debugLog("[sw:notes] zotlit action", params.action, "item", params.item);
+    const itemId = Number(params.item);
+    if (!Number.isFinite(itemId))
+      return;
+    const itemKey = await this.zoteroKeyForItemId(itemId);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((r3) => setTimeout(r3, 800));
+      const file = itemKey ? this.findLiteratureNoteByKey(itemKey) : this.findLiteratureNoteByKeyAny();
+      if (file) {
+        await this.maybeFillNewLiteratureNote(file);
+        return;
+      }
+    }
+    debugLog("[sw:notes] no literature note found yet for item", itemId);
+  }
+  async zoteroKeyForItemId(itemId) {
+    var _a, _b, _c, _d, _e, _f;
+    const db = (_d = (_c = (_b = (_a = this.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["zotlit"]) == null ? void 0 : _c.services) == null ? void 0 : _d.db;
+    const client = db == null ? void 0 : db.client;
+    try {
+      const rows = await ((_e = client == null ? void 0 : client.$queryRawUnsafe) == null ? void 0 : _e.call(client, "SELECT key FROM items WHERE itemID = ? LIMIT 1", itemId));
+      const key = (_f = rows == null ? void 0 : rows[0]) == null ? void 0 : _f.key;
+      if (typeof key === "string" && key)
+        return key;
+    } catch (e3) {
+    }
+    return null;
+  }
+  findLiteratureNoteByKey(key) {
+    var _a, _b;
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+      const k4 = (_b = fm == null ? void 0 : fm["zotero-key"]) != null ? _b : fm == null ? void 0 : fm.zoteroKey;
+      if (typeof k4 === "string" && (k4 === key || k4.startsWith(`${key}g`))) {
+        return file;
+      }
+    }
+    return null;
+  }
+  findLiteratureNoteByKeyAny() {
+    var _a, _b;
+    let best = null;
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+      const k4 = (_b = fm == null ? void 0 : fm["zotero-key"]) != null ? _b : fm == null ? void 0 : fm.zoteroKey;
+      if (typeof k4 !== "string" || !k4)
+        continue;
+      if (!best || file.stat.mtime > best.stat.mtime)
+        best = file;
+    }
+    return best;
+  }
+  async maybeFillNewLiteratureNote(file) {
+    const why = (msg) => debugLog("[sw:notes] skip", file.path, "\u2014", msg);
+    if (this.settings.insertZoteroNotesOnCreate === false)
+      return why("setting off");
+    if (this.bibManager.isBackendLoading)
+      return why("library still loading");
+    if (this._fillingLitNotes.has(file.path))
+      return why("already filling");
+    if (!this.isLiteratureNote(file))
+      return why("not a literature note (no key)");
+    try {
+      const key = await this.zoteroKeyForFile(file);
+      if (!key)
+        return why('no "## Notes" section or unparseable key');
+      this._fillingLitNotes.add(file.path);
+      try {
+        await this.bibManager.fillZoteroNotesForFile(key, file);
+      } finally {
+        this._fillingLitNotes.delete(file.path);
+      }
+    } catch (e3) {
+      console.warn("[sw:notes] insert threw for", file.path, e3);
+    }
+  }
+  isLiteratureNote(file) {
+    var _a, _b, _c;
+    if (file.extension !== "md")
+      return false;
+    const fm = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    if (!fm)
+      return false;
+    const hasZoteroKey = !!((_c = (_b = fm["zotero-key"]) != null ? _b : fm.zoteroKey) != null ? _c : fm.citekey);
+    return hasZoteroKey;
+  }
+  async zoteroKeyForFile(file) {
+    var _a, _b, _c;
+    const content = await this.app.vault.cachedRead(file);
+    if (!/^##[ \t]+Notes[ \t]*$/m.test(content))
+      return null;
+    const fm = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    const raw = (_c = (_b = fm == null ? void 0 : fm["zotero-key"]) != null ? _b : fm == null ? void 0 : fm.zoteroKey) != null ? _c : fm == null ? void 0 : fm.citekey;
+    if (typeof raw !== "string" || !raw.trim())
+      return null;
+    return /^([A-Za-z0-9]+)(?:g(\d+))?$/.test(raw.trim()) ? raw.trim() : null;
   }
   async fillZoteroNotesForCitekeys(citekeys, sourceFile) {
     for (const key of citekeys) {
@@ -95908,15 +96347,15 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         setTimeout(() => void this.autoConfigureZotlitTemplates(attempt + 1), 2e3);
       return;
     }
-    if (folder === SW_ZOTLIT_FOLDER)
+    if (folder === SW_ZOTLIT_FOLDER2)
       return;
     if (folder && folder !== "templates")
       return;
-    if (!await this.app.vault.adapter.exists(SW_ZOTLIT_FOLDER))
+    if (!await this.app.vault.adapter.exists(SW_ZOTLIT_FOLDER2))
       return;
     const res = await installZotlitTemplates(this);
     if (res.folderConfigured) {
-      new import_obsidian28.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER}/`);
+      new import_obsidian28.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER2}/`);
     }
   }
   onunload() {

@@ -126,4 +126,52 @@ describe('setupAssets content-aware extraction', () => {
     expect(adapter.write).toHaveBeenCalledTimes(1);
     expect(adapter.write.mock.calls[0][0]).toBe(`${PLUG}/scripts/b.py`);
   });
+
+  // ── Opt-in template folders: maintain if present, never re-create ──────────
+
+  it('does not create opt-in template folders for a user who never opted in', async () => {
+    const { plugin, files, written } = makePlugin();
+    await setupAssets(plugin);
+    expect(written).not.toContain(`sw-zotlit-templates/t.md`);
+    expect(written).not.toContain(`sw-markdown-templates/m.md`);
+    expect(files[`sw-zotlit-templates/t.md`]).toBeUndefined();
+  });
+
+  it('updates an opted-in template when the bundled content changes', async () => {
+    const { plugin, adapter, files } = makePlugin();
+    // Seed the opt-in record with an OLD hash, and the file present.
+    files[`${PLUG}/.sw-assets.json`] = JSON.stringify({
+      version: 1,
+      hashes: { 'template:sw-zotlit-templates/t.md': 'OLD' },
+      templateOptIns: ['sw-zotlit-templates'],
+    });
+    // The folder exists (with stale content) — the real opt-in state.
+    files['sw-zotlit-templates'] = '<dir>';
+    files['sw-zotlit-templates/t.md'] = 'stale';
+    adapter.write.mockClear();
+
+    await setupAssets(plugin);
+
+    // Recopied because the bundled hash no longer matches.
+    expect(files['sw-zotlit-templates/t.md']).toBe(
+      BUNDLED_ASSETS['sw-zotlit-templates/t.md'].content
+    );
+  });
+
+  it('does NOT re-create an opted-in folder the user deleted', async () => {
+    const { plugin, files, written } = makePlugin();
+    files[`${PLUG}/.sw-assets.json`] = JSON.stringify({
+      version: 1,
+      hashes: {},
+      templateOptIns: ['sw-zotlit-templates'],
+    });
+    // Folder is absent — the user's opt-out.
+
+    await setupAssets(plugin);
+
+    expect(written).not.toContain('sw-zotlit-templates/t.md');
+    // And the stale opt-in is pruned, so we stop checking for it.
+    const stamp = JSON.parse(files[`${PLUG}/.sw-assets.json`]);
+    expect(stamp.templateOptIns).not.toContain('sw-zotlit-templates');
+  });
 });
