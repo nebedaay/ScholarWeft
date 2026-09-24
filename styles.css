@@ -235,6 +235,17 @@ body {
   --sw-citation-underline-style-link: solid;
   --sw-citation-extra-color: var(--text-normal);
   --sw-citation-formatting-color: var(--text-muted);
+
+  /* Callouts blend their background with what's beneath by default; Obsidian's
+     `darken` mode discards the light backgrounds the annotation callouts rely on,
+     making imported Zotero annotations hard to read under the default theme (a
+     theme that overrides the blend, e.g. AnuPpuccin, hides the problem). Opt out
+     so those callout colours render as authored — scoped to annotation callouts
+     so other callouts (and themes that set their own blend) are left alone. */
+  .callout[data-callout$="-annotation"],
+  .callout[data-callout*="ann-"] {
+    --callout-blend-mode: normal;
+  }
 }
 
 .sw-reference-list {
