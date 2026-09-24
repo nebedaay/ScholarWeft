@@ -39,7 +39,7 @@ export async function findPython3(
   modules: string[] = ['lxml', 'docx']
 ): Promise<string | null> {
   if (configured.trim()) return configured.trim();
-  const platform = globalThis.process?.platform;
+  const platform = (window as any).process?.platform;
   const win = platform === 'win32';
   let home = '';
   try {
@@ -89,7 +89,7 @@ export async function findPython3(
 
 /** Resolve the node binary (only needed by the CLI converter fallback). */
 export async function findNode(): Promise<string | null> {
-  const platform = globalThis.process?.platform;
+  const platform = (window as any).process?.platform;
   const candidates =
     platform === 'win32'
       ? ['node', 'C:\\Program Files\\nodejs\\node.exe', `${process.env.APPDATA ?? ''}\\nvm\\node.exe`]

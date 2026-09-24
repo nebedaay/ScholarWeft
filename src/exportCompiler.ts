@@ -319,7 +319,7 @@ export async function runDocumentCompiler(
   const script = `${scriptsDir}/DocumentCompiler.py`;
   // Pass resolved tool paths through so the script doesn't depend on PATH,
   // and the vault root so the script never has to guess it.
-  const baseEnv = (globalThis.process?.env ?? {}) as Record<string, string>;
+  const baseEnv = ((window as any).process?.env ?? {}) as Record<string, string>;
   const env: Record<string, string | undefined> = { ...baseEnv, SW_PYTHON: py };
   {
     const a = plugin.app.vault.adapter as any;

@@ -18,7 +18,7 @@ export function zoteroStyleDirs(customDataDir?: string): string[] {
   const os = require('os') as typeof import('os');
   const path = require('path') as typeof import('path');
   const home = os.homedir();
-  const platform = globalThis.process?.platform;
+  const platform = (window as any).process?.platform;
 
   const dataDirs: string[] = [];
   const custom = (customDataDir ?? '').trim();

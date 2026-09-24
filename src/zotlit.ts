@@ -10,8 +10,8 @@ import { App, TFile } from 'obsidian';
 // in app.plugins.plugins AND its onload has completed (the instance exists).
 // Fall back to the v1 global for older installs.
 export function isZotLitLoaded(app?: App): boolean {
-  if ((globalThis as any).zoteroAPI) return true;
-  const appInstance = app ?? (globalThis as any).app;
+  if ((window as any).zoteroAPI) return true;
+  const appInstance = app ?? (window as any).app;
   return !!(appInstance?.plugins?.plugins?.['zotlit']);
 }
 

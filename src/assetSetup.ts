@@ -1,5 +1,6 @@
 import { normalizePath } from 'obsidian';
 import type ReferenceList from './main';
+import { debugLog } from './helpers';
 import { BUNDLED_ASSETS } from 'bundled:assets';
 
 /**
@@ -108,7 +109,7 @@ export async function setupAssets(plugin: ReferenceList): Promise<void> {
     }
   }
 
-  console.log(
+  debugLog(
     `ScholarWeft ${manifest.version}: assets ${written} written, ${unchanged} unchanged`
       + (failed ? `, ${failed} failed` : '')
   );

@@ -62,7 +62,7 @@ export async function runImportScript(
   }
 
   const script = `${scriptsDir}/zotero-to-md.py`;
-  const baseEnv = (globalThis.process?.env ?? {}) as Record<string, string>;
+  const baseEnv = ((window as any).process?.env ?? {}) as Record<string, string>;
 
   // zotero-to-md.py shells out to pandoc; resolve it now so SW_PANDOC is set
   // and the script doesn't rely on PATH (Electron doesn't inherit the shell PATH).
