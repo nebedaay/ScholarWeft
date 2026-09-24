@@ -18,6 +18,23 @@ skip() { SKIPPED+=("$*"); }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# The app hosting this shell — needed to tell the user exactly which app to grant
+# Full Disk Access to (macOS hides protected folders from it until then).
+terminal_app_name() {
+  case "${TERM_PROGRAM:-}" in
+    Apple_Terminal) echo "Terminal" ;;
+    iTerm.app)       echo "iTerm" ;;
+    WarpTerminal)    echo "Warp" ;;
+    vscode)          echo "Visual Studio Code" ;;
+    Hyper)           echo "Hyper" ;;
+    kitty)           echo "kitty" ;;
+    WezTerm)         echo "WezTerm" ;;
+    tabby)           echo "Tabby" ;;
+    "")              echo "Terminal" ;;
+    *)               echo "$TERM_PROGRAM" ;;
+  esac
+}
+
 # Is a font family installed — whether by brew cask OR dragged into a Fonts
 # folder (Font Book)? Uses fc-list when available, else scans the font folders.
 # So we don't reinstall fonts the user already has (a cask installs one file
@@ -39,7 +56,7 @@ FONT_SPECS=(
 
 # Bump when the script changes, and print it at start-up so it's obvious which
 # copy is running (a stale download has caused confusion).
-SCRIPT_REV="2026-09-23c"
+SCRIPT_REV="2026-09-24b"
 
 DONE=(); FAILED=(); SKIPPED=()
 # Set once the user declines Homebrew, so later brew-needing steps don't keep
@@ -178,29 +195,107 @@ PY
   fi
 }
 
-find_vaults() {
-  local list=() v x cand
-  while IFS= read -r cand; do
-    [ -n "$cand" ] || continue
-    # A registry entry can be stale (vault moved/deleted); keep only real ones.
-    [ -d "$cand/.obsidian" ] || continue
-    cand="${cand%/}"
-    for x in "${list[@]}"; do [ "$cand" = "$x" ] && continue 2; done
-    list+=("$cand")
+# Classify each vault Obsidian has registered, one line of output per entry:
+#   OK<TAB>/path      a readable vault (.obsidian present)
+#   STALE<TAB>/path   the parent folder is readable, but the vault is gone (moved/deleted)
+#   BLOCKED<TAB>/path the parent folder is unreadable — almost always a macOS permission
+#
+# macOS protects ~/Documents, ~/Desktop, ~/Downloads and iCloud Drive: until the
+# terminal app is granted access, a real vault there is invisible to us and
+# `[ -d ]` simply returns false. So we must never confuse "can't read it" with
+# "there is no vault".
+_registry_file() { printf '%s\n' "$HOME/Library/Application Support/obsidian/obsidian.json"; }
+
+_classify_vaults() {
+  local v cand parent
+  while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    cand="${v%/}"
+    if [ -d "$cand/.obsidian" ]; then
+      printf 'OK\t%s\n' "$cand"
+    else
+      parent="$(dirname "$cand")"
+      if [ -d "$parent" ]; then printf 'STALE\t%s\n' "$cand"
+      else printf 'BLOCKED\t%s\n' "$cand"; fi
+    fi
   done < <(_obsidian_registry_vaults)
-  [ "${#list[@]}" -gt 0 ] && printf '%s\n' "${list[@]}"
+}
+
+# Explain the macOS permission wall for the vault paths passed in, and offer to
+# open the right settings pane. Granting access needs a fresh terminal process,
+# so the fix is "grant, quit, reopen, re-run".
+_vault_permission_help() {
+  local app v; app="$(terminal_app_name)"
+  echo "  Obsidian lists a vault, but macOS is hiding it from this terminal:"
+  for v in "$@"; do printf '    %s\n' "$v"; done
+  echo
+  echo "  macOS blocks the terminal from folders like Documents, Desktop, Downloads"
+  echo "  and iCloud Drive until you allow it — so the vault can't be found or"
+  echo "  written to yet."
+  echo
+  echo "  Do this once, then run the script again:"
+  echo "    1. Open System Settings → Privacy & Security → Full Disk Access."
+  echo "    2. Turn ON \"$app\"  (add it with + from Applications/Utilities if unlisted)."
+  echo "    3. Quit and reopen $app, then re-run this script."
+  echo
+  echo "  In a hurry? Granting only the folder works too: add it under"
+  echo "  Privacy & Security → Files and Folders. Moving the vault out of these"
+  echo "  protected folders (e.g. to your home folder) also avoids the issue."
+  if command -v open >/dev/null 2>&1; then
+    if ask "  Open System Settings to Full Disk Access now?"; then
+      open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles" \
+        || warn "Couldn't open System Settings — open it from the Apple menu."
+    fi
+  fi
 }
 VAULT=""
 VAULTS=()
 locate_vaults() {
-  local v n i
+  local v n i status path blocked stale
+  local blocked_paths=() stale_paths=()
   step "Looking up your Obsidian vaults…"
   VAULTS=()
-  while IFS= read -r v; do [ -n "$v" ] && VAULTS+=("$v"); done < <(find_vaults)
+  while IFS=$'\t' read -r status path; do
+    case "$status" in
+      OK)
+        [ -n "$path" ] || continue
+        for v in "${VAULTS[@]}"; do [ "$v" = "$path" ] && continue 2; done
+        VAULTS+=("$path") ;;
+      BLOCKED) blocked_paths+=("$path") ;;
+      STALE)   stale_paths+=("$path") ;;
+    esac
+  done < <(_classify_vaults)
 
-  # No vaults in Obsidian's registry: the user almost certainly has none yet,
-  # so don't scan — ask, or let them type a path for an unregistered vault.
+  # Nothing usable? Say WHY. A registered-but-unreadable vault is a macOS
+  # permission problem, not "no vault yet" — and before this check the two were
+  # indistinguishable, which sent people round in circles.
   if [ "${#VAULTS[@]}" -eq 0 ]; then
+    if [ "${#blocked_paths[@]}" -gt 0 ]; then
+      _vault_permission_help "${blocked_paths[@]}"
+      if ask "  I've granted access and reopened the terminal — look again?"; then
+        VAULTS=(); locate_vaults; return
+      fi
+      if ask "  Type the vault path manually instead?"; then
+        IFS= read -r -p "  Path to the vault: " VAULT
+        VAULT="${VAULT/#\~/$HOME}"; VAULT="${VAULT%/}"
+        if [ -d "$VAULT/.obsidian" ]; then
+          pass "Using vault: $VAULT"
+        elif [ -d "$VAULT" ]; then
+          warn "That folder has no .obsidian folder — make sure it is a vault."
+          pass "Using vault: $VAULT"
+        else
+          fail "Choose vault" "can't read ${VAULT:-<empty>} — if it's in Documents/Desktop/Downloads or iCloud, grant Full Disk Access"
+          VAULT=""
+        fi
+        return
+      fi
+      echo "  Skipping the vault steps — re-run the script once access is granted."
+      return
+    fi
+
+    if [ "${#stale_paths[@]}" -gt 0 ]; then
+      warn "Obsidian lists a vault that no longer exists (moved or deleted): ${stale_paths[0]}"
+    fi
     echo "  Obsidian has no vaults yet (it registers a vault the first time you open it)."
     if ask "  Do you have an existing Obsidian vault you'd like the script to use?"; then
       IFS= read -r -p "  Path to the vault: " VAULT
@@ -228,6 +323,10 @@ locate_vaults() {
        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#VAULTS[@]}" ]; then VAULT="${VAULTS[$((n-1))]}"
        else VAULT="${n/#\~/$HOME}"; VAULT="${VAULT%/}"; fi ;;
   esac
+  if [ "${#blocked_paths[@]}" -gt 0 ]; then
+    warn "Some registered vaults weren't readable (macOS permission): ${blocked_paths[0]}"
+    warn "If you meant that one, grant Full Disk Access to $(terminal_app_name) and re-run."
+  fi
   if [ -n "$VAULT" ]; then
     if [ -d "$VAULT" ]; then printf '  Plugins will be installed into: %s\n' "$VAULT"
     else warn "Not a folder: $VAULT — I'll ask again if you choose to install a plugin."; VAULT=""; fi
@@ -237,7 +336,10 @@ pick_vault() { # used when a plugin install is chosen but no vault was located u
   [ -n "$VAULT" ] && [ -d "$VAULT" ] && return 0
   IFS= read -r -p "  Path to your Obsidian vault: " VAULT
   VAULT="${VAULT/#\~/$HOME}"; VAULT="${VAULT%/}"
-  if [ ! -d "$VAULT" ]; then fail "Choose vault" "not a folder: ${VAULT:-<empty>}"; VAULT=""; return 1; fi
+  if [ ! -d "$VAULT" ]; then
+    fail "Choose vault" "can't read ${VAULT:-<empty>} — if it's in Documents/Desktop/Downloads or iCloud, grant $(terminal_app_name) Full Disk Access (System Settings → Privacy & Security) and re-run"
+    VAULT=""; return 1
+  fi
   return 0
 }
 
@@ -493,6 +595,14 @@ locate_vaults
 if ask "Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settings? (Close Obsidian first.)" "Set up Obsidian plugins"; then
   if _retry_while "Obsidian is still running — please quit it (Cmd+Q), then retry." "Set up Obsidian plugins" pgrep -x Obsidian; then
     if pick_vault; then
+      # ZotLit (and sometimes others) refuse to load on an old Obsidian
+      # INSTALLER even when the app is current — and the installer only updates
+      # by reinstalling Obsidian. Flag it now, before the plugins are relied on,
+      # since the symptom otherwise looks like a failed install.
+      echo "  Reminder: if a plugin won't turn on (ZotLit is the usual one), check"
+      echo "  Obsidian → Settings → About → Installer version. If it's behind the app"
+      echo "  version, reinstall Obsidian from https://obsidian.md/download — your"
+      echo "  vault and settings are untouched."
       disable_conflicting_plugins "$VAULT"
       install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
       install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"

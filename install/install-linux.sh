@@ -17,7 +17,7 @@ skip() { SKIPPED+=("$*"); }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-SCRIPT_REV="2026-09-23"
+SCRIPT_REV="2026-09-24b"
 
 DONE=(); FAILED=(); SKIPPED=()
 
@@ -116,29 +116,64 @@ PY
   fi
 }
 
-find_vaults() {
-  local list=() v x cand
-  while IFS= read -r cand; do
-    [ -n "$cand" ] || continue
-    # A registry entry can be stale (vault moved/deleted); keep only real ones.
-    [ -d "$cand/.obsidian" ] || continue
-    cand="${cand%/}"
-    for x in "${list[@]}"; do [ "$cand" = "$x" ] && continue 2; done
-    list+=("$cand")
+# Classify each vault Obsidian has registered, one line of output per entry:
+#   OK<TAB>/path      a readable vault (.obsidian present)
+#   STALE<TAB>/path   the parent folder is readable, but the vault is gone (moved/deleted)
+#   BLOCKED<TAB>/path the parent folder is unreadable — a permissions problem
+#                     (e.g. the vault on a mount this shell can't reach)
+_classify_vaults() {
+  local v cand parent
+  while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    cand="${v%/}"
+    if [ -d "$cand/.obsidian" ]; then
+      printf 'OK\t%s\n' "$cand"
+    else
+      parent="$(dirname "$cand")"
+      if [ -d "$parent" ]; then printf 'STALE\t%s\n' "$cand"
+      else printf 'BLOCKED\t%s\n' "$cand"; fi
+    fi
   done < <(_obsidian_registry_vaults)
-  [ "${#list[@]}" -gt 0 ] && printf '%s\n' "${list[@]}"
 }
 VAULT=""
 VAULTS=()
 locate_vaults() {
-  local v n i
+  local v n i status path blocked stale
+  local blocked_paths=() stale_paths=()
   step "Looking up your Obsidian vaults…"
   VAULTS=()
-  while IFS= read -r v; do [ -n "$v" ] && VAULTS+=("$v"); done < <(find_vaults)
+  while IFS=$'\t' read -r status path; do
+    case "$status" in
+      OK)
+        [ -n "$path" ] || continue
+        for v in "${VAULTS[@]}"; do [ "$v" = "$path" ] && continue 2; done
+        VAULTS+=("$path") ;;
+      BLOCKED) blocked_paths+=("$path") ;;
+      STALE)   stale_paths+=("$path") ;;
+    esac
+  done < <(_classify_vaults)
 
-  # No vaults in Obsidian's registry: the user almost certainly has none yet,
-  # so don't scan — ask, or let them type a path for an unregistered vault.
+  # Nothing usable? Say WHY. A registered-but-unreadable vault is a permissions
+  # problem, not "no vault yet" — so distinguish the two rather than looping.
   if [ "${#VAULTS[@]}" -eq 0 ]; then
+    if [ "${#blocked_paths[@]}" -gt 0 ]; then
+      warn "Obsidian lists a vault this shell can't read:"
+      for v in "${blocked_paths[@]}"; do printf '    %s\n' "$v"; done
+      echo "  Check the folder exists and that your user can read it (permissions,"
+      echo "  or a mount/encrypted volume that isn't unlocked)."
+      if ask "  Type the vault path instead?"; then
+        IFS= read -r -p "  Path to the vault: " VAULT
+        VAULT="${VAULT/#\~/$HOME}"; VAULT="${VAULT%/}"
+        if [ -d "$VAULT/.obsidian" ] || [ -d "$VAULT" ]; then pass "Using vault: $VAULT"
+        else fail "Choose vault" "can't read ${VAULT:-<empty>} — check permissions"; VAULT=""; fi
+        return
+      fi
+      echo "  Skipping the vault steps — fix the permission and re-run."
+      return
+    fi
+    if [ "${#stale_paths[@]}" -gt 0 ]; then
+      warn "Obsidian lists a vault that no longer exists (moved or deleted): ${stale_paths[0]}"
+    fi
     echo "  Obsidian has no vaults yet (it registers a vault the first time you open it)."
     if ask "  Do you have an existing Obsidian vault you'd like the script to use?"; then
       IFS= read -r -p "  Path to the vault: " VAULT
@@ -166,6 +201,9 @@ locate_vaults() {
        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#VAULTS[@]}" ]; then VAULT="${VAULTS[$((n-1))]}"
        else VAULT="${n/#\~/$HOME}"; VAULT="${VAULT%/}"; fi ;;
   esac
+  if [ "${#blocked_paths[@]}" -gt 0 ]; then
+    warn "Some registered vaults weren't readable (permissions): ${blocked_paths[0]}"
+  fi
   if [ -n "$VAULT" ]; then
     if [ -d "$VAULT" ]; then printf '  Plugins will be installed into: %s\n' "$VAULT"
     else warn "Not a folder: $VAULT — I'll ask again if you choose to install a plugin."; VAULT=""; fi
@@ -175,7 +213,7 @@ pick_vault() {
   [ -n "$VAULT" ] && [ -d "$VAULT" ] && return 0
   IFS= read -r -p "  Path to your Obsidian vault: " VAULT
   VAULT="${VAULT/#\~/$HOME}"; VAULT="${VAULT%/}"
-  if [ ! -d "$VAULT" ]; then fail "Choose vault" "not a folder: ${VAULT:-<empty>}"; VAULT=""; return 1; fi
+  if [ ! -d "$VAULT" ]; then fail "Choose vault" "can't read ${VAULT:-<empty>} — check the path and its permissions"; VAULT=""; return 1; fi
   return 0
 }
 
@@ -403,6 +441,13 @@ locate_vaults
 if ask "Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settings? (Close Obsidian first.)" "Set up Obsidian plugins"; then
   if _retry_while "Obsidian is still running — please quit it, then retry." "Set up Obsidian plugins" pgrep -xi obsidian; then
     if pick_vault; then
+      # ZotLit (and sometimes others) refuse to load on an old Obsidian
+      # INSTALLER even when the app is current — and the installer only updates
+      # by reinstalling Obsidian. Flag it now, before the plugins are relied on.
+      echo "  Reminder: if a plugin won't turn on (ZotLit is the usual one), check"
+      echo "  Obsidian → Settings → About → Installer version. If it's behind the app"
+      echo "  version, reinstall Obsidian from https://obsidian.md/download — your"
+      echo "  vault and settings are untouched."
       disable_conflicting_plugins "$VAULT"
       install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
       install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"

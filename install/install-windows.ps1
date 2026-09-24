@@ -7,6 +7,10 @@
 # Usage (in PowerShell):
 #   powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 
+# Bump when the script changes, and print it at start-up so it's obvious which
+# copy is running (a stale download has caused confusion).
+$script:SCRIPT_REV = '2026-09-24b'
+
 $ErrorActionPreference = 'Stop'
 $script:Done = @(); $script:Failed = @(); $script:Skipped = @()
 
@@ -42,7 +46,19 @@ function Download($url, $dest, $label) {
 # ── Obsidian vault discovery ─────────────────────────────────────────────────
 function Find-Vaults {
   # 1. Obsidian's OWN vault registry — the same list its "Open another vault"
-  #    chooser shows, so reading it is instant and authoritative.
+  #    chooser shows, so reading it is instant and authoritative. Each entry is
+  #    classified (see Find-Vault-Entries) so "can't read it" is never confused
+  #    with "there is no vault".
+  $out = Find-Vault-Entries | Where-Object { $_.Status -eq 'OK' } | ForEach-Object { $_.Path }
+  # Registry is the ONLY automatic source (see the comment above): no scan.
+  return $out
+}
+
+# Classify each registered vault:
+#   OK       a readable vault (.obsidian present)
+#   STALE    the parent folder is readable, but the vault is gone (moved/deleted)
+#   BLOCKED  the parent folder is unreadable — a permissions problem
+function Find-Vault-Entries {
   $out = @()
   $reg = Join-Path $env:APPDATA 'obsidian\obsidian.json'
   if (Test-Path $reg) {
@@ -50,21 +66,40 @@ function Find-Vaults {
       $data = Get-Content $reg -Raw | ConvertFrom-Json
       foreach ($v in $data.vaults.PSObject.Properties.Value) {
         $p = $v.path
-        if ($p -and (Test-Path (Join-Path $p '.obsidian'))) {
-          $p = $p.TrimEnd('\')
-          if ($out -notcontains $p) { $out += $p }
-        }
+        if (-not $p) { continue }
+        $p = $p.TrimEnd('\')
+        if (Test-Path (Join-Path $p '.obsidian')) { $status = 'OK' }
+        elseif (Test-Path (Split-Path $p -Parent)) { $status = 'STALE' }
+        else { $status = 'BLOCKED' }
+        $out += [pscustomobject]@{ Path = $p; Status = $status }
       }
     } catch { }
   }
-  # Registry is the ONLY automatic source (see the comment above): no scan.
   return $out
 }
 $script:Vault = ''
 function Locate-Vaults {
   Step 'Looking up your Obsidian vaults...'
-  $vaults = @(Find-Vaults)
+  $entries = @(Find-Vault-Entries)
+  $vaults = @($entries | Where-Object { $_.Status -eq 'OK' } | ForEach-Object { $_.Path })
+  $blocked = @($entries | Where-Object { $_.Status -eq 'BLOCKED' })
+  $stale = @($entries | Where-Object { $_.Status -eq 'STALE' })
   if ($vaults.Count -eq 0) {
+    if ($blocked.Count -gt 0) {
+      Write-Host "  ! Obsidian lists a vault this shell can't read:" -ForegroundColor Yellow
+      foreach ($b in $blocked) { Write-Host "    $($b.Path)" }
+      Write-Host "  Check the folder exists and that your account can read it (permissions,"
+      Write-Host "  or a drive/network share that isn't connected)."
+      if (Ask "  Type the vault path instead?") {
+        $p = (Read-Host "  Path to the vault").TrimEnd('\')
+        if ($p -and (Test-Path $p)) { $script:Vault = $p; Pass "Using vault: $($script:Vault)" }
+        else { Fail 'Choose vault' "can't read $p — check the path and its permissions" }
+        return
+      }
+      Write-Host "  Skipping the vault steps — fix the permission and re-run."
+      return
+    }
+    if ($stale.Count -gt 0) { Write-Host "  ! Obsidian lists a vault that no longer exists (moved or deleted): $($stale[0].Path)" -ForegroundColor Yellow }
     Write-Host "  Obsidian has no vaults yet (it registers a vault the first time you open it)."
     if (Ask "  Do you have an existing Obsidian vault you'd like the script to use?") {
       $p = (Read-Host "  Path to the vault").TrimEnd('\')
@@ -88,12 +123,15 @@ function Locate-Vaults {
     if ($n -match '^\d+$' -and [int]$n -ge 1 -and [int]$n -le $vaults.Count) { $script:Vault = $vaults[[int]$n - 1] }
     else { $script:Vault = $n }
   }
+  if ($blocked.Count -gt 0) {
+    Write-Host "  ! Some registered vaults weren't readable (permissions): $($blocked[0].Path)" -ForegroundColor Yellow
+  }
   if ($script:Vault) { Write-Host "  Plugins will be installed into: $($script:Vault)" }
 }
 function Pick-Vault {
   if ($script:Vault -and (Test-Path $script:Vault)) { return $true }
   $script:Vault = Read-Host '  Path to your Obsidian vault'
-  if (-not $script:Vault -or -not (Test-Path $script:Vault)) { Fail 'Choose vault' "not a folder: $($script:Vault)"; $script:Vault = ''; return $false }
+  if (-not $script:Vault -or -not (Test-Path $script:Vault)) { Fail 'Choose vault' "can't read $($script:Vault) — check the path and its permissions"; $script:Vault = ''; return $false }
   return $true
 }
 
@@ -257,7 +295,7 @@ function Ensure-Python {
 function Winget($id) { Step "Installing $id..."; winget install --id $id -e --accept-source-agreements --accept-package-agreements }
 
 # ═════════════════════════════════════════════════════════════════════════════
-Say "ScholarWeft setup (script 2026-09-18s)"
+Say "ScholarWeft setup (script $($script:SCRIPT_REV))"
 Write-Host "  Running: $PSCommandPath"
 Write-Host "  I'll ask before each step — y to install/configure, n to skip, q to quit."
 Write-Host "  Safe to re-run; nothing is changed without a yes."
@@ -279,6 +317,13 @@ if (Ask 'Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their setti
   if (Get-Process Obsidian -ErrorAction SilentlyContinue) {
     Fail 'Set up Obsidian plugins' 'Obsidian was running — quit Obsidian and re-run (the settings writes need it closed)'
   } elseif (Pick-Vault) {
+    # ZotLit (and sometimes others) refuse to load on an old Obsidian INSTALLER
+    # even when the app is current — and the installer only updates by
+    # reinstalling Obsidian. Flag it now, before the plugins are relied on.
+    Write-Host '  Reminder: if a plugin won''t turn on (ZotLit is the usual one), check'
+    Write-Host '  Obsidian -> Settings -> About -> Installer version. If it''s behind the app'
+    Write-Host '  version, reinstall Obsidian from https://obsidian.md/download - your'
+    Write-Host '  vault and settings are untouched.'
     Disable-ConflictingPlugins $script:Vault
     Install-ObsidianPlugin 'nebedaay/ScholarWeft' 'scholar-weft' $script:Vault
     Install-ObsidianPlugin 'PKM-er/obsidian-zotlit' 'zotlit' $script:Vault
