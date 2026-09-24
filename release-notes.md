@@ -1,18 +1,17 @@
 Install/update via BRAT.
 
-### ZotLit templates now render on first install
+### Citations and search work immediately on a fresh install
 
-Installing ScholarWeft's ZotLit import templates now also turns on ZotLit's **JavaScript templates** setting, so the templates — and the JavaScript frontmatter fields — render immediately instead of appearing blank.
+The first run no longer makes you wait for your whole Zotero library before anything formats.
 
-That setting is **per-device** (kept in Obsidian's local storage, not in ZotLit's `data.json`) and **off by default**, which is why a fresh install previously needed you to find the toggle in ZotLit's settings yourself. The install now sets it directly and, when ZotLit is running, applies it without a restart; the completion message reports that it was enabled.
+- **Citations render in seconds.** While the full library loads in the background, ScholarWeft fetches just the entries the open note cites, so its citations format almost immediately instead of after several minutes on a large library.
+- **Citekey search works right away.** Typing `@key` now falls through to a live Zotero search while the local index is still building, instead of showing nothing. Search uses Better BibTeX's field search, so citekeys are found reliably (the previous fallback could miss them). If the index is still warming up and nothing matches, a short "still loading" line explains why.
+- **A progress notice** stays up for the duration of the first load, so it's clear why formatting is still in progress.
+- **Interrupted loads recover.** If fetching the library is cut short, ScholarWeft now retries the affected pages and re-fetches, instead of silently keeping a partial library until the next restart.
 
-> ZotLit normally asks before enabling this because Eta templates can run JavaScript with the same access as ZotLit itself. Installing these templates is that opt-in.
+Later starts were already fast; this fixes the first one.
 
-### Setup script: instant vault lookup, per-step Homebrew, first-run pauses
+### Housekeeping
 
-The macOS/Linux/Windows setup scripts were reworked:
-
-- **Vault lookup is instant and never scans your disk.** It reads Obsidian's own vault list — the one its *Open another vault* chooser shows — so it finds your vault wherever it lives, iCloud Drive and other cloud folders included. If Obsidian has no vault yet, it asks whether you have one to point it at, or pauses while you open Obsidian and create one, instead of searching.
-- **Homebrew is offered only when a step you chose needs it**, and its `shellenv` line is added to your `~/.zprofile` for you — no up-front prompt when you don't need the document tools.
-- **Obsidian or Zotero still running:** the script now reminds you and offers **Retry** instead of failing the step.
-- **Freshly installed Obsidian or Zotero:** it pauses for the first launch (Obsidian to create a vault, Zotero to create its profile), then retries — no need to re-run the whole script.
+- The cache folder was renamed from the inherited `.pandoc` to `.scholar-weft`; existing caches are migrated automatically on first load.
+- Internal identifiers left over from the plugin's ancestry (the `lc-` CSS prefix and `pandoc-*` class names) are now consistently `sw-`, and the plugin's settings strings read "ScholarWeft".
