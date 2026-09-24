@@ -125,7 +125,7 @@ export default {
     'See here for a list of available language codes',
   'Cannot connect to Zotero': 'Cannot connect to Zotero',
   'ZoteroConnectionHelp':
-    'Make sure Zotero is running, then in Zotero open Settings (macOS: Zotero → Settings…; Windows/Linux: Edit → Settings…), choose the Advanced tab, and turn ON “Allow other applications on this computer to connect to Zotero”. Click Retry when done. (If you would rather use a .bib file, turn Zotero off below.)',
+    'Check, in this order: (1) Zotero is running — ScholarWeft loads your library automatically once it starts, so no refresh is needed; (2) no OTHER vault is connected to Zotero — only one vault can connect at a time, so close any other vault or Obsidian window using it; (3) in Zotero, open Settings (macOS: Zotero → Settings…; Windows/Linux: Edit → Settings…), choose the Advanced tab, and turn ON “Allow other applications on this computer to connect to Zotero”. Click Retry when done. (If you would rather use a .bib file, turn Zotero off below.)',
   'Start Zotero and try again.': 'Start Zotero and try again.',
   'Libraries to include in bibliography':
     'Libraries to include in bibliography',

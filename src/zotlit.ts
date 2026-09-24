@@ -90,23 +90,47 @@ export function getLitNoteForCitekey(
  * source-id from `zotlit.services.zoteroPref.sourceId`. On any failure we
  * return null so the caller falls back to the plugin's own template.
  */
+export interface ZotLitNoteResult {
+  ok: boolean;
+  /** Human-readable reason when `ok` is false (for the user-facing prompt). */
+  reason?: string;
+  /** ZotLit's dialogue/cause detail, when it reported one. */
+  detail?: string;
+}
+
 export async function createLitNoteViaZotLit(
   app: App,
   item: { indexedKey: string; itemID?: number }
-): Promise<string | null> {
+): Promise<ZotLitNoteResult> {
   const zotlit = getZotLitPlugin(app);
-  if (!zotlit) return null;
+  if (!zotlit) {
+    return { ok: false, reason: 'ZotLit is not enabled in Obsidian.' };
+  }
 
   try {
     // ZotLit 2.x: services on the plugin instance.
     const services = zotlit.services ?? zotlit.api?.services ?? null;
-    if (!services) return null;
+    if (!services) {
+      return {
+        ok: false,
+        reason: 'ZotLit is still starting up (its services are not ready yet).',
+      };
+    }
 
     let itemID = item.itemID;
     if (itemID === undefined) {
       const db = services?.db ?? null;
       itemID = await lookupItemID(db, item.indexedKey);
-      if (itemID === undefined) return null;
+      if (itemID === undefined) {
+        // The usual real-world cause: ZotLit's item index has not been built
+        // (Zotero closed, or its "Item index rebuild failed"), so the Zotero
+        // item key can't be resolved to a ZotLit item ID.
+        return {
+          ok: false,
+          reason:
+            "ZotLit couldn't find this item — its index isn't ready (make sure Zotero is running, then try again).",
+        };
+      }
     }
 
     const sourceId = services?.zoteroPref?.sourceId ?? null;
@@ -117,12 +141,15 @@ export async function createLitNoteViaZotLit(
     // obsidian:// and routes to the registered protocol handler.
     window.open(url, '_self');
     // The protocol handler creates + opens the note; we can't await the result
-    // path synchronously. Returning a sentinel tells the caller NOT to fall
-    // back to its own template (the protocol flow is in charge).
-    return url;
+    // path synchronously, so report success and let it take over.
+    return { ok: true };
   } catch (e) {
-    console.warn('[lc] createLitNoteViaZotLit: error', e);
-    return null;
+    console.warn('[sw] createLitNoteViaZotLit: error', e);
+    return {
+      ok: false,
+      reason: 'ZotLit reported an error creating the note.',
+      detail: (e as Error)?.message,
+    };
   }
 }
 

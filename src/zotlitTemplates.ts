@@ -21,6 +21,11 @@ export interface ZotlitInstallResult {
   /** ZotLit's device-local "JavaScript templates" gate is on (required for the
    *  bundled `.eta.md` templates and the JavaScript frontmatter fields). */
   jsTemplatesEnabled: boolean;
+  /** ZotLit confirmed the gate is on RIGHT NOW (not just that the local key was
+   *  written). When false, the key applies on the next Obsidian restart. */
+  jsTemplatesLive: boolean;
+  /** Whether ZotLit was found loaded at all when we tried to flip the live flag. */
+  zotlitLoaded?: boolean;
   reloadedZotlit: boolean;
   error?: string;
 }
@@ -84,6 +89,7 @@ export async function installZotlitTemplates(
     folderConfigured: false,
     fieldsConfigured: false,
     jsTemplatesEnabled: false,
+    jsTemplatesLive: false,
     reloadedZotlit: false,
   };
 
@@ -187,22 +193,40 @@ export async function installZotlitTemplates(
   // the local key so it sticks across restarts, and — when ZotLit is loaded —
   // ask its own API to flip the live flag so the templates work immediately.
   result.jsTemplatesEnabled = enableZotlitJavaScriptTemplates(app);
-  if (result.jsTemplatesEnabled && result.zotlitDetected) {
-    try {
-      const templateSvc =
-        (app as any).plugins?.plugins?.[ZOTLIT_PLUGIN_ID]?.services?.template;
-      if (
-        templateSvc?.setJavascriptTemplatesEnabled &&
-        !templateSvc.javascriptTemplatesEnabled
-      ) {
-        await templateSvc.setJavascriptTemplatesEnabled(true);
-      }
-    } catch {
-      /* the local key still applies on the next Obsidian load */
-    }
+  if (result.zotlitDetected) {
+    const zotlit = (app as any)?.plugins?.plugins?.[ZOTLIT_PLUGIN_ID];
+    result.zotlitLoaded = !!zotlit?.services?.template;
+    result.jsTemplatesLive = await ensureZotlitJavaScriptTemplatesLive(app);
   }
 
   return result;
+}
+
+/**
+ * Ask ZotLit's OWN template service to turn JavaScript templates on, right now.
+ *
+ * The device-local key written by `enableZotlitJavaScriptTemplates` is only read
+ * when ZotLit loads, so on its own it takes effect on the NEXT restart — which
+ * made it look like installing the templates didn't work the first time.
+ *
+ * We look the service up FRESH (never from a reference captured before ZotLit
+ * was disabled/reloaded — that object is dead by then), and confirm the flag
+ * actually flipped. Returns true when ZotLit reports it on.
+ */
+async function ensureZotlitJavaScriptTemplatesLive(
+  app: unknown
+): Promise<boolean> {
+  const zotlit = (app as any)?.plugins?.plugins?.[ZOTLIT_PLUGIN_ID];
+  const svc = zotlit?.services?.template;
+  if (!svc?.setJavascriptTemplatesEnabled) return false;
+  try {
+    if (!svc.javascriptTemplatesEnabled) {
+      await svc.setJavascriptTemplatesEnabled(true);
+    }
+    return !!svc.javascriptTemplatesEnabled;
+  } catch {
+    return false;
+  }
 }
 
 /** Run the install and show a Notice describing what happened. */
@@ -229,10 +253,15 @@ export async function installZotlitTemplatesWithNotice(
           'backed up as data.json.scholarweft.bak).'
       );
     }
-    if (r.jsTemplatesEnabled) {
+    if (r.jsTemplatesLive) {
       lines.push(
         'ZotLit\'s "JavaScript templates" setting was enabled (the bundled ' +
           'templates require it).'
+      );
+    } else if (r.jsTemplatesEnabled) {
+      lines.push(
+        'ZotLit\'s "JavaScript templates" setting was enabled — restart ' +
+          'Obsidian once for it to take effect (ZotLit reads it at startup).'
       );
     } else {
       lines.push(
