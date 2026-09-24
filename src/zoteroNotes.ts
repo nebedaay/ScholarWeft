@@ -157,7 +157,11 @@ export function recordedKeys(content: string): Set<string> {
 async function zoteroKeyOf(app: App, file: TFile): Promise<string | null> {
   const cache = app.metadataCache.getFileCache(file);
   const fm = cache?.frontmatter;
-  const k = fm?.['zotero-key'] ?? fm?.zoteroKey;
+  // `zotero-key` is what ScholarWeft's own template writes. ZotLit — including
+  // an export from the Zotero–ZotLit companion — writes the same value under
+  // `citekey`. Accept both, or notes ZotLit created are silently treated as
+  // having no Zotero item (`noNotes`) and never get their child notes.
+  const k = fm?.['zotero-key'] ?? fm?.zoteroKey ?? fm?.citekey;
   return typeof k === 'string' && k.trim() ? k.trim() : null;
 }
 
@@ -264,6 +268,9 @@ export async function insertZoteroNotesForFiles(
       }
       const notes = await fetchChildNotes(port, key);
       const r = await insertIntoNote(app, file, notes);
+      if (r === 'inserted') {
+        console.log(`ScholarWeft: inserted ${notes.length} Zotero note(s) into ${file.path}`);
+      }
       if (r === 'inserted') result.inserted++;
       else if (r === 'skipped') result.skipped.push(file.path);
       else result.noNotes.push(file.path);

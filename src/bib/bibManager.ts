@@ -35,8 +35,7 @@ import {
   getZotlitLiteratureFolder,
 } from 'src/zotlit';
 import { cite } from 'src/parser/citeproc';
-import { insertZoteroNotesForFiles } from 'src/zoteroNotes';
-import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
+import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
@@ -2494,27 +2493,23 @@ export class BibManager {
    * @param expectCreation ZotLit creates notes asynchronously (via its protocol
    *   handler), so allow a few retries for the file to appear.
    */
-  async fillZoteroNotesForCitekey(
-    citekey: string,
-    sourceFile: TFile | null,
-    expectCreation = true
-  ): Promise<void> {
-    const sourcePath =
-      sourceFile?.path ?? app.workspace.getActiveFile()?.path ?? '';
-    const attempts = expectCreation ? 6 : 1;
-    let file: TFile | null = null;
-    for (let i = 0; i < attempts; i++) {
-      await new Promise((r) => setTimeout(r, i === 0 ? 1000 : 1000));
-      const hit = getLitNoteForCitekey(citekey, sourcePath, app);
-      if (hit?.file) {
-        file = hit.file;
-        break;
-      }
-    }
-    if (!file) return;
+  /**
+   * Insert a specific literature note's Zotero child notes.
+   *
+   * Use when the caller already has the file (e.g. a vault event): it skips the
+   * citekey→note lookup, which depends on ZotLit's note index being rebuilt.
+   */
+  async fillZoteroNotesForFile(citekey: string, file: TFile): Promise<void> {
+    if (this.plugin.settings.insertZoteroNotesOnCreate === false) return;
     try {
       const res = await insertZoteroNotesForFiles(app, [file], {
         zoteroPort: this.plugin.settings.zoteroPort,
+      });
+      debugLog('[sw:notes] fill result for', file.path, {
+        inserted: res.inserted,
+        noNotes: res.noNotes,
+        skipped: res.skipped,
+        failed: res.failed,
       });
       if (res.inserted) {
         new Notice(
@@ -2522,8 +2517,66 @@ export class BibManager {
           8000
         );
       }
-    } catch {
-      /* best effort — the vault-wide command can be run later */
+    } catch (e) {
+      console.warn('[sw:notes] fill threw for', file.path, e);
+    }
+  }
+
+  async fillZoteroNotesForCitekey(
+    citekey: string,
+    sourceFile: TFile | null,
+    expectCreation = true
+  ): Promise<void> {
+    // User opted out of automatic insertion (the vault command still works).
+    if (this.plugin.settings.insertZoteroNotesOnCreate === false) return;
+    debugLog('[sw:notes] fill start', citekey, 'expectCreation=', expectCreation);
+
+    // Prefer the file we were handed. Resolution by citekey goes through
+    // ZotLit's note index, which can be mid-rebuild right after an export — and
+    // when the caller already knows the file (e.g. a vault event), there is no
+    // reason to depend on that index at all.
+    let file: TFile | null =
+      sourceFile && this.plugin?.app.vault.getAbstractFileByPath(sourceFile.path) instanceof TFile
+        ? sourceFile
+        : null;
+
+    if (!file) {
+      const sourcePath =
+        sourceFile?.path ?? app.workspace.getActiveFile()?.path ?? '';
+      const attempts = Math.max(expectCreation ? 6 : 4, 4);
+      for (let i = 0; i < attempts; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const hit = getLitNoteForCitekey(citekey, sourcePath, app);
+        debugLog('[sw:notes] resolve attempt', i + 1, '/', attempts, 'for', citekey, '→', hit?.file?.path ?? 'not found');
+        if (hit?.file) {
+          file = hit.file;
+          break;
+        }
+      }
+    }
+
+    if (!file) {
+      console.warn('[sw:notes] could not resolve a literature note for', citekey);
+      return;
+    }
+    try {
+      const res = await insertZoteroNotesForFiles(app, [file], {
+        zoteroPort: this.plugin.settings.zoteroPort,
+      });
+      debugLog('[sw:notes] fill result for', citekey, {
+        inserted: res.inserted,
+        noNotes: res.noNotes,
+        skipped: res.skipped,
+        failed: res.failed,
+      });
+      if (res.inserted) {
+        new Notice(
+          `ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`,
+          8000
+        );
+      }
+    } catch (e) {
+      console.warn('[sw:notes] fill threw for', citekey, e);
     }
   }
 

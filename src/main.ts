@@ -49,7 +49,7 @@ import {
   installZotlitTemplates,
   installZotlitTemplatesWithNotice,
 } from './zotlitTemplates';
-import { getLitNoteForCitekey } from './zotlit';
+import { getLitNoteForCitekey, getZotlitLiteratureFolder } from './zotlit';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import {
   insertZoteroNotesForFiles,
@@ -737,6 +737,11 @@ export default class ReferenceList extends Plugin {
               this.bibManager.invalidateFile(file);
               this.processReferences();
             }
+            // ZotLit creates a note's FILE first and writes its content a moment
+            // later, so at `create` time a fresh export is still empty (no
+            // frontmatter, no "## Notes"). Re-check on modify so the child
+            // notes are still inserted. Idempotent, and gated the same way.
+            void this.maybeFillNewLiteratureNote(file);
           },
           150,
           true
@@ -752,6 +757,11 @@ export default class ReferenceList extends Plugin {
             await this.bibManager.updateCitedKeysIndex(file);
             this.persistCitedKeysIndex();
             this.persistRenderedCache();
+            // A literature note can appear without ScholarWeft creating it —
+            // e.g. the Zotero–ZotLit companion exports one directly. In that
+            // case nothing above inserts its Zotero child notes, so detect the
+            // new note and fill it (idempotent; only touches managed notes).
+            void this.maybeFillNewLiteratureNote(file);
           },
           150,
           true
@@ -766,6 +776,22 @@ export default class ReferenceList extends Plugin {
           this.persistCitedKeysIndex();
         }
       )
+    );
+
+    // ZotLit writes an exported note through its own protocol action rather than
+    // by creating a file we can observe (and on a re-export it rewrites a note
+    // it already tracks), so create/modify events never fire for it. Watch
+    // ZotLit's literature-note FOLDER instead: the note has to land there
+    // whatever ZotLit's internals do, and a re-export shows up as a modify.
+    this.registerEvent(
+      app.vault.on('create', (file) => {
+        if (file instanceof TFile) this.maybeFillIfInLitNoteFolder(file);
+      })
+    );
+    this.registerEvent(
+      app.vault.on('modify', (file) => {
+        if (file instanceof TFile) this.maybeFillIfInLitNoteFolder(file);
+      })
     );
 
     (async () => {
@@ -830,6 +856,166 @@ export default class ReferenceList extends Plugin {
         }
       }
     }).open();
+  }
+
+  /**
+   * If `file` lives in ZotLit's literature-note folder, treat it as a candidate
+   * and run the (idempotent, guarded) fill.
+   *
+   * Scoped to the folder so ordinary note edits elsewhere never trigger a scan.
+   * ZotLit's folder is read live, and we also accept the plugin's own configured
+   * folder, so this works whether ZotLit or ScholarWeft created the note.
+   */
+  private maybeFillIfInLitNoteFolder(file: TFile): void {
+    if (this.settings.insertZoteroNotesOnCreate === false) return;
+    if (file.extension !== 'md') return;
+    if (this._fillingLitNotes.has(file.path)) return;
+
+    const folder = (
+      getZotlitLiteratureFolder(this.app) ||
+      (this.settings.useZotlitLiteratureFolder
+        ? ''
+        : (this.settings.literatureNoteFolder ?? '').trim())
+    ).replace(/\/+$/, '');
+    // With no known folder, fall back to the frontmatter test alone.
+    if (folder && !file.path.startsWith(`${folder}/`)) return;
+
+    void this.maybeFillNewLiteratureNote(file);
+  }
+
+  /**
+   * ZotLit just created or updated a literature note (from its own protocol
+   * action). Insert that item's Zotero child notes.
+   *
+   * Kept as a secondary trigger: ZotLit's action carries a NUMERIC Zotero item
+   * ID, while the note's frontmatter stores Zotero's 8-character item KEY —
+   * different identifiers, so resolve the ID to a key through ZotLit's database.
+   */
+  private async onZotLitNoteAction(params: Record<string, unknown>): Promise<void> {
+    if (this.settings.insertZoteroNotesOnCreate === false) return;
+    debugLog('[sw:notes] zotlit action', params.action, 'item', params.item);
+    const itemId = Number(params.item);
+    if (!Number.isFinite(itemId)) return;
+
+    // ZotLit writes the note asynchronously after dispatching the action, so
+    // poll briefly for the note to exist with its frontmatter, then fill it.
+    const itemKey = await this.zoteroKeyForItemId(itemId);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((r) => setTimeout(r, 800));
+      const file = itemKey
+        ? this.findLiteratureNoteByKey(itemKey)
+        : this.findLiteratureNoteByKeyAny();
+      if (file) {
+        await this.maybeFillNewLiteratureNote(file);
+        return;
+      }
+    }
+    debugLog('[sw:notes] no literature note found yet for item', itemId);
+  }
+
+  /** Map a numeric Zotero item ID to its 8-character item key via ZotLit's DB. */
+  private async zoteroKeyForItemId(itemId: number): Promise<string | null> {
+    const db = (this.app as any).plugins?.plugins?.['zotlit']?.services?.db;
+    const client = db?.client;
+    try {
+      const rows = await client?.$queryRawUnsafe?.(
+        'SELECT key FROM items WHERE itemID = ? LIMIT 1',
+        itemId
+      );
+      const key = rows?.[0]?.key;
+      if (typeof key === 'string' && key) return key;
+    } catch {
+      /* fall through to any-match below */
+    }
+    return null;
+  }
+
+  /** Find the literature note carrying `zotero-key: <key>`. */
+  private findLiteratureNoteByKey(key: string): TFile | null {
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const k = fm?.['zotero-key'] ?? fm?.zoteroKey;
+      if (typeof k === 'string' && (k === key || k.startsWith(`${key}g`))) {
+        return file;
+      }
+    }
+    return null;
+  }
+
+  /** Fallback when the item ID can't be resolved: newest literature note. */
+  private findLiteratureNoteByKeyAny(): TFile | null {
+    let best: TFile | null = null;
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const k = fm?.['zotero-key'] ?? fm?.zoteroKey;
+      if (typeof k !== 'string' || !k) continue;
+      if (!best || file.stat.mtime > best.stat.mtime) best = file;
+    }
+    return best;
+  }
+
+  /**
+   * If a newly created file is a literature note that ScholarWeft didn't
+   * create (e.g. exported from the Zotero–ZotLit companion), insert its Zotero
+   * child notes.
+   *
+   * Guards: only managed literature notes (Zotero key in frontmatter AND a
+   * managed "## Notes" section), never while the initial library load is still
+   * running, and the insert itself is idempotent (already-inserted keys are
+   * skipped), so a note created by an SW path is filled once, not twice.
+   */
+  private async maybeFillNewLiteratureNote(file: TFile): Promise<void> {
+    const why = (msg: string) => debugLog('[sw:notes] skip', file.path, '—', msg);
+    if (this.settings.insertZoteroNotesOnCreate === false) return why('setting off');
+    if (this.bibManager.isBackendLoading) return why('library still loading');
+    // Don't re-enter: our own insert writes to the note, which fires 'modify'.
+    if (this._fillingLitNotes.has(file.path)) return why('already filling');
+    if (!this.isLiteratureNote(file)) return why('not a literature note (no key)');
+    try {
+      // Pass the file itself: resolution by citekey goes through ZotLit's note
+      // index, which is often still rebuilding right after an export. The event
+      // already told us exactly which file changed, so use that.
+      const key = await this.zoteroKeyForFile(file);
+      if (!key) return why('no "## Notes" section or unparseable key');
+      this._fillingLitNotes.add(file.path);
+      try {
+        await this.bibManager.fillZoteroNotesForFile(key, file);
+      } finally {
+        // Release immediately: a later event (e.g. the one that arrives after
+        // ZotLit finishes writing the frontmatter) must not be swallowed by a
+        // stale guard. The insert itself is idempotent, so re-entry is safe.
+        this._fillingLitNotes.delete(file.path);
+      }
+    } catch (e) {
+      console.warn('[sw:notes] insert threw for', file.path, e);
+    }
+  }
+
+  /** Paths currently being auto-filled, to avoid 'modify' re-entry loops. */
+  private _fillingLitNotes = new Set<string>();
+
+  /** Does this note look like a Zotero literature note ScholarWeft manages? */
+  private isLiteratureNote(file: TFile): boolean {
+    if (file.extension !== 'md') return false;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (!fm) return false;
+    const hasZoteroKey = !!(fm['zotero-key'] ?? fm.zoteroKey ?? fm.citekey);
+    return hasZoteroKey;
+  }
+
+  /** The ZotLit indexed key ("ITEMKEY" / "ITEMKEYgGROUPID") for a note. */
+  private async zoteroKeyForFile(file: TFile): Promise<string | null> {
+    // A literature note is identified by the "## Notes" section our ZotLit
+    // template emits — NOT by `%%zt-managed%%`, which ScholarWeft itself writes
+    // only once it has inserted notes (so a freshly exported note wouldn't have
+    // it). `insertZoteroNotesForFiles` skips a section that already has content
+    // and no-ops on already-recorded keys, so this stays safe to call.
+    const content = await this.app.vault.cachedRead(file);
+    if (!/^##[ \t]+Notes[ \t]*$/m.test(content)) return null;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const raw = fm?.['zotero-key'] ?? fm?.zoteroKey ?? fm?.citekey;
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    return /^([A-Za-z0-9]+)(?:g(\d+))?$/.test(raw.trim()) ? raw.trim() : null;
   }
 
   /**
