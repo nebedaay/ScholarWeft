@@ -42,7 +42,7 @@ jest.mock('../bibtex', () => ({
 }));
 
 import { BibManager } from '../bibManager';
-import { bibPathsToCSL } from '../helpers';
+import { bibPathsToCSL, searchZoteroBBT } from '../helpers';
 import { parseBibFile } from '../bibtex';
 import { ZOTERO_TYPE_TO_CSL, zoteroItemToCSL } from '../zotero-csl';
 import { SimpleLRU } from '../lru';
@@ -58,7 +58,7 @@ function makePlugin(overrides: Record<string, any> = {}) {
 
   return {
     app: global.app,
-    cacheDir: '.pandoc',
+    cacheDir: '.scholar-weft',
     initPromise,
     settings: {
       cslStyleURL: DEFAULT_STYLE,
@@ -319,6 +319,48 @@ describe('zoteroItemToCSL()', () => {
 
 // ─── CSL rendering pipeline ─────────────────────────────────────────────────
 
+describe('searchZoteroBBT()', () => {
+  const { requestUrl } = require('obsidian');
+
+  it('maps BBT item.search results to CSL entries keyed by citekey', async () => {
+    (requestUrl as jest.Mock).mockResolvedValueOnce({
+      status: 200,
+      headers: {},
+      json: {
+        result: [
+          {
+            id: 'http://zotero.org/users/1/items/ABCD',
+            type: 'book',
+            'citation-key': 'smith2020',
+            citekey: 'smith2020',
+            title: 'A Test Book',
+            author: [{ family: 'Smith', given: 'Jane' }],
+            issued: { 'date-parts': [['2020']] },
+          },
+          {
+            id: 'http://zotero.org/users/1/items/EFGH',
+            type: 'article-journal',
+            citekey: 'doe2021',
+            title: 'Other',
+          },
+        ],
+      },
+    });
+
+    const out = await searchZoteroBBT(
+      '23119',
+      [['citationKey', 'contains', 'smith']],
+      [1],
+      20
+    );
+
+    // The URI `id` is replaced by the citekey; fields are preserved.
+    expect(out.map((e) => e.id)).toEqual(['smith2020', 'doe2021']);
+    expect(out[0].title).toBe('A Test Book');
+    expect((out[0] as any).groupID).toBe(1);
+  });
+});
+
 describe('BibManager CSL rendering pipeline', () => {
   const entries: PartialCSLEntry[] = [
     {
@@ -445,6 +487,50 @@ describe('BibManager CSL rendering pipeline', () => {
     expect(manager2.fileCache.get(file)!.citeBibMap.get('smith2020')).toContain(
       'A Test Article'
     );
+  });
+
+  it('cold start: fetches only the note’s cited keys while the full library loads', async () => {
+    // Empty library + backend still loading = first-run cold start.
+    const { manager } = makeManager([], {
+      pullFromZotero: true,
+      zoteroGroups: [{ id: 1, name: 'My Library' }],
+    });
+    manager.beginBackendLoad();
+
+    const fetched: string[][] = [];
+    (manager as any).getZoteroAdapter = () =>
+      ({
+        getCSLEntriesForCiteKeys: async (keys: string[]) => {
+          fetched.push(keys);
+          return entries.filter((e) => keys.includes(e.id));
+        },
+        getItemsForCiteKeys: async () => null,
+      } as any);
+
+    const file = makeFile('notes/cold.md');
+    const bib = await manager.getReferenceList(file, 'Smith [@smith2020].');
+
+    // The cited key was fetched on demand and rendered immediately.
+    expect(fetched.flat()).toContain('smith2020');
+    expect(bib).toBeInstanceOf(HTMLElement);
+    expect(bib.textContent).toContain('A Test Article');
+    expect(manager.fileCache.get(file)!.resolvedKeys).toEqual(
+      new Set(['smith2020'])
+    );
+
+    // A partial render must NOT be persisted (so the post-load re-render runs).
+    expect((manager as any).renderedCache.has(file.path)).toBe(false);
+
+    // The full library arrives; the note re-renders with everything and persists.
+    manager.markBackendReady();
+    manager.bibCache.set('doe2021', entries[1]);
+    await manager.buildGlobalEngine();
+    const bib2 = await manager.getReferenceList(
+      file,
+      'Smith [@smith2020] and Doe [@doe2021].'
+    );
+    expect(bib2.textContent).toContain('A Test Book');
+    expect((manager as any).renderedCache.has(file.path)).toBe(true);
   });
 
   it('invalidates the persistent cache when note content changes', async () => {

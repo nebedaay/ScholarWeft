@@ -8,7 +8,7 @@ import {
   EditorSuggestTriggerInfo,
   Platform,
 } from 'obsidian';
-import { searchZoteroNative, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
+import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
@@ -18,7 +18,7 @@ export { isZotLitSuggestActive }; // re-exported for settings.tsx
 // Set to true to enable verbose autocomplete logging.
 const SUGGEST_DEBUG = false;
 const LOG = SUGGEST_DEBUG
-  ? (...args: any[]) => console.log('[lc:suggest]', ...args)
+  ? (...args: any[]) => console.log('[sw:suggest]', ...args)
   : (..._args: any[]) => {};
 
 // Returns a compact metadata string for a CSL entry: "Smith · 2020 · Nature"
@@ -90,6 +90,24 @@ function searchCitekeyFirst(
   return fuse.search(normalizeDiacritics(query), { limit }) ?? [];
 }
 
+// A non-selectable placeholder shown while the library is still loading and the
+// live Zotero search returned nothing, so the user learns the index is warming
+// up instead of thinking search is broken. Tagged via a `loading` flag.
+const LOADING_ITEM_ID = '__scholarweft_loading__';
+function loadingSuggestion(): Fuse.FuseResult<PartialCSLEntry>[] {
+  return [
+    {
+      item: { id: LOADING_ITEM_ID } as PartialCSLEntry,
+      refIndex: -1,
+      score: 0,
+      loading: true,
+    } as any,
+  ];
+}
+function isLoadingSuggestion(s: Fuse.FuseResult<PartialCSLEntry>): boolean {
+  return (s as any)?.loading === true || s?.item?.id === LOADING_ITEM_ID;
+}
+
 // Single-@ trigger: matches @citekey (no spaces, no @@ prefix)
 const triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 
@@ -115,7 +133,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // `this.app` from this same argument — no need to redeclare/reassign it.
     this.plugin = plugin;
 
-    (this as any).suggestEl.addClass('lc-suggest');
+    (this as any).suggestEl.addClass('sw-suggest');
     (this as any).scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
       (this as any).suggestions.useSelectedItem(evt);
       return false;
@@ -144,12 +162,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     }
 
     const { plugin } = this;
-    if (!plugin.bibManager.fuseReady) {
-      LOG('getSuggestions: fuse index not ready yet');
-      return [];
-    }
-
     const { bibManager } = plugin;
+    // Do NOT bail out while the local index is still building. Previously this
+    // returned [] for the first several minutes after a fresh install, so
+    // autocomplete looked broken. Fall through to the live Zotero search below
+    // and, only if that finds nothing either, show a "still loading" line.
+    const indexReady = bibManager.fuseReady;
 
     // ── @@ mode: ZotLit-first full-text search ─────────────────────────────
     // Always uses the global index — per-file bibliography overrides are
@@ -190,8 +208,17 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         }
       }
 
-      // 2. Fall back to the plugin's title-biased Fuse index.
+      // 2. Fall back to the plugin's title-biased Fuse index — but while that
+      // index is still building, use a live Zotero title/author search instead
+      // of returning nothing, and say so if even that is empty.
       const fuse = bibManager.fuseTitle ?? bibManager.fuse;
+      if (!fuse) {
+        const items = await this.liveSearch(searchQuery, 'text');
+        if (items.length) {
+          return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
+        }
+        return indexReady ? [] : loadingSuggestion();
+      }
       LOG('@@ fuse fallback, docs=', (fuse as any)?._docs?.length ?? 0);
       if (!searchQuery) {
         const docs = (fuse as any)?._docs as PartialCSLEntry[] | undefined;
@@ -199,7 +226,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
           ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 }))
           : [];
       }
-      return fuse?.search(normalizeDiacritics(searchQuery), { limit: this.limit }) ?? [];
+      return fuse.search(normalizeDiacritics(searchQuery), { limit: this.limit }) ?? [];
     }
 
     // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
@@ -218,41 +245,42 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     if (fuseResults?.length) return fuseResults;
 
     // Fuse returned nothing — fall back to a live Zotero query.
-    const { settings } = plugin;
-    if (settings.pullFromZotero && searchQuery.length >= 2) {
-      const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
-      const groupIds = settings.zoteroGroups?.map((g) => g.id) ?? [];
-      LOG('falling back to live Zotero search');
-      try {
-        const items = await searchZoteroNative(port, searchQuery, groupIds, this.limit);
-        LOG('live Zotero returned', items.length, 'items');
-        return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
-      } catch (e) {
-        LOG('live Zotero search threw:', e);
-      }
+    LOG('falling back to live Zotero search');
+    const liveItems = await this.liveSearch(searchQuery, 'citekey');
+    if (liveItems.length) {
+      LOG('live Zotero returned', liveItems.length, 'items');
+      return liveItems.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
     }
 
-    return [];
+    // Nothing from either the index or a live search. If the index is still
+    // building, tell the user that rather than leaving the popup blank.
+    return indexReady ? [] : loadingSuggestion();
   }
 
   renderSuggestion(
     suggestion: Fuse.FuseResult<PartialCSLEntry>,
     el: HTMLElement
   ): void {
+    if (isLoadingSuggestion(suggestion)) {
+      el.setText(
+        'ScholarWeft: still loading your library — citekey search will be complete shortly.'
+      );
+      return;
+    }
     const frag = createFragment();
     const item = suggestion.item;
 
     if (!suggestion.matches || !suggestion.matches.length) {
       frag.createSpan({ text: `@${item.id}` });
       if (item.title)
-        frag.createSpan({ text: item.title, cls: 'lc-suggest-title' });
+        frag.createSpan({ text: item.title, cls: 'sw-suggest-title' });
       const meta = getEntryMeta(item);
-      if (meta) frag.createSpan({ text: meta, cls: 'lc-suggest-meta' });
+      if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
       return el.setText(frag);
     }
 
     const citekey = frag.createSpan({ text: '@' });
-    const title = frag.createSpan('lc-suggest-title');
+    const title = frag.createSpan('sw-suggest-title');
 
     let prevTitleIndex = 0;
     let prevCiteIndex = 0;
@@ -278,7 +306,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     citekey.appendText(item.id.substring(prevCiteIndex));
 
     const meta = getEntryMeta(item);
-    if (meta) frag.createSpan({ text: meta, cls: 'lc-suggest-meta' });
+    if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
 
     el.setText(frag);
   }
@@ -289,6 +317,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     suggestion: Fuse.FuseResult<PartialCSLEntry>,
     event: KeyboardEvent | MouseEvent
   ): void {
+    if (isLoadingSuggestion(suggestion)) return;
     const { context } = this;
     if (!context) return;
 
@@ -342,6 +371,68 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     } finally {
       this.isRefreshing = false;
     }
+  }
+
+  /**
+   * Live Zotero search used when the local index can't answer (still building,
+   * or the query found nothing). BBT's `item.search` is preferred because it
+   * searches real fields (`citationKey`, `title`, `author`) and returns one
+   * entry per item — the native `?q=` search returns child notes/attachments
+   * and can bury the citeable item. The native API is queried as a secondary
+   * source. Results are merged and de-duplicated, citekey-prefix matches first.
+   */
+  private async liveSearch(
+    query: string,
+    kind: 'citekey' | 'text'
+  ): Promise<PartialCSLEntry[]> {
+    const { settings } = this.plugin;
+    if (!settings.pullFromZotero || query.length < 2) return [];
+    const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
+    const groupIds = settings.zoteroGroups?.map((g) => g.id) ?? [];
+    const out: PartialCSLEntry[] = [];
+    const seen = new Set<string>();
+    const add = (items: PartialCSLEntry[]) => {
+      for (const e of items) {
+        if (e?.id && !seen.has(e.id)) {
+          seen.add(e.id);
+          out.push(e);
+        }
+      }
+    };
+
+    // 1) BBT search on the field that matters for this mode.
+    if (kind === 'citekey') {
+      add(
+        await searchZoteroBBT(
+          port,
+          [['citationKey', 'contains', query]],
+          groupIds,
+          this.limit
+        )
+      );
+    } else {
+      add(await searchZoteroBBT(port, [['title', 'contains', query]], groupIds, this.limit));
+      add(await searchZoteroBBT(port, [['author', 'contains', query]], groupIds, this.limit));
+    }
+
+    // 2) Native `?q=` search as a secondary source (also covers installs where
+    //    BBT's RPC is unavailable).
+    try {
+      add(await searchZoteroNative(port, query, groupIds, this.limit));
+    } catch (e) {
+      LOG('native live search threw:', e);
+    }
+
+    if (kind === 'citekey') {
+      const q = query.toLowerCase();
+      out.sort((a, b) => {
+        const ap = a.id.toLowerCase().startsWith(q) ? 0 : 1;
+        const bp = b.id.toLowerCase().startsWith(q) ? 0 : 1;
+        return ap - bp;
+      });
+    }
+
+    return out.slice(0, this.limit);
   }
 
   onTrigger(cursor: EditorPosition, editor: Editor): EditorSuggestTriggerInfo {

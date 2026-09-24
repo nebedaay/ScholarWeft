@@ -35,7 +35,7 @@ import {
 } from './settings';
 import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
-import { PromiseCapability, debugLog } from './helpers';
+import { PromiseCapability, debugLog, SW_CACHE_DIR, SW_CACHE_DIR_LEGACY } from './helpers';
 import { isAbsolutePath } from './bib/helpers';
 import { findPandoc } from './bib/pandoc';
 import { BibManager, getScopedSettings } from './bib/bibManager';
@@ -175,7 +175,7 @@ export default class ReferenceList extends Plugin {
     builtAt?: number;
     files?: Record<string, string[]>;
   };
-  cacheDir = '.pandoc';
+  cacheDir = SW_CACHE_DIR;
   _initPromise: PromiseCapability<void>;
   private processReferencesRun = 0;
 
@@ -186,10 +186,33 @@ export default class ReferenceList extends Plugin {
     return this._initPromise;
   }
 
+  /**
+   * One-time migration of the cache folder from the ancestral `.pandoc` name to
+   * `.scholar-weft`. Only runs when the new folder is absent and the old one
+   * exists, so it never clobbers a fresh cache.
+   */
+  private async migrateCacheDir(): Promise<void> {
+    const adapter = this.app.vault.adapter;
+    const next = normalizePath(SW_CACHE_DIR);
+    const prev = normalizePath(SW_CACHE_DIR_LEGACY);
+    try {
+      if (await adapter.exists(next)) return;
+      if (!(await adapter.exists(prev))) return;
+      await adapter.rename(prev, next);
+      console.log(`ScholarWeft: migrated cache folder ${prev} → ${next}`);
+    } catch (e) {
+      console.warn('ScholarWeft: cache folder migration failed', e);
+    }
+  }
+
   async onload() {
     const { app } = this;
 
     await this.loadSettings();
+
+    // Rename the ancestral `.pandoc` cache folder to `.scholar-weft` once, so
+    // existing installs keep their library/style/render caches.
+    await this.migrateCacheDir();
 
     // Extract bundled scripts and templates into the plugin directory so
     // users who installed via BRAT get everything they need automatically.
@@ -238,7 +261,7 @@ export default class ReferenceList extends Plugin {
       getCitekeysForFile: (file?: TFile) => this.getCitekeysForFile(file),
     };
 
-    debugLog('[lc:main] loaded settings:', JSON.stringify({
+    debugLog('[sw:main] loaded settings:', JSON.stringify({
       bibliographyPaths: this.settings.bibliographyPaths,
       pullFromZotero: this.settings.pullFromZotero,
       zoteroGroups: this.settings.zoteroGroups,
@@ -250,36 +273,60 @@ export default class ReferenceList extends Plugin {
     this.initPromise.promise
       .then(async () => {
         const { settings, bibManager } = this;
-        debugLog('[lc:main] initPromise.then fired — starting bib load');
+        debugLog('[sw:main] initPromise.then fired — starting bib load');
+        // The Zotero library can take minutes to load on the first run. Mark the
+        // backend as loading so note renders fetch their own citekeys on demand
+        // (see BibManager.getReferenceList) instead of waiting for the whole
+        // library to arrive.
+        if (settings.pullFromZotero) bibManager.beginBackendLoad();
         // Load sources in priority order: .bib first (lower priority),
         // Zotero on top (higher priority, wins on conflicts).
-        if (settings.bibliographyPaths?.length) {
-          await bibManager.loadGlobalBibFiles();
-        } else {
-          debugLog('[lc:main] no bibliographyPaths set, skipping .bib load');
-        }
-        if (settings.pullFromZotero) {
-          await bibManager.loadAndRefreshGlobalZBib();
-        } else {
-          debugLog('[lc:main] pullFromZotero not set, skipping Zotero load');
-        }
-        // Build the Fuse index now so @ autocomplete is available immediately,
-        // before the (slower) CSL engine compilation below.
-        bibManager.buildFuseIndex();
-        // CSL engine compilation can take 30–60 s on a large library — show a
-        // persistent Notice so the user knows why autocomplete and citation
-        // formatting aren't available yet.
+        // The WHOLE load can take minutes on the FIRST run: with no cached
+        // Zotero library yet, fetching it can take several minutes on a large
+        // library, and compiling the CSL engine adds more. Keep ONE persistent
+        // Notice up for the entire time — created BEFORE the fetch, not after
+        // it — so the user sees why nothing formats yet instead of concluding
+        // the plugin is broken. Later starts load from the on-disk cache and
+        // are fast.
         const hasSources =
           (settings.bibliographyPaths?.length ?? 0) > 0 || settings.pullFromZotero;
-        const engineNotice = hasSources
+        const loadNotice = hasSources
           ? new Notice(
-              'ScholarWeft: building citation engine… autocomplete and citation formatting will be ready shortly.',
+              'ScholarWeft: preparing your references… citations will format automatically when this finishes. (The first run can take a few minutes on a large Zotero library; later starts are quick.)',
               0
             )
           : null;
-        // Build the CSL engine once, after all sources are merged.
-        await bibManager.buildGlobalEngine();
-        engineNotice?.hide();
+        const setNotice = (msg: string) => {
+          try {
+            loadNotice?.setMessage(msg);
+          } catch {
+            /* older Obsidian: keep the original message */
+          }
+        };
+        try {
+          if (settings.bibliographyPaths?.length) {
+            setNotice('ScholarWeft: loading bibliography files…');
+            await bibManager.loadGlobalBibFiles();
+          } else {
+            debugLog('[sw:main] no bibliographyPaths set, skipping .bib load');
+          }
+          if (settings.pullFromZotero) {
+            setNotice(
+              'ScholarWeft: loading your Zotero library… this can take a few minutes the first time (later starts are quick). Citations will format automatically when it finishes.'
+            );
+            await bibManager.loadAndRefreshGlobalZBib();
+          } else {
+            debugLog('[sw:main] pullFromZotero not set, skipping Zotero load');
+          }
+          // Build the Fuse index now so @ autocomplete is available immediately,
+          // before the (slower) CSL engine compilation below.
+          bibManager.buildFuseIndex();
+          setNotice('ScholarWeft: building the citation engine…');
+          // Build the CSL engine once, after all sources are merged.
+          await bibManager.buildGlobalEngine();
+        } finally {
+          loadNotice?.hide();
+        }
         // Force all open reading-mode views to re-render now that the citation
         // engine is ready. The markdown post-processor runs synchronously when
         // Obsidian first paints a reading view — if the engine wasn't done yet
@@ -292,7 +339,7 @@ export default class ReferenceList extends Plugin {
             mv.previewMode?.rerender?.(true);
           }
         });
-        debugLog('[lc:main] bib load complete, bibManager.initPromise resolving');
+        debugLog('[sw:main] bib load complete, bibManager.initPromise resolving');
         // Incremental Zotero refresh runs async after the engine is ready.
         // If renames are detected, refreshGlobalZBib() schedules the
         // confirmation modal itself (works for startup and mid-session refreshes).
@@ -300,7 +347,10 @@ export default class ReferenceList extends Plugin {
           bibManager.refreshGlobalZBib().catch(console.error);
         }
       })
-      .finally(() => this.bibManager.initPromise.resolve());
+      .finally(() => {
+        this.bibManager.markBackendReady();
+        this.bibManager.initPromise.resolve();
+      });
 
     this.addSettingTab(new ReferenceListSettingsTab(this));
     this.citeSuggest = new CiteSuggest(app, this);
@@ -489,7 +539,7 @@ export default class ReferenceList extends Plugin {
         }
         new Notice(`ScholarWeft: ${lines.join('\n')}`, 10000);
         if (r.skipped.length) {
-          console.log(
+          debugLog(
             'ScholarWeft: notes skipped because "## Notes" already had content:\n' +
               r.skipped.join('\n')
           );
@@ -601,11 +651,11 @@ export default class ReferenceList extends Plugin {
     });
 
     document.body.toggleClass(
-      'lc-tooltips',
+      'sw-tooltips',
       this.settings.showCitekeyTooltips !== false
     );
     document.body.toggleClass(
-      'lc-decorations',
+      'sw-decorations',
       this.settings.showCitationDecorations ?? true
     );
     this.applyCitationColors();
@@ -903,10 +953,9 @@ export default class ReferenceList extends Plugin {
   }
 
   onunload() {
-    document.body.removeClass('lc-tooltips');
-    this.app.workspace
-      .getLeavesOfType(viewType)
-      .forEach((leaf) => leaf.detach());
+    activeDocument.body.removeClass('sw-tooltips');
+    // Obsidian detaches this plugin's own leaves automatically on unload; do
+    // NOT call detach()/detachLeavesOfType() here (a review-flagged mistake).
     // Guard: onload may have failed before bibManager existed, and unload must
     // not throw on top of that.
     if (this.bibManager) {
@@ -952,8 +1001,8 @@ export default class ReferenceList extends Plugin {
   statusBarIcon: HTMLElement;
   initStatusBar() {
     const ico = (this.statusBarIcon = this.addStatusBarItem());
-    ico.addClass('lc-status-icon', 'clickable-icon');
-    ico.setAttr('aria-label', t('Linked Citations settings'));
+    ico.addClass('sw-status-icon', 'clickable-icon');
+    ico.setAttr('aria-label', t('ScholarWeft settings'));
     ico.setAttr('data-tooltip-position', 'top');
     this.setStatusBarIdle();
     let isOpen = false;
@@ -1115,7 +1164,7 @@ export default class ReferenceList extends Plugin {
   async loadSettings() {
     const saved = (await this.loadData()) ?? {};
 
-    // Restore the persisted citation index from its own file (.pandoc/
+    // Restore the persisted citation index from its own file (.scholar-weft/
     // cited-keys.json) — NOT from data.json, which saveSettings() rewrites and
     // would otherwise clobber the index. Loaded lazily after bibManager exists.
     try {
@@ -1218,23 +1267,23 @@ export default class ReferenceList extends Plugin {
     const { decorationColorUnlinked, decorationColorLinked, decorationColorUnimported } =
       this.settings;
     if (decorationColorUnlinked) {
-      document.body.style.setProperty('--lc-citation-underline-color-unlinked', decorationColorUnlinked);
+      document.body.style.setProperty('--sw-citation-underline-color-unlinked', decorationColorUnlinked);
     }
     if (decorationColorLinked) {
-      document.body.style.setProperty('--lc-wikilink-linked-color', decorationColorLinked);
+      document.body.style.setProperty('--sw-wikilink-linked-color', decorationColorLinked);
     }
     if (decorationColorUnimported) {
-      document.body.style.setProperty('--lc-wikilink-unimported-color', decorationColorUnimported);
+      document.body.style.setProperty('--sw-wikilink-unimported-color', decorationColorUnimported);
     }
   }
 
   async saveSettings(cb?: () => void) {
     document.body.toggleClass(
-      'lc-tooltips',
+      'sw-tooltips',
       this.settings.showCitekeyTooltips !== false
     );
     document.body.toggleClass(
-      'lc-decorations',
+      'sw-decorations',
       this.settings.showCitationDecorations ?? true
     );
     this.applyCitationColors();
@@ -1246,7 +1295,7 @@ export default class ReferenceList extends Plugin {
     await this.saveData(this.settings);
   }
 
-  /** Persist the citation index to its own file (`.pandoc/cited-keys.json`),
+  /** Persist the citation index to its own file (`.scholar-weft/cited-keys.json`),
    *  so settings saves (saveData) can never clobber it. Debounced. */
   persistCitedKeysIndex = debounce(async () => {
     if (!this.bibManager.citedKeysIndexDirty) return;
@@ -1430,7 +1479,7 @@ export default class ReferenceList extends Plugin {
     ) {
       return view?.setMessage(
         t(
-          'Please provide the path to your bibliography file in the Linked Citations plugin settings.'
+          'Please provide the path to your bibliography file in the ScholarWeft plugin settings.'
         )
       );
     }
@@ -1503,16 +1552,16 @@ class BibSnapshotModal extends Modal {
       (folder ? folder + '/' : '') + stem + '-bibliography.bib'
     );
 
-    const inputWrap = contentEl.createDiv({ cls: 'lc-snapshot-input-wrap' });
+    const inputWrap = contentEl.createDiv({ cls: 'sw-snapshot-input-wrap' });
     inputWrap.createEl('label', { text: t('Save as') });
     const input = inputWrap.createEl('input', {
       type: 'text',
       value: defaultPath,
-      cls: 'lc-snapshot-input',
+      cls: 'sw-snapshot-input',
     });
     input.style.width = '100%';
 
-    const btnRow = contentEl.createDiv({ cls: 'lc-snapshot-btn-row' });
+    const btnRow = contentEl.createDiv({ cls: 'sw-snapshot-btn-row' });
     btnRow.style.display = 'flex';
     btnRow.style.justifyContent = 'flex-end';
     btnRow.style.gap = '8px';

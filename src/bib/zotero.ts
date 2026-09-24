@@ -12,6 +12,7 @@ import {
   refreshZBibNative,
   getItemJSONFromCiteKeys,
   getItemJSONFromCiteKeysNative,
+  getCSLEntriesForCiteKeysNative,
 } from './helpers';
 
 export interface ZoteroAdapter {
@@ -50,6 +51,16 @@ export interface ZoteroAdapter {
     citekeys: string[],
     groupId: number
   ): Promise<any[] | null>;
+
+  /**
+   * Fetch CSL entries for specific citekeys. Used to render a note's citations
+   * immediately on a cold start, before the full library has loaded. Best-effort:
+   * keys that can't be found are omitted.
+   */
+  getCSLEntriesForCiteKeys(
+    citekeys: string[],
+    groupId: number
+  ): Promise<PartialCSLEntry[]>;
 }
 
 // ─── Better BibTeX adapter (Zotero ≤6, or ≥7 with BBT installed) ────────────
@@ -88,6 +99,17 @@ export class BBTAdapter implements ZoteroAdapter {
   ): Promise<any[] | null> {
     return getItemJSONFromCiteKeys(this.port, citekeys, groupId);
   }
+
+  async getCSLEntriesForCiteKeys(
+    citekeys: string[],
+    groupId: number
+  ): Promise<PartialCSLEntry[]> {
+    const items = await getItemJSONFromCiteKeys(this.port, citekeys, groupId);
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter((it) => it && typeof it.id === 'string' && it.id)
+      .map((it) => ({ ...it, groupID: groupId }) as PartialCSLEntry);
+  }
 }
 
 // ─── Native Zotero 7/8 REST API adapter ─────────────────────────────────────
@@ -124,5 +146,12 @@ export class NativeAdapter implements ZoteroAdapter {
     groupId: number
   ): Promise<any[] | null> {
     return getItemJSONFromCiteKeysNative(this.port, citekeys, groupId);
+  }
+
+  getCSLEntriesForCiteKeys(
+    citekeys: string[],
+    groupId: number
+  ): Promise<PartialCSLEntry[]> {
+    return getCSLEntriesForCiteKeysNative(this.port, citekeys, groupId);
   }
 }

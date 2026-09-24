@@ -1,5 +1,5 @@
 import { FileSystemAdapter, normalizePath, requestUrl } from 'obsidian';
-import { debugLog } from 'src/helpers';
+import { debugLog, SW_CACHE_DIR } from 'src/helpers';
 import { CSLList, PartialCSLEntry } from './types';
 import { parseBibFile } from './bibtex';
 import { bibToCSLViaPandoc } from './pandoc';
@@ -153,7 +153,7 @@ export async function bibPathsToCSL(
 
 // ─── CSL locale + style caching ─────────────────────────────────────────────
 
-const CACHE_DIR = normalizePath('.pandoc');
+const CACHE_DIR = normalizePath(SW_CACHE_DIR);
 
 export async function getCSLLocale(
   localeCache: Map<string, string>,
@@ -406,7 +406,7 @@ export async function refreshZBib(
 async function zoteroNativeGet(
   port: string,
   apiPath: string
-): Promise<{ data: any; version: number }> {
+): Promise<{ data: any; version: number; totalResults?: number }> {
   const resp = await requestUrl({
     url: `http://127.0.0.1:${port}${apiPath}`,
     method: 'GET',
@@ -414,8 +414,35 @@ async function zoteroNativeGet(
     throw: false,
   });
   if (resp.status !== 200) throw new Error(`Zotero native: HTTP ${resp.status} for ${apiPath}`);
-  const version = Number(resp.headers['last-modified-version'] ?? 0);
-  return { data: resp.json, version };
+  const headers = resp.headers ?? {};
+  const version = Number(
+    headers['last-modified-version'] ?? headers['Last-Modified-Version'] ?? 0
+  );
+  const totalRaw = headers['total-results'] ?? headers['Total-Results'];
+  const totalResults = totalRaw != null ? Number(totalRaw) : undefined;
+  return { data: resp.json, version, totalResults };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Fetch one page, retrying transient failures with exponential backoff. */
+async function fetchNativePageWithRetry(
+  port: string,
+  apiPath: string,
+  attempts = 4
+): Promise<{ data: any; version: number; totalResults?: number }> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await zoteroNativeGet(port, apiPath);
+    } catch (e) {
+      lastErr = e;
+      await sleep(500 * 2 ** i); // 0.5s, 1s, 2s …
+    }
+  }
+  throw lastErr;
 }
 
 async function fetchAllZoteroItemsNative(
@@ -430,13 +457,17 @@ async function fetchAllZoteroItemsNative(
   let libraryVersion = 0;
   const sinceParam = since !== undefined ? `&since=${since}` : '';
   let hasMore = true;
+  let expectedTotal: number | undefined;
 
   while (hasMore) {
-    const { data, version } = await zoteroNativeGet(
+    const { data, version, totalResults } = await fetchNativePageWithRetry(
       port,
       `/api/${libraryType}/${libraryId}/items?format=json&itemType=-attachment&limit=${limit}&start=${start}${sinceParam}`
     );
     libraryVersion = version;
+    if (expectedTotal === undefined && totalResults != null) {
+      expectedTotal = totalResults;
+    }
     if (!Array.isArray(data) || data.length === 0) {
       hasMore = false;
       continue;
@@ -446,6 +477,16 @@ async function fetchAllZoteroItemsNative(
       hasMore = false;
     }
     start += limit;
+  }
+
+  // Guard against a silently-truncated fetch: a partial library would build a
+  // partial index that is treated as complete until the next restart. Throwing
+  // here means getZBibNative() never writes a partial cache, and loadGlobalZBib
+  // schedules a retry instead of accepting the short result.
+  if (expectedTotal != null && allItems.length < expectedTotal) {
+    throw new Error(
+      `Zotero native: incomplete library fetch (${allItems.length}/${expectedTotal} items)`
+    );
   }
 
   return { items: allItems, version: libraryVersion };
@@ -687,6 +728,54 @@ export async function getItemJSONFromCiteKeysNative(
   return results.length ? results : null;
 }
 
+/**
+ * Fetch CSL entries for specific citekeys from the native Zotero API — used to
+ * render a note's citations BEFORE the full library has finished loading.
+ * Mirrors `getItemJSONFromCiteKeysNative` but returns the CSL entry itself.
+ * Parallelised (~6), and best-effort: a key that isn't found is simply skipped.
+ */
+export async function getCSLEntriesForCiteKeysNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  citeKeys: string[],
+  groupId: number
+): Promise<PartialCSLEntry[]> {
+  if (!(await isZoteroRunningNative(port))) return [];
+
+  const { libraryType, libraryId } = nativeLibraryCoords(groupId);
+  const out: PartialCSLEntry[] = [];
+  const seen = new Set<string>();
+  const queue = [...citeKeys];
+  const CONCURRENCY = 6;
+
+  const workers = Array.from(
+    { length: Math.min(CONCURRENCY, queue.length) },
+    async () => {
+      while (queue.length) {
+        const citeKey = queue.shift()!;
+        if (seen.has(citeKey)) continue;
+        seen.add(citeKey);
+        try {
+          const { data } = await zoteroNativeGet(
+            port,
+            `/api/${libraryType}/${libraryId}/items?format=json&itemType=-attachment&limit=25&q=${encodeURIComponent(citeKey)}`
+          );
+          if (!Array.isArray(data)) continue;
+          const match = data.find(
+            (it: any) => it.data?.citationKey === citeKey
+          );
+          if (!match) continue;
+          const csl = _zoteroItemToCSL(match, groupId);
+          if (csl) out.push(csl);
+        } catch {
+          // skip individual failures
+        }
+      }
+    }
+  );
+  await Promise.all(workers);
+  return out;
+}
+
 export async function getItemJSONFromCiteKeys(
   port: string = DEFAULT_ZOTERO_PORT,
   citeKeys: string[],
@@ -734,27 +823,71 @@ export async function searchZoteroNative(
   const targets = groupIds.length ? groupIds : [1];
   const results: PartialCSLEntry[] = [];
 
-  debugLog('[lc:zotero-search] searchZoteroNative called, port=', port, 'query=', query, 'targets=', targets);
+  debugLog('[sw:zotero-search] searchZoteroNative called, port=', port, 'query=', query, 'targets=', targets);
 
   for (const groupId of targets) {
     const libraryType = groupId === 1 ? 'users' : 'groups';
     const libraryId = groupId === 1 ? 0 : groupId;
     const url = `/api/${libraryType}/${libraryId}/items?q=${encoded}&format=json&itemType=-attachment&limit=${limit}`;
-    debugLog('[lc:zotero-search] GET', `http://127.0.0.1:${port}${url}`);
+    debugLog('[sw:zotero-search] GET', `http://127.0.0.1:${port}${url}`);
     try {
       const { data } = await zoteroNativeGet(port, url);
-      debugLog('[lc:zotero-search] response type=', typeof data, Array.isArray(data) ? `array[${data.length}]` : String(data)?.slice(0, 100));
+      debugLog('[sw:zotero-search] response type=', typeof data, Array.isArray(data) ? `array[${data.length}]` : String(data)?.slice(0, 100));
       if (!Array.isArray(data)) continue;
       for (const item of data) {
         const cslItem = _zoteroItemToCSL(item, groupId);
         if (cslItem) results.push(cslItem);
       }
     } catch (e) {
-      debugLog('[lc:zotero-search] request threw:', e);
+      debugLog('[sw:zotero-search] request threw:', e);
       throw e;
     }
   }
 
-  debugLog('[lc:zotero-search] returning', results.length, 'CSL items');
+  debugLog('[sw:zotero-search] returning', results.length, 'CSL items');
   return results;
+}
+
+/**
+ * Search the library through Better BibTeX's JSON-RPC `item.search`. Unlike the
+ * native `?q=` search — which returns child notes/attachments and can bury the
+ * citeable item — this searches real item fields (`citationKey`, `title`,
+ * `author`, …) and returns one rich entry per matching item, so it's reliable
+ * for citekey autocomplete and works before the full library has loaded.
+ *
+ * `conditions` is a list of `[field, operator, value]` triples, ANDed together
+ * (e.g. `[['citationKey', 'contains', 'smith']]`). Best-effort: returns [] when
+ * BBT isn't reachable.
+ */
+export async function searchZoteroBBT(
+  port: string = DEFAULT_ZOTERO_PORT,
+  conditions: Array<[string, string, string]>,
+  groupIds: number[] = [],
+  limit = 20
+): Promise<PartialCSLEntry[]> {
+  const targets = groupIds.length ? groupIds : [1];
+  const out: PartialCSLEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const groupId of targets) {
+    try {
+      const data = await bbtPost(port, {
+        jsonrpc: '2.0',
+        method: 'item.search',
+        params: [conditions, groupId],
+      });
+      if (!Array.isArray(data?.result)) continue;
+      for (const it of data.result) {
+        const id: string = it?.citekey ?? it?.['citation-key'] ?? '';
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        // Spread first, then overwrite the URI `id` with the citekey.
+        out.push({ ...it, id, groupID: groupId } as PartialCSLEntry);
+      }
+    } catch (e) {
+      debugLog('[sw:zotero-search] BBT item.search failed:', e);
+    }
+  }
+
+  return out.slice(0, limit);
 }

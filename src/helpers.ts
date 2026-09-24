@@ -33,6 +33,17 @@ export function debugLog(...args: unknown[]): void {
 }
 
 /**
+ * Vault-relative folder holding the plugin's caches (Zotero library, CSL
+ * styles/locales, parsed bibliographies, rendered citations, link maps).
+ * Renamed from the ancestral `.pandoc`; migrated on first run by
+ * `ReferenceList.migrateCacheDir()`.
+ */
+export const SW_CACHE_DIR = '.scholar-weft';
+
+/** Previous cache folder name, migrated to {@link SW_CACHE_DIR} on first run. */
+export const SW_CACHE_DIR_LEGACY = '.pandoc';
+
+/**
  * Copy an HTMLElement's content to the clipboard as both rich-text HTML and
  * plain text, so pasting into a word processor preserves formatting while
  * pasting into a plain-text editor gives readable text.

@@ -20,6 +20,7 @@ import {
   copyElToClipboard,
   copyTextToClipboard,
   debugLog,
+  SW_CACHE_DIR,
 } from 'src/helpers';
 import {
   RenderedCitation,
@@ -137,7 +138,7 @@ export interface FileCache {
   resolvedKeys: Set<string>;
   unresolvedKeys: Set<string>;
   /** Keys that exist in the global library but are absent from the note's
-   *  snapshot .bib (set via the `lc-snapshot` frontmatter key). Render with
+   *  snapshot .bib (set via the `sw-snapshot` frontmatter key). Render with
    *  the `is-global-only` yellow style — resolvable but not yet snapshotted.
    *  Empty when no snapshot has been taken for this file. */
   globalOnlyKeys: Set<string>;
@@ -289,11 +290,14 @@ function normalizeLocales(locales: string[]) {
   return Object.keys(obj);
 }
 
+/** Default CSL style URL, used when no style is configured. */
+const DEFAULT_CSL_STYLE =
+  'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
+
 export class BibManager {
   plugin: ReferenceList;
   fileCache: SimpleLRU<TFile, FileCache>;
   initPromise: PromiseCapability<void>;
-
   langCache: Map<string, string> = new Map();
   styleCache: Map<string, string> = new Map();
 
@@ -362,6 +366,20 @@ export class BibManager {
    *  calls can both call updateFuse() for the same newly-added items, pushing
    *  the same entry into fuse._docs twice and producing duplicate suggestions. */
   private _isRefreshingZBib = false;
+
+  /** Set when a Zotero library fetch failed partway, so the full load is
+   *  retried once after a delay instead of leaving a partial library in place
+   *  until the next restart. */
+  private _zoteroRetryScheduled = false;
+
+  /** True while the initial full load (including the whole Zotero library) is
+   *  still in progress. While set, a note's own cited keys are fetched on
+   *  demand so it can render in seconds instead of waiting for the entire
+   *  library; the full load continues in the background and re-renders later. */
+  private backendLoading = false;
+  /** Citekeys already requested via the on-demand priority fetch, so repeated
+   *  renders don't re-query Zotero for the same missing keys. */
+  private priorityFetched = new Set<string>();
 
   /** Maps the stable 8-char Zotero item key (_zoteroKey) to the citekey
    *  currently stored in bibCache for that item. The Zotero item key never
@@ -504,7 +522,7 @@ export class BibManager {
     const pluginSettings = this.plugin.settings;
     let style =
       pluginSettings.cslStyleURL ??
-      'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
+      DEFAULT_CSL_STYLE;
     let lang = pluginSettings.cslLang ?? 'en-US';
     let bibCache = this.bibCache;
     let fuse = this.fuse;
@@ -595,7 +613,7 @@ export class BibManager {
   // Load all configured .bib files into bibCache tagged as 'bib'.
   // Does not build the CSL engine — call buildGlobalEngine() after all sources load.
   //
-  // Parse cache: results are stored in .pandoc/bib-parsed.json as an array of
+  // Parse cache: results are stored in .scholar-weft/bib-parsed.json as an array of
   // per-file entries keyed by (path + mtime + size + pandocPath). On startup,
   // an unchanged file loads from JSON in ~5ms instead of running bibtex-parser.
   // Absolute paths outside the vault are always re-parsed (no stat available).
@@ -604,8 +622,8 @@ export class BibManager {
     const paths = settings.bibliographyPaths ?? [];
     if (!paths.length) return;
 
-    const CACHE_DIR = normalizePath('.pandoc');
-    const BIB_CACHE_PATH = normalizePath('.pandoc/bib-parsed.json');
+    const CACHE_DIR = normalizePath(SW_CACHE_DIR);
+    const BIB_CACHE_PATH = normalizePath(`${CACHE_DIR}/bib-parsed.json`);
     const pandoc = settings.pathToPandoc ?? '';
 
     // Load existing cache file once up-front.
@@ -638,7 +656,7 @@ export class BibManager {
 
       // Persist normalised path back to settings if it changed.
       if (resolved !== rawPath) {
-        console.info(`scholar-weft: normalised bib path "${rawPath}" → "${resolved}"`);
+        debugLog(`scholar-weft: normalised bib path "${rawPath}" → "${resolved}"`);
         settings.bibliographyPaths[i] = resolved;
         settingsModified = true;
       }
@@ -654,7 +672,7 @@ export class BibManager {
               cached.size === stat.size &&
               cached.pandoc === pandoc) {
             bib = cached.entries;
-            debugLog(`[lc:bib] parse cache hit for "${resolved}" — ${bib.length} entries`);
+            debugLog(`[sw:bib] parse cache hit for "${resolved}" — ${bib.length} entries`);
           }
         } catch {
           // Fall through to full parse.
@@ -664,7 +682,7 @@ export class BibManager {
       if (!bib) {
         try {
           bib = await bibToCSL(resolved, settings.pathToPandoc);
-          debugLog(`[lc:bib] parsed "${resolved}" — ${bib?.length ?? 0} entries`);
+          debugLog(`[sw:bib] parsed "${resolved}" — ${bib?.length ?? 0} entries`);
         } catch (e) {
           console.error(`scholar-weft: failed to load "${resolved}":`, e);
           continue;
@@ -709,7 +727,7 @@ export class BibManager {
     }
 
     if (settingsModified) this.plugin.saveSettings();
-    debugLog('[lc:bib] bibCache now has', this.bibCache.size, 'entries after .bib load');
+    debugLog('[sw:bib] bibCache now has', this.bibCache.size, 'entries after .bib load');
   }
 
   getZoteroAdapter(): ZoteroAdapter {
@@ -724,6 +742,93 @@ export class BibManager {
     return this.getZoteroAdapter().isRunning();
   }
 
+  /** Called at the start of the initial load so note renders know the full
+   *  library isn't ready yet and should use the on-demand priority fetch. */
+  beginBackendLoad() {
+    this.backendLoading = true;
+  }
+
+  /** Called once the initial full load has finished; from then on note renders
+   *  wait for (the already-resolved) initPromise as before. Any scoped engine
+   *  compiled from the partial bibCache is dropped so notes rebuild against the
+   *  full library. */
+  markBackendReady() {
+    this.backendLoading = false;
+    this.fileCache.clear();
+  }
+
+  get isBackendLoading(): boolean {
+    return this.backendLoading;
+  }
+
+  /**
+   * Cold-start fast path. While the full library is still loading, fetch just
+   * the citekeys a note needs so it can render immediately instead of waiting
+   * minutes. Best-effort: failures are swallowed (the full load will fill the
+   * gaps). Also makes sure the default style + locale are cached so
+   * `loadScopedEngine` can compile an engine from the partial bibCache.
+   */
+  async ensureKeysForRender(keys: string[]): Promise<void> {
+    if (!this.backendLoading) return;
+
+    const fresh = keys.filter(
+      (k) => k && !this.bibCache.has(k) && !this.priorityFetched.has(k)
+    );
+    if (fresh.length && this.plugin.settings.pullFromZotero) {
+      fresh.forEach((k) => this.priorityFetched.add(k));
+      try {
+        await this.fetchCSLForKeys(fresh);
+      } catch (e) {
+        debugLog('[sw:bib] priority fetch failed', e);
+      }
+    }
+
+    await this.ensureDefaultStyleAndLang();
+
+    // getScopedSettings() returns null for notes without frontmatter, in which
+    // case getReferenceList() falls back to this.engine — so make sure a global
+    // engine exists (built from the partial bibCache) before returning.
+    if (!this.engine) {
+      try {
+        await this.buildGlobalEngine();
+      } catch (e) {
+        debugLog('[sw:bib] priority engine build failed', e);
+      }
+    }
+  }
+
+  /** Fetch CSL entries for specific citekeys from every configured group and
+   *  merge them into bibCache (Zotero priority rules apply). */
+  private async fetchCSLForKeys(keys: string[]): Promise<void> {
+    const adapter = this.getZoteroAdapter();
+    const groups = this.plugin.settings.zoteroGroups ?? [];
+    const targets = groups.length ? groups : [{ id: 1 }];
+    for (const group of targets) {
+      const entries = await adapter.getCSLEntriesForCiteKeys(keys, group.id);
+      for (const entry of entries) {
+        if (entry?.id) this.mergeZoteroEntry({ ...entry, groupID: group.id });
+      }
+    }
+  }
+
+  /** Ensure the configured default style and locale are in the caches so a
+   *  scoped engine can be compiled before buildGlobalEngine() has run. */
+  private async ensureDefaultStyleAndLang(): Promise<void> {
+    const { settings } = this.plugin;
+    const style =
+      settings.cslStylePath || settings.cslStyleURL || DEFAULT_CSL_STYLE;
+    const lang = settings.cslLang || 'en-US';
+    if (this.styleCache.has(style) && this.langCache.has(lang)) return;
+    try {
+      await this.getLangAndStyle(lang, {
+        id: style,
+        explicitPath: settings.cslStylePath,
+      });
+    } catch (e) {
+      debugLog('[sw:bib] priority style/lang load failed', e);
+    }
+  }
+
   async loadAndRefreshGlobalZBib() {
     await this.loadGlobalZBib(true);
     // refreshGlobalZBib runs after engine is built by the caller
@@ -735,19 +840,20 @@ export class BibManager {
   async loadGlobalZBib(fromCache?: boolean) {
     if (!this.plugin) return;
     const { settings } = this.plugin;
-    debugLog('[lc:bib] loadGlobalZBib, fromCache=', fromCache, 'zoteroGroups=', JSON.stringify(settings.zoteroGroups), 'pullFromZotero=', settings.pullFromZotero);
+    debugLog('[sw:bib] loadGlobalZBib, fromCache=', fromCache, 'zoteroGroups=', JSON.stringify(settings.zoteroGroups), 'pullFromZotero=', settings.pullFromZotero);
     if (!settings.zoteroGroups?.length) {
-      debugLog('[lc:bib] no zoteroGroups configured — skipping Zotero load');
+      debugLog('[sw:bib] no zoteroGroups configured — skipping Zotero load');
       return;
     }
 
     const adapter = this.getZoteroAdapter();
-    debugLog('[lc:bib] using adapter:', (adapter as any).constructor?.name ?? typeof adapter);
+    debugLog('[sw:bib] using adapter:', (adapter as any).constructor?.name ?? typeof adapter);
+    let failed = false;
     for (const group of settings.zoteroGroups) {
       try {
-        debugLog('[lc:bib] fetching group', group.id, group.name);
+        debugLog('[sw:bib] fetching group', group.id, group.name);
         const res = await adapter.getBib('', group.id, fromCache);
-        debugLog('[lc:bib] group', group.id, 'returned', res.list?.length ?? 'null', 'entries');
+        debugLog('[sw:bib] group', group.id, 'returned', res.list?.length ?? 'null', 'entries');
         if (!res.list?.length) continue;
 
         if (!fromCache) {
@@ -759,12 +865,33 @@ export class BibManager {
           this.mergeZoteroEntry(entry);
         }
       } catch (e) {
+        failed = true;
         console.error('scholar-weft: Zotero load failed:', e);
       }
     }
 
-    debugLog('[lc:bib] bibCache now has', this.bibCache.size, 'entries after Zotero load');
+    debugLog('[sw:bib] bibCache now has', this.bibCache.size, 'entries after Zotero load');
     this.plugin.saveSettings();
+
+    // A failed group leaves the library partial, and the Fuse index built from
+    // it is treated as complete — so a key that arrived later in the fetch can
+    // seem to be missing until the next restart. Retry the whole load once
+    // after a short delay so it recovers on its own.
+    if (failed && !fromCache && !this._zoteroRetryScheduled) {
+      this._zoteroRetryScheduled = true;
+      debugLog('[sw:bib] Zotero load incomplete — scheduling a retry');
+      setTimeout(() => {
+        this._zoteroRetryScheduled = false;
+        if (!this.plugin) return;
+        this.loadGlobalZBib(false)
+          .then(() => this.buildGlobalEngine())
+          .then(() => {
+            this.fileCache.clear();
+            this.plugin.processReferences();
+          })
+          .catch(console.error);
+      }, 60_000);
+    }
   }
 
   // Merge a single Zotero entry into bibCache with full priority + dedup logic.
@@ -1029,13 +1156,13 @@ export class BibManager {
   async buildGlobalEngine() {
     const { settings } = this.plugin;
 
-    debugLog('[lc:bib] buildGlobalEngine, bibCache.size=', this.bibCache.size);
+    debugLog('[sw:bib] buildGlobalEngine, bibCache.size=', this.bibCache.size);
     this.setFuse(Array.from(this.bibCache.values()));
 
     const style =
       settings.cslStylePath ||
       settings.cslStyleURL ||
-      'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
+      DEFAULT_CSL_STYLE;
     const lang = settings.cslLang || 'en-US';
 
     await this.getLangAndStyle(lang, {
@@ -1231,7 +1358,7 @@ export class BibManager {
     const style =
       settings.cslStylePath ||
       settings.cslStyleURL ||
-      'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
+      DEFAULT_CSL_STYLE;
     const lang = settings.cslLang || 'en-US';
 
     let engine: any;
@@ -1269,8 +1396,6 @@ export class BibManager {
   ) {
     if (!this.plugin) return undefined;
     await this.plugin.initPromise.promise;
-    if (!shouldContinue()) return undefined;
-    await this.initPromise.promise;
     if (!shouldContinue()) return undefined;
 
     const segs = getCitationSegments(
@@ -1317,6 +1442,23 @@ export class BibManager {
 
     const processed = segs.map((s) => getCitations(s));
 
+    // Cold start: while the full library is still loading, fetch only THIS
+    // note's cited keys so it can render now instead of waiting minutes for the
+    // whole library. Otherwise wait for the full load as before.
+    if (this.backendLoading) {
+      const needed = new Set<string>();
+      processed.forEach((p) =>
+        p.citations.forEach((c) => {
+          if (c.id) needed.add(c.id);
+        })
+      );
+      await this.ensureKeysForRender([...needed]);
+      if (!shouldContinue()) return undefined;
+    } else {
+      await this.initPromise.promise;
+      if (!shouldContinue()) return undefined;
+    }
+
     // Load the persistent cache once so both the prune path (no citations)
     // and the fast path below see the on-disk state.
     await this.loadRenderedCache();
@@ -1360,6 +1502,7 @@ export class BibManager {
     const hashMatches = persisted && persisted.contentHash === hash;
 
     if (
+      !this.backendLoading &&
       (!cachedDoc || !cachedDoc.source) &&
       hashMatches &&
       this.entryVersionsMatch(persisted!, this.bibCache)
@@ -1403,7 +1546,7 @@ export class BibManager {
     }
 
     // Load snapshot citekeys (fast regex, no full parse) if the file has a
-    // lc-snapshot frontmatter key. These are used only for colour comparison —
+    // sw-snapshot frontmatter key. These are used only for colour comparison —
     // the global engine always handles rendering.
     const snapshotKeys: Set<string> = settings?.snapshotBib?.length
       ? await this.loadSnapshotKeys(settings.snapshotBib)
@@ -1526,8 +1669,14 @@ export class BibManager {
     };
 
     if (!this.warmingSkipLRU) this.fileCache.set(file, result);
-    this.persistFileCache(file, result, hash);
-    this.dispatchResult(file, result, hash);
+    if (this.backendLoading) {
+      // Partial (on-demand) render: don't persist it and don't record the
+      // content hash, so the re-render after the full load isn't skipped.
+      this.dispatchResult(file, result);
+    } else {
+      this.persistFileCache(file, result, hash);
+      this.dispatchResult(file, result, hash);
+    }
 
     return result.bib;
   }
@@ -1576,7 +1725,7 @@ export class BibManager {
    * The `zotero://select` URL is built from the `_zoteroKey` already stored
    * in every CSL entry (item key from the library fetch) — ZERO HTTP calls.
    * PDF attachments still require a per-item fetch; only uncached keys are
-   * fetched, and the maps are persisted (`.pandoc/zlinks.json`) so cold
+   * fetched, and the maps are persisted (`.scholar-weft/zlinks.json`) so cold
    * starts skip the network entirely.
    */
   async getZLinksForKeys(citekeys: Set<string>) {
@@ -1649,12 +1798,12 @@ export class BibManager {
 
   /** Persist the Zotero link maps (debounced by caller). */
   async saveZLinks() {    try {
-      const dir = normalizePath('.pandoc');
+      const dir = normalizePath(SW_CACHE_DIR);
       if (!(await app.vault.adapter.exists(dir))) {
         await app.vault.adapter.mkdir(dir);
       }
       await app.vault.adapter.write(
-        normalizePath('.pandoc/zlinks.json'),
+        normalizePath(`${SW_CACHE_DIR}/zlinks.json`),
         JSON.stringify({
           links: Object.fromEntries(this.zCitekeyToLinks),
           pdfs: Object.fromEntries(this.zCitekeyToPDFLinks),
@@ -1669,7 +1818,7 @@ export class BibManager {
   async loadZLinks() {
     try {
       const raw = await app.vault.adapter.read(
-        normalizePath('.pandoc/zlinks.json')
+        normalizePath(`${SW_CACHE_DIR}/zlinks.json`)
       );
       const data = JSON.parse(raw);
       if (data?.links) {
@@ -1833,11 +1982,11 @@ export class BibManager {
         // buttons (e.g. "Create literature note" when a note now exists, or
         // no Zotero link because the map was empty at render time).
         const wrapper = e.parentElement!;
-        wrapper.findAll('.lc-entry-btns').forEach((b) => b.remove());
+        wrapper.findAll('.sw-entry-btns').forEach((b) => b.remove());
 
-        wrapper.createDiv({ cls: 'lc-entry-btns' }, (div) => {
+        wrapper.createDiv({ cls: 'sw-entry-btns' }, (div) => {
           if (hasConflict) {
-            div.createDiv('clickable-icon lc-conflict-icon', (div) => {
+            div.createDiv('clickable-icon sw-conflict-icon', (div) => {
               setIcon(div, 'lucide-alert-triangle');
               div.setAttr(
                 'aria-label',
@@ -2148,7 +2297,7 @@ export class BibManager {
     this.citedKeysBuiltAt = scanStart;
     if (read > 0 || dropped > 0) this.citedKeysIndexDirty = true;
     if (read > 0) {
-      debugLog(`[lc:index] reconciled citation index: ${read} file(s) read of ${files.length}`);
+      debugLog(`[sw:index] reconciled citation index: ${read} file(s) read of ${files.length}`);
     }
     return read;
   }
@@ -2221,7 +2370,7 @@ export class BibManager {
   // ── persistent rendered-citation cache ────────────────────────────────────
 
   private renderedCachePath() {
-    return normalizePath('.pandoc/rendered-citations.json');
+    return normalizePath(`${SW_CACHE_DIR}/rendered-citations.json`);
   }
 
   /** Load the persistent rendered-citation cache from disk (once). */
@@ -2252,7 +2401,7 @@ export class BibManager {
     const notes: Record<string, PersistedNoteCache> = {};
     for (const [p, v] of this.renderedCache) notes[p] = v;
     try {
-      const dir = normalizePath('.pandoc');
+      const dir = normalizePath(SW_CACHE_DIR);
       if (!(await app.vault.adapter.exists(dir))) {
         await app.vault.adapter.mkdir(dir);
       }
