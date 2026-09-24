@@ -1,30 +1,33 @@
 Install/update via BRAT.
 
-### Citations work on a first run, even before Zotero is open
+### Imported Zotero notes now arrive automatically
 
-The main fix in this release. Previously, opening Obsidian while Zotero was closed loaded an *empty* library and treated it as finished — so citations stayed unformatted, and the only way out was noticing the problem and clicking **Refresh bibliography** yourself.
+When a literature note is created — including an export from the Zotero–ZotLit companion — the item's Zotero child notes are inserted into its **Notes** section automatically, instead of waiting for you to run **Insert Zotero notes into literature notes (vault)**.
 
-- **Your library loads on its own.** ScholarWeft now recognises that it couldn't reach Zotero (rather than mistaking it for an empty library) and retries until it connects. Start Zotero at any point and your citations format within seconds — no manual refresh.
-- **You're told what's wrong.** A banner appears when Zotero can't be reached, and the status bar shows progress beside the `@` icon for the whole load, including while waiting for Zotero. (The old notice was easy to miss, and disappeared when clicked.)
-- **"Refresh bibliography" is now the same code path as startup**, so the two can't drift apart again.
+This covers notes ScholarWeft creates *and* notes ZotLit creates on its own. Notes that already contain them are left untouched, so it never duplicates or overwrites.
 
-### One vault at a time
+There's a new setting for it on the **Literature note import** page: **"If a Zotero reference contains notes, insert them into all literature notes created."** On by default.
 
-Zotero accepts a **single** local connection, so a second vault can't reach it while another holds the connection. This is now called out explicitly wherever a connection problem is described — the on-screen help, the setup guide, and the Zotero page — because it looked like a broken plugin rather than a limitation.
+### Annotation callouts are readable again
 
-### Creating literature notes
+Imported Zotero annotations (`[!ann-highlight-text-blue]` and friends) lost their background under Obsidian's **default theme** — the colours looked washed out, and highlights were nearly impossible to read. Cause: Obsidian composites callout backgrounds with `mix-blend-mode: darken`, which discards the deliberately light annotation colours. (A theme that overrides the blend, such as AnuPpuccin, hid the problem.) Annotation callouts now opt out of blending, so they look as designed in any theme.
 
-- **Zotero notes are now inserted automatically** whenever ScholarWeft creates a literature note — from the sidebar/tooltip ✚ button, the "create literature notes" commands, or a ZotLit import. **Insert Zotero notes into literature notes (vault)** remains available to re-run.
-- **ZotLit import no longer silently falls back** to ScholarWeft's simpler template. If ZotLit can't create the note, you're asked: wait and try again, or explicitly use ScholarWeft's default template. The previous silent fallback produced notes in a shape you hadn't asked for.
-- ZotLit's **JavaScript templates** setting is applied immediately where possible, instead of needing a second restart of Obsidian.
+### Template setup is now a checkbox with a real undo
 
-### Setup
+**Settings → ScholarWeft → Literature note import**:
 
-- **macOS: your terminal needs Full Disk Access** to see a vault in Documents, Desktop, Downloads, or iCloud Drive. The setup script now says so, names the terminal app, and offers to open the right settings pane — instead of reporting "Obsidian has no vaults yet".
-- **Check Obsidian's installer version.** An out-of-date *installer* (not app) stops ZotLit from loading. The setup guide now checks this up front, and the scripts repeat the reminder at the plugin step.
-- Windows: the setup script prints its revision (it was showing a stale date).
+- ScholarWeft's ZotLit import templates
+- The Basic note template (Templater)
 
-### Documentation
+Both are now checkboxes rather than one-way install buttons:
 
-- The two prerequisites above now appear **before** the setup script, where they can actually prevent a failed run.
-- Fixed pipe characters inside code spans in tables, which Obsidian rendered with a stray backslash.
+- **Checked** installs them **and keeps them up to date** with plugin updates.
+- **Unchecked** removes them and **restores the companion plugin's own settings** — ZotLit's template folder returns to what it was, and if the Basic note template had replaced your own `/` template rule, yours is restored.
+- If you never install them, nothing is created. If you delete them, they stay deleted.
+
+Also on that page: **"Use ZotLit's literature note folder"** now follows **"Create literature notes with ZotLit"** (and comes on with it), since creating notes with ZotLit but storing them elsewhere rarely makes sense.
+
+### Fixes
+
+- A literature note's Zotero notes are also inserted when ZotLit exports a note itself, and on re-exports.
+- Reading a note's Zotero item key now accepts `citekey` as well as `zotero-key`, so notes from other import paths are recognised.
