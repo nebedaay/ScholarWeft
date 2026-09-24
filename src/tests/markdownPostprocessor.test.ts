@@ -146,7 +146,7 @@ describe('reading-mode postprocessor anchor handling', () => {
 
     // The citation span must be a DIRECT child of the paragraph, and there
     // must be no leftover Obsidian <a> wrapping it.
-    const span = p.querySelector('span.pandoc-citation');
+    const span = p.querySelector('span.sw-citation');
     expect(span).not.toBeNull();
     expect(span!.parentElement).toBe(p);
     expect(span!.parentElement!.closest('a')).toBeNull();
@@ -177,7 +177,7 @@ describe('reading-mode postprocessor anchor handling', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    const span = p.querySelector('span.pandoc-citation');
+    const span = p.querySelector('span.sw-citation');
     expect(span).not.toBeNull();
     expect(span!.parentElement).toBe(p);
   });
@@ -210,7 +210,7 @@ describe('reading-mode postprocessor anchor handling', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    const span = p.querySelector('span.pandoc-citation');
+    const span = p.querySelector('span.sw-citation');
     expect(span).not.toBeNull();
     // No is-link, and the outer Obsidian anchor survives (kept as the link).
     expect(span!.className).not.toContain('is-link');
@@ -259,7 +259,7 @@ describe('reading-mode postprocessor anchor handling', () => {
     } as any);
 
     // The container must be a SINGLE citation span, directly in the paragraph.
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].parentElement).toBe(p);
     // No leftover ⟦ ⟧ or raw anchors.
@@ -309,7 +309,7 @@ describe('reading-mode postprocessor anchor handling', () => {
     } as any);
 
     // ONE citation span, directly in the paragraph; no leftover [ ] brackets.
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].parentElement).toBe(p);
     expect(p.textContent).not.toContain('[');
@@ -385,7 +385,7 @@ describe('reading-mode postprocessor inside callouts', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    const span = root.querySelector('span.pandoc-citation');
+    const span = root.querySelector('span.sw-citation');
     expect(span).not.toBeNull();
     expect(span!.textContent).toContain('Knysh');
     expect(span!.className).toContain('is-link');
@@ -444,7 +444,7 @@ describe('reading-mode postprocessor with callout sectionInfo', () => {
       getSectionInfo: () => null as never,
     } as any);
 
-    const span = root.querySelector('span.pandoc-citation');
+    const span = root.querySelector('span.sw-citation');
     expect(span).not.toBeNull();
     expect(span!.textContent).toContain('Knysh');
   });
@@ -490,7 +490,7 @@ describe('multi-work container inside a callout', () => {
       getSectionInfo: () => null as never,
     } as any);
 
-    const spans = root.querySelectorAll('span.pandoc-citation');
+    const spans = root.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].getAttribute('data-citekey')).toBe('a|b');
     expect(root.textContent).not.toContain('⟦');
@@ -537,7 +537,7 @@ describe('multi-work container inside a callout', () => {
       getSectionInfo: () => null as never,
     } as any);
 
-    const spans = root.querySelectorAll('span.pandoc-citation');
+    const spans = root.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].getAttribute('data-citekey')).toBe('a|b');
     // No leftover outer brackets — especially no stray ']' at the end.
@@ -590,7 +590,7 @@ describe('reading-mode section lookup fallback', () => {
       getSectionInfo: () => ({ lineStart: 26, lineEnd: 26 }),
     } as any);
 
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].textContent).toContain('Abd al-Wahid 2021');
     // No leftover raw brackets.
@@ -657,7 +657,7 @@ describe('container pre-pass with incomplete section lookup', () => {
     } as any);
 
     // ONE merged span; no raw brackets; no standalone first-link span.
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].textContent).toContain('Abou El Fadl 2014');
     expect(p.textContent).not.toContain('[');
@@ -697,7 +697,7 @@ describe('container pre-pass with whitespace-laden anchors (list items)', () => 
       getSectionInfo: () => ({ lineStart: 26, lineEnd: 26 }),
     } as any);
 
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].textContent).toBe('(A; B)');
     expect(p.textContent).not.toContain('[');
@@ -737,7 +737,7 @@ describe('container pre-pass with label brackets ([…])', () => {
       getSectionInfo: () => ({ lineStart: 26, lineEnd: 26 }),
     } as any);
 
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     // The label's own "([…])" brackets are legitimate; the ONLY stray
     // container '[' before the citation must be gone.
@@ -776,7 +776,7 @@ describe('reading-mode mixed container (wikilink + plain citation)', () => {
       getSectionInfo: () => ({ lineStart: 26, lineEnd: 26 }),
     } as any);
 
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].textContent).toBe('(A; B)');
     expect(p.textContent).not.toContain('[');
@@ -833,7 +833,7 @@ describe('container pre-pass tolerant walk', () => {
       getSectionInfo: () => ({ lineStart: 26, lineEnd: 26 }),
     } as any);
 
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].textContent).toBe('(A; B; C; D)');
   });
@@ -866,7 +866,7 @@ describe('container pre-pass tolerant walk', () => {
       getSectionInfo: () => ({ lineStart: 26, lineEnd: 26 }),
     } as any);
 
-    const spans = p.querySelectorAll('span.pandoc-citation');
+    const spans = p.querySelectorAll('span.sw-citation');
     expect(spans.length).toBe(1);
     expect(spans[0].textContent).toBe('(A; C)');
   });
@@ -896,7 +896,7 @@ describe('reading-mode full-reference insertion', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    const span = p.querySelector('span.pandoc-reference');
+    const span = p.querySelector('span.sw-reference');
     expect(span).not.toBeNull();
     expect(span!.textContent).toContain('A Work');
     // The original Obsidian anchor is gone (replaced, not nested).
@@ -941,10 +941,10 @@ describe('reading-mode full-reference insertion', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    const span = p.querySelector('span.pandoc-reference');
+    const span = p.querySelector('span.sw-reference');
     expect(span).not.toBeNull();
     expect(span!.className).toContain('is-list');
-    expect(span!.querySelectorAll('.pandoc-reference-entry').length).toBe(2);
+    expect(span!.querySelectorAll('.sw-reference-entry').length).toBe(2);
     expect(span!.textContent).toContain('Entry A.');
     expect(span!.textContent).toContain('Entry B.');
   });
@@ -986,10 +986,10 @@ describe('reading-mode full-reference insertion', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    expect(p.querySelectorAll('span.pandoc-citation').length).toBe(0);
-    const span = p.querySelector('span.pandoc-reference');
+    expect(p.querySelectorAll('span.sw-citation').length).toBe(0);
+    const span = p.querySelector('span.sw-reference');
     expect(span).not.toBeNull();
-    expect(span!.querySelectorAll('.pandoc-reference-entry').length).toBe(2);
+    expect(span!.querySelectorAll('.sw-reference-entry').length).toBe(2);
     expect(span!.textContent).toContain('Entry A.');
     expect(span!.textContent).toContain('Entry B.');
   });
@@ -1028,7 +1028,7 @@ describe('container replacement is bounded to the enclosing brackets', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    expect(p.querySelector('span.pandoc-citation')).not.toBeNull();
+    expect(p.querySelector('span.sw-citation')).not.toBeNull();
     // Only the bracketed container is replaced; the rest of the paragraph stays.
     expect(p.textContent).toBe('Before (A; B) after.');
     expect(p.textContent).not.toContain('see also');
@@ -1053,7 +1053,7 @@ describe('container replacement is bounded to the enclosing brackets', () => {
       getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
     } as any);
 
-    expect(p.querySelector('span.pandoc-reference')).not.toBeNull();
+    expect(p.querySelector('span.sw-reference')).not.toBeNull();
     expect(p.textContent.startsWith('Before ')).toBe(true);
     expect(p.textContent.endsWith(' after.')).toBe(true);
     expect(p.textContent).toContain('Entry A.');

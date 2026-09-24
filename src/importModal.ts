@@ -107,7 +107,7 @@ export class ImportModal extends Modal {
   private selectFile(filePath: string, fileName: string): void {
     this.inputPath = filePath;
     this.fileLabel.textContent = fileName;
-    this.fileLabel.classList.remove('lc-import-drop-hint');
+    this.fileLabel.classList.remove('sw-import-drop-hint');
     this.importBtn.disabled = !this.importReady;
     // Restore this source file's previous destination if we have one; else
     // default the filename to the source basename + .md.
@@ -166,18 +166,18 @@ export class ImportModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass('lc-import-modal');
+    contentEl.addClass('sw-import-modal');
     contentEl.createEl('h3', { text: 'Import document' });
     contentEl.createEl('p', {
       text: 'Import a Word (.docx) or LibreOffice (.odt) file with Zotero citation fields into your vault as a Markdown note. Requires Zotero to be running.',
-      cls: 'lc-export-modal-note',
+      cls: 'sw-export-modal-note',
     });
 
     // Requirement / missing-tool note, filled in by applyImportGating().
-    this.depNote = contentEl.createDiv({ cls: 'lc-import-depnote' });
+    this.depNote = contentEl.createDiv({ cls: 'sw-import-depnote' });
 
     // ── Drop zone + file picker ───────────────────────────────────────────────
-    const dropZone = contentEl.createDiv({ cls: 'lc-import-drop-zone' });
+    const dropZone = contentEl.createDiv({ cls: 'sw-import-drop-zone' });
     dropZone.style.cssText = [
       'border: 2px dashed var(--background-modifier-border)',
       'border-radius: 6px',
@@ -192,7 +192,7 @@ export class ImportModal extends Modal {
 
     const browseBtn = dropZone.createEl('button', { text: 'Browse…' });
 
-    this.fileLabel = dropZone.createSpan({ cls: 'lc-import-file-label lc-import-drop-hint' });
+    this.fileLabel = dropZone.createSpan({ cls: 'sw-import-file-label sw-import-drop-hint' });
     this.fileLabel.textContent = 'No file selected — or drop a .docx/.odt here';
     this.fileLabel.style.cssText = 'flex:1;color:var(--text-muted);font-size:0.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
 
@@ -263,44 +263,44 @@ export class ImportModal extends Modal {
     });
 
     // ── Options ──────────────────────────────────────────────────────────────
-    const convertRow = contentEl.createDiv({ cls: 'lc-export-check-row' });
+    const convertRow = contentEl.createDiv({ cls: 'sw-export-check-row' });
     this.convertCb = convertRow.createEl('input', { type: 'checkbox' });
-    this.convertCb.id = 'lc-import-convert';
+    this.convertCb.id = 'sw-import-convert';
     this.convertCb.checked = true;
     const convertLabel = convertRow.createEl('label', {
       text: 'Convert citations to linked format ([[@citekey]])',
     });
-    convertLabel.htmlFor = 'lc-import-convert';
+    convertLabel.htmlFor = 'sw-import-convert';
 
-    const litRow = contentEl.createDiv({ cls: 'lc-export-check-row' });
+    const litRow = contentEl.createDiv({ cls: 'sw-export-check-row' });
     this.litNotesCb = litRow.createEl('input', { type: 'checkbox' });
-    this.litNotesCb.id = 'lc-import-litnotes';
+    this.litNotesCb.id = 'sw-import-litnotes';
     this.litNotesCb.checked = true;
     const litLabel = litRow.createEl('label', {
       text: 'Create literature notes for citations that lack them',
     });
-    litLabel.htmlFor = 'lc-import-litnotes';
+    litLabel.htmlFor = 'sw-import-litnotes';
 
     // ── Output filename + folder (mirrors the export dialogue) ───────────────
-    const fnWrap = contentEl.createDiv({ cls: 'lc-export-row' });
+    const fnWrap = contentEl.createDiv({ cls: 'sw-export-row' });
     fnWrap.style.marginTop = '12px';
     fnWrap.createEl('label', { text: 'Output filename' });
     this.filenameInput = fnWrap.createEl('input', {
       type: 'text',
-      cls: 'lc-export-filename-input',
+      cls: 'sw-export-filename-input',
     });
     this.filenameInput.style.cssText = 'width:100%;margin-top:4px';
     this.filenameInput.addEventListener('input', () => {
       this.filenameTouched = true;
     });
 
-    const dirWrap = contentEl.createDiv({ cls: 'lc-export-row' });
+    const dirWrap = contentEl.createDiv({ cls: 'sw-export-row' });
     dirWrap.style.marginTop = '10px';
     dirWrap.createEl('label', { text: 'Import folder (vault-relative)' });
     this.outputDirInput = dirWrap.createEl('input', {
       type: 'text',
       placeholder: '(vault root)',
-      cls: 'lc-export-outdir-input',
+      cls: 'sw-export-outdir-input',
     });
     this.outputDirInput.style.cssText = 'width:100%;margin-top:4px';
     this.outputDirInput.value = this.getLastOutputDir();
@@ -308,18 +308,18 @@ export class ImportModal extends Modal {
     this.outputDirInput.addEventListener('change', () => this.saveLastOutputDir());
 
     // Overwrite-by-default: re-importing is normally meant to update the note.
-    const owRow = contentEl.createDiv({ cls: 'lc-export-check-row' });
+    const owRow = contentEl.createDiv({ cls: 'sw-export-check-row' });
     owRow.style.marginTop = '4px';
     this.overwriteCb = owRow.createEl('input', { type: 'checkbox' });
-    this.overwriteCb.id = 'lc-import-overwrite';
+    this.overwriteCb.id = 'sw-import-overwrite';
     this.overwriteCb.checked = true;
     const owLabel = owRow.createEl('label', {
       text: 'Overwrite the note if it already exists',
     });
-    owLabel.htmlFor = 'lc-import-overwrite';
+    owLabel.htmlFor = 'sw-import-overwrite';
 
     // ── Buttons ──────────────────────────────────────────────────────────────
-    const btnRow = contentEl.createDiv({ cls: 'lc-export-btn-row' });
+    const btnRow = contentEl.createDiv({ cls: 'sw-export-btn-row' });
     btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px';
 
     const cancelBtn = btnRow.createEl('button', { text: 'Cancel' });

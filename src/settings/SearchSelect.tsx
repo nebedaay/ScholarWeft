@@ -97,11 +97,11 @@ export function SearchSelect({
   };
 
   return (
-    <div className="lc-search-select">
-      <div className="lc-search-select__control">
+    <div className="sw-search-select">
+      <div className="sw-search-select__control">
         <input
           type="text"
-          className="lc-search-select__input"
+          className="sw-search-select__input"
           value={inputVal}
           placeholder={placeholder}
           onChange={handleInput}
@@ -131,7 +131,7 @@ export function SearchSelect({
         />
         {isClearable && selected && (
           <button
-            className="lc-search-select__clear clickable-icon"
+            className="sw-search-select__clear clickable-icon"
             onMouseDown={handleClear}
             aria-label="Clear"
           >
@@ -140,12 +140,12 @@ export function SearchSelect({
         )}
       </div>
       {isOpen && (
-        <div id={menuId} className="lc-search-select__menu" role="listbox">
+        <div id={menuId} className="sw-search-select__menu" role="listbox">
           {options.map((opt, index) => (
             <div
               key={opt.value}
               id={`${menuId}-option-${index}`}
-              className={`lc-search-select__option${
+              className={`sw-search-select__option${
                 index === activeIndex ? ' is-active' : ''
               }`}
               role="option"

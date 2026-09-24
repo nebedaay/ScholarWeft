@@ -14,7 +14,7 @@ import equal from 'fast-deep-equal';
 import { getLitNoteForCitekey } from './zotlit';
 
 function getCiteClass(isResolved: boolean, isUnresolved: boolean) {
-  const cls = ['pandoc-citation'];
+  const cls = ['sw-citation'];
   if (isResolved) cls.push('is-resolved');
   if (isUnresolved) cls.push('is-unresolved');
 
@@ -84,7 +84,7 @@ function isCalloutSection(el: HTMLElement): boolean {
  * by both the text walker (single citations) and the container pre-pass
  * (⟦…⟧ multi-work runs), so both produce identical markup:
  *
- *   <span class="pandoc-citation is-resolved [is-link]">
+ *   <span class="sw-citation is-resolved [is-link]">
  *     rendered text
  *     [<a class="internal-link">…</a>]   when renderCitationsAsLinks
  *
@@ -97,7 +97,7 @@ function buildReferenceSpan(
 ): HTMLSpanElement {
   const span = document.createElement('span');
   span.className =
-    'pandoc-reference' + (rendered.citations.length > 1 ? ' is-list' : '');
+    'sw-reference' + (rendered.citations.length > 1 ? ' is-list' : '');
   span.setAttribute(
     'data-citekey',
     rendered.citations.map((c) => c.id).join('|')
@@ -110,7 +110,7 @@ function buildReferenceSpan(
 
   for (const cite of rendered.citations) {
     const item = document.createElement('span');
-    item.className = 'pandoc-reference-entry';
+    item.className = 'sw-reference-entry';
     item.setAttribute('data-citekey', cite.id);
 
     const entryEl = file
@@ -721,7 +721,7 @@ export function processCiteKeys(plugin: ReferenceList) {
               if (isResolved) classes.push('is-resolved');
 
               frag.createSpan({
-                cls: `pandoc-citation-formatting ${classes.join(' ')}`,
+                cls: `sw-citation-formatting ${classes.join(' ')}`,
                 text: part.val,
               });
               continue;
@@ -736,7 +736,7 @@ export function processCiteKeys(plugin: ReferenceList) {
             case SegmentType.locatorLabel:
             case SegmentType.locatorSuffix:
               frag.createSpan({
-                cls: `pandoc-citation-formatting ${part.type}`,
+                cls: `sw-citation-formatting ${part.type}`,
                 text: part.val,
               });
               continue;
@@ -778,7 +778,7 @@ export function processCiteKeys(plugin: ReferenceList) {
     // reference) so CSS can collapse the paragraph's empty line box, which
     // otherwise shows as a blank line above and below. Inline references mixed
     // with text are left untouched.
-    el.querySelectorAll('.pandoc-reference').forEach((node) => {
+    el.querySelectorAll('.sw-reference').forEach((node) => {
       const span = node as HTMLElement;
       const p = span.closest('p');
       if (!p || p === el) return;
@@ -790,7 +790,7 @@ export function processCiteKeys(plugin: ReferenceList) {
         )
       )
         return;
-      p.classList.add('lc-reference-paragraph');
+      p.classList.add('sw-reference-paragraph');
     });
   };
 }

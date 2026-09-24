@@ -265,7 +265,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.addClass('lc-settings-tab');
+    containerEl.addClass('sw-settings-tab');
 
     if (this.page === 'home') {
       this.renderHome(containerEl);
@@ -404,7 +404,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
     this.plugin.settings.bibliographyPaths.forEach((bibPath, index) => {
       const setting = new Setting(containerEl);
-      setting.setClass('lc-bib-path-entry');
+      setting.setClass('sw-bib-path-entry');
 
       let inputEl: HTMLInputElement;
 
@@ -478,7 +478,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
     ReactDOM.render(
       <ZoteroPullSetting plugin={this.plugin} />,
-      containerEl.createDiv('setting-item lc-setting-item-wrapper')
+      containerEl.createDiv('setting-item sw-setting-item-wrapper')
     );
 
     if (Platform.isDesktop) {
@@ -534,7 +534,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           }}
         />
       </SettingItem>,
-      containerEl.createDiv('lc-setting-item setting-item')
+      containerEl.createDiv('sw-setting-item setting-item')
     );
 
     new Setting(containerEl)
@@ -611,7 +611,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           }}
         />
       </SettingItem>,
-      containerEl.createDiv('lc-setting-item setting-item')
+      containerEl.createDiv('sw-setting-item setting-item')
     );
 
     new Setting(containerEl)
@@ -831,17 +831,17 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       makeColorPicker(
         'Pandoc citation underline color',
         'Underline color for unlinked [@pandoc] citations in the editor.',
-        'decorationColorUnlinked', '--lc-citation-underline-color-unlinked'
+        'decorationColorUnlinked', '--sw-citation-underline-color-unlinked'
       );
       makeColorPicker(
         'Linked [[@]] citation underline — has note',
         'Underline color for [[@key]] citations that have a matching literature note.',
-        'decorationColorLinked', '--lc-wikilink-linked-color'
+        'decorationColorLinked', '--sw-wikilink-linked-color'
       );
       makeColorPicker(
         'Linked [[@]] citation underline — no note yet',
         'Underline color for [[@key]] citations that do not yet have a literature note.',
-        'decorationColorUnimported', '--lc-wikilink-unimported-color'
+        'decorationColorUnimported', '--sw-wikilink-unimported-color'
       );
     }
 
@@ -856,35 +856,35 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       });
       const control = row.createDiv({ cls: 'setting-item-control' });
       const preview = control.createDiv({
-        cls: 'lc-deco-preview' + (showDeco ? ' lc-decorations' : ''),
+        cls: 'sw-deco-preview' + (showDeco ? ' sw-decorations' : ''),
       });
 
       // Helper: one row of markup (plain left) → rendered text (decorated right).
-      // keyCls carries the status class (lc-prev-pandoc etc.); the CSS decoration
+      // keyCls carries the status class (sw-prev-pandoc etc.); the CSS decoration
       // is applied to the RIGHT span so the raw markup stays undecorated.
       const addRow = (
         open: string, key: string, close: string,
         keyCls: string,
         rendered: string, renderedCls = ''
       ) => {
-        const r = preview.createDiv({ cls: 'lc-prev-row' });
-        const left = r.createSpan({ cls: 'lc-prev-left' });
-        left.createSpan({ cls: 'lc-prev-bracket', text: open });
-        left.createSpan({ cls: 'lc-prev-key', text: key });
-        left.createSpan({ cls: 'lc-prev-bracket', text: close });
-        r.createSpan({ cls: 'lc-prev-arrow', text: '→' });
+        const r = preview.createDiv({ cls: 'sw-prev-row' });
+        const left = r.createSpan({ cls: 'sw-prev-left' });
+        left.createSpan({ cls: 'sw-prev-bracket', text: open });
+        left.createSpan({ cls: 'sw-prev-key', text: key });
+        left.createSpan({ cls: 'sw-prev-bracket', text: close });
+        r.createSpan({ cls: 'sw-prev-arrow', text: '→' });
         // keyCls on the rendered span so CSS decoration targets the right side.
-        r.createSpan({ cls: `lc-prev-rendered ${keyCls} ${renderedCls}`.trim(), text: rendered });
+        r.createSpan({ cls: `sw-prev-rendered ${keyCls} ${renderedCls}`.trim(), text: rendered });
       };
 
       // [@jones1999] — pandoc citation, resolved (unlinked)
-      addRow('[', '@jones1999', ']', 'lc-prev-pandoc', '(Jones 1999)');
+      addRow('[', '@jones1999', ']', 'sw-prev-pandoc', '(Jones 1999)');
       // [[@smith2000|@, has note]] — wikilink, has literature note
-      addRow('[[', '@smith2000|@, has note', ']]', 'lc-prev-linked', '(Smith 2000, has note)');
+      addRow('[[', '@smith2000|@, has note', ']]', 'sw-prev-linked', '(Smith 2000, has note)');
       // [[@sanchez2001|@, no note]] — wikilink, no literature note yet
-      addRow('[[', '@sanchez2001|@, no note', ']]', 'lc-prev-unimported', '(Sanchez 2001, no note)');
+      addRow('[[', '@sanchez2001|@, no note', ']]', 'sw-prev-unimported', '(Sanchez 2001, no note)');
       // [[@nothing1899]] — unresolved citekey
-      addRow('[[', '@nothing1899', ']]', 'lc-prev-unresolved-key', '@nothing1899', 'lc-prev-unresolved-val');
+      addRow('[[', '@nothing1899', ']]', 'sw-prev-unresolved-key', '@nothing1899', 'sw-prev-unresolved-val');
     }
 
     new Setting(containerEl)
@@ -1329,13 +1329,13 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         if (mappings.length === 0) {
           listEl.createEl('p', {
             text: t('No mappings yet. Click "+ Add" to create one.'),
-            cls: 'lc-mapping-empty',
+            cls: 'sw-mapping-empty',
           });
           return;
         }
         for (let i = 0; i < mappings.length; i++) {
           const m = mappings[i];
-          const row = listEl.createDiv({ cls: 'lc-mapping-row' });
+          const row = listEl.createDiv({ cls: 'sw-mapping-row' });
 
           const cb = row.createEl('input', { type: 'checkbox' });
           cb.title = t('Enable this mapping by default on export');
@@ -1349,25 +1349,25 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           srcInput.placeholder = 'callout-type';
           srcInput.value = m.source;
           srcInput.title = t('Callout type or CSS class name (e.g. arabic-poetry)');
-          srcInput.classList.add('lc-mapping-input');
+          srcInput.classList.add('sw-mapping-input');
           srcInput.addEventListener('change', () => {
             mappings[i].source = srcInput.value.trim();
             this.plugin.saveSettings();
           });
 
-          row.createSpan({ text: '→', cls: 'lc-mapping-arrow' });
+          row.createSpan({ text: '→', cls: 'sw-mapping-arrow' });
 
           const nameInput = row.createEl('input', { type: 'text' });
           nameInput.placeholder = 'Style name';
           nameInput.value = m.styleName;
           nameInput.title = t('Style name as defined in the template (e.g. Arabic poetry)');
-          nameInput.classList.add('lc-mapping-input', 'lc-mapping-style');
+          nameInput.classList.add('sw-mapping-input', 'sw-mapping-style');
           nameInput.addEventListener('change', () => {
             mappings[i].styleName = nameInput.value.trim();
             this.plugin.saveSettings();
           });
 
-          const del = row.createEl('button', { text: '🗑', cls: 'lc-mapping-del' });
+          const del = row.createEl('button', { text: '🗑', cls: 'sw-mapping-del' });
           del.title = t('Remove this mapping');
           del.addEventListener('click', () => {
             mappings.splice(i, 1);
@@ -1395,12 +1395,12 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             })
         );
 
-      const listEl = containerEl.createDiv({ cls: 'lc-mapping-list' });
+      const listEl = containerEl.createDiv({ cls: 'sw-mapping-list' });
       renderMappingList(listEl);
 
       const addBtn = containerEl.createEl('button', {
         text: t('+ Add mapping'),
-        cls: 'lc-mapping-add',
+        cls: 'sw-mapping-add',
       });
       addBtn.addEventListener('click', () => {
         if (!this.plugin.settings.styleMappings) this.plugin.settings.styleMappings = [];

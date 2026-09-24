@@ -68,7 +68,7 @@ export class TooltipManager {
     const modClasses = this.plugin.settings.hideLinks ? ' collapsed-links' : '';
     const doc = ((el as any).doc || el.ownerDocument || document) as Document;
     const tooltip = (this.tooltip = doc.body.createDiv({
-      cls: `lc-tooltip${modClasses}`,
+      cls: `sw-tooltip${modClasses}`,
     }));
     const rect = el.getBoundingClientRect();
 
@@ -168,17 +168,17 @@ export class TooltipManager {
     }
 
     const doc = ((el as any).doc ?? el.ownerDocument ?? document) as Document;
-    const backdrop = doc.body.createDiv({ cls: 'lc-mobile-backdrop' });
+    const backdrop = doc.body.createDiv({ cls: 'sw-mobile-backdrop' });
 
     // Tap outside the card → dismiss.
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) backdrop.remove();
     });
 
-    const card = backdrop.createDiv({ cls: 'lc-mobile-card lc-reference-list' });
+    const card = backdrop.createDiv({ cls: 'sw-mobile-card sw-reference-list' });
 
     // Header with close button.
-    const header = card.createDiv({ cls: 'lc-mobile-card-header' });
+    const header = card.createDiv({ cls: 'sw-mobile-card-header' });
     const closeBtn = header.createDiv({ cls: 'clickable-icon' });
     setIcon(closeBtn, 'x');
     closeBtn.setAttribute('aria-label', t('Close'));

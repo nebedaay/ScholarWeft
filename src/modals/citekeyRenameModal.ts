@@ -80,21 +80,21 @@ export class CitekeyRenameModal extends Modal {
           `with known replacements:`,
       });
 
-      const mappingList = contentEl.createEl('ul', { cls: 'lc-rename-mapping' });
+      const mappingList = contentEl.createEl('ul', { cls: 'sw-rename-mapping' });
       for (const [oldKey, newKey] of uniqueRenames) {
         mappingList.createEl('li', { text: `@${oldKey}  →  @${newKey}` });
       }
 
       if (fileCount > 1) {
         // Collapsible file list — only useful when more than one file is affected.
-        const details = contentEl.createEl('details', { cls: 'lc-rename-details' });
+        const details = contentEl.createEl('details', { cls: 'sw-rename-details' });
         const summary = details.createEl('summary', {
           text: `Affected files (${fileCount})`,
         });
         summary.style.cursor = 'pointer';
         summary.style.marginBottom = '6px';
 
-        const fileList = details.createEl('ul', { cls: 'lc-rename-file-list' });
+        const fileList = details.createEl('ul', { cls: 'sw-rename-file-list' });
         fileList.style.maxHeight = '200px';
         fileList.style.overflowY = 'auto';
         fileList.style.paddingLeft = '1.4em';
@@ -135,7 +135,7 @@ export class CitekeyRenameModal extends Modal {
       heading.style.marginTop = hasFixable ? '14px' : '0';
       heading.style.color = 'var(--text-muted)';
 
-      const ul = contentEl.createEl('ul', { cls: 'lc-unresolved-list' });
+      const ul = contentEl.createEl('ul', { cls: 'sw-unresolved-list' });
       ul.style.color = 'var(--text-muted)';
       ul.style.fontSize = '0.9em';
       for (const key of this.alsoUnresolved) {
@@ -146,24 +146,24 @@ export class CitekeyRenameModal extends Modal {
     // ── Lit-note filenames checkbox (vault-wide command only) ─────────────────
     let litNotesCheckbox: HTMLInputElement | null = null;
     if (this.showLitNotesOption && hasFixable) {
-      const checkRow = contentEl.createDiv({ cls: 'lc-rename-checkbox-row' });
+      const checkRow = contentEl.createDiv({ cls: 'sw-rename-checkbox-row' });
       checkRow.style.display = 'flex';
       checkRow.style.alignItems = 'center';
       checkRow.style.gap = '8px';
       checkRow.style.marginTop = '14px';
 
       litNotesCheckbox = checkRow.createEl('input', { type: 'checkbox' }) as HTMLInputElement;
-      litNotesCheckbox.id = 'lc-lit-notes-checkbox';
+      litNotesCheckbox.id = 'sw-lit-notes-checkbox';
       litNotesCheckbox.checked = true;
 
       const label = checkRow.createEl('label', {
         text: 'Update literature note filenames to current citekeys',
       });
-      label.htmlFor = 'lc-lit-notes-checkbox';
+      label.htmlFor = 'sw-lit-notes-checkbox';
     }
 
     // ── Button row ────────────────────────────────────────────────────────────
-    const buttonRow = contentEl.createDiv({ cls: 'lc-rename-buttons' });
+    const buttonRow = contentEl.createDiv({ cls: 'sw-rename-buttons' });
     buttonRow.style.display = 'flex';
     buttonRow.style.justifyContent = 'flex-end';
     buttonRow.style.gap = '8px';

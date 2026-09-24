@@ -280,7 +280,7 @@ export class ExportModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass('lc-export-modal');
+    contentEl.addClass('sw-export-modal');
     contentEl.createEl('h3', { text: 'Compile / export document' });
 
     const adapter = this.plugin.app.vault.adapter as any;
@@ -309,10 +309,10 @@ export class ExportModal extends Modal {
         : '';
 
     // ── Format selector (FIRST) ───────────────────────────────────────────
-    const fmtWrap = contentEl.createDiv({ cls: 'lc-export-row' });
+    const fmtWrap = contentEl.createDiv({ cls: 'sw-export-row' });
     fmtWrap.createEl('label', { text: 'Output format' });
     this.formatSelect = fmtWrap.createEl('select', {
-      cls: 'lc-export-format-select',
+      cls: 'sw-export-format-select',
     });
     this.formatSelect.style.cssText = 'width:100%;margin-top:4px';
     const formats: { value: ExportFormat; label: string }[] = [
@@ -339,19 +339,19 @@ export class ExportModal extends Modal {
         + 'or a LaTeX distribution with LuaLaTeX (for a .tex template) to be '
         + 'installed. An ODT template generally produces better results than '
         + 'DOCX for PDF (footnote numbering, figure references).',
-      cls: 'lc-mapping-modal-note',
+      cls: 'sw-mapping-modal-note',
     });
     this.pdfNote.style.marginTop = '4px';
 
     // Requirement / missing-tool note, filled in by applyToolGating().
-    this.depNote = contentEl.createDiv({ cls: 'lc-export-depnote' });
+    this.depNote = contentEl.createDiv({ cls: 'sw-export-depnote' });
 
     // ── Template dropdown (SECOND, filtered by format) ────────────────────
-    const tplWrap = contentEl.createDiv({ cls: 'lc-export-row' });
+    const tplWrap = contentEl.createDiv({ cls: 'sw-export-row' });
     tplWrap.style.marginTop = '10px';
     tplWrap.createEl('label', { text: 'Template' });
     this.templateSelect = tplWrap.createEl('select', {
-      cls: 'lc-export-template-select',
+      cls: 'sw-export-template-select',
     });
     this.templateSelect.style.cssText = 'width:100%;margin-top:4px';
 
@@ -369,7 +369,7 @@ export class ExportModal extends Modal {
     );
 
     // ── Document type radio ───────────────────────────────────────────────
-    const dtWrap = contentEl.createDiv({ cls: 'lc-export-row' });
+    const dtWrap = contentEl.createDiv({ cls: 'sw-export-row' });
     dtWrap.style.marginTop = '10px';
     dtWrap.createEl('label', { text: 'Document type' });
     const dtRow = dtWrap.createDiv();
@@ -378,9 +378,9 @@ export class ExportModal extends Modal {
       const wrap = dtRow.createDiv();
       wrap.style.cssText = 'display:flex;align-items:center;gap:4px';
       const r = wrap.createEl('input', { type: 'radio' });
-      r.name = 'lc-doc-type';
+      r.name = 'sw-doc-type';
       r.value = value;
-      r.id = `lc-dt-${value}`;
+      r.id = `sw-dt-${value}`;
       const lbl = wrap.createEl('label', { text: label });
       lbl.htmlFor = r.id;
       return r;
@@ -390,18 +390,18 @@ export class ExportModal extends Modal {
     this.docTypeCustom  = makeRadio('custom',  'Custom');
 
     // ── Output filename ───────────────────────────────────────────────────
-    const fnWrap = contentEl.createDiv({ cls: 'lc-export-row' });
+    const fnWrap = contentEl.createDiv({ cls: 'sw-export-row' });
     fnWrap.style.marginTop = '10px';
     fnWrap.createEl('label', { text: 'Output filename' });
     this.filenameInput = fnWrap.createEl('input', {
       type: 'text',
-      cls: 'lc-export-filename-input',
+      cls: 'sw-export-filename-input',
     });
     this.filenameInput.style.cssText = 'width:100%;margin-top:4px';
     this.refreshFilename(); // sets initial value
 
     // ── Output directory ──────────────────────────────────────────────────
-    const outWrap = contentEl.createDiv({ cls: 'lc-export-row' });
+    const outWrap = contentEl.createDiv({ cls: 'sw-export-row' });
     outWrap.style.cssText =
       'margin-top:10px;display:flex;gap:6px;align-items:flex-end';
     const outLeft = outWrap.createDiv();
@@ -414,7 +414,7 @@ export class ExportModal extends Modal {
       type: 'text',
       value: initialOutputDir,
       placeholder: '(same folder as source)',
-      cls: 'lc-export-outdir-input',
+      cls: 'sw-export-outdir-input',
     });
     this.outputDirInput.style.cssText = 'width:100%;margin-top:4px';
     const chooseBtn = outWrap.createEl('button', { text: 'Choose…' });
@@ -423,15 +423,15 @@ export class ExportModal extends Modal {
 
     // "Same folder as source" checkbox — checked when the dir box is empty,
     // clears the box (→ same-as-source) when checked, unchecked on any edit.
-    const sameSourceRow = contentEl.createDiv({ cls: 'lc-export-check-row' });
+    const sameSourceRow = contentEl.createDiv({ cls: 'sw-export-check-row' });
     sameSourceRow.style.marginTop = '4px';
     this.sameSourceCb = sameSourceRow.createEl('input', { type: 'checkbox' });
-    this.sameSourceCb.id = 'lc-export-same-source';
+    this.sameSourceCb.id = 'sw-export-same-source';
     this.sameSourceCb.checked = !this.outputDirInput.value.trim();
     const sameSourceLbl = sameSourceRow.createEl('label', {
       text: 'Use same folder as source file',
     });
-    sameSourceLbl.htmlFor = 'lc-export-same-source';
+    sameSourceLbl.htmlFor = 'sw-export-same-source';
     this.sameSourceCb.addEventListener('change', () => {
       if (this.sameSourceCb.checked) {
         this.outputDirInput.value = '';
@@ -444,14 +444,14 @@ export class ExportModal extends Modal {
     });
 
     // ── Checkboxes ────────────────────────────────────────────────────────
-    const checksWrap = contentEl.createDiv({ cls: 'lc-export-checks' });
+    const checksWrap = contentEl.createDiv({ cls: 'sw-export-checks' });
     checksWrap.style.marginTop = '12px';
 
     const makeCheckRow = (
       id: string,
       labelText: string
     ): HTMLInputElement => {
-      const row = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+      const row = checksWrap.createDiv({ cls: 'sw-export-check-row' });
       const cb = row.createEl('input', { type: 'checkbox' });
       cb.id = id;
       const lbl = row.createEl('label', { text: labelText });
@@ -459,8 +459,8 @@ export class ExportModal extends Modal {
       return cb;
     };
 
-    this.tocCb = makeCheckRow('lc-export-toc', 'Include table of contents (TOC)');
-    this.tocLevelsRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.tocCb = makeCheckRow('sw-export-toc', 'Include table of contents (TOC)');
+    this.tocLevelsRow = checksWrap.createDiv({ cls: 'sw-export-check-row' });
     this.tocLevelsRow.style.cssText = 'margin-left:22px';
     this.tocLevelsRow.createEl('label', {
       text: 'TOC depth (1 = chapters, 2 = chapters + sections):',
@@ -470,10 +470,10 @@ export class ExportModal extends Modal {
     this.tocLevelsInput.min = '1';
     this.tocLevelsInput.max = String(MAX_LEVEL);
 
-    this.tofCb = makeCheckRow('lc-export-tof', 'Include table of figures');
+    this.tofCb = makeCheckRow('sw-export-tof', 'Include table of figures');
 
     // Auto-number headings by outline level (0 = only @@-marked headings).
-    const numRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    const numRow = checksWrap.createDiv({ cls: 'sw-export-check-row' });
     numRow.createEl('label', {
       text: 'Auto-number headings down to level (0 = only @@):',
     });
@@ -499,9 +499,9 @@ export class ExportModal extends Modal {
       const row = notesRow.createDiv();
       row.style.cssText = 'margin:0 0 4px 0;line-height:1.4';
       const cb = row.createEl('input', { type: 'radio' });
-      cb.name = 'lc-notes-mode';
+      cb.name = 'sw-notes-mode';
       cb.value = value;
-      cb.id = `lc-notes-${value}`;
+      cb.id = `sw-notes-${value}`;
       cb.style.cssText = 'margin:0 8px 0 0;vertical-align:middle';
       const lbl = row.createEl('label', { text: label });
       lbl.htmlFor = cb.id;
@@ -518,7 +518,7 @@ export class ExportModal extends Modal {
     this.notesModeBodyRow = _body.row;
 
     this.bibliographyCb = makeCheckRow(
-      'lc-export-bibl',
+      'sw-export-bibl',
       'Include a bibliography (keeps it with a note/footnote citation style)'
     );
     this.bibliographyCb.title =
@@ -528,41 +528,41 @@ export class ExportModal extends Modal {
 
     // Non-persisted: reuse an already compiled markdown instead of recompiling.
     // Shown only when such a file exists for the current output folder.
-    this.skipRecompileRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.skipRecompileRow = checksWrap.createDiv({ cls: 'sw-export-check-row' });
     this.skipRecompileRow.style.marginTop = '4px';
     this.skipRecompileCb = this.skipRecompileRow.createEl('input', {
       type: 'checkbox',
     });
-    this.skipRecompileCb.id = 'lc-export-skip-recompile';
+    this.skipRecompileCb.id = 'sw-export-skip-recompile';
     const skipLbl = this.skipRecompileRow.createEl('label', {
       text: 'Skip recompilation and use the already compiled markdown',
     });
-    skipLbl.htmlFor = 'lc-export-skip-recompile';
+    skipLbl.htmlFor = 'sw-export-skip-recompile';
     this.skipRecompileCb.title =
       'A compiled markdown already exists for this note. Check to export from '
       + 'it instead of recompiling (useful for making several formats from one '
       + 'compile). Not remembered between exports.';
 
     this.footnotesCb = makeCheckRow(
-      'lc-export-fn',
+      'sw-export-fn',
       FOOTNOTE_RESTART_LABEL
     );
     this.footnotesLabel = this.footnotesCb.nextElementSibling as HTMLElement;
     this.generatedDateCb = makeCheckRow(
-      'lc-export-gendate',
+      'sw-export-gendate',
       "Use today's date if the note has no date property"
     );
     this.generatedDateCb.checked = true;
     this.newPageCb = makeCheckRow(
-      'lc-export-np',
+      'sw-export-np',
       'Top-level headings start on a new page'
     );
 
     this.romanFrontmatterCb = makeCheckRow(
-      'lc-export-roman',
+      'sw-export-roman',
       'Roman-numeral frontmatter page numbering'
     );
-    this.romanStartRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.romanStartRow = checksWrap.createDiv({ cls: 'sw-export-check-row' });
     this.romanStartRow.style.cssText = 'margin-left:22px';
     this.romanStartInput = this.romanStartRow.createEl('input', {
       type: 'text',
@@ -576,24 +576,24 @@ export class ExportModal extends Modal {
     // ── PDF-specific: keep the intermediate ODT/DOCX (hidden unless format
     //    = pdf). The intermediate format itself is not a choice — it's
     //    whatever format the chosen template is.
-    this.keepIntermediateRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.keepIntermediateRow = checksWrap.createDiv({ cls: 'sw-export-check-row' });
     this.keepIntermediateCb = this.keepIntermediateRow.createEl('input', { type: 'checkbox' });
-    this.keepIntermediateCb.id = 'lc-export-keep-inter';
+    this.keepIntermediateCb.id = 'sw-export-keep-inter';
     const keepInterLbl = this.keepIntermediateRow.createEl('label', {
       text: 'Keep intermediate file (ODT/DOCX/LaTeX)',
     });
-    keepInterLbl.htmlFor = 'lc-export-keep-inter';
+    keepInterLbl.htmlFor = 'sw-export-keep-inter';
     this.keepIntermediateCb.checked = fileHistory?.keepIntermediate ?? false;
 
     // ── Keep the compiled markdown (hidden when format = md — there it IS
     //    the output, not an intermediate) ─────────────────────────────────
-    this.keepIntermediateMdRow = checksWrap.createDiv({ cls: 'lc-export-check-row' });
+    this.keepIntermediateMdRow = checksWrap.createDiv({ cls: 'sw-export-check-row' });
     this.keepIntermediateMdCb = this.keepIntermediateMdRow.createEl('input', { type: 'checkbox' });
-    this.keepIntermediateMdCb.id = 'lc-export-keep-inter-md';
+    this.keepIntermediateMdCb.id = 'sw-export-keep-inter-md';
     const keepInterMdLbl = this.keepIntermediateMdRow.createEl('label', {
       text: 'Keep intermediate compiled markdown',
     });
-    keepInterMdLbl.htmlFor = 'lc-export-keep-inter-md';
+    keepInterMdLbl.htmlFor = 'sw-export-keep-inter-md';
     this.keepIntermediateMdCb.checked = fileHistory?.keepIntermediateMd ?? false;
 
     // ── Citation style override ─────────────────────────────────────────
@@ -663,7 +663,7 @@ export class ExportModal extends Modal {
     });
 
     // ── Buttons ───────────────────────────────────────────────────────────
-    const btnRow = contentEl.createDiv({ cls: 'lc-export-btn-row' });
+    const btnRow = contentEl.createDiv({ cls: 'sw-export-btn-row' });
     btnRow.style.cssText =
       'display:flex;justify-content:flex-end;gap:8px;margin-top:14px';
     // Reset the YAML-backed options to the note's own properties, discarding
@@ -779,15 +779,15 @@ export class ExportModal extends Modal {
     container: HTMLElement,
     fileHistory: FileExportHistory | null
   ): void {
-    const row = container.createDiv({ cls: 'lc-export-check-row' });
+    const row = container.createDiv({ cls: 'sw-export-check-row' });
     this.cslOverrideCb = row.createEl('input', { type: 'checkbox' });
-    this.cslOverrideCb.id = 'lc-export-csl';
+    this.cslOverrideCb.id = 'sw-export-csl';
     const lbl = row.createEl('label', {
       text: "Apply the selected citation style, overriding the template's style if it exists",
     });
-    lbl.htmlFor = 'lc-export-csl';
+    lbl.htmlFor = 'sw-export-csl';
 
-    this.cslStyleRow = container.createDiv({ cls: 'lc-export-check-row' });
+    this.cslStyleRow = container.createDiv({ cls: 'sw-export-check-row' });
     this.cslStyleRow.style.cssText = 'margin-left:22px';
 
     const styles = listZoteroInstalledStyles(this.plugin.settings.zoteroDataDir);
@@ -829,7 +829,7 @@ export class ExportModal extends Modal {
       this.cslStyleInput.value = savedStyle;
       const note = this.cslStyleRow.createEl('p', {
         text: 'No installed Zotero styles found — set the Zotero data folder in Settings, or enter a style name/path/URL.',
-        cls: 'lc-mapping-modal-note',
+        cls: 'sw-mapping-modal-note',
       });
       note.style.marginTop = '2px';
     }
@@ -872,7 +872,7 @@ export class ExportModal extends Modal {
     // Default: if no saved state, use each mapping's own `enabled` default.
     const savedSet = savedIds ? new Set(savedIds) : null;
 
-    const details = container.createEl('details', { cls: 'lc-mapping-details' });
+    const details = container.createEl('details', { cls: 'sw-mapping-details' });
     const enabledCount = mappings.filter(
       m => savedSet ? savedSet.has(m.id) : m.enabled
     ).length;
@@ -882,12 +882,12 @@ export class ExportModal extends Modal {
       summary.setText(`Style mappings (${on} of ${mappings.length} enabled)`);
     };
 
-    const listEl = details.createDiv({ cls: 'lc-mapping-modal-list' });
+    const listEl = details.createDiv({ cls: 'sw-mapping-modal-list' });
     for (const m of mappings) {
       if (!m.source || !m.styleName) continue; // skip incomplete entries
-      const row = listEl.createDiv({ cls: 'lc-mapping-modal-row' });
+      const row = listEl.createDiv({ cls: 'sw-mapping-modal-row' });
       const cb = row.createEl('input', { type: 'checkbox' });
-      cb.id = `lc-map-${m.id}`;
+      cb.id = `sw-map-${m.id}`;
       cb.checked = savedSet ? savedSet.has(m.id) : m.enabled;
       cb.addEventListener('change', updateSummaryText);
       const lbl = row.createEl('label', { text: `${m.source} → ${m.styleName}` });
@@ -902,7 +902,7 @@ export class ExportModal extends Modal {
 
     listEl.createEl('p', {
       text: 'Manage mappings in Settings → Custom style mappings.',
-      cls: 'lc-mapping-modal-note',
+      cls: 'sw-mapping-modal-note',
     });
 
     updateSummaryText();

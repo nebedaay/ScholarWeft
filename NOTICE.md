@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Linked Citations incorporates code from the following open-source projects.
+ScholarWeft incorporates code from the following open-source projects.
 
 ---
 
@@ -47,14 +47,14 @@ https://www.gnu.org/licenses/agpl-3.0.html
 
 ---
 
-## zotero-live-citations (lc-zotero.lua)
+## zotero-live-citations (sw-zotero.lua)
 
 - **Author:** Emiliano Heyns \<emiliano.heyns@iris-advies.com\>
 - **Source:** Better BibTeX for Zotero — https://retorque.re/zotero-better-bibtex/exporting/
 - **Repository:** https://github.com/retorquere/zotero-better-bibtex
 - **License:** AGPL-3.0
 
-`scripts/lc-zotero.lua` is derived from the `zotero-live-citations` Pandoc filter
+`scripts/sw-zotero.lua` is derived from the `zotero-live-citations` Pandoc filter
 distributed with Better BibTeX. It has been integrated into this plugin for use
 as a local Pandoc Lua filter. The full AGPL-3.0 license text is available at:
 https://www.gnu.org/licenses/agpl-3.0.html

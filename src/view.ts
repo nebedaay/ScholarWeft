@@ -19,7 +19,7 @@ export class ReferenceListView extends ItemView {
     super(leaf);
     this.plugin = plugin;
 
-    this.contentEl.addClass('lc-reference-list');
+    this.contentEl.addClass('sw-reference-list');
     this.contentEl.toggleClass(
       'collapsed-links',
       !!this.plugin.settings.hideLinks
@@ -49,20 +49,20 @@ export class ReferenceListView extends ItemView {
       this.contentEl.empty();
       this.contentEl.createDiv(
         {
-          cls: 'lc-reference-list__title',
+          cls: 'sw-reference-list__title',
         },
         (div) => {
           div.createDiv({ text: this.getDisplayText() });
           div.createDiv({}, (div) => {
             if (count) {
               div.createDiv({
-                cls: 'lc-reference-list__count',
+                cls: 'sw-reference-list__count',
                 text: count.toString(),
               });
             }
             if (unresolvedCount) {
               const unresolvedBadge = div.createDiv({
-                cls: 'lc-reference-list__unresolved-count clickable-icon',
+                cls: 'sw-reference-list__unresolved-count clickable-icon',
                 text: unresolvedCount.toString(),
                 attr: {
                   'aria-label': t('Update unresolved citations'),
@@ -77,7 +77,7 @@ export class ReferenceListView extends ItemView {
             }
             if (globalOnlyCount) {
               div.createDiv({
-                cls: 'lc-reference-list__global-only-count',
+                cls: 'sw-reference-list__global-only-count',
                 text: globalOnlyCount.toString(),
                 attr: {
                   'aria-label': t('Citations not in local bibliography snapshot'),
@@ -120,9 +120,9 @@ export class ReferenceListView extends ItemView {
       );
 
       if (count > 1) {
-        const searchWrap = this.contentEl.createDiv({ cls: 'lc-search-wrap' });
+        const searchWrap = this.contentEl.createDiv({ cls: 'sw-search-wrap' });
         const input = searchWrap.createEl('input', {
-          cls: 'lc-search-input',
+          cls: 'sw-search-input',
           attr: { type: 'search', placeholder: t('Filter references…') },
         });
         input.addEventListener('input', () => {

@@ -108,7 +108,7 @@ export default {
   'Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists — dead-link citations are not linked.':
     'Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists — dead-link citations are not linked.',
   // src/view.ts
-  'Please provide the path to Pandoc in the Linked Citations plugin settings.':
+  'Please provide the path to Pandoc in the ScholarWeft plugin settings.':
     'Please provide the path to Pandoc in the ScholarWeft plugin settings.',
   'Click to copy': 'Click to copy',
   'Click to jump to citation': 'Click to jump to citation',
@@ -129,10 +129,10 @@ export default {
   'Start Zotero and try again.': 'Start Zotero and try again.',
   'Libraries to include in bibliography':
     'Libraries to include in bibliography',
-  'Please provide the path to your bibliography file in the Linked Citations plugin settings.':
+  'Please provide the path to your bibliography file in the ScholarWeft plugin settings.':
     'Please provide the path to your bibliography file in the ScholarWeft plugin settings.',
   'Refresh bibliography': 'Refresh bibliography',
-  'Linked Citations settings': 'ScholarWeft settings',
+  'ScholarWeft settings': 'ScholarWeft settings',
   'Insert bibliography at cursor': 'Insert bibliography at cursor',
   // src/main.ts commands
   'Sync literature note filenames to citekeys': 'Sync literature note filenames to citekeys',

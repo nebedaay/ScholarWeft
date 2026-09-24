@@ -17,7 +17,7 @@ Paths:
 - **Vault-relative** (recommended; works on mobile too): `references.bib`, `assets/refs.bib`
 - **Absolute** (desktop only): `/Users/you/references.bib`
 
-An absolute path that lives inside the vault is shortened to vault-relative automatically. Parsed `.bib` files are cached in `.pandoc/bib-parsed.json` and re-parsed only when the file changes, so startup stays fast with large bibliographies.
+An absolute path that lives inside the vault is shortened to vault-relative automatically. Parsed `.bib` files are cached in `.scholar-weft/bib-parsed.json` and re-parsed only when the file changes, so startup stays fast with large bibliographies.
 
 ## Merging sources
 

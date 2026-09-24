@@ -68,7 +68,7 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
 
   return (
     <>
-      <div className="lc-setting-item setting-item">
+      <div className="sw-setting-item setting-item">
         <SettingItem
           name={t('Pull bibliography from Zotero')}
           description={t(
@@ -96,7 +96,7 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
         </SettingItem>
       </div>
       {connected ? null : (
-        <div className="lc-setting-item setting-item">
+        <div className="sw-setting-item setting-item">
           <SettingItem
             name={t('Cannot connect to Zotero')}
             description={t('ZoteroConnectionHelp')}
@@ -109,7 +109,7 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
       )}
       {!isEnabled ? null : (
         <>
-          <div className="lc-setting-item setting-item">
+          <div className="sw-setting-item setting-item">
             <SettingItem
               name={t('Use native Zotero API (Zotero 7/8)')}
               description={t(
@@ -130,7 +130,7 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
               />
             </SettingItem>
           </div>
-          <div className="lc-setting-item setting-item">
+          <div className="sw-setting-item setting-item">
             <SettingItem
               name={t('Zotero port')}
               description={t(
@@ -148,12 +148,12 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
               />
             </SettingItem>
           </div>
-          <div className="setting-item lc-setting-item-wrapper">
+          <div className="setting-item sw-setting-item-wrapper">
             <SettingItem name={t('Libraries to include in bibliography')} />
             {possibleGroups.map((g) => {
               const isEnabled = activeGroups.some((g2) => g2.id === g.id);
               return (
-                <div key={g.id} className="lc-group-toggle">
+                <div key={g.id} className="sw-group-toggle">
                   <SettingItem description={g.name}>
                     <div
                       onClick={() => {

@@ -37,7 +37,7 @@ const citeMark = (
   isGlobalOnly: boolean,
   noteIndex?: string
 ) => {
-  const cls = ['cm-pandoc-citation', 'pandoc-citation'];
+  const cls = ['cm-sw-citation', 'sw-citation'];
 
   if (isGlobalOnly) cls.push('is-global-only');
   else if (isResolved) cls.push('is-resolved');
@@ -58,13 +58,13 @@ const citeMark = (
 
 const citeMarkFormatting = (type: string) => {
   return Decoration.mark({
-    class: `cm-pandoc-citation-formatting ${type}`,
+    class: `cm-sw-citation-formatting ${type}`,
   });
 };
 
 const citeMarkExtra = (type: string) => {
   return Decoration.mark({
-    class: `cm-pandoc-citation-extra ${type}`,
+    class: `cm-sw-citation-extra ${type}`,
   });
 };
 
@@ -124,15 +124,15 @@ class CiteWidget extends WidgetType {
     return createSpan(
       {
         cls: this.cite.reference
-          ? 'pandoc-reference' + (this.cite.citations.length > 1 ? ' is-list' : '')
-          : 'pandoc-citation is-resolved',
+          ? 'sw-reference' + (this.cite.citations.length > 1 ? ' is-list' : '')
+          : 'sw-citation is-resolved',
         attr,
       },
       (span) => {
         if (this.cite.reference) {
           this.cite.citations.forEach((c, i) => {
             const item = document.createElement('span');
-            item.className = 'pandoc-reference-entry';
+            item.className = 'sw-reference-entry';
             item.setAttribute('data-citekey', c.id);
             const html = this.referenceHtml[i];
             const parsed = html
@@ -197,7 +197,7 @@ class CiteWidget extends WidgetType {
           if (parts.length === this.memberStates.length) {
             parts.forEach((part, i) => {
               const m = this.memberStates[i];
-              const cls = ['pandoc-citation-member'];
+              const cls = ['sw-citation-member'];
               if (m.isWikilink) cls.push('is-wikilink');
               if (m.hasLitNote) cls.push('has-lit-note');
               const ms = document.createElement('span');

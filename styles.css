@@ -1,10 +1,10 @@
 /* @settings
 
-name: Linked Citations
-id: linked-citations
+name: ScholarWeft
+id: scholar-weft
 settings:
   - 
-    id: lc-font-size
+    id: sw-font-size
     title: Sidebar reference list font size
     type: variable-number-slider
     default: 15
@@ -13,7 +13,7 @@ settings:
     max: 24
     step: 1
   - 
-    id: lc-tooltip-font-size
+    id: sw-tooltip-font-size
     title: Tooltip citation font size
     type: variable-number-slider
     default: 14
@@ -22,14 +22,14 @@ settings:
     max: 24
     step: 1
   - 
-    id: lc-citation-color
+    id: sw-citation-color
     title: Citation color
     type: variable-themed-color
     format: hex
     default-light: '#2e3338'
     default-dark: '#dcddde'
   - 
-    id: lc-citation-color-missing
+    id: sw-citation-color-missing
     title: Unresolved citation color
     description: This color will be applied if a citekey is not found in your bibliography file
     type: variable-themed-color
@@ -37,14 +37,14 @@ settings:
     default-light: '#2e3338'
     default-dark: '#dcddde'
   - 
-    id: lc-citation-underline-color
+    id: sw-citation-underline-color
     title: Citation underline color
     type: variable-themed-color
     format: hex
     default-light: '#705dcf'
     default-dark: '#7f6df2'
   - 
-    id: lc-citation-underline-color-missing
+    id: sw-citation-underline-color-missing
     title: Unresolved citation underline color
     description: This color will be applied if a citekey is not found in your bibliography file
     type: variable-themed-color
@@ -52,7 +52,7 @@ settings:
     default-light: '#'
     default-dark: '#'
   - 
-    id: lc-citation-formatting-color
+    id: sw-citation-formatting-color
     title: Citation formatting color
     description: Changes the color of brackets and semicolons
     type: variable-themed-color
@@ -60,7 +60,7 @@ settings:
     default-light: '#2e3338'
     default-dark: '#dcddde'
   -
-    id: lc-citation-extra-color
+    id: sw-citation-extra-color
     title: 'Citation "extra" color'
     description: 'Changes the color text within a citation, eg. "pp. 22-24"'
     type: variable-themed-color
@@ -68,7 +68,7 @@ settings:
     default-light: '#2e3338'
     default-dark: '#dcddde'
   -
-    id: lc-citation-color-link
+    id: sw-citation-color-link
     title: Link citation color
     description: 'Color for [[@citekey]] citations that are also Obsidian wikilinks'
     type: variable-themed-color
@@ -76,14 +76,14 @@ settings:
     default-light: '#086ddd'
     default-dark: '#578dde'
   -
-    id: lc-citation-underline-color-link
+    id: sw-citation-underline-color-link
     title: Link citation underline color
     type: variable-themed-color
     format: hex
     default-light: '#086ddd'
     default-dark: '#578dde'
   -
-    id: lc-citation-underline-style
+    id: sw-citation-underline-style
     title: Citation underline style
     type: variable-select
     default: dotted
@@ -97,7 +97,7 @@ settings:
       - label: None
         value: none
   -
-    id: lc-citation-underline-style-link
+    id: sw-citation-underline-style-link
     title: Link citation underline style
     type: variable-select
     default: solid
@@ -111,7 +111,7 @@ settings:
       - label: None
         value: none
   -
-    id: lc-wikilink-linked-color
+    id: sw-wikilink-linked-color
     title: Linked [[@]] citation underline — has literature note
     description: 'Underline color for [[@key]] citations that have a literature note'
     type: variable-themed-color
@@ -119,7 +119,7 @@ settings:
     default-light: '#44aaff'
     default-dark: '#44aaff'
   -
-    id: lc-wikilink-unimported-color
+    id: sw-wikilink-unimported-color
     title: Linked [[@]] citation underline — no literature note yet
     description: 'Underline color for [[@key]] citations that do not yet have a literature note'
     type: variable-themed-color
@@ -220,29 +220,29 @@ settings:
 
 
 body {
-  --lc-font-size: var(--font-ui-medium);
-  --lc-tooltip-font-size: 14px;
-  --lc-citation-color: var(--text-accent);
-  --lc-citation-color-missing: var(--text-normal);
-  --lc-wikilink-linked-color: #44aaff;
-  --lc-wikilink-unimported-color: #cc55ffa8;
-  --lc-citation-underline-color-unlinked: #555a;
-  --lc-citation-color-link: var(--link-color);
-  --lc-citation-underline-color: var(--text-accent);
-  --lc-citation-underline-color-missing: transparent;
-  --lc-citation-underline-color-link: var(--link-color);
-  --lc-citation-underline-style: dotted;
-  --lc-citation-underline-style-link: solid;
-  --lc-citation-extra-color: var(--text-normal);
-  --lc-citation-formatting-color: var(--text-muted);
+  --sw-font-size: var(--font-ui-medium);
+  --sw-tooltip-font-size: 14px;
+  --sw-citation-color: var(--text-accent);
+  --sw-citation-color-missing: var(--text-normal);
+  --sw-wikilink-linked-color: #44aaff;
+  --sw-wikilink-unimported-color: #cc55ffa8;
+  --sw-citation-underline-color-unlinked: #555a;
+  --sw-citation-color-link: var(--link-color);
+  --sw-citation-underline-color: var(--text-accent);
+  --sw-citation-underline-color-missing: transparent;
+  --sw-citation-underline-color-link: var(--link-color);
+  --sw-citation-underline-style: dotted;
+  --sw-citation-underline-style-link: solid;
+  --sw-citation-extra-color: var(--text-normal);
+  --sw-citation-formatting-color: var(--text-muted);
 }
 
-.lc-reference-list {
+.sw-reference-list {
   padding-bottom: 2rem;
 }
 
-.lc-reference-list__title {
-  font-size: var(--lc-font-size);
+.sw-reference-list__title {
+  font-size: var(--sw-font-size);
   font-weight: bold;
   padding: 0 5px;
   display: flex;
@@ -250,13 +250,13 @@ body {
   align-items: center;
 }
 
-.lc-reference-list__title > div {
+.sw-reference-list__title > div {
   display: flex;
   align-items: center;
   gap: var(--size-4-1);
 }
 
-.lc-reference-list__count {
+.sw-reference-list__count {
   color: var(--text-muted);
   display: flex;
   padding: var(--size-4-1) var(--size-4-2);
@@ -267,7 +267,7 @@ body {
   font-size: var(--font-ui-smaller);
 }
 
-.lc-reference-list__unresolved-count {
+.sw-reference-list__unresolved-count {
   color: var(--text-on-accent);
   display: flex;
   padding: var(--size-4-1) var(--size-4-2);
@@ -278,7 +278,7 @@ body {
   font-size: var(--font-ui-smaller);
 }
 
-.lc-reference-list__global-only-count {
+.sw-reference-list__global-only-count {
   color: var(--text-normal);
   display: flex;
   padding: var(--size-4-1) var(--size-4-2);
@@ -289,8 +289,8 @@ body {
   font-size: var(--font-ui-smaller);
 }
 
-.lc-no-content {
-  font-size: var(--lc-font-size);
+.sw-no-content {
+  font-size: var(--sw-font-size);
   padding: 0 5px;
   color: var(--text-muted);
 }
@@ -305,18 +305,18 @@ body {
 }
 
 /* Tooltip: stack entry on top, action buttons in a horizontal row below */
-.lc-tooltip .csl-entry-wrapper {
+.sw-tooltip .csl-entry-wrapper {
   padding: 0;
   flex-direction: column;
 }
 
-.lc-tooltip .lc-entry-btns {
+.sw-tooltip .sw-entry-btns {
   flex-direction: row;
   justify-content: flex-start;
 }
 
 .csl-entry {
-  font-size: var(--lc-font-size);
+  font-size: var(--sw-font-size);
   /* flex: 1 + min-width: 0 are both required for text to wrap inside a flex
      container — without min-width: 0 the item never shrinks below its content
      width and long words / URLs overflow the panel. */
@@ -331,7 +331,7 @@ body {
   display: flex;
 }
 
-.lc-reference-list .csl-entry-wrapper:not(:last-child) {
+.sw-reference-list .csl-entry-wrapper:not(:last-child) {
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
@@ -343,12 +343,12 @@ body {
    above and below the reference (a blank line each side). An atomic
    inline-level box keeps the entries as block children internally without
    disturbing the surrounding paragraph flow. */
-.pandoc-reference {
+.sw-reference {
   display: inline-block;
   vertical-align: top;
   max-width: 100%;
   margin: 0;
-  /* Inherit the note's own text size (not the sidebar's --lc-font-size); the
+  /* Inherit the note's own text size (not the sidebar's --sw-font-size); the
      entries then render slightly smaller below. */
   font-size: 1em;
   /* Restore normal leading: a sole-reference paragraph has line-height:0 (so
@@ -358,10 +358,10 @@ body {
 /* A paragraph holding nothing but a reference: collapse its empty line box so
    there is no blank line above/below the block. (The JS pass adds this class
    only when the paragraph contains nothing but the reference.) */
-p.lc-reference-paragraph {
+p.sw-reference-paragraph {
   line-height: 0;
 }
-.pandoc-reference-entry {
+.sw-reference-entry {
   display: block;
   /* Slightly smaller than the surrounding note text, with the body of each
      entry indented .75cm and the first line hanging back by the same amount. */
@@ -369,97 +369,97 @@ p.lc-reference-paragraph {
   padding-left: 0.75cm;
   text-indent: -0.75cm;
 }
-.pandoc-reference.is-list .pandoc-reference-entry + .pandoc-reference-entry {
+.sw-reference.is-list .sw-reference-entry + .sw-reference-entry {
   margin-top: 0.4em;
 }
-.pandoc-reference .csl-entry {
+.sw-reference .csl-entry {
   display: inline;
   flex: none;
   min-width: 0;
   font-size: inherit;
 }
-.pandoc-reference .csl-entry em,
-.pandoc-reference .csl-entry em em em,
-.pandoc-reference .csl-entry em em em em em {
+.sw-reference .csl-entry em,
+.sw-reference .csl-entry em em em,
+.sw-reference .csl-entry em em em em em {
   font-style: italic;
 }
-.pandoc-reference .csl-entry em em,
-.pandoc-reference .csl-entry em em em em {
+.sw-reference .csl-entry em em,
+.sw-reference .csl-entry em em em em {
   font-style: normal;
 }
-.pandoc-reference .csl-entry span.smallcaps {
+.sw-reference .csl-entry span.smallcaps {
   font-variant: small-caps;
 }
-.pandoc-reference .csl-entry span.underline {
+.sw-reference .csl-entry span.underline {
   text-decoration: underline;
 }
-.pandoc-reference .csl-entry q {
+.sw-reference .csl-entry q {
   quotes: '“' '”' '‘' '’';
 }
-.pandoc-reference .csl-entry div.column {
+.sw-reference .csl-entry div.column {
   display: inline-block;
   vertical-align: top;
   width: 50%;
 }
-.pandoc-reference-entry.is-unresolved {
+.sw-reference-entry.is-unresolved {
   color: var(--text-faint);
 }
 
-.lc-entry-btns {
+.sw-entry-btns {
   display: flex;
   flex-direction: column;
   gap: var(--size-4-1);
 }
 
-.lc-conflict-icon {
+.sw-conflict-icon {
   color: var(--color-yellow);
   opacity: 0.8;
 }
 
-.lc-reference-list a.footnote-ref {
+.sw-reference-list a.footnote-ref {
   vertical-align: super;
 }
 
-.lc-reference-list em,
-.lc-reference-list em em em,
-.lc-reference-list em em em em em {
+.sw-reference-list em,
+.sw-reference-list em em em,
+.sw-reference-list em em em em em {
   font-style: italic;
 }
 
-.lc-reference-list em em,
-.lc-reference-list em em em em {
+.sw-reference-list em em,
+.sw-reference-list em em em em {
   font-style: normal;
 }
-.lc-reference-list code {
+.sw-reference-list code {
   white-space: pre-wrap;
 }
 
-.lc-reference-list span.smallcaps {
+.sw-reference-list span.smallcaps {
   font-variant: small-caps;
 }
 
-.lc-reference-list span.underline {
+.sw-reference-list span.underline {
   text-decoration: underline;
 }
 
-.lc-reference-list q {
+.sw-reference-list q {
   quotes: '“' '”' '‘' '’';
 }
 
-.lc-reference-list div.column {
+.sw-reference-list div.column {
   display: inline-block;
   vertical-align: top;
   width: 50%;
 }
 
-.lc-tooltip.collapsed-links a,
-.lc-reference-list.collapsed-links a {
+.sw-tooltip.collapsed-links a,
+.sw-reference-list.collapsed-links a {
   display: none;
 }
 
-.lc-tooltip.collapsed-links a::after,
-.lc-reference-list.collapsed-links a::after {
-  font-size: var(--lc-font-size);
+.sw-tooltip.collapsed-links a::after,
+.sw-reference-list.collapsed-links a::after {
+  font-size: var(--sw-font-size);
   content: ' ';
   display: inline-block;
   width: 1em;
@@ -473,7 +473,7 @@ p.lc-reference-paragraph {
 
 /* ── Mobile citation card (bottom-sheet) ──────────────────────────────────── */
 
-.lc-mobile-backdrop {
+.sw-mobile-backdrop {
   position: fixed;
   inset: 0;
   z-index: var(--layer-popover);
@@ -482,7 +482,7 @@ p.lc-reference-paragraph {
   align-items: flex-end;
 }
 
-.lc-mobile-card {
+.sw-mobile-card {
   background: var(--background-primary);
   border-top: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-l) var(--radius-l) 0 0;
@@ -495,18 +495,18 @@ p.lc-reference-paragraph {
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
 }
 
-.lc-mobile-card .csl-entry-wrapper {
+.sw-mobile-card .csl-entry-wrapper {
   flex-direction: column;
   padding: 0;
 }
 
-.lc-mobile-card .lc-entry-btns {
+.sw-mobile-card .sw-entry-btns {
   flex-direction: row;
   justify-content: flex-start;
   margin-top: var(--size-4-2);
 }
 
-.lc-mobile-card-header {
+.sw-mobile-card-header {
   display: flex;
   justify-content: flex-end;
   margin-bottom: var(--size-4-2);
@@ -514,11 +514,11 @@ p.lc-reference-paragraph {
 
 /* ── Desktop hover tooltip ────────────────────────────────────────────────── */
 
-.lc-tooltip {
+.sw-tooltip {
   word-wrap: break-word;
   position: fixed;
   font-family: var(--font-interface);
-  font-size: var(--lc-tooltip-font-size);
+  font-size: var(--sw-tooltip-font-size);
   padding: 10px;
   background-color: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
@@ -535,54 +535,54 @@ p.lc-reference-paragraph {
   user-select: text;
 }
 
-.lc-tooltip .csl-entry {
+.sw-tooltip .csl-entry {
   padding: 0;
 }
 
-.lc-decorations .cm-hmd-barelink {
+.sw-decorations .cm-hmd-barelink {
   text-decoration: none;
 }
 
-.lc-decorations
+.sw-decorations
   :not(a, .cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-resolved:not(.is-link) {
-  color: var(--lc-citation-color);
+  > :is(.sw-citation, .at).is-resolved:not(.is-link) {
+  color: var(--sw-citation-color);
 }
 
-.lc-decorations
+.sw-decorations
   :not(.cm-formatting-link)
-  > .cm-pandoc-citation-formatting:not(.at) {
-  color: var(--lc-citation-formatting-color);
+  > .cm-sw-citation-formatting:not(.at) {
+  color: var(--sw-citation-formatting-color);
 }
 
-.lc-decorations
+.sw-decorations
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > .cm-pandoc-citation-extra {
-  color: var(--lc-citation-extra-color);
+  > .cm-sw-citation-extra {
+  color: var(--sw-citation-extra-color);
 }
 
-.lc-decorations
+.sw-decorations
   :not(.cm-link-alias)
-  > :is(.pandoc-citation, .at).is-resolved:not(.is-link) {
+  > :is(.sw-citation, .at).is-resolved:not(.is-link) {
   text-decoration-line: underline;
-  text-decoration-style: var(--lc-citation-underline-style);
+  text-decoration-style: var(--sw-citation-underline-style);
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-citation-underline-color);
+  text-decoration-color: var(--sw-citation-underline-color);
 }
 
-.lc-decorations
+.sw-decorations
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-unresolved {
-  color: var(--lc-citation-color-missing);
-  text-decoration-color: var(--lc-citation-underline-color-missing);
+  > :is(.sw-citation, .at).is-unresolved {
+  color: var(--sw-citation-color-missing);
+  text-decoration-color: var(--sw-citation-underline-color-missing);
   opacity: 1;
 }
 
 /* Citation is in the global library but not yet saved to this note's
    snapshot .bib. Yellow = "resolvable but not pinned". */
-.lc-decorations
+.sw-decorations
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-global-only {
+  > :is(.sw-citation, .at).is-global-only {
   color: var(--color-yellow);
   text-decoration-line: underline;
   text-decoration-style: dashed;
@@ -591,45 +591,45 @@ p.lc-reference-paragraph {
   opacity: 0.9;
 }
 
-.lc-decorations
+.sw-decorations
   :not(a, .cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-link {
-  color: var(--lc-citation-color-link);
+  > :is(.sw-citation, .at).is-link {
+  color: var(--sw-citation-color-link);
   cursor: var(--cursor-link);
 }
 
-.lc-decorations
+.sw-decorations
   :not(.cm-link-alias)
-  > :is(.pandoc-citation, .at).is-link {
+  > :is(.sw-citation, .at).is-link {
   text-decoration-line: underline;
-  text-decoration-style: var(--lc-citation-underline-style-link);
+  text-decoration-style: var(--sw-citation-underline-style-link);
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-citation-underline-color-link);
+  text-decoration-color: var(--sw-citation-underline-color-link);
 }
 
 /* Wikilink underline states — also used by the settings preview. */
-.lc-decorations
-  > :is(.pandoc-citation, .at).is-wikilink {
+.sw-decorations
+  > :is(.sw-citation, .at).is-wikilink {
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 2px;
 }
 
-.lc-decorations
-  > :is(.pandoc-citation, .at).is-wikilink.has-lit-note {
-  text-decoration-color: var(--lc-wikilink-linked-color);
+.sw-decorations
+  > :is(.sw-citation, .at).is-wikilink.has-lit-note {
+  text-decoration-color: var(--sw-wikilink-linked-color);
 }
 
-.lc-decorations
-  > :is(.pandoc-citation, .at).is-wikilink:not(.has-lit-note) {
-  text-decoration-color: var(--lc-wikilink-unimported-color);
+.sw-decorations
+  > :is(.sw-citation, .at).is-wikilink:not(.has-lit-note) {
+  text-decoration-color: var(--sw-wikilink-unimported-color);
 }
 
-.pandoc-citation > * {
+.sw-citation > * {
   pointer-events: none;
 }
 
-.pandoc-citation.is-link > a.internal-link {
+.sw-citation.is-link > a.internal-link {
   pointer-events: auto;
   color: inherit;
   text-decoration: inherit;
@@ -637,45 +637,45 @@ p.lc-reference-paragraph {
 
 /* ── Style mapping list (settings page) ─────────────────────────────────── */
 
-.lc-mapping-list {
+.sw-mapping-list {
   margin: var(--size-4-2) 0 var(--size-4-1);
   display: flex;
   flex-direction: column;
   gap: var(--size-4-1);
 }
 
-.lc-mapping-empty {
+.sw-mapping-empty {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
   margin: 0;
 }
 
-.lc-mapping-row {
+.sw-mapping-row {
   display: flex;
   align-items: center;
   gap: var(--size-4-2);
 }
 
-.lc-mapping-row input[type="checkbox"] {
+.sw-mapping-row input[type="checkbox"] {
   flex: 0 0 auto;
 }
 
-.lc-mapping-input {
+.sw-mapping-input {
   flex: 1;
   font-size: var(--font-ui-small);
 }
 
-.lc-mapping-style {
+.sw-mapping-style {
   flex: 1.4;
 }
 
-.lc-mapping-arrow {
+.sw-mapping-arrow {
   color: var(--text-faint);
   flex: 0 0 auto;
   font-size: var(--font-ui-small);
 }
 
-.lc-mapping-del {
+.sw-mapping-del {
   flex: 0 0 auto;
   background: none;
   border: none;
@@ -684,25 +684,25 @@ p.lc-reference-paragraph {
   opacity: 0.5;
 }
 
-.lc-mapping-del:hover {
+.sw-mapping-del:hover {
   opacity: 1;
 }
 
-.lc-mapping-add {
+.sw-mapping-add {
   margin-top: var(--size-4-2);
   font-size: var(--font-ui-small);
 }
 
 /* ── Mapping section in export modal ────────────────────────────────────── */
 
-.lc-mapping-details {
+.sw-mapping-details {
   margin-top: 10px;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   padding: 6px 10px;
 }
 
-.lc-mapping-details summary {
+.sw-mapping-details summary {
   cursor: pointer;
   font-size: var(--font-ui-small);
   color: var(--text-muted);
@@ -713,37 +713,37 @@ p.lc-reference-paragraph {
   gap: 4px;
 }
 
-.lc-mapping-details summary::before {
+.sw-mapping-details summary::before {
   content: '▶';
   font-size: 0.65em;
   transition: transform 0.15s;
   display: inline-block;
 }
 
-.lc-mapping-details[open] summary::before {
+.sw-mapping-details[open] summary::before {
   transform: rotate(90deg);
 }
 
-.lc-mapping-modal-list {
+.sw-mapping-modal-list {
   margin-top: 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.lc-mapping-modal-row {
+.sw-mapping-modal-row {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: var(--font-ui-small);
 }
 
-.lc-mapping-modal-row label {
+.sw-mapping-modal-row label {
   flex: 1;
   color: var(--text-normal);
 }
 
-.lc-mapping-modal-note {
+.sw-mapping-modal-note {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   font-style: italic;
@@ -752,7 +752,7 @@ p.lc-reference-paragraph {
 
 /* ── Settings decoration preview (source markup → reading-mode output) ───── */
 
-.lc-deco-preview {
+.sw-deco-preview {
   font-family: var(--font-monospace);
   font-size: var(--font-ui-small);
   padding: var(--size-4-2) var(--size-4-3);
@@ -764,143 +764,143 @@ p.lc-reference-paragraph {
   gap: var(--size-4-2);
 }
 
-.lc-prev-row {
+.sw-prev-row {
   display: flex;
   align-items: baseline;
   gap: var(--size-4-2);
 }
 
-.lc-prev-left {
+.sw-prev-left {
   flex: 0 0 auto;
 }
 
-.lc-prev-bracket {
+.sw-prev-bracket {
   color: var(--text-muted);
 }
 
-.lc-prev-key {
+.sw-prev-key {
   color: var(--text-normal);
 }
 
-.lc-prev-arrow {
+.sw-prev-arrow {
   color: var(--text-faint);
   flex: 0 0 auto;
   padding: 0 var(--size-4-1);
 }
 
-.lc-prev-rendered {
+.sw-prev-rendered {
   color: var(--text-normal);
   font-family: var(--font-text);
   flex: 1;
 }
 
 /* Unresolved key in source view — keep monospace; rendered output uses link-unresolved color */
-.lc-prev-unresolved-key {
-  color: var(--lc-citation-color-missing);
+.sw-prev-unresolved-key {
+  color: var(--sw-citation-color-missing);
 }
 
-.lc-prev-unresolved-val {
-  color: var(--link-unresolved-color, var(--lc-citation-color-missing));
+.sw-prev-unresolved-val {
+  color: var(--link-unresolved-color, var(--sw-citation-color-missing));
   font-family: var(--font-monospace);
 }
 
-/* Underline decorations in reading mode — gate on body.lc-decorations.
-   The settings preview widget (lc-deco-preview) uses lc-prev-* classes for
-   its mock rows; real post-processor output uses pandoc-citation instead. */
+/* Underline decorations in reading mode — gate on body.sw-decorations.
+   The settings preview widget (sw-deco-preview) uses sw-prev-* classes for
+   its mock rows; real post-processor output uses sw-citation instead. */
 
 /* Settings preview widget — decoration on the RENDERED (right) side only.
    The left side shows plain raw markup; the right side shows the styled output. */
-.lc-deco-preview.lc-decorations .lc-prev-rendered.lc-prev-pandoc {
+.sw-deco-preview.sw-decorations .sw-prev-rendered.sw-prev-pandoc {
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-citation-underline-color-unlinked);
+  text-decoration-color: var(--sw-citation-underline-color-unlinked);
 }
-.lc-deco-preview.lc-decorations .lc-prev-rendered.lc-prev-linked {
+.sw-deco-preview.sw-decorations .sw-prev-rendered.sw-prev-linked {
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-wikilink-linked-color);
+  text-decoration-color: var(--sw-wikilink-linked-color);
 }
-.lc-deco-preview.lc-decorations .lc-prev-rendered.lc-prev-unimported {
+.sw-deco-preview.sw-decorations .sw-prev-rendered.sw-prev-unimported {
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-wikilink-unimported-color);
+  text-decoration-color: var(--sw-wikilink-unimported-color);
 }
 
 /* Actual reading-mode view: pandoc-style citations */
-body.lc-decorations .markdown-preview-view .pandoc-citation.is-resolved:not(.is-link) {
+body.sw-decorations .markdown-preview-view .sw-citation.is-resolved:not(.is-link) {
   text-decoration-line: underline;
-  text-decoration-style: var(--lc-citation-underline-style);
+  text-decoration-style: var(--sw-citation-underline-style);
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-citation-underline-color);
+  text-decoration-color: var(--sw-citation-underline-color);
 }
 
 /* Actual reading-mode view: link-style citations [[@key]] — must target the
    inner <a> directly because Obsidian's own link styles can override text-
    decoration set on the parent span, even via the existing "inherit" rule. */
-body.lc-decorations .markdown-preview-view .pandoc-citation.is-resolved.is-link,
-body.lc-decorations .markdown-preview-view .pandoc-citation.is-resolved.is-link > a.internal-link {
+body.sw-decorations .markdown-preview-view .sw-citation.is-resolved.is-link,
+body.sw-decorations .markdown-preview-view .sw-citation.is-resolved.is-link > a.internal-link {
   text-decoration-line: underline;
-  text-decoration-style: var(--lc-citation-underline-style-link);
+  text-decoration-style: var(--sw-citation-underline-style-link);
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-citation-underline-color-link);
+  text-decoration-color: var(--sw-citation-underline-color-link);
 }
 
 /* Actual reading-mode view: unresolved citations */
-body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
+body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   text-decoration-line: underline;
-  text-decoration-style: var(--lc-citation-underline-style);
+  text-decoration-style: var(--sw-citation-underline-style);
   text-decoration-thickness: 2px;
-  text-decoration-color: var(--lc-citation-underline-color-missing);
+  text-decoration-color: var(--sw-citation-underline-color-missing);
 }
 
-.lc-success {
+.sw-success {
   color: var(--interactive-success);
 }
 
-.lc-error {
+.sw-error {
   color: var(--text-error);
 }
 
-.lc-multiselect {
+.sw-multiselect {
   width: 320px;
   text-align: left;
   font-size: var(--font-ui-small);
 }
 
-.lc-multiselect input {
+.sw-multiselect input {
   outline: none !important;
   box-shadow: none !important;
   font-size: var(--font-ui-small);
   height: unset;
 }
 
-.lc-setting-item-wrapper {
+.sw-setting-item-wrapper {
   flex-direction: column;
   align-items: stretch;
 }
 
-.lc-setting-item-wrapper > div {
+.sw-setting-item-wrapper > div {
   margin-right: 0 !important;
 }
 
-.lc-setting-item-wrapper > div:last-child {
+.sw-setting-item-wrapper > div:last-child {
   padding-bottom: 0;
 }
 
-.lc-group-toggle {
+.sw-group-toggle {
   display: flex;
   justify-content: flex-end;
   padding-top: var(--size-4-2);
 }
 
-.lc-group-toggle .setting-item-description {
+.sw-group-toggle .setting-item-description {
   padding-top: 0;
 }
 
-.lc-suggest-title {
+.sw-suggest-title {
   font-size: var(--font-ui-small);
   color: var(--text-muted);
   display: block;
@@ -910,7 +910,7 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   padding-top: var(--size-4-1);
 }
 
-.lc-suggest-meta {
+.sw-suggest-meta {
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
   display: block;
@@ -919,7 +919,7 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   white-space: nowrap;
 }
 
-.lc-suggest-loading-wrapper {
+.sw-suggest-loading-wrapper {
   display: flex;
   position: relative;
   align-items: center;
@@ -927,9 +927,9 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   padding: var(--size-4-2) 0;
 }
 
-.lc-suggest-loading,
-.lc-suggest-loading:before,
-.lc-suggest-loading:after {
+.sw-suggest-loading,
+.sw-suggest-loading:before,
+.sw-suggest-loading:after {
   border-radius: 999px;
   width: 1em;
   height: 1em;
@@ -937,7 +937,7 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   animation: bblFadInOut 1.6s infinite ease-in-out;
 }
 
-.lc-suggest-loading {
+.sw-suggest-loading {
   display: block;
   color: var(--text-muted);
   font-size: 7px;
@@ -945,16 +945,16 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   animation-delay: -0.16s;
   top: -1em;
 }
-.lc-suggest-loading:before,
-.lc-suggest-loading:after {
+.sw-suggest-loading:before,
+.sw-suggest-loading:after {
   content: '';
   position: absolute;
 }
-.lc-suggest-loading:before {
+.sw-suggest-loading:before {
   left: -2em;
   animation-delay: -0.32s;
 }
-.lc-suggest-loading:after {
+.sw-suggest-loading:after {
   left: 2em;
 }
 
@@ -969,12 +969,12 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   }
 }
 
-.lc-status-icon {
+.sw-status-icon {
   --icon-size: var(--icon-s);
   --icon-stroke: var(--icon-s-stroke-width);
 }
 
-.lc-status-icon.is-loading svg {
+.sw-status-icon.is-loading svg {
   animation: spin 2s linear infinite;
 }
 
@@ -987,20 +987,20 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   }
 }
 
-.suggestion-container.lc-suggest {
+.suggestion-container.sw-suggest {
   max-width: 500px;
   width: 95vw;
 }
 
 /* ── SearchSelect component (replaces react-select) ─────────────────────── */
 
-.lc-search-select {
+.sw-search-select {
   position: relative;
   width: 320px;
   font-size: var(--font-ui-small);
 }
 
-.lc-search-select__control {
+.sw-search-select__control {
   display: flex;
   align-items: center;
   background: var(--background-modifier-form-field);
@@ -1008,12 +1008,12 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   border-radius: var(--input-radius);
 }
 
-.lc-search-select__control:focus-within {
+.sw-search-select__control:focus-within {
   border-color: var(--interactive-accent);
   box-shadow: 0 0 0 1px var(--interactive-accent);
 }
 
-.lc-search-select__input {
+.sw-search-select__input {
   flex: 1;
   background: transparent;
   border: none;
@@ -1025,7 +1025,7 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   height: unset;
 }
 
-.lc-search-select__clear {
+.sw-search-select__clear {
   background: none;
   border: none;
   color: var(--text-muted);
@@ -1035,11 +1035,11 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   line-height: 1;
 }
 
-.lc-search-select__clear:hover {
+.sw-search-select__clear:hover {
   color: var(--text-normal);
 }
 
-.lc-search-select__menu {
+.sw-search-select__menu {
   position: absolute;
   top: 100%;
   left: 0;
@@ -1054,26 +1054,26 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.lc-search-select__option {
+.sw-search-select__option {
   padding: 6px 10px;
   cursor: pointer;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
 }
 
-.lc-search-select__option:hover,
-.lc-search-select__option.is-active {
+.sw-search-select__option:hover,
+.sw-search-select__option.is-active {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
 }
 
 /* ── Sidebar reference filter ────────────────────────────────────────────── */
 
-.lc-search-wrap {
+.sw-search-wrap {
   padding: 4px 5px 2px;
 }
 
-.lc-search-input {
+.sw-search-input {
   width: 100%;
   font-size: var(--font-ui-small);
   background: var(--background-modifier-form-field);
@@ -1084,87 +1084,87 @@ body.lc-decorations .markdown-preview-view .pandoc-citation.is-unresolved {
   box-sizing: border-box;
 }
 
-.lc-search-input:focus {
+.sw-search-input:focus {
   outline: none;
   border-color: var(--interactive-accent);
   box-shadow: 0 0 0 1px var(--interactive-accent);
 }
 
 /* ══ Citation decoration: linked/unlinked/unimported dotted underlines ══════
-   Gated on body.lc-decorations (toggled by the "Citation decoration" setting)
+   Gated on body.sw-decorations (toggled by the "Citation decoration" setting)
    so that when the option is off, source view shows plain unstyled text.
    Only fires in the editor (.markdown-source-view); reading mode and export
    stay plain text regardless of the setting (see reading-view block below).
    The plugin marks each citation span with:
-     .pandoc-citation.is-wikilink.has-lit-note   linked (has lit note)
-     .pandoc-citation:not(.is-wikilink)           unlinked (plain [@key])
-     .pandoc-citation.is-wikilink:not(.has-lit-note)  unimported (no note yet) */
+     .sw-citation.is-wikilink.has-lit-note   linked (has lit note)
+     .sw-citation:not(.is-wikilink)           unlinked (plain [@key])
+     .sw-citation.is-wikilink:not(.has-lit-note)  unimported (no note yet) */
 
-.lc-decorations .markdown-source-view
+.sw-decorations .markdown-source-view
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-resolved {
+  > :is(.sw-citation, .at).is-resolved {
   color: var(--text-normal) !important;
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 2px;
 }
 
-.lc-decorations .markdown-source-view
+.sw-decorations .markdown-source-view
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-wikilink.has-lit-note {
-  text-decoration-color: var(--lc-wikilink-linked-color);
+  > :is(.sw-citation, .at).is-wikilink.has-lit-note {
+  text-decoration-color: var(--sw-wikilink-linked-color);
 }
 
-.lc-decorations .markdown-source-view
+.sw-decorations .markdown-source-view
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at):not(.is-wikilink) {
-  text-decoration-color: var(--lc-citation-underline-color-unlinked);
+  > :is(.sw-citation, .at):not(.is-wikilink) {
+  text-decoration-color: var(--sw-citation-underline-color-unlinked);
 }
 
-.lc-decorations .markdown-source-view
+.sw-decorations .markdown-source-view
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > :is(.pandoc-citation, .at).is-wikilink:not(.has-lit-note) {
-  text-decoration-color: var(--lc-wikilink-unimported-color);
+  > :is(.sw-citation, .at).is-wikilink:not(.has-lit-note) {
+  text-decoration-color: var(--sw-wikilink-unimported-color);
 }
 
-/* Multi-work containers: each member is its own .pandoc-citation-member span
+/* Multi-work containers: each member is its own .sw-citation-member span
    carrying the same state classes, so a glance at "[ (A); (B); (C) ]" shows
    each work's linked/unlinked/unimported status. */
-.lc-decorations .markdown-source-view .pandoc-citation .pandoc-citation-member {
+.sw-decorations .markdown-source-view .sw-citation .sw-citation-member {
   color: var(--text-normal) !important;
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: 2px;
 }
-.lc-decorations .markdown-source-view .pandoc-citation .pandoc-citation-member.is-wikilink.has-lit-note {
-  text-decoration-color: var(--lc-wikilink-linked-color);
+.sw-decorations .markdown-source-view .sw-citation .sw-citation-member.is-wikilink.has-lit-note {
+  text-decoration-color: var(--sw-wikilink-linked-color);
 }
-.lc-decorations .markdown-source-view .pandoc-citation .pandoc-citation-member:not(.is-wikilink) {
-  text-decoration-color: var(--lc-citation-underline-color-unlinked);
+.sw-decorations .markdown-source-view .sw-citation .sw-citation-member:not(.is-wikilink) {
+  text-decoration-color: var(--sw-citation-underline-color-unlinked);
 }
-.lc-decorations .markdown-source-view .pandoc-citation .pandoc-citation-member.is-wikilink:not(.has-lit-note) {
-  text-decoration-color: var(--lc-wikilink-unimported-color);
+.sw-decorations .markdown-source-view .sw-citation .sw-citation-member.is-wikilink:not(.has-lit-note) {
+  text-decoration-color: var(--sw-wikilink-unimported-color);
 }
 
 /* Reading mode + export: citations are plain text — no dotted underline,
    and no theme link styling on the internal anchor. Applies unconditionally
-   (even when lc-decorations is on) because reading mode is for reading. */
-.markdown-reading-view .pandoc-citation,
-.markdown-reading-view .pandoc-citation a.internal-link,
-.markdown-reading-view .pandoc-citation a.internal-link.is-unresolved,
-.markdown-reading-view .pandoc-citation .is-unresolved {
+   (even when sw-decorations is on) because reading mode is for reading. */
+.markdown-reading-view .sw-citation,
+.markdown-reading-view .sw-citation a.internal-link,
+.markdown-reading-view .sw-citation a.internal-link.is-unresolved,
+.markdown-reading-view .sw-citation .is-unresolved {
   color: var(--text-normal) !important;
   text-decoration: none !important;
 }
 
 /* Formatting marks (brackets, @, commas, locators) stay default text color
    in live preview, only when decorations are on (otherwise nothing to reset). */
-.lc-decorations .markdown-source-view
+.sw-decorations .markdown-source-view
   :not(.cm-formatting-link)
-  > .cm-pandoc-citation-formatting:not(.at),
-.lc-decorations .markdown-source-view
+  > .cm-sw-citation-formatting:not(.at),
+.sw-decorations .markdown-source-view
   :not(.cm-hmd-internal-link, .cm-link-alias)
-  > .cm-pandoc-citation-extra {
+  > .cm-sw-citation-extra {
   color: var(--text-normal) !important;
 }
 
@@ -1389,22 +1389,22 @@ Annotation callouts
 
 /* ── Settings: home menu + sub-page navigation ─────────────────────────── */
 
-.lc-settings-tab .sw-settings-nav {
+.sw-settings-tab .sw-settings-nav {
     margin-bottom: 4px;
 }
 
-.lc-settings-tab .sw-settings-back {
+.sw-settings-tab .sw-settings-back {
     cursor: pointer;
     font-size: var(--font-ui-small);
     color: var(--text-muted);
 }
 
-.lc-settings-tab .sw-settings-back:hover {
+.sw-settings-tab .sw-settings-back:hover {
     color: var(--text-normal);
     text-decoration: underline;
 }
 
-.lc-settings-tab .sw-settings-card {
+.sw-settings-tab .sw-settings-card {
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--radius-m);
     padding: 12px 14px;
@@ -1413,16 +1413,16 @@ Annotation callouts
     transition: background-color 0.1s ease;
 }
 
-.lc-settings-tab .sw-settings-card:hover {
+.sw-settings-tab .sw-settings-card:hover {
     background-color: var(--background-modifier-hover);
 }
 
-.lc-settings-tab .sw-settings-card-title {
+.sw-settings-tab .sw-settings-card-title {
     font-weight: 600;
     font-size: var(--font-ui-medium);
 }
 
-.lc-settings-tab .sw-settings-card-desc {
+.sw-settings-tab .sw-settings-card-desc {
     color: var(--text-muted);
     font-size: var(--font-ui-small);
     margin-top: 2px;
