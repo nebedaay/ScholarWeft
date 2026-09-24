@@ -4,6 +4,8 @@ In ScholarWeft's settings you can click **Install and use ScholarWeft's ZotLit i
 
 The click also writes ScholarWeft's **frontmatter field mappings** into ZotLit's settings. ZotLit builds each note's frontmatter from its *settings*, not from the templates, so a template folder alone would not reproduce the imported properties — the mappings are what turn Zotero fields into the `title`, `authors`, `up`, `related`, and other properties the templates expect. ZotLit's previous settings are backed up as `data.json.scholarweft.bak` first.
 
+It also turns on ZotLit's **JavaScript templates** setting. That gate is a *per-device* setting (not in `data.json`), off by default, and the bundled `.eta.md` templates and the JavaScript frontmatter fields stay inert without it. (You can confirm it yourself in ZotLit's settings; ZotLit normally asks before enabling because Eta templates can run JavaScript with the same access as ZotLit itself — installing these templates is that opt-in.)
+
 The templates follow ScholarWeft's "link everything" philosophy and assume you curate your Zotero items and annotations with Obsidian in mind:
 
 - All annotations appear in their original colour in callout boxes, so you can colour-code annotation types; each colour is linked to a colour note where you can explain its use and link onward.

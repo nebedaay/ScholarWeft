@@ -18,6 +18,9 @@ export interface ZotlitInstallResult {
   folderConfigured: boolean;
   /** ZotLit's `note.frontmatter-fields` was written from the bundled mappings. */
   fieldsConfigured: boolean;
+  /** ZotLit's device-local "JavaScript templates" gate is on (required for the
+   *  bundled `.eta.md` templates and the JavaScript frontmatter fields). */
+  jsTemplatesEnabled: boolean;
   reloadedZotlit: boolean;
   error?: string;
 }
@@ -41,6 +44,30 @@ function bundledFrontmatterFields(): unknown[] | null {
 }
 
 /**
+ * ZotLit's "JavaScript templates" gate is a DEVICE-LOCAL setting (Obsidian's
+ * per-device local storage), NOT in data.json — same idea as Templater's
+ * trigger. Without it the bundled `.eta.md` templates and the JavaScript
+ * frontmatter fields are inert. Set the local key directly (the user opted in
+ * by installing these templates); ZotLit reads `'1'` on next load.
+ */
+const ZOTLIT_JS_TEMPLATES_KEY = 'zotlit-javascript-templates';
+
+function enableZotlitJavaScriptTemplates(app: unknown): boolean {
+  try {
+    const a = app as {
+      loadLocalStorage?: (k: string) => unknown;
+      saveLocalStorage?: (k: string, v: unknown) => void;
+    };
+    if (a.loadLocalStorage?.(ZOTLIT_JS_TEMPLATES_KEY) !== '1') {
+      a.saveLocalStorage?.(ZOTLIT_JS_TEMPLATES_KEY, '1');
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Copy the bundled ZotLit templates into `SW_ZOTLIT_FOLDER` and, when ZotLit
  * is installed, point its "Template folder" setting at that folder (reloading
  * ZotLit so it takes effect immediately).
@@ -56,6 +83,7 @@ export async function installZotlitTemplates(
     zotlitDetected: false,
     folderConfigured: false,
     fieldsConfigured: false,
+    jsTemplatesEnabled: false,
     reloadedZotlit: false,
   };
 
@@ -155,6 +183,25 @@ export async function installZotlitTemplates(
     }
   }
 
+  // Enable ZotLit's device-local "JavaScript templates" gate (see above). Write
+  // the local key so it sticks across restarts, and — when ZotLit is loaded —
+  // ask its own API to flip the live flag so the templates work immediately.
+  result.jsTemplatesEnabled = enableZotlitJavaScriptTemplates(app);
+  if (result.jsTemplatesEnabled && result.zotlitDetected) {
+    try {
+      const templateSvc =
+        (app as any).plugins?.plugins?.[ZOTLIT_PLUGIN_ID]?.services?.template;
+      if (
+        templateSvc?.setJavascriptTemplatesEnabled &&
+        !templateSvc.javascriptTemplatesEnabled
+      ) {
+        await templateSvc.setJavascriptTemplatesEnabled(true);
+      }
+    } catch {
+      /* the local key still applies on the next Obsidian load */
+    }
+  }
+
   return result;
 }
 
@@ -180,6 +227,17 @@ export async function installZotlitTemplatesWithNotice(
       lines.push(
         "ZotLit's frontmatter field mappings set (the previous settings were " +
           'backed up as data.json.scholarweft.bak).'
+      );
+    }
+    if (r.jsTemplatesEnabled) {
+      lines.push(
+        'ZotLit\'s "JavaScript templates" setting was enabled (the bundled ' +
+          'templates require it).'
+      );
+    } else {
+      lines.push(
+        'In ZotLit\'s settings, turn on "JavaScript templates" so the ' +
+          'installed templates render (and confirm its warning).'
       );
     }
     if (r.error) lines.push(r.error);
