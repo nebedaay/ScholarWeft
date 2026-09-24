@@ -1,6 +1,7 @@
 import { Notice, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { BUNDLED_ASSETS } from 'bundled:assets';
+import { recordTemplateOptIn } from './assetSetup';
 
 /**
  * Folder (vault-relative) where ScholarWeft's ZotLit import templates are
@@ -113,6 +114,8 @@ export async function installZotlitTemplates(
       );
       result.written.push(name);
     }
+    // Opted in: future plugin updates maintain these templates.
+    await recordTemplateOptIn(plugin, SW_ZOTLIT_FOLDER);
   } catch (e) {
     result.error = `Could not write templates: ${(e as Error).message}`;
     return result;
@@ -229,7 +232,98 @@ async function ensureZotlitJavaScriptTemplatesLive(
   }
 }
 
-/** Run the install and show a Notice describing what happened. */
+/**
+ * Undo `installZotlitTemplates`: remove the template folder and restore the
+ * ZotLit settings we changed — but only where they still point at OUR folder, so
+ * a choice the user has since made is never clobbered.
+ *
+ * Restores from `data.json.scholarweft.bak` (written at install) when present and
+ * unreadable otherwise, and does nothing at all if ZotLit isn't loaded.
+ */
+export async function uninstallZotlitTemplates(
+  plugin: ReferenceList
+): Promise<{ removed: boolean; reverted: boolean; error?: string }> {
+  const anyApp = plugin.app as any;
+  const adapter = plugin.app.vault.adapter;
+  const result = { removed: false, reverted: false, error: undefined as string | undefined };
+
+  // Remove our template folder.
+  try {
+    if (await adapter.exists(SW_ZOTLIT_FOLDER)) {
+      await adapter.rmdir(SW_ZOTLIT_FOLDER, true);
+      result.removed = true;
+    }
+  } catch (e) {
+    result.error = `Could not remove ${SW_ZOTLIT_FOLDER}/: ${(e as Error).message}`;
+  }
+
+  const zotlit = anyApp.plugins?.plugins?.[ZOTLIT_PLUGIN_ID];
+  // Only touch settings when ZotLit is loaded — writing its file while it is
+  // absent is how you end up with a settings file the plugin can't read.
+  if (!zotlit) return result;
+
+  const dataPath = normalizePath(
+    `${plugin.app.vault.configDir}/plugins/${ZOTLIT_PLUGIN_ID}/data.json`
+  );
+  const bakPath = `${dataPath}.scholarweft.bak`;
+  let disabled = false;
+  try {
+    await anyApp.plugins.disablePlugin(ZOTLIT_PLUGIN_ID);
+    disabled = true;
+  } catch {
+    /* proceed anyway */
+  }
+  try {
+    const raw = (await adapter.exists(dataPath)) ? await adapter.read(dataPath) : null;
+    if (!raw?.trim()) return result;
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      result.error = "ZotLit's settings file couldn't be parsed — left untouched.";
+      return result;
+    }
+
+    let reverted = false;
+    // Only revert `template.folder` when it still points at ours.
+    if (data['template.folder'] === SW_ZOTLIT_FOLDER) {
+      // Prefer the pre-install backup's value; otherwise fall back to ZotLit's
+      // default folder name.
+      let prior: unknown;
+      try {
+        if (await adapter.exists(bakPath)) {
+          prior = JSON.parse(await adapter.read(bakPath))['template.folder'];
+        }
+      } catch {
+        /* no usable backup */
+      }
+      data['template.folder'] = typeof prior === 'string' && prior ? prior : 'templates';
+      reverted = true;
+    }
+    // The frontmatter mappings are ours too; drop them so ZotLit falls back to
+    // its own defaults rather than keeping ScholarWeft's shape.
+    if (data['note.frontmatter-fields'] !== undefined) {
+      delete data['note.frontmatter-fields'];
+      reverted = true;
+    }
+    if (reverted) {
+      await adapter.write(dataPath, JSON.stringify(data, null, 2));
+      result.reverted = true;
+    }
+  } catch (e) {
+    result.error = `Could not restore ZotLit's settings: ${(e as Error).message}`;
+  } finally {
+    if (disabled) {
+      try {
+        await anyApp.plugins.enablePlugin(ZOTLIT_PLUGIN_ID);
+      } catch {
+        /* applies on next launch */
+      }
+    }
+  }
+  return result;
+}
+
 export async function installZotlitTemplatesWithNotice(
   plugin: ReferenceList
 ): Promise<void> {

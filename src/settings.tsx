@@ -1,11 +1,19 @@
-import { FuzzySuggestModal, Notice, Platform, PluginSettingTab, Setting, TFile } from 'obsidian';
+import { FuzzySuggestModal, Notice, Platform, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
 
 import { t } from './lang/helpers';
 import { findPandoc } from './bib/pandoc';
 import { getBibPath } from './bib/helpers';
 import { getZotlitLiteratureFolder, isZotLitSuggestActive } from './zotlit';
-import { installZotlitTemplatesWithNotice } from './zotlitTemplates';
-import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
+import {
+  SW_ZOTLIT_FOLDER,
+  installZotlitTemplatesWithNotice,
+  uninstallZotlitTemplates,
+} from './zotlitTemplates';
+import {
+  SW_MARKDOWN_FOLDER,
+  installTemplaterTemplatesWithNotice,
+  uninstallTemplaterTemplates,
+} from './templaterTemplates';
 import { installCompanionPluginWithNotice, enableCompanionPlugin } from './companionPlugins';
 import ReferenceList from './main';
 import ReactDOM from 'react-dom';
@@ -48,10 +56,13 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
   createNotesWithZotLit: true,
+  /** Auto-insert an item's Zotero child notes into a literature note when it is
+   *  created (by ScholarWeft or by ZotLit). See the settings interface. */
+  insertZoteroNotesOnCreate: true,
   /** Use ZotLit's configured literature-note folder for the plugin's own
    *  notes too, read live from ZotLit (so it follows a change there). When on,
    *  `literatureNoteFolder` below is ignored. */
-  useZotlitLiteratureFolder: false,
+  useZotlitLiteratureFolder: true,
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default: opening in Zotero already reveals all
    *  attachments, and the lookup costs per-citekey network time. */
@@ -173,6 +184,17 @@ export interface ReferenceListSettings {
    * plugin's own basic template is used instead.
    */
   createNotesWithZotLit?: boolean;
+  /**
+   * When true, a newly created literature note gets the item's Zotero child
+   * notes inserted automatically (into its managed "## Notes" section), so it
+   * isn't a separate step the user has to know about. Applies both when
+   * ScholarWeft creates the note and when ZotLit does (e.g. an export from the
+   * Zotero–ZotLit companion), where ScholarWeft detects the new note.
+   *
+   * Only affects notes carrying the managed marker, and inserts are idempotent
+   * (already-inserted keys are skipped).
+   */
+  insertZoteroNotesOnCreate?: boolean;
   /** Action to take when a citation is tapped on mobile (no hover available). */
   mobileClickAction?: 'show' | 'copy' | 'link';
   pullFromZotero?: boolean;
@@ -952,24 +974,47 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
     const useZotlitFolder = !!this.plugin.settings.useZotlitLiteratureFolder;
     const zotlitFolder = getZotlitLiteratureFolder(this.app);
+    const useZotlitForNotes = this.plugin.settings.createNotesWithZotLit !== false;
 
     new Setting(containerEl)
-      .setName(t("Use ZotLit's literature note folder"))
+      .setName(t('Create literature notes with ZotLit'))
       .setDesc(
         t(
-          "Use ZotLit's configured literature note folder for the plugin's own notes too, so both create notes in the same place. It is read live from ZotLit, so it follows the folder if ZotLit's setting changes. When on, the folder below is ignored." +
-            (useZotlitFolder
-              ? ` ZotLit's folder is currently: ${zotlitFolder || '(not set)'}.`
-              : '')
+          'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.'
         )
       )
       .addToggle((toggle) =>
-        toggle.setValue(useZotlitFolder).onChange((value) => {
-          this.plugin.settings.useZotlitLiteratureFolder = value;
-          this.plugin.saveSettings();
-          this.display();
-        })
+        toggle
+          .setValue(useZotlitForNotes)
+          .onChange((value) => {
+            this.plugin.settings.createNotesWithZotLit = value;
+            // Creating notes with ZotLit but storing them elsewhere makes little
+            // sense, so keep the two in step by default.
+            if (value) this.plugin.settings.useZotlitLiteratureFolder = true;
+            this.plugin.saveSettings();
+            this.display();
+          })
       );
+
+    if (useZotlitForNotes) {
+      new Setting(containerEl)
+        .setName(t("Use ZotLit's literature note folder"))
+        .setDesc(
+          t(
+            "Use ZotLit's configured literature note folder for the plugin's own notes too, so both create notes in the same place. It is read live from ZotLit, so it follows the folder if ZotLit's setting changes." +
+              (useZotlitFolder
+                ? ` ZotLit's folder is currently: ${zotlitFolder || '(not set)'}.`
+                : '')
+          )
+        )
+        .addToggle((toggle) =>
+          toggle.setValue(useZotlitFolder).onChange((value) => {
+            this.plugin.settings.useZotlitLiteratureFolder = value;
+            this.plugin.saveSettings();
+            this.display();
+          })
+        );
+    }
 
     if (!useZotlitFolder) {
       new Setting(containerEl)
@@ -992,17 +1037,19 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName(t('Create literature notes with ZotLit'))
+      .setName(
+        t('If a Zotero reference contains notes, insert them into all literature notes created.')
+      )
       .setDesc(
         t(
-          'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.'
+          'Whenever a literature note is created — by ScholarWeft or by ZotLit (for example an export from the Zotero–ZotLit companion) — insert the Zotero item\'s child notes into the note\'s "Notes" section automatically, instead of leaving it as a separate step. Notes that already contain them are left alone; you can still re-run "Insert Zotero notes into literature notes (vault)" at any time.'
         )
       )
       .addToggle((toggle) =>
         toggle
-          .setValue(this.plugin.settings.createNotesWithZotLit !== false)
+          .setValue(this.plugin.settings.insertZoteroNotesOnCreate !== false)
           .onChange((value) => {
-            this.plugin.settings.createNotesWithZotLit = value;
+            this.plugin.settings.insertZoteroNotesOnCreate = value;
             this.plugin.saveSettings();
           })
       );
@@ -1015,10 +1062,25 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         readyDesc:
           'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
         actionLabel: 'Install templates',
+        reinstallLabel: 'Reinstall templates',
+        isInstalled: () => this.templatesInstalled(SW_ZOTLIT_FOLDER),
         hint:
           "ZotLit won't enable, or errors when you turn it on? Your Obsidian installer is probably older than the app — the app updates itself, but the installer only updates when you reinstall from a fresh download. Check Settings → About → Installer version, then download the latest installer from obsidian.md/download and reinstall Obsidian; your vault and settings are untouched.",
         run: async () => {
           await installZotlitTemplatesWithNotice(this.plugin);
+        },
+        uninstall: async () => {
+          const r = await uninstallZotlitTemplates(this.plugin);
+          if (r.error) new Notice(`ScholarWeft: ${r.error}`, 8000);
+          else {
+            new Notice(
+              r.reverted
+                ? "ScholarWeft: removed the ZotLit templates and restored ZotLit's own settings."
+                : 'ScholarWeft: removed the ZotLit templates.' +
+                    (r.reverted ? '' : " (ZotLit's settings were left as they are.)"),
+              8000
+            );
+          }
         },
       });
       this.renderCompanionSetting(containerEl, {
@@ -1028,10 +1090,25 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         readyDesc:
           'Installs the Basic note template and sets Templater to apply it by default to every note you manually create in your vault. The template adds four properties at the top of each note that help you situate and connect all notes in your vault: created date, larger category ("up"), related notes, and alternative names ("aliases"). It lives in its own folder ("sw-markdown-templates/"), so your own templates and other Templater rules are left untouched. If new notes still start empty, open Templater\'s settings, turn on "Trigger Templater on new file creation", and confirm its warning.',
         actionLabel: 'Install and set up',
+        reinstallLabel: 'Reinstall and set up',
+        isInstalled: () => this.templatesInstalled(SW_MARKDOWN_FOLDER),
         openSettingsId: 'templater-obsidian',
         openSettingsLabel: 'Open Templater settings',
         run: async () => {
           await installTemplaterTemplatesWithNotice(this.plugin);
+        },
+        uninstall: async () => {
+          const r = await uninstallTemplaterTemplates(this.plugin);
+          if (r.error) new Notice(`ScholarWeft: ${r.error}`, 8000);
+          else {
+            const extra = r.restoredRule
+              ? ` Your own "/" template rule (${r.restoredRule}) was restored.`
+              : '';
+            new Notice(
+              `ScholarWeft: removed the Basic note template.${extra}`,
+              8000
+            );
+          }
         },
       });
     }
@@ -1043,6 +1120,17 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
    * (run the ScholarWeft action). Installing fetches the plugin's stable
    * GitHub release; Obsidian then treats it as a normal community plugin.
    */
+  /**
+   * Are a template folder's files already present in the vault? Used to label
+   * the install buttons "Reinstall" so a user can tell a previous run worked.
+   * Any markdown file counts — the folder existing with content is the signal.
+   */
+  private templatesInstalled(folder: string): boolean {
+    const dir = this.app.vault.getAbstractFileByPath(folder);
+    if (!(dir instanceof TFolder)) return false;
+    return dir.children.some((c) => c instanceof TFile && c.extension === 'md');
+  }
+
   private renderCompanionSetting(
     containerEl: HTMLElement,
     cfg: {
@@ -1051,7 +1139,19 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       name: string;
       readyDesc: string;
       actionLabel: string;
+      /** Shown instead of `actionLabel` when the output already exists, so a
+       *  user can tell a previous install succeeded rather than re-running it
+       *  out of doubt. */
+      reinstallLabel?: string;
+      /** Returns true when this setting's output is already present. */
+      isInstalled?: () => boolean;
       run: () => Promise<void>;
+      /** When provided, the action becomes a CHECKBOX with these semantics:
+       *  checked = install and keep up to date; unchecked = remove what we
+       *  installed and restore the companion's own settings. */
+      uninstall?: () => Promise<void>;
+      /** Checkbox label when the option is off (defaults to the setting name). */
+      uncheckedLabel?: string;
       /** Optional: id of a settings tab to offer jumping to (e.g. a step the
        *  companion plugin gates behind its own confirmation). */
       openSettingsId?: string;
@@ -1123,15 +1223,53 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
     } else {
       setting.setDesc(t(cfg.readyDesc));
+      if (cfg.uninstall) {
+        // Checkbox semantics: the box IS the opt-in. Checked installs and keeps
+        // the output in step with plugin updates; unchecking removes what we
+        // added and restores the companion's own settings, so there is a real,
+        // discoverable undo rather than a one-way button.
+        let on = false;
+        try {
+          on = !!cfg.isInstalled?.();
+        } catch {
+          /* treat as off */
+        }
+        setting.addToggle((toggle) =>
+          toggle.setValue(on).onChange(async (value) => {
+            toggle.setDisabled(true);
+            try {
+              if (value) await cfg.run();
+              else await cfg.uninstall!();
+            } finally {
+              toggle.setDisabled(false);
+              rerender();
+            }
+          })
+        );
+        return;
+      }
+      // "Reinstall" when the output already exists, so a user who ran this
+      // before can see it took effect instead of re-running it to be sure.
+      let alreadyDone = false;
+      try {
+        alreadyDone = !!cfg.isInstalled?.();
+      } catch {
+        /* treat as not installed */
+      }
       setting.addButton((btn) =>
         btn
-          .setButtonText(t(cfg.actionLabel))
+          .setButtonText(
+            alreadyDone
+              ? t(cfg.reinstallLabel ?? 'Reinstall')
+              : t(cfg.actionLabel)
+          )
           .onClick(async () => {
             btn.setDisabled(true);
             try {
               await cfg.run();
             } finally {
               btn.setDisabled(false);
+              rerender();
             }
           })
       );

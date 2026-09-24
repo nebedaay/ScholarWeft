@@ -2,6 +2,7 @@ import { Notice, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { TemplaterRuleModal } from './modals/templaterRuleModal';
 import { BUNDLED_ASSETS } from 'bundled:assets';
+import { recordTemplateOptIn } from './assetSetup';
 
 /**
  * Folder (vault-relative) where ScholarWeft's Basic note template is installed.
@@ -123,6 +124,8 @@ export async function installTemplaterTemplates(
       );
       result.written.push(name);
     }
+    // Opted in: future plugin updates maintain these templates.
+    await recordTemplateOptIn(plugin, SW_MARKDOWN_FOLDER);
   } catch (e) {
     result.error = `Could not write templates: ${(e as Error).message}`;
     return result;
@@ -268,4 +271,113 @@ export async function installTemplaterTemplatesWithNotice(
     );
   }
   new Notice(`ScholarWeft: ${lines.join('\n')}`, 9000);
+}
+
+/**
+ * Undo `installTemplaterTemplates`: remove our template folder, drop our root
+ * rule, and — if the install REPLACED a user's own root rule — restore theirs
+ * from the pre-install backup.
+ *
+ * Reverts only our own changes: `trigger_on_file_creation` is left on if the
+ * user had already enabled it, and a rule the user set later is untouched.
+ */
+export async function uninstallTemplaterTemplates(
+  plugin: ReferenceList
+): Promise<{
+  removed: boolean;
+  reverted: boolean;
+  restoredRule?: string;
+  error?: string;
+}> {
+  const anyApp = plugin.app as any;
+  const adapter = plugin.app.vault.adapter;
+  const result: {
+    removed: boolean;
+    reverted: boolean;
+    restoredRule?: string;
+    error?: string;
+  } = { removed: false, reverted: false };
+
+  try {
+    if (await adapter.exists(SW_MARKDOWN_FOLDER)) {
+      await adapter.rmdir(SW_MARKDOWN_FOLDER, true);
+      result.removed = true;
+    }
+  } catch (e) {
+    result.error = `Could not remove ${SW_MARKDOWN_FOLDER}/: ${(e as Error).message}`;
+  }
+
+  const templater = anyApp.plugins?.plugins?.[TEMPLATER_PLUGIN_ID];
+  if (!templater) return result;
+
+  const dataPath = normalizePath(
+    `${plugin.app.vault.configDir}/plugins/${TEMPLATER_PLUGIN_ID}/data.json`
+  );
+  const bakPath = `${dataPath}.scholarweft.bak`;
+  let disabled = false;
+  try {
+    await anyApp.plugins.disablePlugin(TEMPLATER_PLUGIN_ID);
+    disabled = true;
+  } catch {
+    /* proceed anyway */
+  }
+  try {
+    const raw = (await adapter.exists(dataPath)) ? await adapter.read(dataPath) : null;
+    if (!raw?.trim()) return result;
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      result.error = "Templater's settings file couldn't be parsed — left untouched.";
+      return result;
+    }
+
+    let changed = false;
+    const rules: unknown[] = Array.isArray(data['folder_templates'])
+      ? (data['folder_templates'] as unknown[]).slice()
+      : [];
+    const withoutOurs = rules.filter((r) => !isOurRule(r));
+    if (withoutOurs.length !== rules.length) changed = true;
+
+    // Restore a root rule we displaced — only if the user has no root rule now.
+    const hasRootNow = withoutOurs.some((r) => isRootRule(r));
+    if (!hasRootNow && (await adapter.exists(bakPath))) {
+      try {
+        const prior = JSON.parse(await adapter.read(bakPath));
+        const priorRules: unknown[] = Array.isArray(prior?.['folder_templates'])
+          ? prior['folder_templates']
+          : [];
+        const priorRoot = priorRules.find((r) => isRootRule(r) && !isOurRule(r));
+        if (priorRoot) {
+          withoutOurs.push(priorRoot);
+          result.restoredRule = String((priorRoot as any).template ?? '');
+          changed = true;
+        }
+        // Restore the trigger only if the backup shows it was off before.
+        if (prior?.['trigger_on_file_creation'] !== true) {
+          data['trigger_on_file_creation'] = false;
+          changed = true;
+        }
+      } catch {
+        /* no usable backup */
+      }
+    }
+
+    data['folder_templates'] = withoutOurs;
+    if (changed) {
+      await adapter.write(dataPath, JSON.stringify(data, null, 2));
+      result.reverted = true;
+    }
+  } catch (e) {
+    result.error = `Could not restore Templater's settings: ${(e as Error).message}`;
+  } finally {
+    if (disabled) {
+      try {
+        await anyApp.plugins.enablePlugin(TEMPLATER_PLUGIN_ID);
+      } catch {
+        /* applies on next launch */
+      }
+    }
+  }
+  return result;
 }
