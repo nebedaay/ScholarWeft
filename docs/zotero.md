@@ -14,6 +14,14 @@ Zotero is optional if you keep your references in a bibliography file: those cit
 
 **Pull from Zotero** controls whether Zotero entries are loaded at all (leave it on to include them).
 
+## If ScholarWeft can't connect
+
+Three causes, in order of likelihood:
+
+1. **Zotero isn't running.** Start it. ScholarWeft shows a banner and a status-bar message while it's waiting, and loads the library on its own as soon as Zotero appears — no manual refresh needed.
+2. **Another vault is connected to Zotero.** Zotero accepts **one local connection at a time**, so a second vault (or a second Obsidian window on a different vault) can't reach it while another holds the connection. **Close the other vault** and click **Retry**. If you work across several vaults, close whichever one is holding the connection; you don't need to give the others up.
+3. **Zotero's local connection is switched off.** In Zotero: Settings → **Advanced** → tick **“Allow other applications on this computer to communicate with Zotero”**.
+
 ## Port
 
 The default port is **23119**. Change **Zotero port** if you use Juris-M (24119) or a custom port.

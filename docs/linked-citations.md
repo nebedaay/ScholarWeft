@@ -13,11 +13,11 @@ None of this needs external tools — linked citations work without Pandoc or Zo
 | Wikilink form           | Rendered as                    | Pandoc equivalent           |
 | ----------------------- | ------------------------------ | --------------------------- |
 | `[[@key]]`              | (Author Year)                  | `[@key]`                    |
-| `[[@key\|@]]`           | (Author Year)                  | `[@key]`                    |
-| `[[@key\|@ -]]`         | Author (Year)                  | `@key` (narrative)          |
-| `[[@key\|-@]]`          | (Year)                         | `[-@key]` (suppress author) |
-| `[[@key\|see @, p. 6]]` | (see Author Year, p. 6)        | `[see @key, p. 6]`          |
-| `[[@key\|-@, p. 6]]`    | (Year, p. 6)                   | `[-@key, p. 6]`             |
+| <code>[[@key&#124;@]]</code>           | (Author Year)                  | `[@key]`                    |
+| <code>[[@key&#124;@ -]]</code>         | Author (Year)                  | `@key` (narrative)          |
+| <code>[[@key&#124;-@]]</code>          | (Year)                         | `[-@key]` (suppress author) |
+| <code>[[@key&#124;see @, p. 6]]</code> | (see Author Year, p. 6)        | `[see @key, p. 6]`          |
+| <code>[[@key&#124;-@, p. 6]]</code>    | (Year, p. 6)                   | `[-@key, p. 6]`             |
 | `[ [[@a]]; [[@b]] ]`    | (Author A Year; Author B Year) | `[@a; @b]` (multi-work)     |
 
 Inside an alias, `@` is a proxy for the link’s own citekey. The convert commands translate between linked and pandoc forms losslessly.
@@ -26,16 +26,16 @@ See the [pandoc citation syntax](https://pandoc.org/demo/example33/8.20-citation
 
 ## Inserting full references
 
-For reading lists and syllabi you can insert the formatted bibliography entry
+For reading lists and syllabi, you can insert the formatted bibliography entry
 itself, rather than an in-text citation, by using the alias `reference` (or the
 abbreviation `ref`; both are case-insensitive):
 
 | Wikilink form                          | Rendered as                            |
 | -------------------------------------- | -------------------------------------- |
-| `[[@key\|reference]]`                  | the full entry for `@key`              |
-| `[[@key\|ref]]`                        | same                                   |
-| `[ [[@a\|reference]] [[@b]] [[@c]] ]`  | the three entries, one below the other |
-| `⟦[[@a\|reference]]; [[@b]]⟧`          | the two entries, one below the other   |
+| <code>[[@key&#124;reference]]</code>                  | the full entry for `@key`              |
+| <code>[[@key&#124;ref]]</code>                        | same                                   |
+| <code>[ [[@a&#124;reference]] [[@b]] [[@c]] ]</code>  | the three entries, one below the other |
+| <code>⟦[[@a&#124;reference]]; [[@b]]⟧</code>          | the two entries, one below the other   |
 
 A container is a list of references when **any** member uses the `reference`/`ref`
 alias — a list is either all citations or all references, so only one member

@@ -4,6 +4,33 @@ This page walks through **everything**, in order, with the exact menu items and 
 
 ## The easy way: run the setup script
 
+### Two things to check first
+
+Do these **before** the script. Both are things the script can't do for you, and together they cause almost every "it didn't work" report.
+
+#### 1. macOS only: let your terminal see your vault
+
+macOS blocks apps from folders such as **Documents**, **Desktop**, **Downloads**, and **iCloud Drive** until you allow it — and a fresh terminal has access to none of them. Since that's where most vaults live, the script can't read or write your vault until you grant access:
+
+1. Open **System Settings → Privacy & Security → Full Disk Access**.
+2. Turn on your terminal app — **Terminal**, **iTerm**, **Warp**, or **Visual Studio Code**, whichever you're using. If it isn't listed, click **+**, go to **Applications → Utilities**, and add it.
+3. **Quit the terminal completely** (`Cmd` + `Q`) and reopen it — access only applies to a newly started app; closing the window is not enough.
+
+(Windows and Linux: skip this step.)
+
+#### 2. Everyone: update Obsidian's *installer* if it's behind
+
+Obsidian has **two** version numbers, and the one that matters here isn't the one that updates itself:
+
+- the **app** version updates automatically, and
+- the **installer** version only changes when you download Obsidian again and replace it.
+
+Plugins — **ZotLit especially** — can refuse to load, or error when you enable them, on an old installer. The script installs ZotLit's files, but a stale installer stops them from working, which looks like a script failure.
+
+**Check it:** open Obsidian → **Settings → About** (or run **Show debug info** from the command palette) and read the **Installer version**. If it's behind the app version, download the latest from <https://obsidian.md/download> and replace your current copy (on macOS, drag the new **Obsidian** into **Applications** and choose **Replace**). Your vaults, plugins, and settings are untouched.
+
+### What the script does
+
 **The script does all of the following steps for you, except those you’ve already done or opt out of**:
 
 - installs/updates the Obsidian and Zotero apps
@@ -85,9 +112,13 @@ Download: <https://www.zotero.org/download/> — install the **Zotero** app (not
 4. Near the bottom, tick **“Allow other applications on this computer to communicate with Zotero”** (some versions say *“…to connect to Zotero”*).
 5. Close the settings window. Leave Zotero **running** whenever you use ScholarWeft.
 
-> If you ever see the notice **“Cannot connect to Zotero”** in ScholarWeft's settings, this checkbox (plus “is Zotero running?”) is almost always the reason. (The [setup script](#the-easy-way-run-the-setup-script) can tick it for you when Zotero is closed.)
-> 
-> Another reason may be that another vault is already connecting to Zotero. If so, close the other vault. **Only one vault can connect to Zotero at a time.**
+> If you ever see the notice **“Cannot connect to Zotero”** in ScholarWeft's settings, these are the three usual reasons, in order:
+>
+> 1. **Zotero isn't running.** Start it (see the ScholarWeft banner or status-bar message when this is the cause).
+> 2. **Another vault is already connected to Zotero.** Zotero accepts one local connection at a time, so a second vault — or a second Obsidian window on another vault — can't reach it while the first holds the connection. **Close the other vault(s)** and click Retry. If you work in several vaults, you don't need to shut them all down permanently — just switch the connection by closing the one that's using it.
+> 3. **The checkbox above is off** — re-tick it.
+>
+> (The [setup script](#the-easy-way-run-the-setup-script) can tick the checkbox for you when Zotero is closed.)
 
 ---
 
@@ -286,7 +317,7 @@ Open **Settings → ScholarWeft**.
 
 ## 8. Check that it works
 
-1. Make sure **Zotero is running**.
+1. Make sure **Zotero is running**, and that **no other vault is connected to it** — Zotero allows one local connection at a time, so if you have another vault open that uses Zotero, close it first.
 2. In Obsidian, make a new note and type `[[@` — you should see citekey suggestions from Zotero's **My Library**. Pick one and press Enter.
 3. Type `[[@` a few letters again and select a reference; the citation should turn into *(Author Year)* and link to a literature note.
 4. Open **Settings → ScholarWeft → Bibliography** — it should say connected, not “Cannot connect to Zotero”.
@@ -299,11 +330,15 @@ Open **Settings → ScholarWeft**.
 
 **A plugin (e.g. ZotLit) won't enable, or errors when you enable it.** Your Obsidian **installer** is probably older than the app. The app updates itself, but the installer only updates when you reinstall from a fresh download. Check **Settings → About** (or run **Show debug info**) for the **Installer version**, then download the latest installer from <https://obsidian.md/download> and reinstall Obsidian — your vault and settings are untouched.
 
-**“Cannot connect to Zotero.”** Open Zotero → Settings (**Zotero → Settings…** on macOS, **Edit → Settings…** on Windows/Linux) → **Advanced** → tick **“Allow other applications on this computer to communicate with Zotero”**. Make sure Zotero itself is running, then click **Retry**.
+**“Cannot connect to Zotero.”** Three usual causes, in order:
+
+1. **Zotero isn't running** — start it. ScholarWeft shows a banner and a status-bar message when this is the cause, and connects on its own once Zotero appears.
+2. **Another vault is already connected to Zotero** — only one vault can connect at a time, so **close the other vault** (or the other Obsidian window) and click **Retry**. If you use several vaults, close the one holding the connection; you don't need to keep them all closed.
+3. **The connection checkbox is off** — open Zotero → Settings (**Zotero → Settings…** on macOS, **Edit → Settings…** on Windows/Linux) → **Advanced** → tick **“Allow other applications on this computer to communicate with Zotero”**, then click **Retry**.
 
 **Zotero 10: features still report “Cannot connect”.** Zotero 10 added a security check that silently drops local requests it thinks come from a browser. ScholarWeft 0.2.5+ works with this automatically; on older versions, update ScholarWeft.
 
-**No citekey suggestions when I type `[[@`.** You need stable citekeys. Install **Better BibTeX** (Step 3) and let it generate them; make sure Zotero is running and **My Library** is ticked under Settings → ScholarWeft → Bibliography.
+**No citekey suggestions when I type `[[@`.** You need stable citekeys. Install **Better BibTeX** (Step 3) and let it generate them; make sure Zotero is running, that **no other vault is connected to it** (one connection at a time), and that **My Library** is ticked under Settings → ScholarWeft → Bibliography.
 
 **Pandoc / Python reported missing.** Install them (Step 6) and set **Path to Pandoc** / **Path to Python 3** in Settings → ScholarWeft → Document import/export. On Apple-silicon Macs Pandoc is usually at `/opt/homebrew/bin/pandoc`; on Windows, check that “Add python.exe to PATH” was ticked when installing Python.
 

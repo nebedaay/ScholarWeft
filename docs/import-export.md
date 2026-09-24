@@ -135,7 +135,7 @@ Lookup order: your configured templates directory → `<vault>/Export Templates/
 | `shorttitle` | Even-page header (falls back to `title` before `:`, then the filename) |
 | `abstract` | Cover/near-cover abstract block |
 | `note` | Cover/near-cover note block |
-| `author` | Author — a string, a `- Name` list (joined with `, `), or a `\|-` block scalar. The title block prints the **whole block** (line breaks preserved: name / affiliation / date); the running header ("Author — Short Title") uses only its **first line** |
+| `author` | Author — a string, a `- Name` list (joined with `, `), or a <code>&#124;-</code> block scalar. The title block prints the **whole block** (line breaks preserved: name / affiliation / date); the running header ("Author — Short Title") uses only its **first line** |
 | `csl` / `citation-style` | Citation style for this note (a Zotero style name, `.csl` path, or URL) |
 | `lang` / `language` | Document language (BCP-47, e.g. `en-US`, `de-DE`, `fr-FR`, `ar`). Sets the LaTeX/babel main language — and therefore **hyphenation** for justified text — and the document language for DOCX/ODT. Defaults to the **Default document language** setting (initially `en-US`) when absent |
 | `bibliography` | Override the bibliography source(s) for this note |

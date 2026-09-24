@@ -347,6 +347,7 @@ body {
   display: inline-block;
   vertical-align: top;
   max-width: 100%;
+  
   margin: 0;
   /* Inherit the note's own text size (not the sidebar's --sw-font-size); the
      entries then render slightly smaller below. */
@@ -366,7 +367,7 @@ p.sw-reference-paragraph {
   /* Slightly smaller than the surrounding note text, with the body of each
      entry indented .75cm and the first line hanging back by the same amount. */
   font-size: 0.95em;
-  padding-left: 0.75cm;
+  margin-left: 1.25cm;
   text-indent: -0.75cm;
 }
 .sw-reference.is-list .sw-reference-entry + .sw-reference-entry {
@@ -969,9 +970,68 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   }
 }
 
+/* Persistent "Zotero isn't running" banner. Non-modal on purpose: Zotero may
+   stay closed for a long time and a modal would block the app. */
+.sw-zotero-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 0;
+  background-color: var(--background-modifier-error);
+  color: var(--text-on-accent);
+  font-size: var(--font-ui-small);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.sw-zotero-alert-text {
+  flex: 1 1 auto;
+}
+
+.sw-zotero-alert-icon,
+.sw-zotero-alert-dismiss {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.sw-zotero-alert-retry {
+  flex: 0 0 auto;
+}
+
+.sw-modal-muted {
+  color: var(--text-muted);
+}
+
+.sw-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .sw-status-icon {
   --icon-size: var(--icon-s);
   --icon-stroke: var(--icon-s-stroke-width);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Loading/progress text beside the status-bar icon. Hidden by default so the
+   icon looks unchanged when idle; shown for the whole first-run load (and while
+   waiting for Zotero), where a Notice would be missed or dismissed. */
+.sw-status-text {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  max-width: 22em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sw-status-text.sw-status-hidden {
+  display: none;
 }
 
 .sw-status-icon.is-loading svg {
