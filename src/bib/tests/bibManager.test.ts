@@ -361,6 +361,57 @@ describe('searchZoteroBBT()', () => {
   });
 });
 
+describe('graceful degradation without Zotero / .bib / Pandoc', () => {
+  it('loadGlobalZBib() is a no-op when no Zotero groups are configured', async () => {
+    const { manager } = makeManager([], {
+      pullFromZotero: true,
+      zoteroGroups: [],
+    });
+    const outcome = await manager.loadGlobalZBib(false);
+    expect(outcome.attempted).toBe(false);
+    expect(manager.bibCache.size).toBe(0);
+  });
+
+  it('the native adapter returns no library when Zotero is not running', async () => {
+    const { manager } = makeManager([], {
+      pullFromZotero: true,
+      useNativeZoteroAPI: true,
+      zoteroGroups: [{ id: 1, name: 'My Library' }],
+    });
+    const adapter = manager.getZoteroAdapter();
+    const res = await adapter.getBib('', 1, true);
+    expect(res.list).toBeNull();
+  });
+
+  it('searchZoteroBBT returns [] (not a throw) when the request fails', async () => {
+    const { requestUrl } = require('obsidian');
+    (requestUrl as jest.Mock).mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+    const out = await searchZoteroBBT(
+      '23119',
+      [['citationKey', 'contains', 'anything']],
+      [1],
+      20
+    );
+    expect(out).toEqual([]);
+  });
+
+  it('renders nothing (and records the keys) when there is no library at all', async () => {
+    const { manager } = makeManager([]);
+    manager.styleCache.set(DEFAULT_STYLE, styles[DEFAULT_STYLE]);
+    manager.langCache.set('en-US', locales['en-US']);
+    await manager.buildGlobalEngine();
+
+    const file = makeFile('notes/nolib.md');
+    const bib = await manager.getReferenceList(file, 'Nothing [@nobody1999].');
+
+    expect(bib).toBeNull();
+    expect(manager.fileCache.get(file)!.unresolvedKeys).toEqual(
+      new Set(['nobody1999'])
+    );
+  });
+});
+
 describe('BibManager CSL rendering pipeline', () => {
   const entries: PartialCSLEntry[] = [
     {
@@ -531,6 +582,65 @@ describe('BibManager CSL rendering pipeline', () => {
     );
     expect(bib2.textContent).toContain('A Test Book');
     expect((manager as any).renderedCache.has(file.path)).toBe(true);
+  });
+
+  it('does NOT treat an unreachable Zotero as a loaded library', async () => {
+    // The original bug: Zotero down → 0 entries → declared "ready", so the
+    // on-demand render path was disarmed and citations stayed unformatted.
+    const { manager } = makeManager([], {
+      pullFromZotero: true,
+      useNativeZoteroAPI: true,
+      zoteroGroups: [{ id: 1, name: 'My Library' }],
+    });
+
+    let engineBuilt = false;
+    (manager as any).buildGlobalEngine = async () => {
+      engineBuilt = true;
+    };
+    // Zotero is down: the adapter reports it as not running.
+    (manager as any).getZoteroAdapter = () =>
+      ({
+        isRunning: async () => false,
+        getBib: async () => ({ list: null, version: 0 }),
+      } as any);
+
+    // One attempt only, so the test doesn't wait on the backoff timers.
+    await manager.loadAllSources({ fromCache: true, maxRetries: 0 });
+
+    // The library is still considered loading, not ready.
+    expect(manager.isBackendLoading).toBe(true);
+    expect(manager.initPromise.settled).toBe(false);
+
+    // And the promise really is still pending until a load succeeds.
+    let resolved = false;
+    void manager.initPromise.promise.then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(engineBuilt).toBe(false);
+  });
+
+  it('marks the library ready once entries actually load', async () => {
+    const { manager } = makeManager([], {
+      pullFromZotero: true,
+      useNativeZoteroAPI: true,
+      zoteroGroups: [{ id: 1, name: 'My Library' }],
+    });
+    (manager as any).getZoteroAdapter = () =>
+      ({
+        isRunning: async () => true,
+        getBib: async () => ({
+          list: [{ id: 'smith2020', title: 'A Test Article' }],
+          version: 1,
+        }),
+      } as any);
+
+    await manager.loadAllSources({ fromCache: true, maxRetries: 0 });
+
+    expect(manager.bibCache.has('smith2020')).toBe(true);
+    expect(manager.isBackendLoading).toBe(false);
+    expect(manager.initPromise.settled).toBe(true);
   });
 
   it('invalidates the persistent cache when note content changes', async () => {

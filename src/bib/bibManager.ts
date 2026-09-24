@@ -27,7 +27,7 @@ import {
   getCitationSegments,
   getCitations,
 } from 'src/parser/parser';
-import { FileSystemAdapter, Keymap, MarkdownView, Menu, TFile, TFolder, debounce, normalizePath, setIcon } from 'obsidian';
+import { App, FileSystemAdapter, Keymap, MarkdownView, Menu, Modal, Notice, TFile, TFolder, debounce, normalizePath, setIcon } from 'obsidian';
 import {
   createLitNoteViaZotLit,
   createLitNotesViaZotLitBulk,
@@ -35,6 +35,7 @@ import {
   getZotlitLiteratureFolder,
 } from 'src/zotlit';
 import { cite } from 'src/parser/citeproc';
+import { insertZoteroNotesForFiles } from 'src/zoteroNotes';
 import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
@@ -290,9 +291,139 @@ function normalizeLocales(locales: string[]) {
   return Object.keys(obj);
 }
 
+/** Outcome of a Zotero library load, so callers can tell an empty library from
+ *  an unreachable Zotero (see loadGlobalZBib). */
+export interface ZoteroLoadOutcome {
+  /** Entries merged into bibCache by this load. */
+  entries: number;
+  /** Whether a Zotero source was configured and actually attempted. */
+  attempted: boolean;
+  /** Zotero was unreachable, or a group fetch threw. */
+  unreachable: boolean;
+}
+
 /** Default CSL style URL, used when no style is configured. */
 const DEFAULT_CSL_STYLE =
   'https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl';
+
+/**
+ * A persistent, dismissible banner warning that Zotero can't be reached.
+ *
+ * Deliberately NOT a modal alert: Zotero may stay closed for a long time, and a
+ * modal would block the whole app until it's dismissed. This sits at the top of
+ * the workspace, is impossible to miss, offers a Retry button, and goes away by
+ * itself once Zotero answers — so the user isn't left reading the console to
+ * discover why nothing formats.
+ */
+class ZoteroOfflineAlert {
+  private el: HTMLElement | null = null;
+  constructor(
+    private readonly app: App,
+    private readonly onRetry: () => void
+  ) {}
+
+  show(onRetryExternal?: () => void) {
+    if (this.el) return;
+    // Obsidian's workspace may not be mounted yet (early startup), and on mobile
+    // the DOM helpers differ. Fail quietly rather than throw during load.
+    const anchor = this.resolveAnchor();
+    if (!anchor) return;
+
+    const el = createDiv({ cls: 'sw-zotero-alert' });
+    const icon = el.createSpan({ cls: 'sw-zotero-alert-icon' });
+    setIcon(icon, 'lucide-plug-zap');
+    el.createSpan({
+      cls: 'sw-zotero-alert-text',
+      text:
+        'ScholarWeft: can’t connect to Zotero. Make sure Zotero is open, and that ' +
+        'no other vault is connected to it (only one vault can connect at a ' +
+        'time). Citations format automatically once it connects.',
+    });
+    const retry = el.createEl('button', { cls: 'sw-zotero-alert-retry', text: 'Retry now' });
+    retry.onClickEvent(() => (onRetryExternal ?? this.onRetry)());
+    const dismiss = el.createSpan({ cls: 'sw-zotero-alert-dismiss clickable-icon' });
+    setIcon(dismiss, 'lucide-x');
+    dismiss.setAttr('aria-label', 'Dismiss');
+    dismiss.onClickEvent(() => this.hide());
+
+    anchor.prepend(el);
+    this.el = el;
+  }
+
+  private resolveAnchor(): HTMLElement | null {
+    try {
+      const container = this.app?.workspace?.containerEl;
+      if (!container) return null;
+      return (
+        (container.querySelector('.workspace-split.mod-vertical') as HTMLElement) ??
+        container
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  hide() {
+    this.el?.remove();
+    this.el = null;
+  }
+
+  get visible() {
+    return !!this.el;
+  }
+}
+
+  /**
+ * Ask before substituting ScholarWeft's own template when a ZotLit import
+ * fails. Defaults to NOT substituting, because someone who enabled "create
+ * notes with ZotLit" wants ZotLit's note shape; most would rather fix Zotero
+ * and retry than get a note they didn't ask for.
+ */
+function promptZotLitFallback(reason?: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(v);
+    };
+    class Prompt extends Modal {
+      onOpen() {
+        this.titleEl.setText('ZotLit could not create this note');
+        this.contentEl.createEl('p', {
+          text: reason ?? 'ZotLit could not create the note for this item.',
+        });
+        this.contentEl.createEl('p', {
+          cls: 'sw-modal-muted',
+          text:
+            'You can wait until ZotLit can create it (its steps are usually ' +
+            'fixing Zotero or trying again), or create a simpler note now using ' +
+            "ScholarWeft's built-in template.",
+        });
+        const row = this.contentEl.createDiv({ cls: 'sw-modal-buttons' });
+        const cancel = row.createEl('button', { text: 'Wait (do nothing)' });
+        cancel.onClickEvent(() => {
+          done(false);
+          this.close();
+        });
+        const useFallback = row.createEl('button', {
+          cls: 'mod-warning',
+          text: "Use ScholarWeft's default template",
+        });
+        useFallback.onClickEvent(() => {
+          done(true);
+          this.close();
+        });
+        cancel.focus();
+      }
+      onClose() {
+        this.contentEl.empty();
+        done(false); // closing = don't substitute
+      }
+    }
+    new Prompt(app).open();
+  });
+}
 
 export class BibManager {
   plugin: ReferenceList;
@@ -371,6 +502,11 @@ export class BibManager {
    *  retried once after a delay instead of leaving a partial library in place
    *  until the next restart. */
   private _zoteroRetryScheduled = false;
+
+/** Set while a background "is Zotero back yet?" probe is pending. */
+  private _zoteroRecoveryScheduled = false;
+  /** Persistent "Zotero isn't running" banner (created lazily). */
+  private _zoteroAlert: ZoteroOfflineAlert | null = null;
 
   /** True while the initial full load (including the whole Zotero library) is
    *  still in progress. While set, a note's own cited keys are fetched on
@@ -453,24 +589,112 @@ export class BibManager {
     this.plugin = null;
   }
 
-  async reinit(clearBibData: boolean) {
+  /**
+   * Load every configured source into bibCache and build the CSL engine.
+   *
+   * This is the ONE load routine, used by both startup and `reinit()` (the
+   * "Refresh bibliography" button) so the two can't diverge — a divergence is
+   * what let a failed first load look identical to a successful empty one.
+   *
+   * When Zotero is unreachable or returns nothing, the library is NOT treated
+   * as loaded: `initPromise` stays pending so note renders keep using the
+   * on-demand priority fetch and live search, and we keep retrying with
+   * backoff until entries arrive. Nothing else tells the user, so the retry is
+   * what makes "open Obsidian, then start Zotero" work without a manual
+   * refresh.
+   *
+   * `onStatus` reports human-readable progress for the caller's Notice.
+   */
+  async loadAllSources(opts: {
+    fromCache?: boolean;
+    onStatus?: (message: string) => void;
+    /** Retry abandoned after this many consecutive empty/refused attempts. */
+    maxRetries?: number;
+  } = {}): Promise<void> {
+    const { fromCache = false, onStatus } = opts;
+    const maxRetries = opts.maxRetries ?? 30;
+    const { settings } = this.plugin;
+
+    // Fresh load state: renders fall back to the on-demand path until this
+    // resolves with data.
     this.initPromise = new PromiseCapability();
+    this.beginBackendLoad();
     this.fileCache.clear();
 
-    if (clearBibData) {
-      this._renamedThisRefresh.clear();
-      this.bibCache.clear();
-      this.bibSourceKeys.clear();
-      this.conflictKeys.clear();
-      this.bibEpoch++;
+    this._renamedThisRefresh.clear();
+    this.bibCache.clear();
+    this.bibSourceKeys.clear();
+    this.conflictKeys.clear();
+    this.bibEpoch++;
 
-      if (!this.plugin) return;
-      const { settings } = this.plugin;
-      if (settings.bibliographyPaths?.length) await this.loadGlobalBibFiles();
-      if (settings.pullFromZotero) await this.loadGlobalZBib(false);
+    if (settings.bibliographyPaths?.length) {
+      onStatus?.('loading bibliography files…');
+      await this.loadGlobalBibFiles();
     }
 
+    if (settings.pullFromZotero) {
+      const retrying = () => {
+        this.buildFuseIndex(); // partial results still improve autocomplete
+        onStatus?.(
+          'waiting for Zotero to start… retrying (citations will format as soon as it connects)'
+        );
+      };
+
+      let outcome = { entries: 0, attempted: false, unreachable: false };
+      let attempt = 0;
+      let loaded = false;
+      for (;;) {
+        onStatus?.(
+          attempt === 0
+            ? 'loading your Zotero library… (the first run can take a few minutes)'
+            : 'waiting for Zotero to start… retrying'
+        );
+        try {
+          outcome = await this.loadGlobalZBib(fromCache);
+        } catch (e) {
+          debugLog('[sw:bib] library load threw', e);
+          outcome = { entries: 0, attempted: true, unreachable: true };
+        }
+
+        // Success: we reached Zotero and it gave us items (or the library is
+        // genuinely empty AND we could reach it).
+        if (outcome.attempted && (!outcome.unreachable || this.bibCache.size > 0)) {
+          loaded = true;
+          break;
+        }
+        if (this.bibCache.size > 0) {
+          loaded = true; // partial but usable
+          break;
+        }
+        if (++attempt > maxRetries) {
+          debugLog('[sw:bib] giving up retrying the Zotero load after', attempt, 'attempts');
+          // The user configured Zotero deliberately, so "not running" is a
+          // problem to surface — not a silent state. Say so loudly and keep a
+          // Retry affordance; the background probe clears it automatically.
+          this.showZoteroOffline();
+          // Deliberately NOT `loaded`: the library stays in the loading state,
+          // so note renders keep using the on-demand priority fetch + live
+          // search instead of waiting on a promise that may never resolve.
+          break;
+        }
+        retrying();
+        await new Promise((r) => setTimeout(r, Math.min(2000 * attempt, 15_000)));
+      }
+
+      if (!loaded) {
+        this.scheduleZoteroRecovery();
+        return;
+      }
+    }
+
+    onStatus?.('building the citation engine…');
     await this.buildGlobalEngine();
+    this.buildFuseIndex();
+
+    // Only now is the library genuinely loaded: release note renders from the
+    // on-demand path and force a re-render against the full library.
+    this.hideZoteroOffline();
+    this.markBackendReady();
     this.initPromise.resolve();
 
     // loadGlobalZBib (above) calls mergeZoteroEntry for every item, which
@@ -481,6 +705,77 @@ export class BibManager {
       const snapshot = new Map(this._renamedThisRefresh);
       setTimeout(() => this.plugin.autoUpdateCurrentNote(snapshot), 500);
     }
+  }
+
+  /**
+   * Show the persistent "Zotero isn't running" banner. Idempotent.
+   */
+  showZoteroOffline() {
+    if (!this._zoteroAlert) {
+      this._zoteroAlert = new ZoteroOfflineAlert(app, () => {
+        void this.retryNow();
+      });
+    }
+    this._zoteroAlert.show();
+  }
+
+  hideZoteroOffline() {
+    this._zoteroAlert?.hide();
+  }
+
+  /** Force a full reload of the library (the banner's Retry button, and the
+   *  manual "Refresh bibliography" path). */
+  async retryNow(): Promise<void> {
+    await this.loadAllSources({ fromCache: false, maxRetries: 2 });
+    this.fileCache.clear();
+    this.plugin?.processReferences();
+  }
+
+  /**
+   * Background recovery after the retry budget was exhausted: keep probing
+   * cheaply until Zotero answers, then finish the load for real.
+   *
+   * This is what makes "open Obsidian with Zotero closed, then start Zotero"
+   * work on its own — previously the only way to recover was the user noticing
+   * and clicking "Refresh bibliography".
+   */
+  private scheduleZoteroRecovery(delayMs = 15_000) {
+    if (this._zoteroRecoveryScheduled) return;
+    this._zoteroRecoveryScheduled = true;
+    debugLog('[sw:bib] scheduling Zotero recovery probe');
+    setTimeout(async () => {
+      this._zoteroRecoveryScheduled = false;
+      if (!this.plugin) return;
+      // Still loading (e.g. the user already hit Refresh) — nothing to do.
+      if (!this.backendLoading) return;
+      try {
+        const running = await this.isZoteroAvailable();
+        if (!running) {
+          this.scheduleZoteroRecovery(Math.min(delayMs * 2, 60_000));
+          return;
+        }
+        debugLog('[sw:bib] Zotero is back — completing the library load');
+        await this.loadAllSources({ fromCache: false });
+        this.fileCache.clear();
+        this.plugin.processReferences();
+      } catch (e) {
+        debugLog('[sw:bib] Zotero recovery probe failed', e);
+        this.scheduleZoteroRecovery(Math.min(delayMs * 2, 60_000));
+      }
+    }, delayMs);
+  }
+
+  async reinit(clearBibData: boolean) {
+    if (!this.plugin) return;
+    if (!clearBibData) {
+      // Just rebuild the engine over what's already loaded.
+      this.initPromise = new PromiseCapability();
+      this.fileCache.clear();
+      await this.buildGlobalEngine();
+      this.initPromise.resolve();
+      return;
+    }
+    await this.loadAllSources({ fromCache: false });
   }
 
   // Build the Fuse indexes from the current bibCache without touching the CSL
@@ -837,18 +1132,37 @@ export class BibManager {
   // Merge Zotero entries into bibCache (Zotero wins on conflicts with .bib).
   // Within Zotero, keeps the most recently modified entry when a citationKey
   // appears in multiple groups. Does not build the CSL engine.
-  async loadGlobalZBib(fromCache?: boolean) {
-    if (!this.plugin) return;
+  /**
+   * Load every configured Zotero group into bibCache.
+   *
+   * Returns how the load went so callers can tell "fetched the library" from
+   * "couldn't reach Zotero". The distinction matters: an unreachable Zotero
+   * used to look identical to an empty library, so the plugin declared itself
+   * ready with 0 entries and never retried — citations then stayed unformatted
+   * until the user manually hit "Refresh bibliography".
+   */
+  async loadGlobalZBib(fromCache?: boolean): Promise<ZoteroLoadOutcome> {
     const { settings } = this.plugin;
     debugLog('[sw:bib] loadGlobalZBib, fromCache=', fromCache, 'zoteroGroups=', JSON.stringify(settings.zoteroGroups), 'pullFromZotero=', settings.pullFromZotero);
     if (!settings.zoteroGroups?.length) {
       debugLog('[sw:bib] no zoteroGroups configured — skipping Zotero load');
-      return;
+      return { entries: 0, attempted: false, unreachable: false };
     }
 
     const adapter = this.getZoteroAdapter();
     debugLog('[sw:bib] using adapter:', (adapter as any).constructor?.name ?? typeof adapter);
+
+    // Is Zotero actually up? Checked once up front so "unreachable" is reported
+    // honestly rather than inferred from an empty result.
+    let unreachable = false;
+    try {
+      unreachable = !(await adapter.isRunning());
+    } catch {
+      unreachable = true;
+    }
+
     let failed = false;
+    let entries = 0;
     for (const group of settings.zoteroGroups) {
       try {
         debugLog('[sw:bib] fetching group', group.id, group.name);
@@ -864,6 +1178,7 @@ export class BibManager {
         for (const entry of res.list) {
           this.mergeZoteroEntry(entry);
         }
+        entries += res.list.length;
       } catch (e) {
         failed = true;
         console.error('scholar-weft: Zotero load failed:', e);
@@ -892,6 +1207,8 @@ export class BibManager {
           .catch(console.error);
       }, 60_000);
     }
+
+    return { entries, attempted: true, unreachable: unreachable || failed };
   }
 
   // Merge a single Zotero entry into bibCache with full priority + dedup logic.
@@ -2085,13 +2402,22 @@ export class BibManager {
         : undefined;
 
       if (indexedKey) {
-        const created = await createLitNoteViaZotLit(app, { indexedKey });
-        if (created) {
+        const res = await createLitNoteViaZotLit(app, { indexedKey });
+        if (res.ok) {
           // The protocol handler (obsidian://zotlit/open) creates AND opens the
-          // note itself — nothing more to do here.
+          // note itself. ZotLit creates asynchronously, so wait briefly, then
+          // fold in its child notes — SW drove the import, so SW finishes it.
+          void this.fillZoteroNotesForCitekey(citekey, sourceFile);
           return;
         }
-        // Fall through to the plugin template if ZotLit couldn't create it.
+
+        // ZotLit failed. Do NOT silently substitute our own template: a user
+        // who enabled ZotLit wants ZotLit's note shape (their templates,
+        // frontmatter, and attachments), and a quiet fallback produces a note
+        // they never asked for — which is what made this look like the setting
+        // was being ignored. Ask instead, and say WHY it failed.
+        const useFallback = await promptZotLitFallback(res.reason);
+        if (!useFallback) return;
       }
     }
 
@@ -2151,6 +2477,54 @@ export class BibManager {
 
     await app.vault.create(notePath, content);
     await app.workspace.openLinkText(notePath, sourceFile.path, true);
+
+    // SW created this note, so SW should finish the job: pull in the item's
+    // Zotero child notes rather than leaving "Insert Zotero notes" as a step
+    // the user has to know about.
+    void this.fillZoteroNotesForCitekey(citekey, sourceFile);
+  }
+
+  /**
+   * Insert a single literature note's Zotero child notes, once the note exists.
+   *
+   * Every SW-driven note-creation path funnels through here, so "insert Zotero
+   * notes" is never a separate step the user has to know about. Best-effort:
+   * the vault-wide command remains available to re-run later.
+   *
+   * @param expectCreation ZotLit creates notes asynchronously (via its protocol
+   *   handler), so allow a few retries for the file to appear.
+   */
+  async fillZoteroNotesForCitekey(
+    citekey: string,
+    sourceFile: TFile | null,
+    expectCreation = true
+  ): Promise<void> {
+    const sourcePath =
+      sourceFile?.path ?? app.workspace.getActiveFile()?.path ?? '';
+    const attempts = expectCreation ? 6 : 1;
+    let file: TFile | null = null;
+    for (let i = 0; i < attempts; i++) {
+      await new Promise((r) => setTimeout(r, i === 0 ? 1000 : 1000));
+      const hit = getLitNoteForCitekey(citekey, sourcePath, app);
+      if (hit?.file) {
+        file = hit.file;
+        break;
+      }
+    }
+    if (!file) return;
+    try {
+      const res = await insertZoteroNotesForFiles(app, [file], {
+        zoteroPort: this.plugin.settings.zoteroPort,
+      });
+      if (res.inserted) {
+        new Notice(
+          `ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`,
+          8000
+        );
+      }
+    } catch {
+      /* best effort — the vault-wide command can be run later */
+    }
   }
 
   /**
@@ -2679,6 +3053,12 @@ export class BibManager {
     if (this.plugin.settings.createNotesWithZotLit !== false) {
       created = await createLitNotesViaZotLitBulk(app, refs, onProgress);
       if (created >= refs.length) {
+        // ZotLit created them all. Fold in each note's Zotero child notes here
+        // rather than leaving it to the caller, so EVERY creation path ends the
+        // same way (SW drove the import, so SW finishes it).
+        for (const key of missing) {
+          await this.fillZoteroNotesForCitekey(key, opts.file ?? null);
+        }
         return { created, missing: refs.map((r) => r.indexedKey), missingKeys: missing };
       }
     }

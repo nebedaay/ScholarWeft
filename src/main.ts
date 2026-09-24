@@ -274,58 +274,36 @@ export default class ReferenceList extends Plugin {
       .then(async () => {
         const { settings, bibManager } = this;
         debugLog('[sw:main] initPromise.then fired — starting bib load');
-        // The Zotero library can take minutes to load on the first run. Mark the
-        // backend as loading so note renders fetch their own citekeys on demand
-        // (see BibManager.getReferenceList) instead of waiting for the whole
-        // library to arrive.
-        if (settings.pullFromZotero) bibManager.beginBackendLoad();
         // Load sources in priority order: .bib first (lower priority),
         // Zotero on top (higher priority, wins on conflicts).
-        // The WHOLE load can take minutes on the FIRST run: with no cached
-        // Zotero library yet, fetching it can take several minutes on a large
-        // library, and compiling the CSL engine adds more. Keep ONE persistent
-        // Notice up for the entire time — created BEFORE the fetch, not after
-        // it — so the user sees why nothing formats yet instead of concluding
-        // the plugin is broken. Later starts load from the on-disk cache and
-        // are fast.
+        //
+        // The WHOLE load can take minutes on the FIRST run, and Zotero may not
+        // even be running yet. Progress is shown two ways: a persistent status
+        // bar item (the reliable one — it survives clicks and is always
+        // visible) and a Notice (which is easy to miss). `loadAllSources` does
+        // not resolve the library as "ready" on an empty/unreachable result —
+        // it retries until entries arrive — so what we report here is truthful.
         const hasSources =
           (settings.bibliographyPaths?.length ?? 0) > 0 || settings.pullFromZotero;
-        const loadNotice = hasSources
-          ? new Notice(
-              'ScholarWeft: preparing your references… citations will format automatically when this finishes. (The first run can take a few minutes on a large Zotero library; later starts are quick.)',
-              0
-            )
-          : null;
+        const loadNotice = hasSources ? new Notice('ScholarWeft: preparing your references…', 0) : null;
         const setNotice = (msg: string) => {
           try {
-            loadNotice?.setMessage(msg);
+            loadNotice?.setMessage(`ScholarWeft: ${msg}`);
           } catch {
             /* older Obsidian: keep the original message */
           }
         };
         try {
-          if (settings.bibliographyPaths?.length) {
-            setNotice('ScholarWeft: loading bibliography files…');
-            await bibManager.loadGlobalBibFiles();
-          } else {
-            debugLog('[sw:main] no bibliographyPaths set, skipping .bib load');
-          }
-          if (settings.pullFromZotero) {
-            setNotice(
-              'ScholarWeft: loading your Zotero library… this can take a few minutes the first time (later starts are quick). Citations will format automatically when it finishes.'
-            );
-            await bibManager.loadAndRefreshGlobalZBib();
-          } else {
-            debugLog('[sw:main] pullFromZotero not set, skipping Zotero load');
-          }
-          // Build the Fuse index now so @ autocomplete is available immediately,
-          // before the (slower) CSL engine compilation below.
-          bibManager.buildFuseIndex();
-          setNotice('ScholarWeft: building the citation engine…');
-          // Build the CSL engine once, after all sources are merged.
-          await bibManager.buildGlobalEngine();
+          await bibManager.loadAllSources({
+            fromCache: true,
+            onStatus: (msg) => {
+              setNotice(msg);
+              this.setStatusBarMessage(msg);
+            },
+          });
         } finally {
           loadNotice?.hide();
+          this.setStatusBarIdle();
         }
         // Force all open reading-mode views to re-render now that the citation
         // engine is ready. The markdown post-processor runs synchronously when
@@ -347,10 +325,14 @@ export default class ReferenceList extends Plugin {
           bibManager.refreshGlobalZBib().catch(console.error);
         }
       })
-      .finally(() => {
-        this.bibManager.markBackendReady();
-        this.bibManager.initPromise.resolve();
+      .catch((e) => {
+        console.error('scholar-weft: bibliography load failed:', e);
       });
+    // NOTE: there is deliberately NO `.finally { markBackendReady() }` here.
+    // `loadAllSources` owns that transition and only makes it once the library
+    // genuinely loaded — an unconditional call is what previously declared a
+    // failed (empty) first load "ready", disarming the on-demand render path
+    // and leaving citations unformatted until a manual "Refresh bibliography".
 
     this.addSettingTab(new ReferenceListSettingsTab(this));
     this.citeSuggest = new CiteSuggest(app, this);
@@ -408,6 +390,7 @@ export default class ReferenceList extends Plugin {
       this.checkConflictingPlugins();
       void this.applyPendingSetup();
       void this.autoConfigureZotlitTemplates();
+      void this.ensureZotlitJsTemplates();
     });
 
     this.addCommand({
@@ -850,34 +833,18 @@ export default class ReferenceList extends Plugin {
   }
 
   /**
-   * After ScholarWeft (via ZotLit) creates literature notes for `citekeys`,
-   * insert their Zotero child notes. ZotLit creates notes asynchronously and
-   * we only have the citekeys, so resolve each to its note via ZotLit's index.
+   * After notes are created for `citekeys`, insert their Zotero child notes.
+   *
+   * Delegates to BibManager so every creation path shares ONE implementation
+   * (the single-note sidebar/tooltip path calls it directly). Kept as a thin
+   * wrapper because the bulk commands already know the citekeys.
    */
   private async fillZoteroNotesForCitekeys(
     citekeys: string[],
     sourceFile: TFile | null
   ): Promise<void> {
-    if (!citekeys?.length) return;
-    const sourcePath = sourceFile?.path ?? this.app.workspace.getActiveFile()?.path ?? '';
-    const files: TFile[] = [];
     for (const key of citekeys) {
-      const hit = getLitNoteForCitekey(key, sourcePath, this.app);
-      if (hit?.file) files.push(hit.file);
-    }
-    if (!files.length) return;
-    try {
-      const r = await insertZoteroNotesForFiles(this.app, files, {
-        zoteroPort: this.settings.zoteroPort,
-      });
-      if (r.inserted) {
-        new Notice(
-          `ScholarWeft: inserted Zotero notes into ${r.inserted} new literature note(s).`,
-          8000
-        );
-      }
-    } catch {
-      /* best effort — the vault command can be run later */
+      await this.bibManager.fillZoteroNotesForCitekey(key, sourceFile);
     }
   }
 
@@ -910,8 +877,7 @@ export default class ReferenceList extends Plugin {
       } catch {
         /* leave for the next launch */
       }
-    }
-    if (ready.includes('templater')) {
+    }    if (ready.includes('templater')) {
       try {
         await installTemplaterTemplatesWithNotice(this);
       } catch {
@@ -926,6 +892,34 @@ export default class ReferenceList extends Plugin {
     }
     this.settings.pendingSetup = [];
     await this.saveSettings();
+  }
+
+  /**
+   * Keep ZotLit's device-local "JavaScript templates" gate ON.
+   *
+   * The local key is written when the templates are installed, but ZotLit only
+   * reads it at ITS load time, so writing it mid-session did nothing until the
+   * next restart (which made the templates look broken after a fresh install).
+   * Retry briefly until ZotLit is loaded, then flip its live flag so it applies
+   * without a restart. Never turns it OFF — if the user later disables it, we
+   * leave that choice alone once we've seen it off while ZotLit was loaded.
+   */
+  private async ensureZotlitJsTemplates(attempt = 0) {
+    const zotlit = (this.app as any).plugins?.plugins?.['zotlit'];
+    const svc = zotlit?.services?.template;
+    if (!svc?.setJavascriptTemplatesEnabled) {
+      if (attempt < 5) {
+        setTimeout(() => void this.ensureZotlitJsTemplates(attempt + 1), 2000);
+      }
+      return;
+    }
+    try {
+      if (!svc.javascriptTemplatesEnabled) {
+        await svc.setJavascriptTemplatesEnabled(true);
+      }
+    } catch {
+      /* the local key still applies on the next Obsidian load */
+    }
   }
 
   /**
@@ -999,11 +993,17 @@ export default class ReferenceList extends Plugin {
   }
 
   statusBarIcon: HTMLElement;
+  statusBarText: HTMLElement | null = null;
   initStatusBar() {
     const ico = (this.statusBarIcon = this.addStatusBarItem());
     ico.addClass('sw-status-icon', 'clickable-icon');
     ico.setAttr('aria-label', t('ScholarWeft settings'));
     ico.setAttr('data-tooltip-position', 'top');
+    // A sibling span carries the loading message. Kept separate from the icon
+    // so the icon stays a stable click target (settings menu) while the text
+    // appears and disappears.
+    const text = (this.statusBarText = ico.createSpan({ cls: 'sw-status-text sw-status-hidden' }));
+    text.setAttr('aria-hidden', 'true');
     this.setStatusBarIdle();
     let isOpen = false;
     ico.addEventListener('click', () => {
@@ -1081,9 +1081,30 @@ export default class ReferenceList extends Plugin {
     setIcon(this.statusBarIcon, 'lucide-loader');
   }
 
+  /**
+   * Show a persistent status-bar message beside the icon while the library
+   * loads. The Notice is easy to miss (and vanishes when clicked), so this is
+   * the durable indicator: it stays until `setStatusBarIdle()`, so a load that
+   * takes minutes — or that is waiting for Zotero to start — is always visible.
+   */
+  setStatusBarMessage(msg: string) {
+    this.setStatusBarLoading();
+    const el = this.statusBarText;
+    if (!el) return;
+    el.setText(msg);
+    el.removeClass('sw-status-hidden');
+    this.statusBarIcon.setAttr('aria-label', `ScholarWeft: ${msg}`);
+  }
+
   setStatusBarIdle() {
     this.statusBarIcon.removeClass('is-loading');
     setIcon(this.statusBarIcon, 'lucide-at-sign');
+    this.statusBarIcon.setAttr('aria-label', t('ScholarWeft settings'));
+    const el = this.statusBarText;
+    if (el) {
+      el.setText('');
+      el.addClass('sw-status-hidden');
+    }
   }
 
   get view() {
