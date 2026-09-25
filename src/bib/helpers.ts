@@ -728,6 +728,78 @@ export async function getItemJSONFromCiteKeysNative(
   return results.length ? results : null;
 }
 
+/** The item's children, bucketed the way the note-context mappers want them. */
+export interface RawZoteroChildren {
+  attachments: any[];
+  annotations: any[];
+  notes: any[];
+}
+
+/**
+ * Fetch every child of an item — attachments, child notes, and the
+ * annotations that hang off those attachments — for the note-import path.
+ *
+ * Two calls, because Zotero's `children` endpoint returns only DIRECT children
+ * unless an `itemType` filter is given: the unfiltered call yields the item's
+ * notes and attachments, while `itemType=annotation` resolves annotations at
+ * any depth (its response carries each annotation's `parentItem`, so they
+ * re-attach to the right attachment). The local server also lists an
+ * annotation under its attachment when queried directly, so duplicates are
+ * de-duplicated by key.
+ *
+ * Returns `null` when Zotero isn't running, so the caller can degrade instead
+ * of throwing.
+ */
+export async function fetchItemChildrenNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  itemKey: string,
+  libraryID: number
+): Promise<RawZoteroChildren | null> {
+  if (!itemKey) return { attachments: [], annotations: [], notes: [] };
+  if (!(await isZoteroRunningNative(port))) return null;
+
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  const base = `/api/${libraryType}/${libraryId}/items/${itemKey}/children`;
+  const safeGet = async (
+    path: string
+  ): Promise<{ data: any } | null> => {
+    try {
+      return await zoteroNativeGet(port, path);
+    } catch {
+      return null;
+    }
+  };
+  const [direct, annotationOnly] = await Promise.all([
+    safeGet(`${base}?format=json`),
+    safeGet(`${base}?itemType=annotation&format=json`),
+  ]);
+
+  const attachments: any[] = [];
+  const annotations: any[] = [];
+  const notes: any[] = [];
+  const seen = new Set<string>();
+
+  for (const item of [
+    ...(Array.isArray(direct?.data) ? direct.data : []),
+    ...(Array.isArray(annotationOnly?.data) ? annotationOnly.data : []),
+  ]) {
+    const type = item?.data?.itemType;
+    if (type === 'attachment') {
+      attachments.push(item);
+    } else if (type === 'annotation') {
+      const key = String(item?.key ?? item?.data?.key ?? '');
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        annotations.push(item);
+      }
+    } else if (type === 'note') {
+      notes.push(item);
+    }
+  }
+
+  return { attachments, annotations, notes };
+}
+
 /**
  * Fetch CSL entries for specific citekeys from the native Zotero API — used to
  * render a note's citations BEFORE the full library has finished loading.
