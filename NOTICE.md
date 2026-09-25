@@ -108,3 +108,28 @@ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
+
+---
+
+## ZotLit
+
+- **Author:** AidenLx
+- **Repository:** https://github.com/aidenlx/zotlit
+- **License:** AGPL-3.0
+
+ScholarWeft's ZotLit-compatible note templates and the engine configuration that
+renders them are written to match ZotLit's behaviour, and two small helpers are
+adapted from its source:
+
+- `src/template/blockquote.ts` — adapted from `packages/templates/src/blockquote.ts`
+  (blockquote `>`-prefix formatting, including the collapsing of consecutive
+  blank lines).
+- `src/template/color.ts` — adapted from `packages/db/src/lib/zt-color.ts`
+  (Zotero annotation colour → palette name). The two legacy/importer-written
+  colours are mapped to the nearest current colour rather than given their own
+  names; that mapping is ScholarWeft's choice, not ZotLit's.
+
+`src/template/engine.ts` reproduces ZotLit's Eta configuration (variable name,
+auto-trim, `bq`/`basename`/`suffix`/`embed` helpers, and `include` semantics) so
+templates render identically. The full AGPL-3.0 license text is available at:
+https://www.gnu.org/licenses/agpl-3.0.html
