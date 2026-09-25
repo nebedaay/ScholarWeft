@@ -37,7 +37,8 @@ import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
 import { DataExplorerView, dataExplorerViewType } from './dataExplorer';
 import { PromiseCapability, debugLog, SW_CACHE_DIR, SW_CACHE_DIR_LEGACY } from './helpers';
-import { isAbsolutePath } from './bib/helpers';
+import { isAbsolutePath, DEFAULT_ZOTERO_PORT, isZoteroRunning } from './bib/helpers';
+import { pickZoteroItems } from './zoteroPicker';
 import { findPandoc } from './bib/pandoc';
 import { BibManager, getScopedSettings } from './bib/bibManager';
 import { CiteSuggest } from './citeSuggest/citeSuggest';
@@ -421,6 +422,14 @@ export default class ReferenceList extends Plugin {
       name: t('Open Zotero data explorer'),
       callback: async () => {
         this.initDataExplorerLeaf();
+      },
+    });
+
+    this.addCommand({
+      id: 'import-literature-notes-from-zotero',
+      name: t('Import literature notes from Zotero…'),
+      callback: async () => {
+        await this.importLiteratureNotesFromZotero();
       },
     });
 
@@ -1386,6 +1395,85 @@ export default class ReferenceList extends Plugin {
     if (!leaf) return;
     await leaf.setViewState({ type: dataExplorerViewType });
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  /**
+   * Let the user pick one or more items in Zotero's native dialog (Better
+   * BibTeX CAYW) and import or refresh a literature note for each. Each item
+   * goes through the normal creation path, so `useOwnNoteTemplate` (and the
+   * ZotLit/fallback routes) are honoured.
+   */
+  async importLiteratureNotesFromZotero() {
+    const port = this.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
+    if (!(await isZoteroRunning(port))) {
+      new Notice(
+        'Zotero (with Better BibTeX) is not running — the item picker needs it.'
+      );
+      return;
+    }
+
+    // Any file works as the link anchor; prefer the active note.
+    const anchor =
+      this.app.workspace.getActiveFile() ?? this.app.vault.getMarkdownFiles()[0];
+    if (!anchor) {
+      new Notice('Open a note first — the import needs a file to anchor links to.');
+      return;
+    }
+
+    const waiting = new Notice('Pick one or more items in Zotero…', 0);
+    let picked;
+    try {
+      picked = await pickZoteroItems(port);
+    } catch (e) {
+      waiting.hide();
+      new Notice(`Zotero picker: ${(e as Error).message}`, 8000);
+      return;
+    }
+    waiting.hide();
+
+    if (!picked.length) {
+      new Notice('No items selected.');
+      return;
+    }
+
+    const citekeys: string[] = [];
+    for (const p of picked) {
+      const ck =
+        p.citekey && this.bibManager.bibCache.has(p.citekey)
+          ? p.citekey
+          : this.findCitekeyByZoteroKey(p.zoteroKey);
+      if (ck && !citekeys.includes(ck)) citekeys.push(ck);
+      else if (!ck) {
+        console.warn('[sw:import] picked item is not in the loaded library', p);
+      }
+    }
+    if (!citekeys.length) {
+      new Notice('The selected item(s) are not in the loaded Zotero library.');
+      return;
+    }
+
+    const run = new Notice(`Importing ${citekeys.length} literature note(s)…`, 0);
+    let imported = 0;
+    for (const ck of citekeys) {
+      try {
+        await this.bibManager.createLiteratureNote(ck, anchor, { open: false });
+        imported++;
+      } catch (e) {
+        console.warn('[sw:import] picker import failed for', ck, e);
+      }
+    }
+    run.hide();
+    new Notice(`Imported ${imported}/${citekeys.length} literature note(s).`, 6000);
+  }
+
+  private findCitekeyByZoteroKey(zoteroKey: string | null): string | null {
+    if (!zoteroKey) return null;
+    for (const [citekey, entry] of this.bibManager.bibCache) {
+      if ((entry as { _zoteroKey?: string })?._zoteroKey === zoteroKey) {
+        return citekey;
+      }
+    }
+    return null;
   }
 
   async getCitekeysForFile(file?: TFile) {
