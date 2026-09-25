@@ -131,6 +131,7 @@ export class NoteTemplateEngine extends Eta {
         `const merge_into = (existing, rendered) => this.noteHelpers.mergeInto(${d}, existing, rendered); ` +
         `const set_file_name = (n) => this.noteHelpers.setFileName(${d}, n); ` +
         `const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d}, f, o); ` +
+        `const creator_values = (r, f, o) => this.noteHelpers.creatorValues(${d}, r, f, o); ` +
         `const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d}, r, f, o); ` +
         `const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d}, o); ` +
         `const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d}, a, o); ` +

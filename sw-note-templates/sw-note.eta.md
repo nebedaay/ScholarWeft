@@ -1,9 +1,11 @@
 <%/*
   sw-note.eta.md — OUR single-file literature-note template.
 
-  One copy-pasteable file: it emits BOTH the frontmatter and the body. It follows
-  the layout of the user's ZotLit templates (`sw-zotlit-templates/`), NOT the
-  older Zotero-Integration shape: there is NO title heading or abstract in the
+  One copy-pasteable file: it emits BOTH the frontmatter and the body. It mirrors
+  the user's ZotLit setup — the frontmatter fields and order match
+  `sw-zotlit-settings/frontmatter-fields.json`, and the body follows the layout
+  of the ZotLit templates (`sw-zotlit-templates/`), NOT the older
+  Zotero-Integration shape: there is NO title heading or abstract in the
   body (those live only in the frontmatter), `## Notes` is always present and
   OUTSIDE the managed region, and the managed region holds only `## Annotations`
   — emitted only when there ARE annotations, so an empty region is never left
@@ -19,21 +21,27 @@
 <% start_YAML(); -%>
 <% add_property('document-type', '[[zotero-import]]'); -%>
 <% add_property('created', import_date()); -%>
+<% add_property('added', item.dateAdded ? item.dateAdded.slice(0, 10) : null); -%>
 <% add_property('up', ['[[Bibliographic Notes]]']); -%>
 <% add_property('related', related_links()); -%>
 <% add_property('item-type', item.itemType); -%>
 <% add_property('title', item.title); -%>
 <% add_property('shorttitle', short_title()); -%>
+<% add_property('authors', creator_values('author')); -%>
+<% add_property('editors', creator_values('editor')); -%>
+<% add_property('translators', creator_values('translator')); -%>
+<% add_property('abstract', item.abstract); -%>
 <% add_property('series', item.series ? wikilink(item.series) : null); -%>
 <% add_property('series-number', item.seriesNumber); -%>
 <% add_property('edition', item.edition); -%>
-<% for (const group of creators_by_type()) { add_property(group.key, group.values); } -%>
+<% add_property('contributors', creator_values('contributor')); -%>
 <% add_property('year', item.date ? `[[${item.date.year}]]` : null); -%>
 <% add_property('issue', item.issue); -%>
 <% add_property('volume', item.volume); -%>
 <% add_property('publication', item.containerTitle ? wikilink(item.containerTitle) : null); -%>
 <% add_property('place', item.place); -%>
 <% add_property('publisher', item.publisher ? wikilink(item.publisher) : null); -%>
+<% add_property('volumes', item.numberOfVolumes); -%>
 <% add_property('doi', item.DOI); -%>
 <% add_property('citekey', item.citekey); -%>
 <% add_property('zotero-link', item.backlink); -%>

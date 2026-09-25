@@ -52,6 +52,18 @@ describe('buildNoteContext() — identity', () => {
     expect(c.language).toBe('ar');
   });
 
+  it('maps the item-type-specific fields the templates read by name', () => {
+    const c = buildNoteContext({
+      ...fixture,
+      'collection-title': 'Sīdī al-ʿArabī',
+      'collection-number': '3',
+      'number-of-volumes': '2',
+    });
+    expect(c.series).toBe('Sīdī al-ʿArabī');
+    expect(c.seriesNumber).toBe('3');
+    expect(c.numberOfVolumes).toBe('2');
+  });
+
   it('builds the Zotero deep link, and no web link for a personal library', () => {
     const c = buildNoteContext(fixture);
     expect(c.backlink).toBe('zotero://select/library/items/EKUBHHNW');

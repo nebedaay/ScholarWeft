@@ -99,7 +99,7 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(end).toBeGreaterThan(0);
   });
 
-  it('writes the Zotero-Integration frontmatter shape', () => {
+  it('writes the ZotLit frontmatter shape', () => {
     expect(out).toContain('document-type: "[[zotero-import]]"');
     expect(out).toContain('created: 2026-09-25');
     expect(out).toContain('up:\n  - "[[Bibliographic Notes]]"');
@@ -178,6 +178,40 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(empty.includes('### ')).toBe(false);
   });
 
+  it('mirrors the ZotLit frontmatter field set and order', () => {
+    const rich: CachedEntry = {
+      ...entry,
+      abstract: 'Abstract text',
+      _dateAdded: '2022-02-12T17:19:53Z',
+      translator: [{ family: 'T' }],
+      contributor: [{ family: 'C' }],
+      'collection-title': 'Series',
+      'collection-number': '5',
+      'number-of-volumes': '3',
+    };
+    const richOut = render(raw, rich);
+
+    expect(richOut).toContain('added: 2022-02-12');
+    expect(richOut).toContain('translators:\n  - "[[T]]"');
+    expect(richOut).toContain('contributors:\n  - "[[C]]"');
+    expect(richOut).toContain('abstract: Abstract text');
+    expect(richOut).toContain('series: "[[Series]]"');
+    expect(richOut).toContain('series-number: "5"');
+    expect(richOut).toContain('volumes: "3"');
+
+    const at = (key: string) => richOut.indexOf(`\n${key}:`);
+    expect(at('authors')).toBeLessThan(at('editors'));
+    expect(at('editors')).toBeLessThan(at('translators'));
+    expect(at('translators')).toBeLessThan(at('abstract'));
+    expect(at('abstract')).toBeLessThan(at('series'));
+    expect(at('series')).toBeLessThan(at('contributors'));
+    expect(at('contributors')).toBeLessThan(at('year'));
+    expect(at('publication')).toBeLessThan(at('volumes'));
+    expect(at('volumes')).toBeLessThan(at('citekey'));
+    expect(at('citekey')).toBeLessThan(at('attachments'));
+    expect(at('attachments')).toBeLessThan(at('aliases'));
+  });
+
   it('leaves no trailing whitespace on any line', () => {
     const bad = out
       .split('\n')
@@ -186,7 +220,7 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(bad).toEqual([]);
   });
 
-  it('emits a block-scalar-free, Obsidian-parseable frontmatter', () => {
+  it('quotes values Obsidian would otherwise misparse', () => {
     // A colon-space in a value must have been quoted by the YAML builder.
     expect(out).not.toMatch(/^title: .*: /m);
   });

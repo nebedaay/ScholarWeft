@@ -190,6 +190,10 @@ export interface NoteContext {
   place: string | null;
   edition: string | null;
   language: string | null;
+  /** Item-type-specific fields the ZotLit templates read by these names. */
+  series: string | null;
+  seriesNumber: string | null;
+  numberOfVolumes: string | null;
   extra: ItemExtra | null;
 
   // People, tags, membership
@@ -604,6 +608,9 @@ export function buildNoteContext(
     place: str(e['publisher-place']),
     edition: str(e.edition),
     language: str(e.language),
+    series: str(e['collection-title']),
+    seriesNumber: str(e['collection-number']),
+    numberOfVolumes: str(e['number-of-volumes']),
     extra: parseExtra(e._extra),
 
     creators,

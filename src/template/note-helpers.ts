@@ -201,6 +201,21 @@ export class NoteHelpers {
     return groupCreatorsByType(ctx.creators, format ?? state.options.creatorFormat, opts);
   }
 
+  /** Formatted names for ONE Zotero role, for a fixed frontmatter field. */
+  creatorValues(
+    ctx: NoteContext,
+    role: string,
+    format?: string,
+    opts?: CreatorFormatOptions
+  ): string[] {
+    const state = this.stateOf(ctx);
+    const group = groupCreatorsByType(ctx.creators, format ?? state.options.creatorFormat, {
+      ...opts,
+      roles: [role],
+    }).find((g) => g.key === `${role}${opts?.suffix ?? 's'}`);
+    return group?.values ?? [];
+  }
+
   creatorNames(
     ctx: NoteContext,
     role?: string | string[],
