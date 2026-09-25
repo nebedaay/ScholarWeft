@@ -44,3 +44,6 @@ tmp/
 # Editor lock/temp files (Word "~$name.docx", LibreOffice ".~lock.name#")
 ~$*
 .~lock.*#
+
+# Local working notes (session handoff) — not for the public repo
+HANDOFF.md
