@@ -182,6 +182,14 @@ export default {
     'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
   'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.':
     'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.',
+  "Use ScholarWeft's own note template":
+    "Use ScholarWeft's own note template",
+  "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.":
+    "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
+  'Child-note heading level':
+    'Child-note heading level',
+  'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.':
+    'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.',
   'Open in Zotero': 'Open in Zotero',
   'Filter references…': 'Filter references…',
 

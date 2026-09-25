@@ -9,6 +9,7 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __markAsModule = (target) => __defProp(target, "__esModule", { value: true });
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[Object.keys(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
@@ -28,6 +29,10 @@ var __reExport = (target, module2, desc) => {
 };
 var __toModule = (module2) => {
   return __reExport(__markAsModule(__defProp(module2 != null ? __create(__getProtoOf(module2)) : {}, "default", module2 && module2.__esModule && "default" in module2 ? { get: () => module2.default, enumerable: true } : { value: module2, enumerable: true })), module2);
+};
+var __publicField = (obj, key, value) => {
+  __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+  return value;
 };
 
 // node_modules/fast-deep-equal/index.js
@@ -1044,7 +1049,7 @@ var require_moo = __commonJS({
         var combined = new RegExp(reUnion(parts) + suffix, flags);
         return { regexp: combined, groups, fast, error: errorRule || defaultErrorRule };
       }
-      function compile(rules) {
+      function compile2(rules) {
         var result = compileRules(toRules(rules));
         return new Lexer({ start: result }, "start");
       }
@@ -1331,7 +1336,7 @@ var require_moo = __commonJS({
         return true;
       };
       return {
-        compile,
+        compile: compile2,
         states: compileStates,
         error: Object.freeze({ error: true }),
         fallback: Object.freeze({ fallback: true }),
@@ -1847,37 +1852,37 @@ var require_citeproc_commonjs = __commonJS({
     "use strict";
     var CSL2 = {
       PROCESSOR_VERSION: "1.4.61",
-      error: function(str) {
+      error: function(str3) {
         if (typeof Error === "undefined") {
-          throw new Error("citeproc-js error: " + str);
+          throw new Error("citeproc-js error: " + str3);
         } else {
-          throw "citeproc-js error: " + str;
+          throw "citeproc-js error: " + str3;
         }
       },
-      debug: function(str) {
+      debug: function(str3) {
         if (typeof console === "undefined") {
-          dump("CSL: " + str + "\n");
+          dump("CSL: " + str3 + "\n");
         } else {
-          console.log("citeproc-js warning: " + str);
+          console.log("citeproc-js warning: " + str3);
         }
       },
-      toLocaleUpperCase(str) {
+      toLocaleUpperCase(str3) {
         var arr = this.tmp.lang_array;
         try {
-          str = str.toLocaleUpperCase(arr);
+          str3 = str3.toLocaleUpperCase(arr);
         } catch (e3) {
-          str = str.toUpperCase();
+          str3 = str3.toUpperCase();
         }
-        return str;
+        return str3;
       },
-      toLocaleLowerCase(str) {
+      toLocaleLowerCase(str3) {
         var arr = this.tmp.lang_array;
         try {
-          str = str.toLocaleLowerCase(arr);
+          str3 = str3.toLocaleLowerCase(arr);
         } catch (e3) {
-          str = str.toLowerCase();
+          str3 = str3.toLowerCase();
         }
-        return str;
+        return str3;
       },
       LOCATOR_LABELS_REGEXP: new RegExp("^((vrs|sv|subpara|op|subch|add|amend|annot|app|art|bibliog|bk|ch|cl|col|cmt|dec|dept|div|ex|fig|fld|fol|n|hypo|illus|intro|l|no|p|pp|para|pt|pmbl|princ|pub|r|rn|sched|sec|ser|subdiv|subsec|supp|tbl|tit|vol)\\.)\\s+(.*)"),
       STATUTE_SUBDIV_PLAIN_REGEX: /(?:(?:^| )(?:vrs|sv|subpara|op|subch|add|amend|annot|app|art|bibliog|bk|ch|cl|col|cmt|dec|dept|div|ex|fig|fld|fol|n|hypo|illus|intro|l|no|p|pp|para|pt|pmbl|princ|pub|r|rn|sched|sec|ser|subdiv|subsec|supp|tbl|tit|vol)\. *)/,
@@ -2052,9 +2057,9 @@ var require_citeproc_commonjs = __commonJS({
       checkNestedBrace: function(state) {
         if (state.opt.xclass === "note") {
           this.depth = 0;
-          this.update = function(str) {
-            var str = str ? str : "";
-            var lst = str.split(/([\(\)])/);
+          this.update = function(str3) {
+            var str3 = str3 ? str3 : "";
+            var lst = str3.split(/([\(\)])/);
             for (var i3 = 1, ilen = lst.length; i3 < ilen; i3 += 2) {
               if (lst[i3] === "(") {
                 if (this.depth % 2 === 1) {
@@ -2072,8 +2077,8 @@ var require_citeproc_commonjs = __commonJS({
             return ret;
           };
         } else {
-          this.update = function(str) {
-            return str;
+          this.update = function(str3) {
+            return str3;
           };
         }
       },
@@ -2194,11 +2199,11 @@ var require_citeproc_commonjs = __commonJS({
         }
         return item;
       },
-      normalizeLocaleStr: function(str) {
-        if (!str) {
+      normalizeLocaleStr: function(str3) {
+        if (!str3) {
           return;
         }
-        var lst = str.split("-");
+        var lst = str3.split("-");
         lst[0] = lst[0].toLowerCase();
         if (lst[1]) {
           lst[1] = lst[1].toUpperCase();
@@ -2976,13 +2981,13 @@ var require_citeproc_commonjs = __commonJS({
         "\u06E6": "\u064A"
       },
       SUPERSCRIPTS_REGEXP: new RegExp("[\xAA\xB2\xB3\xB9\xBA\u02B0\u02B1\u02B2\u02B3\u02B4\u02B5\u02B6\u02B7\u02B8\u02E0\u02E1\u02E2\u02E3\u02E4\u1D2C\u1D2D\u1D2E\u1D30\u1D31\u1D32\u1D33\u1D34\u1D35\u1D36\u1D37\u1D38\u1D39\u1D3A\u1D3C\u1D3D\u1D3E\u1D3F\u1D40\u1D41\u1D42\u1D43\u1D44\u1D45\u1D46\u1D47\u1D48\u1D49\u1D4A\u1D4B\u1D4C\u1D4D\u1D4F\u1D50\u1D51\u1D52\u1D53\u1D54\u1D55\u1D56\u1D57\u1D58\u1D59\u1D5A\u1D5B\u1D5C\u1D5D\u1D5E\u1D5F\u1D60\u1D61\u2070\u2071\u2074\u2075\u2076\u2077\u2078\u2079\u207A\u207B\u207C\u207D\u207E\u207F\u2120\u2122\u3192\u3193\u3194\u3195\u3196\u3197\u3198\u3199\u319A\u319B\u319C\u319D\u319E\u319F\u02C0\u02C1\u06E5\u06E6]", "g"),
-      UPDATE_GROUP_CONTEXT_CONDITION: function(state, str, valueTerm, token, value) {
+      UPDATE_GROUP_CONTEXT_CONDITION: function(state, str3, valueTerm, token, value) {
         if (!state.opt.use_context_condition)
           return;
         var flags = state.tmp.group_context.tip;
         if (flags.condition) {
           if (!flags.condition.termtxt) {
-            flags.condition.termtxt = str;
+            flags.condition.termtxt = str3;
             flags.condition.valueTerm = valueTerm;
           }
           if (!flags.value_seen && flags.condition.test === "comma-safe-numbers-only") {
@@ -2998,8 +3003,8 @@ var require_citeproc_commonjs = __commonJS({
             state.tmp.just_did_number = false;
           } else if (token && token.strings.suffix) {
             state.tmp.just_did_number = false;
-          } else if (str) {
-            if (str.match(/[0-9]$/)) {
+          } else if (str3) {
+            if (str3.match(/[0-9]$/)) {
               state.tmp.just_did_number = true;
             } else {
               state.tmp.just_did_number = false;
@@ -3022,8 +3027,8 @@ var require_citeproc_commonjs = __commonJS({
           if (flags.condition.termtxt) {
             termStartAlpha = flags.condition.termtxt.slice(0, 1).match(CSL2.ALL_ROMANESQUE_REGEXP);
           }
-          var num = state.tmp.just_did_number;
-          if (num) {
+          var num2 = state.tmp.just_did_number;
+          if (num2) {
             if (flags.condition.valueTerm) {
               testres = numbersOnly ? false : true;
             } else if (!locale_term) {
@@ -3084,12 +3089,12 @@ var require_citeproc_commonjs = __commonJS({
           split: new RegExp("(?:" + splits.join("|") + ")")
         };
       }(),
-      TITLE_SPLIT: function(str) {
-        if (!str) {
-          return str;
+      TITLE_SPLIT: function(str3) {
+        if (!str3) {
+          return str3;
         }
-        var m3 = str.match(CSL2.TITLE_SPLIT_REGEXP.match);
-        var lst = str.split(CSL2.TITLE_SPLIT_REGEXP.split);
+        var m3 = str3.match(CSL2.TITLE_SPLIT_REGEXP.match);
+        var lst = str3.split(CSL2.TITLE_SPLIT_REGEXP.split);
         for (var i3 = lst.length - 2; i3 > -1; i3--) {
           lst[i3] = lst[i3].trim();
           if (lst[i3] && lst[i3].slice(-1).toLowerCase() !== lst[i3].slice(-1)) {
@@ -3567,13 +3572,13 @@ var require_citeproc_commonjs = __commonJS({
       xml = xml.replace(/\s+$/g, "");
       return xml;
     };
-    CSL2.parseXml = function(str) {
+    CSL2.parseXml = function(str3) {
       var _pos = 0;
       var _obj = { children: [] };
       var _stack = [_obj.children];
-      function _listifyString(str2) {
-        str2 = str2.split(/(?:\r\n|\n|\r)/).join(" ").replace(/>[	 ]+</g, "><").replace(/<\!--.*?-->/g, "");
-        var lst2 = str2.split("><");
+      function _listifyString(str4) {
+        str4 = str4.split(/(?:\r\n|\n|\r)/).join(" ").replace(/>[	 ]+</g, "><").replace(/<\!--.*?-->/g, "");
+        var lst2 = str4.split("><");
         var stylePos = null;
         for (var i4 = 0, ilen2 = lst2.length; i4 < ilen2; i4++) {
           if (i4 > 0) {
@@ -3609,13 +3614,13 @@ var require_citeproc_commonjs = __commonJS({
         }
         return lst2;
       }
-      function _decodeHtmlEntities(str2) {
-        return str2.split("&amp;").join("&").split("&quot;").join('"').split("&gt;").join(">").split("&lt;").join("<").replace(/&#([0-9]{1,6});/gi, function(match2, numStr) {
-          var num = parseInt(numStr, 10);
-          return String.fromCharCode(num);
+      function _decodeHtmlEntities(str4) {
+        return str4.split("&amp;").join("&").split("&quot;").join('"').split("&gt;").join(">").split("&lt;").join("<").replace(/&#([0-9]{1,6});/gi, function(match2, numStr) {
+          var num2 = parseInt(numStr, 10);
+          return String.fromCharCode(num2);
         }).replace(/&#x([a-f0-9]{1,6});/gi, function(match2, numStr) {
-          var num = parseInt(numStr, 16);
-          return String.fromCharCode(num);
+          var num2 = parseInt(numStr, 16);
+          return String.fromCharCode(num2);
         });
       }
       function _getAttributes(elem2) {
@@ -3685,7 +3690,7 @@ var require_citeproc_commonjs = __commonJS({
           _extendStackWithNewChildren(obj);
         }
       }
-      var lst = _listifyString(str);
+      var lst = _listifyString(str3);
       for (var i3 = 0, ilen = lst.length; i3 < ilen; i3++) {
         var elem = lst[i3];
         processElement(elem);
@@ -3697,18 +3702,18 @@ var require_citeproc_commonjs = __commonJS({
       if (typeof DOMParser == "undefined") {
         DOMParser = function() {
         };
-        DOMParser.prototype.parseFromString = function(str2, contentType) {
+        DOMParser.prototype.parseFromString = function(str4, contentType) {
           if (typeof ActiveXObject != "undefined") {
             var xmldata = new ActiveXObject("MSXML.DomDocument");
             xmldata.async = false;
-            xmldata.loadXML(str2);
+            xmldata.loadXML(str4);
             return xmldata;
           } else if (typeof XMLHttpRequest != "undefined") {
             var xmldata = new XMLHttpRequest();
             if (!contentType) {
               contentType = "text/xml";
             }
-            xmldata.open("GET", "data:" + contentType + ";charset=utf-8," + encodeURIComponent(str2), false);
+            xmldata.open("GET", "data:" + contentType + ";charset=utf-8," + encodeURIComponent(str4), false);
             if (xmldata.overrideMimeType) {
               xmldata.overrideMimeType(contentType);
             }
@@ -3716,7 +3721,7 @@ var require_citeproc_commonjs = __commonJS({
             return xmldata.responseXML;
           } else if (typeof marknote != "undefined") {
             var parser = new marknote.Parser();
-            return parser.parse(str2);
+            return parser.parse(str4);
           }
         };
         this.hasAttributes = function(node) {
@@ -3766,8 +3771,8 @@ var require_citeproc_commonjs = __commonJS({
         }
       };
       this.parser = new DOMParser();
-      var str = '<docco><institution institution-parts="long" delimiter=", " substitute-use-first="1" use-last="1"><institution-part name="long"/></institution></docco>';
-      var inst_doc = this.parser.parseFromString(str, "text/xml");
+      var str3 = '<docco><institution institution-parts="long" delimiter=", " substitute-use-first="1" use-last="1"><institution-part name="long"/></institution></docco>';
+      var inst_doc = this.parser.parseFromString(str3, "text/xml");
       var inst_node = inst_doc.getElementsByTagName("institution");
       this.institution = inst_node.item(0);
       var inst_part_node = inst_doc.getElementsByTagName("institution-part");
@@ -4125,8 +4130,8 @@ var require_citeproc_commonjs = __commonJS({
       strcmp = function(a3, b3) {
         return CSL2.toLocaleLowerCase.call(me, a3).localeCompare(CSL2.toLocaleLowerCase.call(me, b3), default_locale, strcmp_opts);
       };
-      var stripPunct = function(str) {
-        return str.replace(/^[\[\]\'\"]*/g, "");
+      var stripPunct = function(str3) {
+        return str3.replace(/^[\[\]\'\"]*/g, "");
       };
       var getBracketPreSort = function() {
         if (!strcmp("[x", "x")) {
@@ -5287,8 +5292,8 @@ var require_citeproc_commonjs = __commonJS({
       }
       if (Item.page) {
         Item["page-first"] = Item.page;
-        var num = "" + Item.page;
-        var m3 = num.split(/\s*(?:&|, |-|\u2013)\s*/);
+        var num2 = "" + Item.page;
+        var m3 = num2.split(/\s*(?:&|, |-|\u2013)\s*/);
         if (m3[0].slice(-1) !== "\\") {
           Item["page-first"] = m3[0];
         }
@@ -5612,18 +5617,18 @@ var require_citeproc_commonjs = __commonJS({
     CSL2.Doppeler = function(rexStr, stringMangler) {
       var matchRex = new RegExp("(" + rexStr + ")", "g");
       var splitRex = new RegExp(rexStr, "g");
-      this.split = function(str) {
+      this.split = function(str3) {
         if (stringMangler) {
-          str = stringMangler(str);
+          str3 = stringMangler(str3);
         }
-        var match2 = str.match(matchRex);
+        var match2 = str3.match(matchRex);
         if (!match2) {
           return {
             tags: [],
-            strings: [str]
+            strings: [str3]
           };
         }
-        var split = str.split(splitRex);
+        var split = str3.split(splitRex);
         for (var i3 = match2.length - 1; i3 > -1; i3--) {
           if (typeof match2[i3] === "number") {
             match2[i3] = "";
@@ -5733,14 +5738,14 @@ var require_citeproc_commonjs = __commonJS({
               lst = lst.slice(0, i3).concat(lst.slice(i3 + 1));
             }
           }
-          var str = lst.join("");
-          str = str.slice(0, params[0].authors[0]);
-          if (str.length > 1) {
-            str = str.slice(0, 1).toUpperCase() + str.slice(1).toLowerCase();
-          } else if (str.length === 1) {
-            str = str.toUpperCase();
+          var str3 = lst.join("");
+          str3 = str3.slice(0, params[0].authors[0]);
+          if (str3.length > 1) {
+            str3 = str3.slice(0, 1).toUpperCase() + str3.slice(1).toLowerCase();
+          } else if (str3.length === 1) {
+            str3 = str3.toUpperCase();
           }
-          label = str;
+          label = str3;
         }
       }
       var year = "0000";
@@ -5760,10 +5765,10 @@ var require_citeproc_commonjs = __commonJS({
         CSL2.error("Bad trigraph definition: " + this.opt.trigraph);
       }
       for (var i3 = 0, ilen = ilst.length; i3 < ilen; i3 += 1) {
-        var str = ilst[i3];
+        var str3 = ilst[i3];
         var config = { authors: [], year: 0 };
-        for (var j4 = 0, jlen = str.length; j4 < jlen; j4 += 1) {
-          switch (str.slice(j4, j4 + 1)) {
+        for (var j4 = 0, jlen = str3.length; j4 < jlen; j4 += 1) {
+          switch (str3.slice(j4, j4 + 1)) {
             case "A":
               config.authors.push(1);
               break;
@@ -6038,7 +6043,7 @@ var require_citeproc_commonjs = __commonJS({
         blob.strings.suffix = this.checkNestedBrace.update(blob.strings.suffix);
       }
     };
-    CSL2.Output.Queue.prototype.append = function(str, tokname, notSerious, ignorePredecessor, noStripPeriods) {
+    CSL2.Output.Queue.prototype.append = function(str3, tokname, notSerious, ignorePredecessor, noStripPeriods) {
       var token, blob, curr;
       var useblob = true;
       if (notSerious) {
@@ -6052,11 +6057,11 @@ var require_citeproc_commonjs = __commonJS({
           tokname = "empty";
         }
       }
-      if (typeof str === "undefined") {
+      if (typeof str3 === "undefined") {
         return false;
       }
-      if (typeof str === "number") {
-        str = "" + str;
+      if (typeof str3 === "number") {
+        str3 = "" + str3;
       }
       if (!notSerious && this.state.tmp.element_trace && this.state.tmp.element_trace.value() === "suppress-me") {
         return false;
@@ -6078,12 +6083,12 @@ var require_citeproc_commonjs = __commonJS({
       if (token.strings && typeof token.strings.delimiter === "undefined") {
         token.strings.delimiter = "";
       }
-      if (typeof str === "string" && str.length) {
-        str = str.replace(/ ([:;?!\u00bb])/g, "\u202F$1").replace(/\u00ab /g, "\xAB\u202F");
-        this.last_char_rendered = str.slice(-1);
-        str = str.replace(/\s+'/g, " '");
+      if (typeof str3 === "string" && str3.length) {
+        str3 = str3.replace(/ ([:;?!\u00bb])/g, "\u202F$1").replace(/\u00ab /g, "\xAB\u202F");
+        this.last_char_rendered = str3.slice(-1);
+        str3 = str3.replace(/\s+'/g, " '");
         if (!notSerious) {
-          str = str.replace(/^'/g, " '");
+          str3 = str3.replace(/^'/g, " '");
         }
         if (!ignorePredecessor) {
           this.state.tmp.term_predecessor = true;
@@ -6092,7 +6097,7 @@ var require_citeproc_commonjs = __commonJS({
           this.state.tmp.term_predecessor_name = true;
         }
       }
-      blob = new CSL2.Blob(str, token);
+      blob = new CSL2.Blob(str3, token);
       curr = this.current.value();
       if (typeof curr === "undefined" && this.current.mystack.length === 0) {
         this.current.mystack.push([]);
@@ -6106,7 +6111,7 @@ var require_citeproc_commonjs = __commonJS({
           this.state.tmp.term_predecessor_name = true;
         }
       }
-      if (typeof str === "string") {
+      if (typeof str3 === "string") {
         if (typeof blob.blobs === "string") {
           if (blob.blobs.slice(0, 1) !== " ") {
             var blobPrefix = "";
@@ -6122,7 +6127,7 @@ var require_citeproc_commonjs = __commonJS({
           }
         }
         if (blob.strings["text-case"]) {
-          blob.blobs = CSL2.Output.Formatters[blob.strings["text-case"]](this.state, str);
+          blob.blobs = CSL2.Output.Formatters[blob.strings["text-case"]](this.state, str3);
         }
         if (this.state.tmp.strip_periods && !noStripPeriods) {
           blob.blobs = blob.blobs.replace(/\.([^a-z]|$)/g, "$1");
@@ -6142,7 +6147,7 @@ var require_citeproc_commonjs = __commonJS({
       } else if (useblob) {
         curr.push(blob);
       } else {
-        curr.push(str);
+        curr.push(str3);
       }
       return true;
     };
@@ -6334,7 +6339,7 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL2.Output.Queue.prototype.renderBlobs = function(blobs, delim, in_cite, parent) {
-      var state, ret, ret_last_char, use_delim, blob, pos, len, ppos, llen, str, params, txt_esc;
+      var state, ret, ret_last_char, use_delim, blob, pos, len, ppos, llen, str3, params, txt_esc;
       txt_esc = CSL2.getSafeEscape(this.state);
       if (!delim) {
         delim = "";
@@ -6392,21 +6397,21 @@ var require_citeproc_commonjs = __commonJS({
           }
         } else if (blob.status !== CSL2.SUPPRESS) {
           if (blob.particle) {
-            str = blob.particle + blob.num;
+            str3 = blob.particle + blob.num;
           } else {
-            str = blob.formatter.format(blob.num, blob.gender);
+            str3 = blob.formatter.format(blob.num, blob.gender);
           }
-          var strlen = str.replace(/<[^>]*>/g, "").length;
-          this.append(str, "empty", true);
+          var strlen = str3.replace(/<[^>]*>/g, "").length;
+          this.append(str3, "empty", true);
           var str_blob = this.pop();
           var count_offset_characters = state.tmp.count_offset_characters;
-          str = this.string(state, [str_blob], false);
+          str3 = this.string(state, [str_blob], false);
           state.tmp.count_offset_characters = count_offset_characters;
           if (blob.strings["text-case"]) {
-            str = CSL2.Output.Formatters[blob.strings["text-case"]](this.state, str);
+            str3 = CSL2.Output.Formatters[blob.strings["text-case"]](this.state, str3);
           }
-          if (str && this.state.tmp.strip_periods) {
-            str = str.replace(/\.([^a-z]|$)/g, "$1");
+          if (str3 && this.state.tmp.strip_periods) {
+            str3 = str3.replace(/\.([^a-z]|$)/g, "$1");
           }
           if (!state.tmp.suppress_decorations) {
             llen = blob.decorations.length;
@@ -6415,10 +6420,10 @@ var require_citeproc_commonjs = __commonJS({
               if (state.normalDecorIsOrphan(blob, params)) {
                 continue;
               }
-              str = state.fun.decorate[params[0]][params[1]].call(blob, state, str, params[2]);
+              str3 = state.fun.decorate[params[0]][params[1]].call(blob, state, str3, params[2]);
             }
           }
-          str = txt_esc(blob.strings.prefix) + str + txt_esc(blob.strings.suffix);
+          str3 = txt_esc(blob.strings.prefix) + str3 + txt_esc(blob.strings.suffix);
           var addme = "";
           if (blob.status === CSL2.END) {
             addme = txt_esc(blob.range_prefix);
@@ -6434,7 +6439,7 @@ var require_citeproc_commonjs = __commonJS({
             addme = txt_esc(blob.splice_prefix);
           }
           ret += addme;
-          ret += str;
+          ret += str3;
           if (state.tmp.count_offset_characters) {
             state.tmp.offset_characters += addme.length + blob.strings.prefix.length + strlen + blob.strings.suffix.length;
           }
@@ -7820,7 +7825,7 @@ var require_citeproc_commonjs = __commonJS({
       return [this.registry.return_data, ret];
     };
     CSL2.Engine.prototype.process_CitationCluster = function(sortedItems, citation) {
-      var str = "";
+      var str3 = "";
       if (citation && citation.properties && citation.properties.mode === "composite") {
         citation.properties.mode = "author-only";
         var firstChunk = CSL2.getCitationCluster.call(this, sortedItems, citation);
@@ -7839,16 +7844,16 @@ var require_citeproc_commonjs = __commonJS({
           firstChunk += secondChunk;
           secondChunk = false;
         }
-        str = [firstChunk, secondChunk, thirdChunk].filter(function(obj) {
+        str3 = [firstChunk, secondChunk, thirdChunk].filter(function(obj) {
           return obj;
         }).join(" ");
       } else {
-        str = CSL2.getCitationCluster.call(this, sortedItems, citation);
+        str3 = CSL2.getCitationCluster.call(this, sortedItems, citation);
       }
-      return str;
+      return str3;
     };
     CSL2.Engine.prototype.makeCitationCluster = function(rawList) {
-      var inputList, newitem, str, pos, len, item, Item;
+      var inputList, newitem, str3, pos, len, item, Item;
       inputList = [];
       len = rawList.length;
       for (pos = 0; pos < len; pos += 1) {
@@ -7886,8 +7891,8 @@ var require_citeproc_commonjs = __commonJS({
         inputList.sort(this.citation.srt.compareCompositeKeys);
       }
       this.tmp.citation_errors = [];
-      var str = CSL2.getCitationCluster.call(this, inputList);
-      return str;
+      var str3 = CSL2.getCitationCluster.call(this, inputList);
+      return str3;
     };
     CSL2.getAmbiguousCite = function(Item, disambig, visualForm, item) {
       var ret;
@@ -9488,7 +9493,7 @@ var require_citeproc_commonjs = __commonJS({
     };
     CSL2.Node["date-part"] = {
       build: function(state, target) {
-        var func, pos, len, first_date, value, value_end, real, have_collapsed, invoked, precondition, known_year, bc, ad, bc_end, ad_end, ready, curr, dcurr, number, num, formatter, item, blob;
+        var func, pos, len, first_date, value, value_end, real, have_collapsed, invoked, precondition, known_year, bc, ad, bc_end, ad_end, ready, curr, dcurr, number, num2, formatter, item, blob;
         if (!this.strings.form) {
           this.strings.form = "long";
         }
@@ -9701,8 +9706,8 @@ var require_citeproc_commonjs = __commonJS({
             if (state2.registry.registry[Item.id] && state2.registry.registry[Item.id].disambig.year_suffix !== false && !state2.tmp.has_done_year_suffix) {
               state2.tmp.has_done_year_suffix = true;
               last_string_output = "x";
-              num = parseInt(state2.registry.registry[Item.id].disambig.year_suffix, 10);
-              number = new CSL2.NumericBlob(state2, false, num, this, Item.id);
+              num2 = parseInt(state2.registry.registry[Item.id].disambig.year_suffix, 10);
+              number = new CSL2.NumericBlob(state2, false, num2, this, Item.id);
               this.successor_prefix = state2[state2.build.area].opt.layout_delimiter;
               this.splice_prefix = state2[state2.build.area].opt.layout_delimiter;
               formatter = new CSL2.Util.Suffixator(CSL2.SUFFIX_CHARS);
@@ -10333,23 +10338,23 @@ var require_citeproc_commonjs = __commonJS({
                     }
                   }
                   if (state2.tmp.area === "citation_sort" && state2.bibliography_sort.tmp.citation_number_map) {
-                    var num = state2.bibliography_sort.tmp.citation_number_map[state2.registry.registry[Item.id].seq];
+                    var num2 = state2.bibliography_sort.tmp.citation_number_map[state2.registry.registry[Item.id].seq];
                   } else {
-                    var num = state2.registry.registry[Item.id].seq;
+                    var num2 = state2.registry.registry[Item.id].seq;
                   }
-                  if (num) {
-                    num = CSL2.Util.padding("" + num);
+                  if (num2) {
+                    num2 = CSL2.Util.padding("" + num2);
                   }
-                  state2.output.append(num, this);
+                  state2.output.append(num2, this);
                 };
               } else {
                 func = function(state2, Item) {
-                  var num = false;
-                  num = Item[variable];
-                  if (num) {
-                    num = CSL2.Util.padding(num);
+                  var num2 = false;
+                  num2 = Item[variable];
+                  if (num2) {
+                    num2 = CSL2.Util.padding(num2);
                   }
-                  state2.output.append(num, this);
+                  state2.output.append(num2, this);
                 };
               }
             } else if (variable === "citation-label") {
@@ -11108,14 +11113,14 @@ var require_citeproc_commonjs = __commonJS({
         return blob;
       }
       var plural = 0;
-      var num = this.freeters_count[v3] + this.institutions_count[v3];
-      if (num > 1) {
+      var num2 = this.freeters_count[v3] + this.institutions_count[v3];
+      if (num2 > 1) {
         plural = 1;
       } else {
         for (var i3 = 0, ilen = this.persons[v3].length; i3 < ilen; i3 += 1) {
-          num += this.persons_count[v3][i3];
+          num2 += this.persons_count[v3][i3];
         }
-        if (num > 1) {
+        if (num2 > 1) {
           plural = 1;
         }
       }
@@ -12155,23 +12160,23 @@ var require_citeproc_commonjs = __commonJS({
     CSL2.NameOutput.prototype._renderOneInstitutionPart = function(blobs, style) {
       for (var i3 = 0, ilen = blobs.length; i3 < ilen; i3 += 1) {
         if (blobs[i3]) {
-          var str = blobs[i3];
+          var str3 = blobs[i3];
           if (this.state.tmp.strip_periods) {
-            str = str.replace(/\./g, "");
+            str3 = str3.replace(/\./g, "");
           } else {
             for (var j4 = 0, jlen = style.decorations.length; j4 < jlen; j4 += 1) {
               if (style.decorations[j4][0] === "@strip-periods" && style.decorations[j4][1] === "true") {
-                str = str.replace(/\./g, "");
+                str3 = str3.replace(/\./g, "");
                 break;
               }
             }
           }
           this.state.tmp.group_context.tip.variable_success = true;
           this.state.tmp.can_substitute.replace(false, CSL2.LITERAL);
-          if (str === "!here>>>") {
+          if (str3 === "!here>>>") {
             blobs[i3] = false;
           } else {
-            this.state.output.append(str, style, true);
+            this.state.output.append(str3, style, true);
             blobs[i3] = this.state.output.pop();
           }
         }
@@ -12454,29 +12459,29 @@ var require_citeproc_commonjs = __commonJS({
       this._parseName(name);
       return name;
     };
-    CSL2.NameOutput.prototype._stripPeriods = function(tokname, str) {
+    CSL2.NameOutput.prototype._stripPeriods = function(tokname, str3) {
       var decor_tok = this[tokname + "_decor"];
-      if (str) {
+      if (str3) {
         if (this.state.tmp.strip_periods) {
-          str = str.replace(/\./g, "");
+          str3 = str3.replace(/\./g, "");
         } else if (decor_tok) {
           for (var i3 = 0, ilen = decor_tok.decorations.length; i3 < ilen; i3 += 1) {
             if (decor_tok.decorations[i3][0] === "@strip-periods" && decor_tok.decorations[i3][1] === "true") {
-              str = str.replace(/\./g, "");
+              str3 = str3.replace(/\./g, "");
               break;
             }
           }
         }
       }
-      return str;
+      return str3;
     };
     CSL2.NameOutput.prototype._nonDroppingParticle = function(name) {
       var ndp = name["non-dropping-particle"];
       if (ndp && this.state.tmp.sort_key_flag) {
         ndp = ndp.replace(/[\'\u2019]/, "");
       }
-      var str = this._stripPeriods("family", ndp);
-      if (this.state.output.append(str, this.family_decor, true)) {
+      var str3 = this._stripPeriods("family", ndp);
+      if (this.state.output.append(str3, this.family_decor, true)) {
         return this.state.output.pop();
       }
       return false;
@@ -12486,7 +12491,7 @@ var require_citeproc_commonjs = __commonJS({
       if (dp && this.state.tmp.sort_key_flag) {
         dp = dp.replace(/[\'\u2019]/, "");
       }
-      var str = this._stripPeriods("given", dp);
+      var str3 = this._stripPeriods("given", dp);
       if (name["dropping-particle"] && name["dropping-particle"].match(/^et.?al[^a-z]$/)) {
         if (this.state.inheritOpt(this.name, "et-al-use-last")) {
           if (typeof j4 === "undefined") {
@@ -12502,14 +12507,14 @@ var require_citeproc_commonjs = __commonJS({
           }
         }
         name["comma-dropping-particle"] = "";
-      } else if (this.state.output.append(str, this.given_decor, true)) {
+      } else if (this.state.output.append(str3, this.given_decor, true)) {
         return this.state.output.pop();
       }
       return false;
     };
     CSL2.NameOutput.prototype._familyName = function(name) {
-      var str = this._stripPeriods("family", name.family);
-      if (this.state.output.append(str, this.family_decor, true)) {
+      var str3 = this._stripPeriods("family", name.family);
+      if (this.state.output.append(str3, this.family_decor, true)) {
         return this.state.output.pop();
       }
       return false;
@@ -12556,8 +12561,8 @@ var require_citeproc_commonjs = __commonJS({
       } else if (useLevel === 2) {
         name.given = CSL2.Util.Names.unInitialize(this.state, name.given);
       }
-      var str = this._stripPeriods("given", name.given);
-      var rendered = this.state.output.append(str, this.given_decor, true);
+      var str3 = this._stripPeriods("given", name.given);
+      var rendered = this.state.output.append(str3, this.given_decor, true);
       if (rendered) {
         ret = this.state.output.pop();
         return {
@@ -12570,17 +12575,17 @@ var require_citeproc_commonjs = __commonJS({
       };
     };
     CSL2.NameOutput.prototype._nameSuffix = function(name) {
-      var str = name.suffix, ret;
-      if (str && typeof this.state.inheritOpt(this.name, "initialize-with") === "string") {
-        str = CSL2.Util.Names.initializeWith(this.state, str, this.state.inheritOpt(this.name, "initialize-with"), true);
+      var str3 = name.suffix, ret;
+      if (str3 && typeof this.state.inheritOpt(this.name, "initialize-with") === "string") {
+        str3 = CSL2.Util.Names.initializeWith(this.state, str3, this.state.inheritOpt(this.name, "initialize-with"), true);
       }
-      str = this._stripPeriods("family", str);
+      str3 = this._stripPeriods("family", str3);
       var toSuffix = "";
-      if (str && str.slice(-1) === ".") {
-        str = str.slice(0, -1);
+      if (str3 && str3.slice(-1) === ".") {
+        str3 = str3.slice(0, -1);
         toSuffix = ".";
       }
-      var rendered = this.state.output.append(str, "empty", true);
+      var rendered = this.state.output.append(str3, "empty", true);
       if (rendered) {
         ret = this.state.output.pop();
         ret.strings.suffix = toSuffix + ret.strings.suffix;
@@ -12866,11 +12871,11 @@ var require_citeproc_commonjs = __commonJS({
       }
       return static_ordering_val;
     };
-    CSL2.NameOutput.prototype._quashChecks = function(jurisdiction, str) {
-      var str = this.state.transform.quashCheck(jurisdiction, str);
-      var lst = str.split(/>>[0-9]{4}>>/);
-      var m3 = str.match(/>>([0-9]{4})>>/);
-      str = lst.pop();
+    CSL2.NameOutput.prototype._quashChecks = function(jurisdiction, str3) {
+      var str3 = this.state.transform.quashCheck(jurisdiction, str3);
+      var lst = str3.split(/>>[0-9]{4}>>/);
+      var m3 = str3.match(/>>([0-9]{4})>>/);
+      str3 = lst.pop();
       var date = this.Item["original-date"] ? this.Item["original-date"] : this.Item["issued"];
       if (date) {
         date = parseInt(date.year, 10);
@@ -12882,12 +12887,12 @@ var require_citeproc_commonjs = __commonJS({
             if (date >= parseInt(m3[k4], 10)) {
               break;
             }
-            str = lst.pop();
+            str3 = lst.pop();
           }
         }
-        str = str.replace(/\s*\|\s*/g, "|");
+        str3 = str3.replace(/\s*\|\s*/g, "|");
       }
-      return str;
+      return str3;
     };
     CSL2.NameOutput.prototype._trimInstitution = function(subunits) {
       var use_first = false;
@@ -12977,9 +12982,9 @@ var require_citeproc_commonjs = __commonJS({
       for (var i3 = 0, ilen = 2; i3 < ilen; i3 += 1) {
         var varname = ["publisher", "publisher-place"][i3];
         for (var j4 = 0, jlen = this["publisher-list"].length; j4 < jlen; j4 += 1) {
-          var str = this[varname + "-list"][j4];
+          var str3 = this[varname + "-list"][j4];
           var tok = this[varname + "-token"];
-          this.state.output.append(str, tok, true);
+          this.state.output.append(str3, tok, true);
           this[varname + "-list"][j4] = this.state.output.pop();
         }
       }
@@ -13475,7 +13480,7 @@ var require_citeproc_commonjs = __commonJS({
     };
     CSL2.Node.text = {
       build: function(state, target) {
-        var func, form, plural, id, num, number, formatter, firstoutput, specialdelimiter, label, suffix, term;
+        var func, form, plural, id, num2, number, formatter, firstoutput, specialdelimiter, label, suffix, term;
         if (this.postponed_macro) {
           var group_start = CSL2.Util.cloneToken(this);
           group_start.name = "group";
@@ -13526,28 +13531,28 @@ var require_citeproc_commonjs = __commonJS({
                       state2.tmp.group_context.tip.done_vars.push("citation-number");
                     }
                     if (state2.tmp.area === "citation_sort" && state2.bibliography_sort.tmp.citation_number_map) {
-                      var num2 = state2.bibliography_sort.tmp.citation_number_map[state2.registry.registry[Item.id].seq];
+                      var num3 = state2.bibliography_sort.tmp.citation_number_map[state2.registry.registry[Item.id].seq];
                     } else {
-                      var num2 = state2.registry.registry[Item.id].seq;
+                      var num3 = state2.registry.registry[Item.id].seq;
                     }
-                    if (num2) {
-                      num2 = CSL2.Util.padding("" + num2);
+                    if (num3) {
+                      num3 = CSL2.Util.padding("" + num3);
                     }
-                    state2.output.append(num2, this);
+                    state2.output.append(num3, this);
                     return;
                   }
                   if (item && item["author-only"]) {
                     state2.tmp.element_trace.replace("suppress-me");
                   }
                   if (state2.tmp.area !== "bibliography_sort" && state2.bibliography_sort.tmp.citation_number_map && state2.bibliography_sort.opt.citation_number_sort_direction === CSL2.DESCENDING) {
-                    num2 = state2.bibliography_sort.tmp.citation_number_map[state2.registry.registry[id].seq];
+                    num3 = state2.bibliography_sort.tmp.citation_number_map[state2.registry.registry[id].seq];
                   } else {
-                    num2 = state2.registry.registry[id].seq;
+                    num3 = state2.registry.registry[id].seq;
                   }
                   if (state2.opt.citation_number_slug) {
                     state2.output.append(state2.opt.citation_number_slug, this);
                   } else {
-                    number = new CSL2.NumericBlob(state2, false, num2, this, Item.id);
+                    number = new CSL2.NumericBlob(state2, false, num3, this, Item.id);
                     if (state2.tmp.in_cite_predecessor) {
                       number.suppress_splice_prefix = true;
                     }
@@ -13567,11 +13572,11 @@ var require_citeproc_commonjs = __commonJS({
               }
               func = function(state2, Item) {
                 if (state2.registry.registry[Item.id] && state2.registry.registry[Item.id].disambig.year_suffix !== false && !state2.tmp.just_looking) {
-                  num = parseInt(state2.registry.registry[Item.id].disambig.year_suffix, 10);
+                  num2 = parseInt(state2.registry.registry[Item.id].disambig.year_suffix, 10);
                   if (state2[state2.tmp.area].opt.cite_group_delimiter) {
                     this.successor_prefix = state2[state2.tmp.area].opt.cite_group_delimiter;
                   }
-                  number = new CSL2.NumericBlob(state2, false, num, this, Item.id);
+                  number = new CSL2.NumericBlob(state2, false, num2, this, Item.id);
                   formatter = new CSL2.Util.Suffixator(CSL2.SUFFIX_CHARS);
                   number.setFormatter(formatter);
                   state2.output.append(number, "literal");
@@ -13603,8 +13608,8 @@ var require_citeproc_commonjs = __commonJS({
                 if (!state2.tmp.just_looking) {
                   suffix = "";
                   if (state2.registry.registry[Item.id] && state2.registry.registry[Item.id].disambig.year_suffix !== false) {
-                    num = parseInt(state2.registry.registry[Item.id].disambig.year_suffix, 10);
-                    suffix = state2.fun.suffixator.format(num);
+                    num2 = parseInt(state2.registry.registry[Item.id].disambig.year_suffix, 10);
+                    suffix = state2.fun.suffixator.format(num2);
                   }
                   label += suffix;
                 }
@@ -15922,7 +15927,7 @@ var require_citeproc_commonjs = __commonJS({
       this.year_suffix = false;
       this.disambiguate = 0;
     };
-    CSL2.Blob = function(str, token, levelname) {
+    CSL2.Blob = function(str3, token, levelname) {
       var len, pos, key;
       this.levelname = levelname;
       if (token) {
@@ -15948,10 +15953,10 @@ var require_citeproc_commonjs = __commonJS({
         this.strings.delimiter = "";
         this.decorations = [];
       }
-      if (typeof str === "string") {
-        this.blobs = str;
-      } else if (str) {
-        this.blobs = [str];
+      if (typeof str3 === "string") {
+        this.blobs = str3;
+      } else if (str3) {
+        this.blobs = [str3];
       } else {
         this.blobs = [];
       }
@@ -15965,12 +15970,12 @@ var require_citeproc_commonjs = __commonJS({
         this.blobs.push(blob);
       }
     };
-    CSL2.NumericBlob = function(state, particle, num, mother_token, id) {
+    CSL2.NumericBlob = function(state, particle, num2, mother_token, id) {
       this.id = id;
       this.alldecor = [];
-      this.num = num;
+      this.num = num2;
       this.particle = particle;
-      this.blobs = num.toString();
+      this.blobs = num2.toString();
       this.status = CSL2.START;
       this.strings = {};
       if (mother_token) {
@@ -16010,8 +16015,8 @@ var require_citeproc_commonjs = __commonJS({
     };
     CSL2.Output.DefaultFormatter = function() {
     };
-    CSL2.Output.DefaultFormatter.prototype.format = function(num) {
-      return num.toString();
+    CSL2.Output.DefaultFormatter.prototype.format = function(num2) {
+      return num2.toString();
     };
     CSL2.NumericBlob.prototype.checkNext = function(next, start) {
       if (start) {
@@ -16281,8 +16286,8 @@ var require_citeproc_commonjs = __commonJS({
       ret = ret.replace(/\u2013([a-z])/g, "-$1");
       return ret;
     };
-    CSL2.Util.Names.notag = function(str) {
-      return str.replace(/^(?:<[^>]+>)*/, "");
+    CSL2.Util.Names.notag = function(str3) {
+      return str3.replace(/^(?:<[^>]+>)*/, "");
     };
     CSL2.Util.Names.mergetag = function(state, tagstr, newstr) {
       var m3 = tagstr.match(/(?:-*<[^>]+>-*)/g);
@@ -16300,10 +16305,10 @@ var require_citeproc_commonjs = __commonJS({
       }
       return newstr;
     };
-    CSL2.Util.Names.tagonly = function(state, str) {
-      var m3 = str.match(/(?:<[^>]+>)+/);
+    CSL2.Util.Names.tagonly = function(state, str3) {
+      var m3 = str3.match(/(?:<[^>]+>)+/);
       if (!m3) {
-        return str;
+        return str3;
       } else {
         return m3.join("");
       }
@@ -16416,23 +16421,23 @@ var require_citeproc_commonjs = __commonJS({
     };
     CSL2.Util.Dates = {};
     CSL2.Util.Dates.year = {};
-    CSL2.Util.Dates.year["long"] = function(state, num) {
-      if (!num) {
-        if (typeof num === "boolean") {
-          num = "";
+    CSL2.Util.Dates.year["long"] = function(state, num2) {
+      if (!num2) {
+        if (typeof num2 === "boolean") {
+          num2 = "";
         } else {
-          num = 0;
+          num2 = 0;
         }
       }
-      return num.toString();
+      return num2.toString();
     };
-    CSL2.Util.Dates.year.imperial = function(state, num, end) {
+    CSL2.Util.Dates.year.imperial = function(state, num2, end) {
       var year = "";
-      if (!num) {
-        if (typeof num === "boolean") {
-          num = "";
+      if (!num2) {
+        if (typeof num2 === "boolean") {
+          num2 = "";
         } else {
-          num = 0;
+          num2 = 0;
         }
       }
       end = end ? "_end" : "";
@@ -16446,7 +16451,7 @@ var require_citeproc_commonjs = __commonJS({
       while (day.length < 2) {
         day = "0" + day;
       }
-      var date = parseInt(num + month + day, 10);
+      var date = parseInt(num2 + month + day, 10);
       var label;
       var offset;
       if (date >= 18680908 && date < 19120730) {
@@ -16473,44 +16478,44 @@ var require_citeproc_commonjs = __commonJS({
         if (state.transform.abbrevs["default"]["number"][normalizedKey]) {
           label = state.transform.abbrevs["default"]["number"][normalizedKey];
         }
-        year = label + (num - offset);
+        year = label + (num2 - offset);
       }
       return year;
     };
-    CSL2.Util.Dates.year["short"] = function(state, num) {
-      num = num.toString();
-      if (num && num.length === 4) {
-        return num.substr(2);
+    CSL2.Util.Dates.year["short"] = function(state, num2) {
+      num2 = num2.toString();
+      if (num2 && num2.length === 4) {
+        return num2.substr(2);
       }
     };
-    CSL2.Util.Dates.year.numeric = function(state, num) {
+    CSL2.Util.Dates.year.numeric = function(state, num2) {
       var m3, pre;
-      num = "" + num;
-      var m3 = num.match(/([0-9]*)$/);
+      num2 = "" + num2;
+      var m3 = num2.match(/([0-9]*)$/);
       if (m3) {
-        pre = num.slice(0, m3[1].length * -1);
-        num = m3[1];
+        pre = num2.slice(0, m3[1].length * -1);
+        num2 = m3[1];
       } else {
-        pre = num;
-        num = "";
+        pre = num2;
+        num2 = "";
       }
-      while (num.length < 4) {
-        num = "0" + num;
+      while (num2.length < 4) {
+        num2 = "0" + num2;
       }
-      return pre + num;
+      return pre + num2;
     };
-    CSL2.Util.Dates.normalizeMonth = function(num, useSeason) {
+    CSL2.Util.Dates.normalizeMonth = function(num2, useSeason) {
       var ret;
-      if (!num) {
-        num = 0;
+      if (!num2) {
+        num2 = 0;
       }
-      num = "" + num;
-      if (!num.match(/^[0-9]+$/)) {
-        num = 0;
+      num2 = "" + num2;
+      if (!num2.match(/^[0-9]+$/)) {
+        num2 = 0;
       }
-      num = parseInt(num, 10);
+      num2 = parseInt(num2, 10);
       if (useSeason) {
-        var res = { stub: "month-", num };
+        var res = { stub: "month-", num: num2 };
         if (res.num < 1 || res.num > 24) {
           res.num = 0;
         } else {
@@ -16524,89 +16529,89 @@ var require_citeproc_commonjs = __commonJS({
         }
         ret = res;
       } else {
-        if (num < 1 || num > 12) {
-          num = 0;
+        if (num2 < 1 || num2 > 12) {
+          num2 = 0;
         }
-        ret = num;
+        ret = num2;
       }
       return ret;
     };
     CSL2.Util.Dates.month = {};
-    CSL2.Util.Dates.month.numeric = function(state, num) {
-      var num = CSL2.Util.Dates.normalizeMonth(num);
-      if (!num) {
-        num = "";
+    CSL2.Util.Dates.month.numeric = function(state, num2) {
+      var num2 = CSL2.Util.Dates.normalizeMonth(num2);
+      if (!num2) {
+        num2 = "";
       }
-      return num;
+      return num2;
     };
-    CSL2.Util.Dates.month["numeric-leading-zeros"] = function(state, num) {
-      var num = CSL2.Util.Dates.normalizeMonth(num);
-      if (!num) {
-        num = "";
+    CSL2.Util.Dates.month["numeric-leading-zeros"] = function(state, num2) {
+      var num2 = CSL2.Util.Dates.normalizeMonth(num2);
+      if (!num2) {
+        num2 = "";
       } else {
-        num = "" + num;
-        while (num.length < 2) {
-          num = "0" + num;
+        num2 = "" + num2;
+        while (num2.length < 2) {
+          num2 = "0" + num2;
         }
       }
-      return num;
+      return num2;
     };
-    CSL2.Util.Dates.month["long"] = function(state, num, gender, forceDefaultLocale) {
-      var res = CSL2.Util.Dates.normalizeMonth(num, true);
-      var num = res.num;
-      if (!num) {
-        num = "";
+    CSL2.Util.Dates.month["long"] = function(state, num2, gender, forceDefaultLocale) {
+      var res = CSL2.Util.Dates.normalizeMonth(num2, true);
+      var num2 = res.num;
+      if (!num2) {
+        num2 = "";
       } else {
-        num = "" + num;
-        while (num.length < 2) {
-          num = "0" + num;
+        num2 = "" + num2;
+        while (num2.length < 2) {
+          num2 = "0" + num2;
         }
-        num = state.getTerm(res.stub + num, "long", 0, 0, false, forceDefaultLocale);
+        num2 = state.getTerm(res.stub + num2, "long", 0, 0, false, forceDefaultLocale);
       }
-      return num;
+      return num2;
     };
-    CSL2.Util.Dates.month["short"] = function(state, num, gender, forceDefaultLocale) {
-      var res = CSL2.Util.Dates.normalizeMonth(num, true);
-      var num = res.num;
-      if (!num) {
-        num = "";
+    CSL2.Util.Dates.month["short"] = function(state, num2, gender, forceDefaultLocale) {
+      var res = CSL2.Util.Dates.normalizeMonth(num2, true);
+      var num2 = res.num;
+      if (!num2) {
+        num2 = "";
       } else {
-        num = "" + num;
-        while (num.length < 2) {
-          num = "0" + num;
+        num2 = "" + num2;
+        while (num2.length < 2) {
+          num2 = "0" + num2;
         }
-        num = state.getTerm(res.stub + num, "short", 0, 0, false, forceDefaultLocale);
+        num2 = state.getTerm(res.stub + num2, "short", 0, 0, false, forceDefaultLocale);
       }
-      return num;
+      return num2;
     };
     CSL2.Util.Dates.day = {};
-    CSL2.Util.Dates.day.numeric = function(state, num) {
-      return num.toString();
+    CSL2.Util.Dates.day.numeric = function(state, num2) {
+      return num2.toString();
     };
     CSL2.Util.Dates.day["long"] = CSL2.Util.Dates.day.numeric;
-    CSL2.Util.Dates.day["numeric-leading-zeros"] = function(state, num) {
-      if (!num) {
-        num = 0;
+    CSL2.Util.Dates.day["numeric-leading-zeros"] = function(state, num2) {
+      if (!num2) {
+        num2 = 0;
       }
-      num = num.toString();
-      while (num.length < 2) {
-        num = "0" + num;
+      num2 = num2.toString();
+      while (num2.length < 2) {
+        num2 = "0" + num2;
       }
-      return num.toString();
+      return num2.toString();
     };
-    CSL2.Util.Dates.day.ordinal = function(state, num, gender) {
-      return state.fun.ordinalizer.format(num, gender);
+    CSL2.Util.Dates.day.ordinal = function(state, num2, gender) {
+      return state.fun.ordinalizer.format(num2, gender);
     };
     CSL2.Util.Sort = {};
-    CSL2.Util.Sort.strip_prepositions = function(str) {
+    CSL2.Util.Sort.strip_prepositions = function(str3) {
       var m3;
-      if (typeof str === "string") {
-        m3 = str.match(/^(([aA]|[aA][nN]|[tT][hH][eE])\s+)/);
+      if (typeof str3 === "string") {
+        m3 = str3.match(/^(([aA]|[aA][nN]|[tT][hH][eE])\s+)/);
       }
       if (m3) {
-        str = str.substr(m3[1].length);
+        str3 = str3.substr(m3[1].length);
       }
-      return str;
+      return str3;
     };
     CSL2.Util.substituteStart = function(state, target) {
       var element_trace, display, bib_first, func, choose_start, if_start, nodetypes;
@@ -16760,7 +16765,7 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL2.Util.substituteEnd = function(state, target) {
-      var func, bib_first_end, bib_other, if_end, choose_end, author_substitute, str;
+      var func, bib_first_end, bib_other, if_end, choose_end, author_substitute, str3;
       if (state.sys.variableWrapper && (this.hasVariable || this.variables_real && this.variables_real.length)) {
         func = function(state2) {
           if (!state2.tmp.just_looking && !state2.tmp.suppress_decorations) {
@@ -16840,8 +16845,8 @@ var require_citeproc_commonjs = __commonJS({
                 for (i3 = 0, ilen = state2.tmp.name_node.children.length; i3 < ilen; i3 += 1) {
                   var name = state2.tmp.rendered_name[i3];
                   if (dosub && state2.tmp.last_rendered_name && state2.tmp.last_rendered_name.length > i3 - 1 && name && !name.localeCompare(state2.tmp.last_rendered_name[i3])) {
-                    str = new CSL2.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
-                    state2.tmp.name_node.children[i3].blobs = [str];
+                    str3 = new CSL2.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
+                    state2.tmp.name_node.children[i3].blobs = [str3];
                     if (subrule === "partial-first") {
                       dosub = false;
                     }
@@ -16856,8 +16861,8 @@ var require_citeproc_commonjs = __commonJS({
                 if (rendered_name) {
                   if (state2.tmp.last_rendered_name && !rendered_name.localeCompare(state2.tmp.last_rendered_name)) {
                     for (i3 = 0, ilen = state2.tmp.name_node.children.length; i3 < ilen; i3 += 1) {
-                      str = new CSL2.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
-                      state2.tmp.name_node.children[i3].blobs = [str];
+                      str3 = new CSL2.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
+                      state2.tmp.name_node.children[i3].blobs = [str3];
                     }
                   }
                   state2.tmp.last_rendered_name = rendered_name;
@@ -16866,13 +16871,13 @@ var require_citeproc_commonjs = __commonJS({
                 var rendered_name = state2.tmp.rendered_name.join(",");
                 if (rendered_name) {
                   if (state2.tmp.last_rendered_name && !rendered_name.localeCompare(state2.tmp.last_rendered_name)) {
-                    str = new CSL2.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
+                    str3 = new CSL2.Blob(state2[state2.tmp.area].opt["subsequent-author-substitute"]);
                     if (state2.tmp.label_blob) {
-                      state2.tmp.name_node.top.blobs = [str, state2.tmp.label_blob];
+                      state2.tmp.name_node.top.blobs = [str3, state2.tmp.label_blob];
                     } else if (state2.tmp.name_node.top.blobs.length) {
-                      state2.tmp.name_node.top.blobs[0].blobs = [str];
+                      state2.tmp.name_node.top.blobs[0].blobs = [str3];
                     } else {
-                      state2.tmp.name_node.top.blobs = [str];
+                      state2.tmp.name_node.top.blobs = [str3];
                     }
                     state2.tmp.substituted_variable = substitution_name;
                   }
@@ -16894,32 +16899,32 @@ var require_citeproc_commonjs = __commonJS({
         this.execs.push(func);
       }
     };
-    CSL2.Util.padding = function(num) {
-      var m3 = num.match(/\s*(-{0,1}[0-9]+)/);
+    CSL2.Util.padding = function(num2) {
+      var m3 = num2.match(/\s*(-{0,1}[0-9]+)/);
       if (m3) {
-        num = parseInt(m3[1], 10);
-        if (num < 0) {
-          num = 1e20 + num;
+        num2 = parseInt(m3[1], 10);
+        if (num2 < 0) {
+          num2 = 1e20 + num2;
         }
-        num = "" + num;
-        while (num.length < 20) {
-          num = "0" + num;
+        num2 = "" + num2;
+        while (num2.length < 20) {
+          num2 = "0" + num2;
         }
       }
-      return num;
+      return num2;
     };
     CSL2.Util.LongOrdinalizer = function() {
     };
     CSL2.Util.LongOrdinalizer.prototype.init = function(state) {
       this.state = state;
     };
-    CSL2.Util.LongOrdinalizer.prototype.format = function(num, gender) {
-      if (num < 10) {
-        num = "0" + num;
+    CSL2.Util.LongOrdinalizer.prototype.format = function(num2, gender) {
+      if (num2 < 10) {
+        num2 = "0" + num2;
       }
-      var ret = CSL2.Engine.getField(CSL2.LOOSE, this.state.locale[this.state.opt.lang].terms, "long-ordinal-" + num, "long", 0, gender);
+      var ret = CSL2.Engine.getField(CSL2.LOOSE, this.state.locale[this.state.opt.lang].terms, "long-ordinal-" + num2, "long", 0, gender);
       if (!ret) {
-        ret = this.state.fun.ordinalizer.format(num, gender);
+        ret = this.state.fun.ordinalizer.format(num2, gender);
       }
       this.state.tmp.cite_renders_content = true;
       return ret;
@@ -16945,10 +16950,10 @@ var require_citeproc_commonjs = __commonJS({
         }
       }
     };
-    CSL2.Util.Ordinalizer.prototype.format = function(num, gender) {
-      var str;
-      num = parseInt(num, 10);
-      str = "" + num;
+    CSL2.Util.Ordinalizer.prototype.format = function(num2, gender) {
+      var str3;
+      num2 = parseInt(num2, 10);
+      str3 = "" + num2;
       var suffix = "";
       var trygenders = [];
       if (gender) {
@@ -16961,12 +16966,12 @@ var require_citeproc_commonjs = __commonJS({
         for (var i3 = 0, ilen = trygenders.length; i3 < ilen; i3 += 1) {
           trygender = trygenders[i3];
           var ordinfo = this.state.locale[this.state.opt.lang].ord["1.0.1"];
-          if (ordinfo["whole-number"][str] && ordinfo["whole-number"][str][trygender]) {
-            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["whole-number"][str][trygender], false, 0, gender);
-          } else if (ordinfo["last-two-digits"][str.slice(str.length - 2)] && ordinfo["last-two-digits"][str.slice(str.length - 2)][trygender]) {
-            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-two-digits"][str.slice(str.length - 2)][trygender], false, 0, gender);
-          } else if (ordinfo["last-digit"][str.slice(str.length - 1)] && ordinfo["last-digit"][str.slice(str.length - 1)][trygender]) {
-            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-digit"][str.slice(str.length - 1)][trygender], false, 0, gender);
+          if (ordinfo["whole-number"][str3] && ordinfo["whole-number"][str3][trygender]) {
+            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["whole-number"][str3][trygender], false, 0, gender);
+          } else if (ordinfo["last-two-digits"][str3.slice(str3.length - 2)] && ordinfo["last-two-digits"][str3.slice(str3.length - 2)][trygender]) {
+            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-two-digits"][str3.slice(str3.length - 2)][trygender], false, 0, gender);
+          } else if (ordinfo["last-digit"][str3.slice(str3.length - 1)] && ordinfo["last-digit"][str3.slice(str3.length - 1)][trygender]) {
+            suffix = this.state.getTerm(this.state.locale[this.state.opt.lang].ord["1.0.1"]["last-digit"][str3.slice(str3.length - 1)][trygender], false, 0, gender);
           }
           if (suffix) {
             break;
@@ -16977,28 +16982,28 @@ var require_citeproc_commonjs = __commonJS({
           gender = void 0;
         }
         this.state.fun.ordinalizer.init();
-        if (num / 10 % 10 === 1 || num > 10 && num < 20) {
+        if (num2 / 10 % 10 === 1 || num2 > 10 && num2 < 20) {
           suffix = this.suffixes[this.state.opt.lang][gender][3];
-        } else if (num % 10 === 1 && num % 100 !== 11) {
+        } else if (num2 % 10 === 1 && num2 % 100 !== 11) {
           suffix = this.suffixes[this.state.opt.lang][gender][0];
-        } else if (num % 10 === 2 && num % 100 !== 12) {
+        } else if (num2 % 10 === 2 && num2 % 100 !== 12) {
           suffix = this.suffixes[this.state.opt.lang][gender][1];
-        } else if (num % 10 === 3 && num % 100 !== 13) {
+        } else if (num2 % 10 === 3 && num2 % 100 !== 13) {
           suffix = this.suffixes[this.state.opt.lang][gender][2];
         } else {
           suffix = this.suffixes[this.state.opt.lang][gender][3];
         }
       }
-      str = str += suffix;
-      return str;
+      str3 = str3 += suffix;
+      return str3;
     };
     CSL2.Util.Romanizer = function() {
     };
-    CSL2.Util.Romanizer.prototype.format = function(num) {
+    CSL2.Util.Romanizer.prototype.format = function(num2) {
       var ret, pos, n2, numstr, len;
       ret = "";
-      if (num < 6e3) {
-        numstr = num.toString().split("");
+      if (num2 < 6e3) {
+        numstr = num2.toString().split("");
         numstr.reverse();
         pos = 0;
         n2 = 0;
@@ -17045,9 +17050,9 @@ var require_citeproc_commonjs = __commonJS({
       if (localeAnd === localeAmpersand) {
         localeAmpersand = "&";
       }
-      function normalizeFieldValue(str) {
-        str = str.trim();
-        var m3 = str.match(/^([^ ]+)/);
+      function normalizeFieldValue(str3) {
+        str3 = str3.trim();
+        var m3 = str3.match(/^([^ ]+)/);
         if (m3 && !CSL2.STATUTE_SUBDIV_STRINGS[m3[1]]) {
           var embeddedLabel = null;
           if (["locator", "locator-extra", "page"].indexOf(variable) > -1) {
@@ -17060,10 +17065,10 @@ var require_citeproc_commonjs = __commonJS({
             embeddedLabel = CSL2.STATUTE_SUBDIV_STRINGS_REVERSE[variable];
           }
           if (embeddedLabel) {
-            str = embeddedLabel + " " + str;
+            str3 = embeddedLabel + " " + str3;
           }
         }
-        return str;
+        return str3;
       }
       function composeNumberInfo(origLabel, label, val2, joiningSuffix, parsePosition) {
         joiningSuffix = joiningSuffix ? joiningSuffix : "";
@@ -17104,19 +17109,19 @@ var require_citeproc_commonjs = __commonJS({
         }
         return elems;
       }
-      function parseString(str, defaultLabel2) {
+      function parseString(str3, defaultLabel2) {
         defaultLabel2 = defaultLabel2 ? defaultLabel2 : "";
-        str = normalizeFieldValue(str, defaultLabel2);
+        str3 = normalizeFieldValue(str3, defaultLabel2);
         var jmrex, jsrex, mystr;
         if (variable === "page") {
-          if (str.indexOf("\u2013") > -1) {
-            str = str.replace(/\u2013/g, "-");
+          if (str3.indexOf("\u2013") > -1) {
+            str3 = str3.replace(/\u2013/g, "-");
           }
         }
-        if (str.indexOf("\\-") > -1) {
+        if (str3.indexOf("\\-") > -1) {
           jmrex = new RegExp(joinerMatchRex.source.replace("\\-", ""));
           jsrex = new RegExp(joinerSplitRex.source.replace("\\-", ""));
-          var lst = str.split("\\-");
+          var lst = str3.split("\\-");
           for (var i3 = 0, ilen = lst.length; i3 < ilen; i3++) {
             lst[i3] = lst[i3].replace(/\-/g, "\u2013");
           }
@@ -17125,7 +17130,7 @@ var require_citeproc_commonjs = __commonJS({
         } else {
           jmrex = joinerMatchRex;
           jsrex = joinerSplitRex;
-          mystr = str;
+          mystr = str3;
         }
         var elems = [];
         var m3 = mystr.match(jmrex);
@@ -17412,17 +17417,17 @@ var require_citeproc_commonjs = __commonJS({
         }
         var val2 = values2[i3];
         var isPage = checkPage(variable, val2);
-        var str;
+        var str3;
         if (isPage && !isNaN(parseInt(values2[i3 - 1].value)) && !isNaN(parseInt(values2[i3].value))) {
-          str = values2[i3 - 1].particle + values2[i3 - 1].value + " - " + values2[i3].particle + values2[i3].value;
-          str = me.fun.page_mangler(str);
+          str3 = values2[i3 - 1].particle + values2[i3 - 1].value + " - " + values2[i3].particle + values2[i3].value;
+          str3 = me.fun.page_mangler(str3);
         } else {
           if (("" + values2[i3 - 1].value).match(/^([0-9]+|[ivxlcmIVXLCM]+)$/) && ("" + values2[i3].value).match(/^([0-9]+|[ivxlcmIVXLCM]+)$/)) {
             values2[i3 - 1].joiningSuffix = me.getTerm("page-range-delimiter");
           }
-          str = values2[i3 - 1].value + stripHyphenBackslash(values2[i3 - 1].joiningSuffix) + values2[i3].value;
+          str3 = values2[i3 - 1].value + stripHyphenBackslash(values2[i3 - 1].joiningSuffix) + values2[i3].value;
         }
-        var m3 = str.match(/^((?:[0-9]*[a-zA-Z]+0*))?([0-9]+[a-z]*)(\s*[^0-9]+\s*)([-,a-zA-Z]?0*)([0-9]+[a-z]*)$/);
+        var m3 = str3.match(/^((?:[0-9]*[a-zA-Z]+0*))?([0-9]+[a-z]*)(\s*[^0-9]+\s*)([-,a-zA-Z]?0*)([0-9]+[a-z]*)$/);
         if (m3) {
           var rangeDelimiter = m3[3];
           rangeDelimiter = fixupRangeDelimiter(variable, val2, rangeDelimiter, values2[i3].numeric);
@@ -17594,35 +17599,35 @@ var require_citeproc_commonjs = __commonJS({
       var labelDecorations = state.tmp.shadow_numbers[varname].labelDecorations;
       var lastLabelName = null;
       for (var i3 = 0, ilen = nums.length; i3 < ilen; i3++) {
-        var num = nums[i3];
+        var num2 = nums[i3];
         var label = "";
         var labelName;
-        if (num.label) {
-          if (num.label.slice(0, 4) === "var:") {
-            labelName = num.label.slice(4);
+        if (num2.label) {
+          if (num2.label.slice(0, 4) === "var:") {
+            labelName = num2.label.slice(4);
           } else {
-            labelName = CSL2.STATUTE_SUBDIV_STRINGS[num.label];
+            labelName = CSL2.STATUTE_SUBDIV_STRINGS[num2.label];
           }
           if (labelName) {
-            if (num.label === masterLabel) {
+            if (num2.label === masterLabel) {
               if (tryStatic) {
-                label = state.getTerm(labelName, "static", num.plural);
+                label = state.getTerm(labelName, "static", num2.plural);
                 if (label.indexOf("%s") === -1) {
                   label = "";
                 }
               }
               if (!label) {
-                label = state.getTerm(labelName, labelForm, num.plural);
+                label = state.getTerm(labelName, labelForm, num2.plural);
               }
             } else {
               if (tryStatic) {
-                label = state.getTerm(labelName, "static", num.plural);
+                label = state.getTerm(labelName, "static", num2.plural);
                 if (label.indexOf("%s") === -1) {
                   label = "";
                 }
               }
               if (!label) {
-                label = state.getTerm(labelName, embeddedLabelForm, num.plural);
+                label = state.getTerm(labelName, embeddedLabelForm, num2.plural);
               }
             }
             if (labelCapitalizeIfFirst) {
@@ -17634,41 +17639,41 @@ var require_citeproc_commonjs = __commonJS({
         if (label) {
           labelPlaceholderPos = label.indexOf("%s");
         }
-        var numStyling = CSL2.Util.cloneToken(num.styling);
-        numStyling.formatter = num.styling.formatter;
-        numStyling.type = num.styling.type;
-        numStyling.num = num.styling.num;
-        numStyling.gender = num.styling.gender;
+        var numStyling = CSL2.Util.cloneToken(num2.styling);
+        numStyling.formatter = num2.styling.formatter;
+        numStyling.type = num2.styling.type;
+        numStyling.num = num2.styling.num;
+        numStyling.gender = num2.styling.gender;
         if (labelPlaceholderPos > 0 && labelPlaceholderPos < label.length - 2) {
           numStyling.strings.prefix += label.slice(0, labelPlaceholderPos);
           numStyling.strings.suffix = label.slice(labelPlaceholderPos + 2) + numStyling.strings.suffix;
-        } else if (num.labelVisibility) {
+        } else if (num2.labelVisibility) {
           if (!label) {
-            label = num.label;
-            labelName = num.label;
+            label = num2.label;
+            labelName = num2.label;
           }
           if (labelPlaceholderPos > 0) {
             var prefixLabelStyling = new CSL2.Token();
             prefixLabelStyling.decorations = labelDecorations;
             state.output.append(label.slice(0, labelPlaceholderPos), prefixLabelStyling);
           } else if (labelPlaceholderPos === label.length - 2 || labelPlaceholderPos === -1) {
-            state.output.append(label + num.labelSuffix, "empty");
+            state.output.append(label + num2.labelSuffix, "empty");
           }
         }
-        CSL2.UPDATE_GROUP_CONTEXT_CONDITION(state, masterStyling.strings.prefix, null, masterStyling, `${num.particle}${num.value}`);
-        if (num.collapsible) {
+        CSL2.UPDATE_GROUP_CONTEXT_CONDITION(state, masterStyling.strings.prefix, null, masterStyling, `${num2.particle}${num2.value}`);
+        if (num2.collapsible) {
           var blob;
-          if (num.value.match(/^[1-9][0-9]*$/) && Number.isSafeInteger(parseInt(num.value, 10))) {
-            blob = new CSL2.NumericBlob(state, num.particle, parseInt(num.value, 10), numStyling, itemID);
+          if (num2.value.match(/^[1-9][0-9]*$/) && Number.isSafeInteger(parseInt(num2.value, 10))) {
+            blob = new CSL2.NumericBlob(state, num2.particle, parseInt(num2.value, 10), numStyling, itemID);
           } else {
-            blob = new CSL2.NumericBlob(state, num.particle, num.value, numStyling, itemID);
+            blob = new CSL2.NumericBlob(state, num2.particle, num2.value, numStyling, itemID);
           }
           if (typeof blob.gender === "undefined") {
             blob.gender = state.locale[state.opt.lang]["noun-genders"][varname];
           }
           state.output.append(blob, "literal");
         } else {
-          state.output.append(num.particle + num.value, numStyling);
+          state.output.append(num2.particle + num2.value, numStyling);
         }
         if (labelPlaceholderPos === 0 && labelPlaceholderPos < label.length - 2) {
           if (lastLabelName === null) {
@@ -17701,16 +17706,16 @@ var require_citeproc_commonjs = __commonJS({
         ret2 = ret2.replace(/([^\\])\-/g, "$1" + state.getTerm(rangeType + "-range-delimiter"));
         return ret2;
       };
-      listify = function(str) {
+      listify = function(str3) {
         var m4, lst2, ret2;
         var hyphens = "\\s+\\-\\s+";
         var this_range_delimiter = range_delimiter === "-" ? "" : range_delimiter;
         var delimRex = new RegExp("([^\\\\])[-" + this_range_delimiter + "\\u2013]", "g");
-        str = str.replace(delimRex, "$1 - ").replace(/\s+-\s+/g, " - ");
+        str3 = str3.replace(delimRex, "$1 - ").replace(/\s+-\s+/g, " - ");
         var rexm = new RegExp("((?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*" + hyphens + "(?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*)", "g");
         var rexlst = new RegExp("(?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*" + hyphens + "(?:[0-9]*[a-zA-Z]+0*)?[0-9]+[a-z]*");
-        m4 = str.match(rexm);
-        lst2 = str.split(rexlst);
+        m4 = str3.match(rexm);
+        lst2 = str3.split(rexlst);
         if (lst2.length === 0) {
           ret2 = m4;
         } else {
@@ -17722,9 +17727,9 @@ var require_citeproc_commonjs = __commonJS({
         }
         return ret2;
       };
-      expand = function(str) {
-        str = "" + str;
-        lst = listify(str);
+      expand = function(str3) {
+        str3 = "" + str3;
+        lst = listify(str3);
         len = lst.length;
         for (pos = 1; pos < len; pos += 2) {
           m3 = lst[pos].match(rangerex);
@@ -17825,40 +17830,40 @@ var require_citeproc_commonjs = __commonJS({
         }
         return stringify(lst2);
       };
-      var sniff = function(str, func, minchars, isyear) {
+      var sniff = function(str3, func, minchars, isyear) {
         var ret2;
-        str = "" + str;
-        var lst2 = expand(str);
+        str3 = "" + str3;
+        var lst2 = expand(str3);
         var ret2 = func(lst2, minchars, isyear);
         return ret2;
       };
       if (!state.opt[rangeType + "-range-format"]) {
-        ret_func = function(str) {
-          return sniff(str, stringify);
+        ret_func = function(str3) {
+          return sniff(str3, stringify);
         };
       } else if (state.opt[rangeType + "-range-format"] === "expanded") {
-        ret_func = function(str) {
-          return sniff(str, stringify);
+        ret_func = function(str3) {
+          return sniff(str3, stringify);
         };
       } else if (state.opt[rangeType + "-range-format"] === "minimal") {
-        ret_func = function(str) {
-          return sniff(str, minimize);
+        ret_func = function(str3) {
+          return sniff(str3, minimize);
         };
       } else if (state.opt[rangeType + "-range-format"] === "minimal-two") {
-        ret_func = function(str, isyear) {
-          return sniff(str, minimize, 2, isyear);
+        ret_func = function(str3, isyear) {
+          return sniff(str3, minimize, 2, isyear);
         };
       } else if (state.opt[rangeType + "-range-format"] === "chicago") {
-        ret_func = function(str) {
-          return sniff(str, chicago15);
+        ret_func = function(str3) {
+          return sniff(str3, chicago15);
         };
       } else if (state.opt[rangeType + "-range-format"] === "chicago-15") {
-        ret_func = function(str) {
-          return sniff(str, chicago15);
+        ret_func = function(str3) {
+          return sniff(str3, chicago15);
         };
       } else if (state.opt[rangeType + "-range-format"] === "chicago-16") {
-        ret_func = function(str) {
-          return sniff(str, chicago16);
+        ret_func = function(str3) {
+          return sniff(str3, chicago16);
         };
       }
       return ret_func;
@@ -18011,8 +18016,8 @@ var require_citeproc_commonjs = __commonJS({
           }
         }
         var ret = _nestingData[opener];
-        ret.opener = new RegExp("^(?:" + openers.map(function(str) {
-          return str.replace("(", "\\(");
+        ret.opener = new RegExp("^(?:" + openers.map(function(str3) {
+          return str3.replace("(", "\\(");
         }).join("|") + ")");
         return ret;
       }
@@ -18038,14 +18043,14 @@ var require_citeproc_commonjs = __commonJS({
           var closer = keys[i3];
           closers.push(closer);
         }
-        var all = openers.concat(closers).map(function(str) {
-          return str.replace("(", "\\(");
+        var all = openers.concat(closers).map(function(str3) {
+          return str3.replace("(", "\\(");
         }).join("|");
         return {
           matchAll: new RegExp("((?:" + all + "))", "g"),
           splitAll: new RegExp("(?:" + all + ")", "g"),
-          open: new RegExp("(^(?:" + openers.map(function(str) {
-            return str.replace("(", "\\(");
+          open: new RegExp("(^(?:" + openers.map(function(str3) {
+            return str3.replace("(", "\\(");
           }).join("|") + ")$)"),
           close: new RegExp("(^(?:" + closers.join("|") + ")$)")
         };
@@ -18106,19 +18111,19 @@ var require_citeproc_commonjs = __commonJS({
           return _tryClose(tag, pos);
         }
       }
-      function _doppelString(str) {
+      function _doppelString(str3) {
         var forcedSpaces = [];
-        str = str.replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?\"[^>]*(>)/g, '$1 $2$3;"$4');
-        str = str.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3");
-        var match2 = str.match(_tagRex.matchAll);
+        str3 = str3.replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?\"[^>]*(>)/g, '$1 $2$3;"$4');
+        str3 = str3.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3");
+        var match2 = str3.match(_tagRex.matchAll);
         if (!match2) {
           return {
             tags: [],
-            strings: [str],
+            strings: [str3],
             forcedSpaces: []
           };
         }
-        var split = str.split(_tagRex.splitAll);
+        var split = str3.split(_tagRex.splitAll);
         for (var i3 = 0, ilen = match2.length - 1; i3 < ilen; i3++) {
           if (_nestingData[match2[i3]]) {
             if (split[i3 + 1] === "" && ['"', "'"].indexOf(match2[i3 + 1]) > -1) {
@@ -18178,12 +18183,12 @@ var require_citeproc_commonjs = __commonJS({
           _stack.pop();
         };
       };
-      function _apostropheForce(tag, str) {
+      function _apostropheForce(tag, str3) {
         if (tag === "'") {
-          if (str && str.match(/^[^\,\.\?\:\;\ ]/)) {
+          if (str3 && str3.match(/^[^\,\.\?\:\;\ ]/)) {
             return "\u2019";
           }
-        } else if (tag === " '" && str && str.match(/^[\ ]/)) {
+        } else if (tag === " '" && str3 && str3.match(/^[\ ]/)) {
           return " \u2019";
         }
         return false;
@@ -18195,13 +18200,13 @@ var require_citeproc_commonjs = __commonJS({
         function Stack(blob2) {
           this.stack = [blob2];
           this.latest = blob2;
-          this.addStyling = function(str2, decor) {
+          this.addStyling = function(str4, decor) {
             if (firstString) {
-              if (str2.slice(0, 1) === " ") {
-                str2 = str2.slice(1);
+              if (str4.slice(0, 1) === " ") {
+                str4 = str4.slice(1);
               }
-              if (str2.slice(0, 1) === " ") {
-                str2 = str2.slice(1);
+              if (str4.slice(0, 1) === " ") {
+                str4 = str4.slice(1);
               }
               firstString = false;
             }
@@ -18244,17 +18249,17 @@ var require_citeproc_commonjs = __commonJS({
               this.latest.blobs.push(newblob);
               this.stack.push(newblob);
               this.latest = newblob;
-              if (str2) {
+              if (str4) {
                 var tok = new CSL2.Token();
                 var newblob = new CSL2.Blob(null, tok);
-                newblob.blobs = str2;
+                newblob.blobs = str4;
                 newblob.alldecor = this.latest.alldecor.slice();
                 this.latest.blobs.push(newblob);
               }
             } else {
-              if (str2) {
+              if (str4) {
                 var child = new CSL2.Blob();
-                child.blobs = str2;
+                child.blobs = str4;
                 child.alldecor = this.latest.alldecor.slice();
                 this.latest.blobs.push(child);
               }
@@ -18266,42 +18271,42 @@ var require_citeproc_commonjs = __commonJS({
         }
         var stack = new Stack(blob);
         if (doppel.strings.length) {
-          var str = doppel.strings[0];
+          var str3 = doppel.strings[0];
           if (leadingSpace) {
-            str = " " + str;
+            str3 = " " + str3;
           }
-          stack.addStyling(str);
+          stack.addStyling(str3);
         }
         for (var i3 = 0, ilen = doppel.tags.length; i3 < ilen; i3++) {
           var tag = doppel.tags[i3];
-          var str = doppel.strings[i3 + 1];
+          var str3 = doppel.strings[i3 + 1];
           if (tag.match(_tagRex.open)) {
             tagReg.set(tag);
-            stack.addStyling(str, tagReg.pair());
+            stack.addStyling(str3, tagReg.pair());
           } else {
             tagReg.pop();
             stack.popStyling();
-            stack.addStyling(str);
+            stack.addStyling(str3);
           }
         }
       }
       this.processTags = function(blob) {
-        var str = blob.blobs;
+        var str3 = blob.blobs;
         var leadingSpace = false;
-        if (str.slice(0, 1) === " " && !str.match(/^\s+[\'\"]/)) {
+        if (str3.slice(0, 1) === " " && !str3.match(/^\s+[\'\"]/)) {
           leadingSpace = true;
         }
         var rex = new RegExp("(" + CSL2.ROMANESQUE_REGEXP.source + ")\u2019(" + CSL2.ROMANESQUE_REGEXP.source + ")", "g");
-        var str = " " + str.replace(rex, "$1'$2");
-        var doppel = _doppelString(str);
+        var str3 = " " + str3.replace(rex, "$1'$2");
+        var doppel = _doppelString(str3);
         if (doppel.tags.length === 0) {
           return;
         }
         var quoteFormSeen = false;
         for (var i3 = 0, ilen = doppel.tags.length; i3 < ilen; i3++) {
           var tag = doppel.tags[i3];
-          var str = doppel.strings[i3 + 1];
-          var apostrophe = _apostropheForce(tag, str);
+          var str3 = doppel.strings[i3 + 1];
+          var apostrophe = _apostropheForce(tag, str3);
           if (apostrophe) {
             doppel.strings[i3 + 1] = apostrophe + doppel.strings[i3 + 1];
             doppel.tags[i3] = "";
@@ -18384,8 +18389,8 @@ var require_citeproc_commonjs = __commonJS({
     };
     CSL2.Output.Formatters = function() {
       var rexStr = `(?:\u2018|\u2019|\u201C|\u201D| "| '|"|'|[-\u2013\u2014/.,;?!:]|\\[|\\]|\\(|\\)|<span style="font-variant: small-caps;">|<span class="no(?:case|decor)">|</span>|</?(?:i|sc|b|sub|sup)>)`;
-      var tagDoppel = new CSL2.Doppeler(rexStr, function(str) {
-        return str.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3").replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?(\")[^>]*(>)/g, "$1 $2 $3;$4$5");
+      var tagDoppel = new CSL2.Doppeler(rexStr, function(str3) {
+        return str3.replace(/(<span)\s+(class=\"no(?:case|decor)\")[^>]*(>)/g, "$1 $2$3").replace(/(<span)\s+(style=\"font-variant:)\s*(small-caps);?(\")[^>]*(>)/g, "$1 $2 $3;$4$5");
       });
       var rexNameStr = '(?:[-\\s]*<\\/*(?:spans+class="no(?:case|decor)"|i|sc|b|sub|sup)>[-\\s]*|[-\\s]+)';
       var nameDoppel = new CSL2.Doppeler(rexNameStr);
@@ -18473,7 +18478,7 @@ var require_citeproc_commonjs = __commonJS({
         }
         for (var i3 = 0, ilen = config.doppel.tags.length; i3 < ilen; i3++) {
           var tag = config.doppel.tags[i3];
-          var str = config.doppel.strings[i3 + 1];
+          var str3 = config.doppel.strings[i3 + 1];
           if (config.tagState !== null) {
             if (_tagParams[tag]) {
               config.tagState.push(_tagParams[tag]);
@@ -18487,7 +18492,7 @@ var require_citeproc_commonjs = __commonJS({
             }
           }
           if (config.tagState.length === 0) {
-            config.doppel.strings[i3 + 1] = config.capitaliseWords(str, i3 + 1, config.doppel, config.doppel.tags[i3 + 1]);
+            config.doppel.strings[i3 + 1] = config.capitaliseWords(str3, i3 + 1, config.doppel, config.doppel.tags[i3 + 1]);
           } else if (config.doppel.strings[i3 + 1].trim()) {
             config.lastWordPos = null;
           }
@@ -18500,12 +18505,12 @@ var require_citeproc_commonjs = __commonJS({
             }
           }
           if (config.isFirst) {
-            if (str.trim()) {
+            if (str3.trim()) {
               config.isFirst = false;
             }
           }
           if (config.afterPunct) {
-            if (str.trim()) {
+            if (str3.trim()) {
               config.afterPunct = false;
             }
           }
@@ -18530,14 +18535,14 @@ var require_citeproc_commonjs = __commonJS({
         }
         return tagDoppel.join(config.doppel);
       }
-      function passthrough(state, str) {
-        return str;
+      function passthrough(state, str3) {
+        return str3;
       }
       function lowercase(state, string) {
         var config = {
           quoteState: null,
-          capitaliseWords: function(str) {
-            var words = str.split(" ");
+          capitaliseWords: function(str3) {
+            var words = str3.split(" ");
             for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
               var word = words[i3];
               if (word) {
@@ -18556,8 +18561,8 @@ var require_citeproc_commonjs = __commonJS({
       function uppercase(state, string) {
         var config = {
           quoteState: null,
-          capitaliseWords: function(str) {
-            var words = str.split(" ");
+          capitaliseWords: function(str3) {
+            var words = str3.split(" ");
             for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
               var word = words[i3];
               if (word) {
@@ -18576,8 +18581,8 @@ var require_citeproc_commonjs = __commonJS({
       function sentence(state, string) {
         var config = {
           quoteState: [],
-          capitaliseWords: function(str) {
-            var words = str.split(" ");
+          capitaliseWords: function(str3) {
+            var words = str3.split(" ");
             for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
               var word = words[i3];
               if (word) {
@@ -18601,9 +18606,9 @@ var require_citeproc_commonjs = __commonJS({
       function title(state, string) {
         var config = {
           quoteState: [],
-          capitaliseWords: function(str, i3, followingTag) {
-            if (str.trim()) {
-              var wordle = wordDoppel.split(str);
+          capitaliseWords: function(str3, i3, followingTag) {
+            if (str3.trim()) {
+              var wordle = wordDoppel.split(str3);
               var words = wordle.strings;
               for (var j4 = 0, jlen = words.length; j4 < jlen; j4++) {
                 var word = words[j4];
@@ -18631,9 +18636,9 @@ var require_citeproc_commonjs = __commonJS({
                   words: j4
                 };
               }
-              str = wordDoppel.join(wordle);
+              str3 = wordDoppel.join(wordle);
             }
-            return str;
+            return str3;
           },
           skipWordsRex: state.locale[state.opt.lang].opts["skip-words-regexp"],
           tagState: [],
@@ -18645,8 +18650,8 @@ var require_citeproc_commonjs = __commonJS({
       function capitalizeFirst(state, string) {
         var config = {
           quoteState: [],
-          capitaliseWords: function(str) {
-            var wordle = wordDoppel.split(str);
+          capitaliseWords: function(str3) {
+            var wordle = wordDoppel.split(str3);
             var words = wordle.strings;
             for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
               var word = words[i3];
@@ -18672,8 +18677,8 @@ var require_citeproc_commonjs = __commonJS({
       function capitalizeAll(state, string) {
         var config = {
           quoteState: [],
-          capitaliseWords: function(str) {
-            var wordle = wordDoppel.split(str);
+          capitaliseWords: function(str3) {
+            var wordle = wordDoppel.split(str3);
             var words = wordle.strings;
             for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
               var word = words[i3];
@@ -18732,74 +18737,74 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/baseline": '<span style="baseline">%%STRING%%</span>',
       "@strip-periods/true": CSL2.Output.Formatters.passthrough,
       "@strip-periods/false": CSL2.Output.Formatters.passthrough,
-      "@quotes/true": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/true": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str3 + state.getTerm("close-quote");
       },
-      "@quotes/inner": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/inner": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str3 + state.getTerm("close-inner-quote");
       },
       "@quotes/false": false,
-      "@cite/entry": function(state, str) {
-        return state.sys.wrapCitationEntry(str, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": function(state, str3) {
+        return state.sys.wrapCitationEntry(str3, this.item_id, this.locator_txt, this.suffix_txt);
       },
-      "@bibliography/entry": function(state, str) {
+      "@bibliography/entry": function(state, str3) {
         var insert = "";
         if (state.sys.embedBibliographyEntry) {
           insert = state.sys.embedBibliographyEntry(this.item_id) + "\n";
         }
-        return '  <div class="csl-entry">' + str + "</div>\n" + insert;
+        return '  <div class="csl-entry">' + str3 + "</div>\n" + insert;
       },
-      "@display/block": function(state, str) {
-        return '\n\n    <div class="csl-block">' + str + "</div>\n";
+      "@display/block": function(state, str3) {
+        return '\n\n    <div class="csl-block">' + str3 + "</div>\n";
       },
-      "@display/left-margin": function(state, str) {
-        return '\n    <div class="csl-left-margin">' + str + "</div>";
+      "@display/left-margin": function(state, str3) {
+        return '\n    <div class="csl-left-margin">' + str3 + "</div>";
       },
-      "@display/right-inline": function(state, str) {
-        return '<div class="csl-right-inline">' + str + "</div>\n  ";
+      "@display/right-inline": function(state, str3) {
+        return '<div class="csl-right-inline">' + str3 + "</div>\n  ";
       },
-      "@display/indent": function(state, str) {
-        return '<div class="csl-indent">' + str + "</div>\n  ";
+      "@display/indent": function(state, str3) {
+        return '<div class="csl-indent">' + str3 + "</div>\n  ";
       },
-      "@showid/true": function(state, str, cslid) {
+      "@showid/true": function(state, str3, cslid) {
         if (!state.tmp.just_looking && !state.tmp.suppress_decorations) {
           if (cslid) {
-            return '<span class="' + state.opt.nodenames[cslid] + '" cslid="' + cslid + '">' + str + "</span>";
-          } else if (this.params && typeof str === "string") {
+            return '<span class="' + state.opt.nodenames[cslid] + '" cslid="' + cslid + '">' + str3 + "</span>";
+          } else if (this.params && typeof str3 === "string") {
             var prePunct = "";
-            if (str) {
-              var m3 = str.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
+            if (str3) {
+              var m3 = str3.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
               prePunct = m3[1];
-              str = m3[2];
+              str3 = m3[2];
             }
             var postPunct = "";
-            if (str && CSL2.SWAPPING_PUNCTUATION.indexOf(str.slice(-1)) > -1) {
-              postPunct = str.slice(-1);
-              str = str.slice(0, -1);
+            if (str3 && CSL2.SWAPPING_PUNCTUATION.indexOf(str3.slice(-1)) > -1) {
+              postPunct = str3.slice(-1);
+              str3 = str3.slice(0, -1);
             }
-            return state.sys.variableWrapper(this.params, prePunct, str, postPunct);
+            return state.sys.variableWrapper(this.params, prePunct, str3, postPunct);
           } else {
-            return str;
+            return str3;
           }
         } else {
-          return str;
+          return str3;
         }
       },
-      "@URL/true": function(state, str) {
-        return '<a href="' + str + '">' + str + "</a>";
+      "@URL/true": function(state, str3) {
+        return '<a href="' + str3 + '">' + str3 + "</a>";
       },
-      "@DOI/true": function(state, str) {
-        var doiurl = str;
-        if (!str.match(/^https?:\/\//)) {
-          doiurl = "https://doi.org/" + str;
+      "@DOI/true": function(state, str3) {
+        var doiurl = str3;
+        if (!str3.match(/^https?:\/\//)) {
+          doiurl = "https://doi.org/" + str3;
         }
-        return '<a href="' + doiurl + '">' + str + "</a>";
+        return '<a href="' + doiurl + '">' + str3 + "</a>";
       }
     };
     CSL2.Output.Formats.prototype.text = {
@@ -18827,45 +18832,45 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/sub": false,
       "@strip-periods/true": CSL2.Output.Formatters.passthrough,
       "@strip-periods/false": CSL2.Output.Formatters.passthrough,
-      "@quotes/true": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/true": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str3 + state.getTerm("close-quote");
       },
-      "@quotes/inner": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/inner": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str3 + state.getTerm("close-inner-quote");
       },
       "@quotes/false": false,
-      "@cite/entry": function(state, str) {
-        return state.sys.wrapCitationEntry(str, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": function(state, str3) {
+        return state.sys.wrapCitationEntry(str3, this.item_id, this.locator_txt, this.suffix_txt);
       },
-      "@bibliography/entry": function(state, str) {
-        return str + "\n";
+      "@bibliography/entry": function(state, str3) {
+        return str3 + "\n";
       },
-      "@display/block": function(state, str) {
-        return "\n" + str;
+      "@display/block": function(state, str3) {
+        return "\n" + str3;
       },
-      "@display/left-margin": function(state, str) {
-        return str + " ";
+      "@display/left-margin": function(state, str3) {
+        return str3 + " ";
       },
-      "@display/right-inline": function(state, str) {
-        return str;
+      "@display/right-inline": function(state, str3) {
+        return str3;
       },
-      "@display/indent": function(state, str) {
-        return "\n    " + str;
+      "@display/indent": function(state, str3) {
+        return "\n    " + str3;
       },
-      "@showid/true": function(state, str) {
-        return str;
+      "@showid/true": function(state, str3) {
+        return str3;
       },
-      "@URL/true": function(state, str) {
-        return str;
+      "@URL/true": function(state, str3) {
+        return str3;
       },
-      "@DOI/true": function(state, str) {
-        return str;
+      "@DOI/true": function(state, str3) {
+        return str3;
       }
     };
     CSL2.Output.Formats.prototype.rtf = {
@@ -18895,60 +18900,60 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/sub": "\\sub %%STRING%%\\nosupersub{}",
       "@strip-periods/true": CSL2.Output.Formatters.passthrough,
       "@strip-periods/false": CSL2.Output.Formatters.passthrough,
-      "@quotes/true": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/true": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return CSL2.Output.Formats.rtf.text_escape(state.getTerm("open-quote"));
         }
-        return CSL2.Output.Formats.rtf.text_escape(state.getTerm("open-quote")) + str + CSL2.Output.Formats.rtf.text_escape(state.getTerm("close-quote"));
+        return CSL2.Output.Formats.rtf.text_escape(state.getTerm("open-quote")) + str3 + CSL2.Output.Formats.rtf.text_escape(state.getTerm("close-quote"));
       },
-      "@quotes/inner": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/inner": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return CSL2.Output.Formats.rtf.text_escape("\u2019");
         }
-        return CSL2.Output.Formats.rtf.text_escape(state.getTerm("open-inner-quote")) + str + CSL2.Output.Formats.rtf.text_escape(state.getTerm("close-inner-quote"));
+        return CSL2.Output.Formats.rtf.text_escape(state.getTerm("open-inner-quote")) + str3 + CSL2.Output.Formats.rtf.text_escape(state.getTerm("close-inner-quote"));
       },
       "@quotes/false": false,
       "bibstart": "{\\rtf ",
       "bibend": "}",
       "@display/block": "\\line{}%%STRING%%\\line\r\n",
-      "@cite/entry": function(state, str) {
-        return state.sys.wrapCitationEntry(str, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": function(state, str3) {
+        return state.sys.wrapCitationEntry(str3, this.item_id, this.locator_txt, this.suffix_txt);
       },
-      "@bibliography/entry": function(state, str) {
-        return str;
+      "@bibliography/entry": function(state, str3) {
+        return str3;
       },
-      "@display/left-margin": function(state, str) {
-        return str + "\\tab ";
+      "@display/left-margin": function(state, str3) {
+        return str3 + "\\tab ";
       },
-      "@display/right-inline": function(state, str) {
-        return str + "\r\n";
+      "@display/right-inline": function(state, str3) {
+        return str3 + "\r\n";
       },
-      "@display/indent": function(state, str) {
-        return "\n\\tab " + str + "\\line\r\n";
+      "@display/indent": function(state, str3) {
+        return "\n\\tab " + str3 + "\\line\r\n";
       },
-      "@showid/true": function(state, str) {
+      "@showid/true": function(state, str3) {
         if (!state.tmp.just_looking && !state.tmp.suppress_decorations) {
           var prePunct = "";
-          if (str) {
-            var m3 = str.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
+          if (str3) {
+            var m3 = str3.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
             prePunct = m3[1];
-            str = m3[2];
+            str3 = m3[2];
           }
           var postPunct = "";
-          if (str && CSL2.SWAPPING_PUNCTUATION.indexOf(str.slice(-1)) > -1) {
-            postPunct = str.slice(-1);
-            str = str.slice(0, -1);
+          if (str3 && CSL2.SWAPPING_PUNCTUATION.indexOf(str3.slice(-1)) > -1) {
+            postPunct = str3.slice(-1);
+            str3 = str3.slice(0, -1);
           }
-          return state.sys.variableWrapper(this.params, prePunct, str, postPunct);
+          return state.sys.variableWrapper(this.params, prePunct, str3, postPunct);
         } else {
-          return str;
+          return str3;
         }
       },
-      "@URL/true": function(state, str) {
-        return str;
+      "@URL/true": function(state, str3) {
+        return str3;
       },
-      "@DOI/true": function(state, str) {
-        return str;
+      "@DOI/true": function(state, str3) {
+        return str3;
       }
     };
     CSL2.Output.Formats.prototype.asciidoc = {
@@ -18978,64 +18983,64 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/baseline": false,
       "@strip-periods/true": CSL2.Output.Formatters.passthrough,
       "@strip-periods/false": CSL2.Output.Formatters.passthrough,
-      "@quotes/true": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/true": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return "``";
         }
-        return "``" + str + "''";
+        return "``" + str3 + "''";
       },
-      "@quotes/inner": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/inner": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return "`";
         }
-        return "`" + str + "'";
+        return "`" + str3 + "'";
       },
       "@quotes/false": false,
-      "@cite/entry": function(state, str) {
-        return state.sys.wrapCitationEntry(str, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": function(state, str3) {
+        return state.sys.wrapCitationEntry(str3, this.item_id, this.locator_txt, this.suffix_txt);
       },
-      "@bibliography/entry": function(state, str) {
-        return str + "\n";
+      "@bibliography/entry": function(state, str3) {
+        return str3 + "\n";
       },
-      "@display/block": function(state, str) {
-        return str;
+      "@display/block": function(state, str3) {
+        return str3;
       },
-      "@display/left-margin": function(state, str) {
-        return str;
+      "@display/left-margin": function(state, str3) {
+        return str3;
       },
-      "@display/right-inline": function(state, str) {
-        return " " + str;
+      "@display/right-inline": function(state, str3) {
+        return " " + str3;
       },
-      "@display/indent": function(state, str) {
-        return " " + str;
+      "@display/indent": function(state, str3) {
+        return " " + str3;
       },
-      "@showid/true": function(state, str) {
-        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && typeof str === "string") {
+      "@showid/true": function(state, str3) {
+        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && typeof str3 === "string") {
           var prePunct = "";
-          if (str) {
-            var m3 = str.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
+          if (str3) {
+            var m3 = str3.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
             prePunct = m3[1];
-            str = m3[2];
+            str3 = m3[2];
           }
           var postPunct = "";
-          if (str && CSL2.SWAPPING_PUNCTUATION.indexOf(str.slice(-1)) > -1) {
-            postPunct = str.slice(-1);
-            str = str.slice(0, -1);
+          if (str3 && CSL2.SWAPPING_PUNCTUATION.indexOf(str3.slice(-1)) > -1) {
+            postPunct = str3.slice(-1);
+            str3 = str3.slice(0, -1);
           }
-          return state.sys.variableWrapper(this.params, prePunct, str, postPunct);
+          return state.sys.variableWrapper(this.params, prePunct, str3, postPunct);
         } else {
-          return str;
+          return str3;
         }
       },
-      "@URL/true": function(state, str) {
-        return str;
+      "@URL/true": function(state, str3) {
+        return str3;
       },
-      "@DOI/true": function(state, str) {
-        var doiurl = str;
-        if (!str.match(/^https?:\/\//)) {
-          doiurl = "https://doi.org/" + str;
+      "@DOI/true": function(state, str3) {
+        var doiurl = str3;
+        if (!str3.match(/^https?:\/\//)) {
+          doiurl = "https://doi.org/" + str3;
         }
-        return doiurl + "[" + str + "]";
+        return doiurl + "[" + str3 + "]";
       }
     };
     CSL2.Output.Formats.prototype.fo = {
@@ -19065,23 +19070,23 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/baseline": '<fo:inline vertical-align="baseline">%%STRING%%</fo:inline>',
       "@strip-periods/true": CSL2.Output.Formatters.passthrough,
       "@strip-periods/false": CSL2.Output.Formatters.passthrough,
-      "@quotes/true": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/true": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str3 + state.getTerm("close-quote");
       },
-      "@quotes/inner": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/inner": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str3 + state.getTerm("close-inner-quote");
       },
       "@quotes/false": false,
-      "@cite/entry": function(state, str) {
-        return state.sys.wrapCitationEntry(str, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": function(state, str3) {
+        return state.sys.wrapCitationEntry(str3, this.item_id, this.locator_txt, this.suffix_txt);
       },
-      "@bibliography/entry": function(state, str) {
+      "@bibliography/entry": function(state, str3) {
         var indent = "";
         if (state.bibliography && state.bibliography.opt && state.bibliography.opt.hangingindent) {
           var hi = state.bibliography.opt.hangingindent;
@@ -19091,47 +19096,47 @@ var require_citeproc_commonjs = __commonJS({
         if (state.sys.embedBibliographyEntry) {
           insert = state.sys.embedBibliographyEntry(this.item_id) + "\n";
         }
-        return '<fo:block id="' + this.system_id + '"' + indent + ">" + str + "</fo:block>\n" + insert;
+        return '<fo:block id="' + this.system_id + '"' + indent + ">" + str3 + "</fo:block>\n" + insert;
       },
-      "@display/block": function(state, str) {
-        return "\n  <fo:block>" + str + "</fo:block>\n";
+      "@display/block": function(state, str3) {
+        return "\n  <fo:block>" + str3 + "</fo:block>\n";
       },
-      "@display/left-margin": function(state, str) {
-        return '\n  <fo:table table-layout="fixed" width="100%">\n    <fo:table-column column-number="1" column-width="$$$__COLUMN_WIDTH_1__$$$"/>\n    <fo:table-column column-number="2" column-width="proportional-column-width(1)"/>\n    <fo:table-body>\n      <fo:table-row>\n        <fo:table-cell>\n          <fo:block>' + str + "</fo:block>\n        </fo:table-cell>\n        ";
+      "@display/left-margin": function(state, str3) {
+        return '\n  <fo:table table-layout="fixed" width="100%">\n    <fo:table-column column-number="1" column-width="$$$__COLUMN_WIDTH_1__$$$"/>\n    <fo:table-column column-number="2" column-width="proportional-column-width(1)"/>\n    <fo:table-body>\n      <fo:table-row>\n        <fo:table-cell>\n          <fo:block>' + str3 + "</fo:block>\n        </fo:table-cell>\n        ";
       },
-      "@display/right-inline": function(state, str) {
-        return "<fo:table-cell>\n          <fo:block>" + str + "</fo:block>\n        </fo:table-cell>\n      </fo:table-row>\n    </fo:table-body>\n  </fo:table>\n";
+      "@display/right-inline": function(state, str3) {
+        return "<fo:table-cell>\n          <fo:block>" + str3 + "</fo:block>\n        </fo:table-cell>\n      </fo:table-row>\n    </fo:table-body>\n  </fo:table>\n";
       },
-      "@display/indent": function(state, str) {
-        return '<fo:block margin-left="2em">' + str + "</fo:block>\n";
+      "@display/indent": function(state, str3) {
+        return '<fo:block margin-left="2em">' + str3 + "</fo:block>\n";
       },
-      "@showid/true": function(state, str) {
-        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && typeof str === "string") {
+      "@showid/true": function(state, str3) {
+        if (!state.tmp.just_looking && !state.tmp.suppress_decorations && this.params && typeof str3 === "string") {
           var prePunct = "";
-          if (str) {
-            var m3 = str.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
+          if (str3) {
+            var m3 = str3.match(CSL2.VARIABLE_WRAPPER_PREPUNCT_REX);
             prePunct = m3[1];
-            str = m3[2];
+            str3 = m3[2];
           }
           var postPunct = "";
-          if (str && CSL2.SWAPPING_PUNCTUATION.indexOf(str.slice(-1)) > -1) {
-            postPunct = str.slice(-1);
-            str = str.slice(0, -1);
+          if (str3 && CSL2.SWAPPING_PUNCTUATION.indexOf(str3.slice(-1)) > -1) {
+            postPunct = str3.slice(-1);
+            str3 = str3.slice(0, -1);
           }
-          return state.sys.variableWrapper(this.params, prePunct, str, postPunct);
+          return state.sys.variableWrapper(this.params, prePunct, str3, postPunct);
         } else {
-          return str;
+          return str3;
         }
       },
-      "@URL/true": function(state, str) {
-        return `<fo:basic-link external-destination="url('` + str + `')">` + str + "</fo:basic-link>";
+      "@URL/true": function(state, str3) {
+        return `<fo:basic-link external-destination="url('` + str3 + `')">` + str3 + "</fo:basic-link>";
       },
-      "@DOI/true": function(state, str) {
-        var doiurl = str;
-        if (!str.match(/^https?:\/\//)) {
-          doiurl = "https://doi.org/" + str;
+      "@DOI/true": function(state, str3) {
+        var doiurl = str3;
+        if (!str3.match(/^https?:\/\//)) {
+          doiurl = "https://doi.org/" + str3;
         }
-        return `<fo:basic-link external-destination="url('` + doiurl + `')">` + str + "</fo:basic-link>";
+        return `<fo:basic-link external-destination="url('` + doiurl + `')">` + str3 + "</fo:basic-link>";
       }
     };
     CSL2.Output.Formats.prototype.latex = {
@@ -19159,45 +19164,45 @@ var require_citeproc_commonjs = __commonJS({
       "@vertical-align/sub": false,
       "@strip-periods/true": CSL2.Output.Formatters.passthrough,
       "@strip-periods/false": CSL2.Output.Formatters.passthrough,
-      "@quotes/true": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/true": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return state.getTerm("open-quote");
         }
-        return state.getTerm("open-quote") + str + state.getTerm("close-quote");
+        return state.getTerm("open-quote") + str3 + state.getTerm("close-quote");
       },
-      "@quotes/inner": function(state, str) {
-        if (typeof str === "undefined") {
+      "@quotes/inner": function(state, str3) {
+        if (typeof str3 === "undefined") {
           return "\u2019";
         }
-        return state.getTerm("open-inner-quote") + str + state.getTerm("close-inner-quote");
+        return state.getTerm("open-inner-quote") + str3 + state.getTerm("close-inner-quote");
       },
       "@quotes/false": false,
-      "@cite/entry": function(state, str) {
-        return state.sys.wrapCitationEntry(str, this.item_id, this.locator_txt, this.suffix_txt);
+      "@cite/entry": function(state, str3) {
+        return state.sys.wrapCitationEntry(str3, this.item_id, this.locator_txt, this.suffix_txt);
       },
-      "@bibliography/entry": function(state, str) {
+      "@bibliography/entry": function(state, str3) {
         return "\\bibitem{" + state.sys.embedBibliographyEntry(this.item_id) + "}\n";
       },
-      "@display/block": function(state, str) {
-        return "\n" + str;
+      "@display/block": function(state, str3) {
+        return "\n" + str3;
       },
-      "@display/left-margin": function(state, str) {
-        return str;
+      "@display/left-margin": function(state, str3) {
+        return str3;
       },
-      "@display/right-inline": function(state, str) {
-        return str;
+      "@display/right-inline": function(state, str3) {
+        return str3;
       },
-      "@display/indent": function(state, str) {
-        return "\n    " + str;
+      "@display/indent": function(state, str3) {
+        return "\n    " + str3;
       },
-      "@showid/true": function(state, str, cslid) {
-        return str;
+      "@showid/true": function(state, str3, cslid) {
+        return str3;
       },
-      "@URL/true": function(state, str) {
-        return str;
+      "@URL/true": function(state, str3) {
+        return str3;
       },
-      "@DOI/true": function(state, str) {
-        return str;
+      "@DOI/true": function(state, str3) {
+        return str3;
       }
     };
     CSL2.Output.Formats = new CSL2.Output.Formats();
@@ -19649,11 +19654,11 @@ var require_citeproc_commonjs = __commonJS({
       this.nameind = {};
       this.nameindpkeys = {};
       this.itemkeyreg = {};
-      strip_periods = function(str) {
-        if (!str) {
-          str = "";
+      strip_periods = function(str3) {
+        if (!str3) {
+          str3 = "";
         }
-        return str.replace(/\./g, " ").replace(/\s+/g, " ").replace(/\s+$/, "");
+        return str3.replace(/\./g, " ").replace(/\s+/g, " ").replace(/\s+$/, "");
       };
       set_keys = function(state2, itemid, nameobj) {
         pkey = strip_periods(nameobj.family);
@@ -20685,13 +20690,13 @@ var require_citeproc_commonjs = __commonJS({
         }
         return [hasParticle, nameValue, particleList];
       }
-      function trimLast(str) {
-        var lastChar = str.slice(-1);
-        str = str.trim();
-        if (lastChar === " " && ["'", "\u2019"].indexOf(str.slice(-1)) > -1) {
-          str += " ";
+      function trimLast(str3) {
+        var lastChar = str3.slice(-1);
+        str3 = str3.trim();
+        if (lastChar === " " && ["'", "\u2019"].indexOf(str3.slice(-1)) > -1) {
+          str3 += " ";
         }
-        return str;
+        return str3;
       }
       function parseSuffix(nameObj) {
         if (!nameObj.suffix && nameObj.given) {
@@ -20742,7 +20747,7 @@ __export(exports, {
   default: () => ReferenceList
 });
 var import_state2 = __toModule(require("@codemirror/state"));
-var import_obsidian28 = __toModule(require("obsidian"));
+var import_obsidian30 = __toModule(require("obsidian"));
 
 // src/editorExtension.ts
 var import_language = __toModule(require("@codemirror/language"));
@@ -25827,7 +25832,7 @@ function mergeContainerExpression(containerText) {
     return null;
   return { expr: "[" + expr + "]", members: publicMembers, reference: false };
 }
-function transformLinkAliases(str, linkCiteKey) {
+function transformLinkAliases(str3, linkCiteKey) {
   var _a;
   const out = [];
   const map = [];
@@ -25839,7 +25844,7 @@ function transformLinkAliases(str, linkCiteKey) {
   };
   const copyRange = (from, to) => {
     for (let i3 = from; i3 < to; i3++)
-      push(str[i3], i3);
+      push(str3[i3], i3);
   };
   const emitExpanded = (alias, key, aliasStart) => {
     const tokenRe = /@[^\s,;]*/g;
@@ -25860,23 +25865,23 @@ function transformLinkAliases(str, linkCiteKey) {
   const bracketContainers = [];
   {
     let scan = 0;
-    while (scan < str.length) {
-      const open2 = str.indexOf("[", scan);
+    while (scan < str3.length) {
+      const open2 = str3.indexOf("[", scan);
       if (open2 === -1)
         break;
-      if (str[open2 + 1] === "[") {
+      if (str3[open2 + 1] === "[") {
         scan = open2 + 2;
         continue;
       }
       let depth = 0;
       let close2 = -1;
-      for (let i3 = open2 + 1; i3 < str.length; i3++) {
-        if (str[i3] === "[" && str[i3 + 1] === "[") {
+      for (let i3 = open2 + 1; i3 < str3.length; i3++) {
+        if (str3[i3] === "[" && str3[i3 + 1] === "[") {
           depth++;
           i3++;
-        } else if (str[i3] === "[" && str[i3 + 1] !== "[") {
+        } else if (str3[i3] === "[" && str3[i3 + 1] !== "[") {
           depth++;
-        } else if (str[i3] === "]" && str[i3 + 1] === "]") {
+        } else if (str3[i3] === "]" && str3[i3 + 1] === "]") {
           if (depth > 0) {
             depth--;
             i3++;
@@ -25884,7 +25889,7 @@ function transformLinkAliases(str, linkCiteKey) {
             close2 = i3;
             break;
           }
-        } else if (str[i3] === "]" && str[i3 + 1] !== "]") {
+        } else if (str3[i3] === "]" && str3[i3 + 1] !== "]") {
           if (depth > 0) {
             depth--;
           } else {
@@ -25895,7 +25900,7 @@ function transformLinkAliases(str, linkCiteKey) {
       }
       if (close2 === -1)
         break;
-      const container = mergeContainerExpression(str.slice(open2, close2 + 1));
+      const container = mergeContainerExpression(str3.slice(open2, close2 + 1));
       if (container) {
         bracketContainers.push({
           open: open2,
@@ -25914,7 +25919,7 @@ function transformLinkAliases(str, linkCiteKey) {
   let containerIdx = 0;
   let emittedUntil = -1;
   const isInsideEmittedContainer = (pos) => pos <= emittedUntil;
-  while (m3 = specialRe.exec(str)) {
+  while (m3 = specialRe.exec(str3)) {
     while (containerIdx < bracketContainers.length && bracketContainers[containerIdx].open < m3.index) {
       const c3 = bracketContainers[containerIdx];
       if (c3.open > emittedUntil) {
@@ -25931,10 +25936,10 @@ function transformLinkAliases(str, linkCiteKey) {
       continue;
     }
     if (m3[0] === containerOpen) {
-      const close2 = str.indexOf(containerClose, m3.index + 1);
+      const close2 = str3.indexOf(containerClose, m3.index + 1);
       if (close2 === -1)
         continue;
-      const merged2 = mergeContainerExpression(str.slice(m3.index, close2 + 1));
+      const merged2 = mergeContainerExpression(str3.slice(m3.index, close2 + 1));
       if (merged2 === null)
         continue;
       copyRange(last, m3.index);
@@ -25959,7 +25964,7 @@ function transformLinkAliases(str, linkCiteKey) {
         referenceRanges.push([start, end]);
         const keyStart = start + 2;
         for (let k4 = 0; k4 < key.length + 1; k4++) {
-          push(str[keyStart + k4], keyStart + k4);
+          push(str3[keyStart + k4], keyStart + k4);
         }
         push("]", end - 2);
         last = end;
@@ -25970,7 +25975,7 @@ function transformLinkAliases(str, linkCiteKey) {
     } else {
       const keyStart = start + 2;
       for (let k4 = 0; k4 < key.length + 1; k4++) {
-        push(str[keyStart + k4], keyStart + k4);
+        push(str3[keyStart + k4], keyStart + k4);
       }
       push("]", end - 2);
     }
@@ -25990,9 +25995,9 @@ function transformLinkAliases(str, linkCiteKey) {
   }
   if (linkCiteKey) {
     let i3 = last;
-    while (i3 < str.length) {
-      if (str[i3] === "@") {
-        const token = /^@[^\s,;\]\[]*/.exec(str.slice(i3));
+    while (i3 < str3.length) {
+      if (str3[i3] === "@") {
+        const token = /^@[^\s,;\]\[]*/.exec(str3.slice(i3));
         if (token) {
           push("@", i3);
           for (let n2 = 0; n2 < linkCiteKey.length; n2++)
@@ -26001,17 +26006,17 @@ function transformLinkAliases(str, linkCiteKey) {
           continue;
         }
       }
-      push(str[i3], i3);
+      push(str3[i3], i3);
       i3++;
     }
     return { text: out.join(""), map, referenceRanges };
   }
-  copyRange(last, str.length);
+  copyRange(last, str3.length);
   return { text: out.join(""), map, referenceRanges };
 }
-function getCitationSegments(str, ignoreLinks = false, expandLinkAliases = false, linkCiteKey) {
+function getCitationSegments(str3, ignoreLinks = false, expandLinkAliases = false, linkCiteKey) {
   if (expandLinkAliases && !ignoreLinks) {
-    const { text, map, referenceRanges } = transformLinkAliases(str, linkCiteKey);
+    const { text, map, referenceRanges } = transformLinkAliases(str3, linkCiteKey);
     const groups = getCitationSegments(text, ignoreLinks);
     if (!groups.length)
       return groups;
@@ -26076,10 +26081,10 @@ function getCitationSegments(str, ignoreLinks = false, expandLinkAliases = false
     state.currentSegment.to = i3;
     state.segment.push(state.currentSegment);
   };
-  for (let i3 = 0, len = str.length + 1; i3 < len; i3++) {
-    const prev = str[i3 - 1];
-    const c3 = str[i3];
-    const next = str[i3 + 1];
+  for (let i3 = 0, len = str3.length + 1; i3 < len; i3++) {
+    const prev = str3[i3 - 1];
+    const c3 = str3[i3];
+    const next = str3[i3 + 1];
     if (c3 === "[") {
       if (next === "[" && !state)
         continue;
@@ -26273,13 +26278,13 @@ function getCitationSegments(str, ignoreLinks = false, expandLinkAliases = false
         let j4 = i3 + 1;
         let hasFollowingKey = false;
         let depth = state.bracketDepth;
-        for (; j4 < str.length; j4++) {
-          if (str[j4] === "[")
+        for (; j4 < str3.length; j4++) {
+          if (str3[j4] === "[")
             depth++;
-          else if (str[j4] === "]") {
+          else if (str3[j4] === "]") {
             if (--depth === 0)
               break;
-          } else if (str[j4] === "@") {
+          } else if (str3[j4] === "@") {
             hasFollowingKey = true;
             break;
           }
@@ -27161,6 +27166,10 @@ var en_default = {
   "Install templates": "Install templates",
   'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.': `Copies ScholarWeft's ZotLit templates into "sw-zotlit-templates/" and points ZotLit's "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.`,
   "When ZotLit is available, the tooltip's \"Create literature note\" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.": `When ZotLit is available, the tooltip's "Create literature note" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.`,
+  "Use ScholarWeft's own note template": "Use ScholarWeft's own note template",
+  "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.": "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
+  "Child-note heading level": "Child-note heading level",
+  'Heading level (1\u20136) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.': `Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`,
   "Open in Zotero": "Open in Zotero",
   "Filter references\u2026": "Filter references\u2026",
   "Path to Python 3 (for Document Compiler)": "Path to Python 3 (for Document Compiler)",
@@ -27733,17 +27742,17 @@ async function findPandoc() {
     const { exec } = require("child_process");
     const { promisify } = require("util");
     const execAsync = promisify(exec);
-    const fs = require("fs");
+    const fs2 = require("fs");
     for (const p4 of candidates) {
-      if (fs.existsSync(p4))
+      if (fs2.existsSync(p4))
         return p4;
     }
     const cmd = process.platform === "win32" ? "where pandoc" : "which pandoc";
     try {
       const { stdout } = await execAsync(cmd, { timeout: 5e3 });
-      const path = stdout.trim().split("\n")[0].trim();
-      if (path)
-        return path;
+      const path2 = stdout.trim().split("\n")[0].trim();
+      if (path2)
+        return path2;
     } catch (e3) {
     }
   } catch (e3) {
@@ -27965,8 +27974,8 @@ function createMacroMatcher(macros) {
   };
 }
 function createEnvironmentMatcher(macros) {
-  const environmentsHash = Array.isArray(macros) ? Object.fromEntries(macros.map((str) => {
-    return [str, {}];
+  const environmentsHash = Array.isArray(macros) ? Object.fromEntries(macros.map((str3) => {
+    return [str3, {}];
   })) : macros;
   return function matchAgainstEnvironments(node) {
     if (!match.anyEnvironment(node))
@@ -28057,7 +28066,7 @@ var latex_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -28071,11 +28080,11 @@ var latex_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -33230,7 +33239,7 @@ var align_environment_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -33244,11 +33253,11 @@ var align_environment_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -33941,7 +33950,7 @@ var xparse_argspec_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -33955,11 +33964,11 @@ var xparse_argspec_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -35312,7 +35321,7 @@ var pgfkeys_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -35326,11 +35335,11 @@ var pgfkeys_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -36456,7 +36465,7 @@ var macro_substitutions_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -36470,11 +36479,11 @@ var macro_substitutions_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -36571,8 +36580,8 @@ var macro_substitutions_default = function() {
         content: "#"
       };
     }
-    function peg$f7(num) {
-      const split = options.splitNumber(num);
+    function peg$f7(num2) {
+      const split = options.splitNumber(num2);
       return [{
         type: "hash_number",
         number: split.number
@@ -36891,7 +36900,7 @@ var ligatures_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -36905,11 +36914,11 @@ var ligatures_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -37585,7 +37594,7 @@ var xcolor_expressions_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -37599,11 +37608,11 @@ var xcolor_expressions_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -37823,11 +37832,11 @@ var xcolor_expressions_default = function() {
         content: r3 ? [c3].concat(r3) : [c3]
       };
     }
-    function peg$f19(c3, fs) {
+    function peg$f19(c3, fs2) {
       return {
         type: "color",
         color: c3,
-        functions: fs
+        functions: fs2
       };
     }
     function peg$f20(f3, n2) {
@@ -39574,7 +39583,7 @@ var tabular_spec_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -39588,11 +39597,11 @@ var tabular_spec_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -40883,7 +40892,7 @@ var systeme_environment_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -40897,11 +40906,11 @@ var systeme_environment_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -42055,7 +42064,7 @@ var tex_glue_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -42069,11 +42078,11 @@ var tex_glue_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -42813,7 +42822,7 @@ var tikz_default = function() {
       this.name = "SyntaxError";
     }
     format(sources) {
-      let str = "Error: " + this.message;
+      let str3 = "Error: " + this.message;
       if (this.location) {
         let src = null;
         const st = sources.find((s22) => s22.source === this.location.source);
@@ -42827,11 +42836,11 @@ var tikz_default = function() {
           const filler = "".padEnd(offset_s.line.toString().length, " ");
           const line = src[s3.line - 1];
           const hatLen = (s3.line === e3.line ? e3.column : line.length + 1) - s3.column || 1;
-          str += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
+          str3 += "\n --> " + loc + "\n" + filler + " |\n" + offset_s.line + " | " + line + "\n" + filler + " | " + "".padEnd(s3.column - 1, " ") + "".padEnd(hatLen, "^");
         } else
-          str += "\n at " + loc;
+          str3 += "\n at " + loc;
       }
-      return str;
+      return str3;
     }
     static buildMessage(expected, found) {
       function hex(ch) {
@@ -58432,28 +58441,28 @@ async function playnice() {
 
 // node_modules/@retorquere/bibtex-parser/dist/esm/verbatim.js
 var __defProp2 = Object.defineProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp2(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __defNormalProp2 = (obj, key, value) => key in obj ? __defProp2(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField2 = (obj, key, value) => __defNormalProp2(obj, typeof key !== "symbol" ? key + "" : key, value);
 var ParsingError = class extends Error {
   constructor(message, parser) {
     message += ` at ${parser.location()}`;
     if (parser.parsing)
       message += ` in ${JSON.stringify(parser.parsing)}`;
     super(message);
-    __publicField(this, "source");
+    __publicField2(this, "source");
     this.name = "ParsingError";
   }
 };
 var letter = /[\p{Lu}\p{Lt}\p{Ll}\p{Lm}\p{Lo}]/u;
 var Library = class {
   constructor(input, options = {}) {
-    __publicField(this, "parsing");
-    __publicField(this, "entries", []);
-    __publicField(this, "strings", {});
-    __publicField(this, "comments", []);
-    __publicField(this, "errors", []);
-    __publicField(this, "preambles", []);
-    __publicField(this, "default_strings", {
+    __publicField2(this, "parsing");
+    __publicField2(this, "entries", []);
+    __publicField2(this, "strings", {});
+    __publicField2(this, "comments", []);
+    __publicField2(this, "errors", []);
+    __publicField2(this, "preambles", []);
+    __publicField2(this, "default_strings", {
       JAN: "01",
       JANUARY: "01",
       FEB: "02",
@@ -58498,10 +58507,10 @@ var Library = class {
       TOPLAS: "ACM Transactions on Programming Languages and Systems",
       TCS: "Theoretical Computer Science"
     });
-    __publicField(this, "pos", 0);
-    __publicField(this, "linebreaks", []);
-    __publicField(this, "input");
-    __publicField(this, "max_entries");
+    __publicField2(this, "pos", 0);
+    __publicField2(this, "linebreaks", []);
+    __publicField2(this, "input");
+    __publicField2(this, "max_entries");
     this.max_entries = options.max_entries || 0;
     this.input = input;
     this.parsing = null;
@@ -58921,23 +58930,23 @@ var prepositions_default = [
 
 // node_modules/@retorquere/bibtex-parser/dist/esm/tokenizer.js
 var __defProp3 = Object.defineProperty;
-var __defNormalProp2 = (obj, key, value) => key in obj ? __defProp3(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField2 = (obj, key, value) => __defNormalProp2(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __defNormalProp3 = (obj, key, value) => key in obj ? __defProp3(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField3 = (obj, key, value) => __defNormalProp3(obj, typeof key !== "symbol" ? key + "" : key, value);
 var RE = new class {
   constructor() {
-    __publicField2(this, "Acronym");
-    __publicField2(this, "Word");
-    __publicField2(this, "Contraction");
-    __publicField2(this, "Whitespace", /[ \t\n\r\u00A0]+/u);
-    __publicField2(this, "Ordinal");
-    __publicField2(this, "Email");
-    __publicField2(this, "Handle");
-    __publicField2(this, "IntOrVersion");
-    __publicField2(this, "Domain");
-    __publicField2(this, "Website");
-    __publicField2(this, "Preposition");
-    __publicField2(this, "ComplexPreposition", /^([^ \t\n\r\u00A0]+)([ \t\n\r\u00A0]+)([^ \t\n\r\u00A0]+)(?:([ \t\n\r\u00A0]+)([^ \t\n\r\u00A0]+))?$/u);
-    __publicField2(this, "P", /\p{P}/u);
+    __publicField3(this, "Acronym");
+    __publicField3(this, "Word");
+    __publicField3(this, "Contraction");
+    __publicField3(this, "Whitespace", /[ \t\n\r\u00A0]+/u);
+    __publicField3(this, "Ordinal");
+    __publicField3(this, "Email");
+    __publicField3(this, "Handle");
+    __publicField3(this, "IntOrVersion");
+    __publicField3(this, "Domain");
+    __publicField3(this, "Website");
+    __publicField3(this, "Preposition");
+    __publicField3(this, "ComplexPreposition", /^([^ \t\n\r\u00A0]+)([ \t\n\r\u00A0]+)([^ \t\n\r\u00A0]+)(?:([ \t\n\r\u00A0]+)([^ \t\n\r\u00A0]+))?$/u);
+    __publicField3(this, "P", /\p{P}/u);
     const B4 = "(?=(?:[^\\p{L}\\p{N}\\p{M}\\u00AD\\u2060]|$))";
     const LNM = "[\\p{L}\\p{N}\\p{M}\xAD\u2060]";
     const W2 = `${LNM}*?\\p{L}${LNM}*`;
@@ -58976,8 +58985,8 @@ var lexer = import_moo.default.compile({
 });
 var Shape = new class {
   constructor() {
-    __publicField2(this, "shapes", /* @__PURE__ */ new Map());
-    __publicField2(this, "re", {
+    __publicField3(this, "shapes", /* @__PURE__ */ new Map());
+    __publicField3(this, "re", {
       X: /[\p{Lu}\p{Lt}]/u,
       x: /[\p{Ll}\p{Lm}\p{Lo}]/u,
       d: /\p{N}/u
@@ -66315,8 +66324,8 @@ var fields_default = {
 
 // node_modules/@retorquere/bibtex-parser/dist/esm/index.js
 var __defProp4 = Object.defineProperty;
-var __defNormalProp3 = (obj, key, value) => key in obj ? __defProp4(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField3 = (obj, key, value) => __defNormalProp3(obj, typeof key !== "symbol" ? key + "" : key, value);
+var __defNormalProp4 = (obj, key, value) => key in obj ? __defProp4(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField4 = (obj, key, value) => __defNormalProp4(obj, typeof key !== "symbol" ? key + "" : key, value);
 function latexMode(node) {
   return node._renderInfo.mode;
 }
@@ -66515,14 +66524,14 @@ for (const m3 in table5.tounicode) {
 }
 var BibTeXParser = class {
   constructor() {
-    __publicField3(this, "fallback");
-    __publicField3(this, "current");
-    __publicField3(this, "english");
-    __publicField3(this, "options");
-    __publicField3(this, "fieldMode");
-    __publicField3(this, "newcommands", {});
-    __publicField3(this, "bib");
-    __publicField3(this, "unhandled", /* @__PURE__ */ new Set());
+    __publicField4(this, "fallback");
+    __publicField4(this, "current");
+    __publicField4(this, "english");
+    __publicField4(this, "options");
+    __publicField4(this, "fieldMode");
+    __publicField4(this, "newcommands", {});
+    __publicField4(this, "bib");
+    __publicField4(this, "unhandled", /* @__PURE__ */ new Set());
   }
   split(ast, sep, split) {
     const roots = [];
@@ -67889,12 +67898,12 @@ async function bibToCSL(bibPath, pathToPandoc) {
   return parseBibFile(raw, resolved);
 }
 async function bibPathsToCSL(bibPaths, pathToPandoc) {
-  const resolved = await Promise.all(bibPaths.map((path) => getBibPath(path)));
-  const ext = (path) => {
+  const resolved = await Promise.all(bibPaths.map((path2) => getBibPath(path2)));
+  const ext = (path2) => {
     var _a;
-    return ((_a = path.split(".").pop()) != null ? _a : "").toLowerCase();
+    return ((_a = path2.split(".").pop()) != null ? _a : "").toLowerCase();
   };
-  const allBib = resolved.every((path) => ["bib", "bibtex"].includes(ext(path)));
+  const allBib = resolved.every((path2) => ["bib", "bibtex"].includes(ext(path2)));
   if (allBib) {
     const raw = (await Promise.all(resolved.map(readFileText))).join("\n\n");
     return parseBibFile(raw, resolved[0]);
@@ -67921,13 +67930,13 @@ async function getCSLLocale(localeCache, _cacheDir, lang) {
   if (resp.status !== 200) {
     throw new Error(`Error downloading CSL locale ${lang}: HTTP ${resp.status}`);
   }
-  const str = resp.text;
-  if (str.startsWith("404")) {
+  const str3 = resp.text;
+  if (str3.startsWith("404")) {
     throw new Error(`Error downloading CSL locale: 404 Not Found for ${lang}`);
   }
-  await app.vault.adapter.write(cachePath, str);
-  localeCache.set(lang, str);
-  return str;
+  await app.vault.adapter.write(cachePath, str3);
+  localeCache.set(lang, str3);
+  return str3;
 }
 async function getCSLStyle(styleCache, _cacheDir, url, explicitPath) {
   const key = explicitPath != null ? explicitPath : url;
@@ -67955,10 +67964,10 @@ async function getCSLStyle(styleCache, _cacheDir, url, explicitPath) {
   if (resp.status !== 200) {
     throw new Error(`Error downloading CSL style: HTTP ${resp.status} from ${fullUrl}`);
   }
-  const str = resp.text;
-  await app.vault.adapter.write(cachePath, str);
-  styleCache.set(key, str);
-  return str;
+  const str3 = resp.text;
+  await app.vault.adapter.write(cachePath, str3);
+  styleCache.set(key, str3);
+  return str3;
 }
 var defaultHeaders = {
   "Content-Type": "application/json",
@@ -68040,9 +68049,9 @@ async function getZBib(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, loadCache
   });
   if (resp.status !== 200)
     throw new Error(`Zotero BBT export: HTTP ${resp.status}`);
-  const str = resp.text;
-  await app.vault.adapter.write(cachePath, str);
-  return applyGroupID(JSON.parse(str), groupId);
+  const str3 = resp.text;
+  await app.vault.adapter.write(cachePath, str3);
+  return applyGroupID(JSON.parse(str3), groupId);
 }
 async function refreshZBib(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, since) {
   if (!await isZoteroRunning(port))
@@ -68290,8 +68299,8 @@ async function getItemJSONFromCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKey
         }).map((c3) => {
           var _a, _b, _c;
           const href = (_b = (_a = c3.links) == null ? void 0 : _a.enclosure) == null ? void 0 : _b.href;
-          const path = (_c = c3.data) == null ? void 0 : _c.path;
-          const raw = href != null ? href : path;
+          const path2 = (_c = c3.data) == null ? void 0 : _c.path;
+          const raw = href != null ? href : path2;
           const clean = raw.replace(/^file:\/\//, "").split("?")[0];
           return { path: decodeURIComponent(clean) };
         }) : [];
@@ -68302,6 +68311,48 @@ async function getItemJSONFromCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKey
   });
   await Promise.all(workers);
   return results.length ? results : null;
+}
+async function fetchItemChildrenNative(port = DEFAULT_ZOTERO_PORT, itemKey, libraryID) {
+  var _a, _b, _c, _d;
+  if (!itemKey)
+    return { attachments: [], annotations: [], notes: [] };
+  if (!await isZoteroRunningNative(port))
+    return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  const base = `/api/${libraryType}/${libraryId}/items/${itemKey}/children`;
+  const safeGet = async (path2) => {
+    try {
+      return await zoteroNativeGet(port, path2);
+    } catch (e3) {
+      return null;
+    }
+  };
+  const [direct, annotationOnly] = await Promise.all([
+    safeGet(`${base}?format=json`),
+    safeGet(`${base}?itemType=annotation&format=json`)
+  ]);
+  const attachments = [];
+  const annotations = [];
+  const notes = [];
+  const seen = new Set();
+  for (const item of [
+    ...Array.isArray(direct == null ? void 0 : direct.data) ? direct.data : [],
+    ...Array.isArray(annotationOnly == null ? void 0 : annotationOnly.data) ? annotationOnly.data : []
+  ]) {
+    const type = (_a = item == null ? void 0 : item.data) == null ? void 0 : _a.itemType;
+    if (type === "attachment") {
+      attachments.push(item);
+    } else if (type === "annotation") {
+      const key = String((_d = (_c = item == null ? void 0 : item.key) != null ? _c : (_b = item == null ? void 0 : item.data) == null ? void 0 : _b.key) != null ? _d : "");
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        annotations.push(item);
+      }
+    } else if (type === "note") {
+      notes.push(item);
+    }
+  }
+  return { attachments, annotations, notes };
 }
 async function getCSLEntriesForCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKeys, groupId) {
   if (!await isZoteroRunningNative(port))
@@ -87228,30 +87279,30 @@ function zoteroStyleDirs(customDataDir) {
   if (typeof require !== "function")
     return [];
   const os = require("os");
-  const path = require("path");
+  const path2 = require("path");
   const home = os.homedir();
   const platform = (_a = window.process) == null ? void 0 : _a.platform;
   const dataDirs = [];
   const custom = (customDataDir != null ? customDataDir : "").trim();
   if (custom) {
-    dataDirs.push(path.basename(custom) === "styles" ? custom : path.join(custom, "styles"), path.join(custom, "styles"));
+    dataDirs.push(path2.basename(custom) === "styles" ? custom : path2.join(custom, "styles"), path2.join(custom, "styles"));
   }
   if (platform === "win32") {
-    dataDirs.push(path.join(home, "Zotero", "styles"), path.join((_b = process.env.APPDATA) != null ? _b : "", "Zotero", "Zotero", "styles"));
+    dataDirs.push(path2.join(home, "Zotero", "styles"), path2.join((_b = process.env.APPDATA) != null ? _b : "", "Zotero", "Zotero", "styles"));
   } else if (platform === "darwin") {
-    dataDirs.push(path.join(home, "Zotero", "styles"));
+    dataDirs.push(path2.join(home, "Zotero", "styles"));
   } else {
-    dataDirs.push(path.join(home, "Zotero", "styles"), path.join(home, ".zotero", "zotero", "styles"));
+    dataDirs.push(path2.join(home, "Zotero", "styles"), path2.join(home, ".zotero", "zotero", "styles"));
   }
   return dataDirs;
 }
 function listZoteroInstalledStyles(customDataDir) {
-  const fs = require("fs");
-  const path = require("path");
+  const fs2 = require("fs");
+  const path2 = require("path");
   let stylesDir = null;
   for (const dir of zoteroStyleDirs(customDataDir)) {
     try {
-      if (fs.existsSync(dir)) {
+      if (fs2.existsSync(dir)) {
         stylesDir = dir;
         break;
       }
@@ -87262,19 +87313,19 @@ function listZoteroInstalledStyles(customDataDir) {
     return [];
   let files;
   try {
-    files = fs.readdirSync(stylesDir).filter((f3) => f3.endsWith(".csl"));
+    files = fs2.readdirSync(stylesDir).filter((f3) => f3.endsWith(".csl"));
   } catch (e3) {
     return [];
   }
   const styles = [];
   for (const file of files) {
-    const filePath = path.join(stylesDir, file);
-    let title = path.basename(file, ".csl");
+    const filePath = path2.join(stylesDir, file);
+    let title = path2.basename(file, ".csl");
     try {
       const buf = Buffer.alloc(2048);
-      const fd = fs.openSync(filePath, "r");
-      const bytesRead = fs.readSync(fd, buf, 0, 2048, 0);
-      fs.closeSync(fd);
+      const fd = fs2.openSync(filePath, "r");
+      const bytesRead = fs2.readSync(fd, buf, 0, 2048, 0);
+      fs2.closeSync(fd);
       const head = buf.slice(0, bytesRead).toString("utf-8");
       const m3 = head.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
       if (m3)
@@ -87293,20 +87344,20 @@ function resolveZoteroStylePath(value, customDataDir) {
     return v3;
   if (typeof require !== "function")
     return null;
-  const fs = require("fs");
-  const path = require("path");
+  const fs2 = require("fs");
+  const path2 = require("path");
   if (v3.includes("/") || v3.includes("\\") || v3.toLowerCase().endsWith(".csl")) {
     try {
-      if (fs.existsSync(v3))
+      if (fs2.existsSync(v3))
         return v3;
     } catch (e3) {
     }
   }
   const name = v3.replace(/\.csl$/i, "");
   for (const dir of zoteroStyleDirs(customDataDir)) {
-    const candidate = path.join(dir, `${name}.csl`);
+    const candidate = path2.join(dir, `${name}.csl`);
     try {
-      if (fs.existsSync(candidate))
+      if (fs2.existsSync(candidate))
         return candidate;
     } catch (e3) {
     }
@@ -87677,6 +87728,8 @@ var DEFAULT_SETTINGS = {
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
   createNotesWithZotLit: true,
+  useOwnNoteTemplate: false,
+  ownNoteNotesHeadingLevel: 3,
   insertZoteroNotesOnCreate: true,
   useZotlitLiteratureFolder: true,
   showPdfLinks: false,
@@ -87881,10 +87934,10 @@ var ReferenceListSettingsTab = class extends import_obsidian16.PluginSettingTab 
             };
             fileInput.click();
           } else {
-            new BibFilePickerModal((path) => {
-              inputEl.value = path;
+            new BibFilePickerModal((path2) => {
+              inputEl.value = path2;
               inputEl.dispatchEvent(new Event("input"));
-              this.plugin.settings.bibliographyPaths[index] = path;
+              this.plugin.settings.bibliographyPaths[index] = path2;
               this.plugin.saveSettings(() => this.plugin.bibManager.reinit(true));
             }).open();
           }
@@ -88125,6 +88178,22 @@ var ReferenceListSettingsTab = class extends import_obsidian16.PluginSettingTab 
   }
   renderLiteratureNotes(containerEl) {
     renderDependencyNote(containerEl, ["zotero", "zotlit"], t("Creating literature notes needs Zotero for citekey and metadata lookup; ZotLit is optional and adds richer templates."));
+    const useOwn = this.plugin.settings.useOwnNoteTemplate === true;
+    new import_obsidian16.Setting(containerEl).setName(t("Use ScholarWeft's own note template")).setDesc(t("Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.")).addToggle((toggle) => toggle.setValue(useOwn).onChange((value) => {
+      this.plugin.settings.useOwnNoteTemplate = value;
+      this.plugin.saveSettings();
+      this.display();
+    }));
+    if (useOwn) {
+      new import_obsidian16.Setting(containerEl).setName(t("Child-note heading level")).setDesc(t(`Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`)).addSlider((slider) => {
+        var _a;
+        return slider.setLimits(1, 6, 1).setValue((_a = this.plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3).setDynamicTooltip().onChange((value) => {
+          this.plugin.settings.ownNoteNotesHeadingLevel = value;
+          this.plugin.saveSettings();
+        });
+      });
+      return;
+    }
     const useZotlitFolder = !!this.plugin.settings.useZotlitLiteratureFolder;
     const zotlitFolder = getZotlitLiteratureFolder(this.app);
     const useZotlitForNotes = this.plugin.settings.createNotesWithZotLit !== false;
@@ -89056,14 +89125,14 @@ var KeyStore = class {
   }
 };
 function createKey(key) {
-  let path = null;
+  let path2 = null;
   let id = null;
   let src = null;
   let weight = 1;
   let getFn = null;
   if (isString(key) || isArray(key)) {
     src = key;
-    path = createKeyPath(key);
+    path2 = createKeyPath(key);
     id = createKeyId(key);
   } else {
     if (!hasOwn.call(key, "name")) {
@@ -89077,11 +89146,11 @@ function createKey(key) {
         throw new Error(INVALID_KEY_WEIGHT_VALUE(name));
       }
     }
-    path = createKeyPath(name);
+    path2 = createKeyPath(name);
     id = createKeyId(name);
     getFn = key.getFn;
   }
-  return { path, id, weight, src, getFn };
+  return { path: path2, id, weight, src, getFn };
 }
 function createKeyPath(key) {
   return isArray(key) ? key : key.split(".");
@@ -89089,34 +89158,34 @@ function createKeyPath(key) {
 function createKeyId(key) {
   return isArray(key) ? key.join(".") : key;
 }
-function get(obj, path) {
+function get(obj, path2) {
   let list = [];
   let arr = false;
-  const deepGet = (obj2, path2, index) => {
+  const deepGet = (obj2, path3, index) => {
     if (!isDefined(obj2)) {
       return;
     }
-    if (!path2[index]) {
+    if (!path3[index]) {
       list.push(obj2);
     } else {
-      let key = path2[index];
+      let key = path3[index];
       const value = obj2[key];
       if (!isDefined(value)) {
         return;
       }
-      if (index === path2.length - 1 && (isString(value) || isNumber(value) || isBoolean(value))) {
+      if (index === path3.length - 1 && (isString(value) || isNumber(value) || isBoolean(value))) {
         list.push(toString(value));
       } else if (isArray(value)) {
         arr = true;
         for (let i3 = 0, len = value.length; i3 < len; i3 += 1) {
-          deepGet(value[i3], path2, index + 1);
+          deepGet(value[i3], path3, index + 1);
         }
-      } else if (path2.length) {
-        deepGet(value, path2, index + 1);
+      } else if (path3.length) {
+        deepGet(value, path3, index + 1);
       }
     }
   };
-  deepGet(obj, isString(path) ? path.split(".") : path, 0);
+  deepGet(obj, isString(path2) ? path2.split(".") : path2, 0);
   return arr ? list : list[0];
 }
 var MatchOptions = {
@@ -90347,7 +90416,7 @@ var SimpleLRU = class {
 };
 
 // src/bib/bibManager.ts
-var import_obsidian20 = __toModule(require("obsidian"));
+var import_obsidian22 = __toModule(require("obsidian"));
 
 // src/parser/citeproc.ts
 function genUid(length) {
@@ -90451,9 +90520,9 @@ function getCiteprocCites(groups, style, ids = []) {
   });
   return { output, idToGroup };
 }
-function decodeHtml(str) {
+function decodeHtml(str3) {
   const txt = document.createElement("textarea");
-  txt.innerHTML = str;
+  txt.innerHTML = str3;
   return txt.value;
 }
 function sanitize(val) {
@@ -90482,11 +90551,11 @@ function cite(engine, group, uncitedItemIDs) {
     };
   });
   realCites.forEach((cite2, i3) => {
-    const [id, noteIndex, str] = bakedCites[i3];
+    const [id, noteIndex, str3] = bakedCites[i3];
     const gid = idToGroup[id];
     cites[gid] = {
       ...group[gid],
-      val: sanitize(str),
+      val: sanitize(str3),
       noteIndex
     };
   });
@@ -90530,9 +90599,9 @@ function zoteroHtmlToMarkdown(html) {
   s3 = s3.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   return s3;
 }
-async function getJson(port, path) {
+async function getJson(port, path2) {
   const resp = await (0, import_obsidian19.requestUrl)({
-    url: `http://127.0.0.1:${port}${path}`,
+    url: `http://127.0.0.1:${port}${path2}`,
     method: "GET",
     headers: {
       Accept: "application/json",
@@ -90707,6 +90776,2099 @@ async function insertZoteroNotesForFiles(app2, files, opts = {}) {
   return result;
 }
 
+// src/noteImport.ts
+var import_obsidian21 = __toModule(require("obsidian"));
+
+// src/template/color.ts
+var ANNOTATION_COLOR_NAMES = {
+  "#FFD400": "yellow",
+  "#FF6666": "red",
+  "#5FB236": "green",
+  "#2EA8E5": "blue",
+  "#A28AE5": "purple",
+  "#E56EEE": "magenta",
+  "#F19837": "orange",
+  "#AAAAAA": "gray",
+  "#FF8C19": "yellow",
+  "#A6507B": "purple"
+};
+function annotationColorToName(raw) {
+  var _a;
+  if (!raw)
+    return null;
+  return (_a = ANNOTATION_COLOR_NAMES[raw.toUpperCase()]) != null ? _a : null;
+}
+
+// src/bib/extra.ts
+var EXTRA_PAIR_RE = /^([A-Za-z][\w .-]*?)\s*[:=]\s*(.+)$/;
+var EXTRA_CSL_FIELDS = new Set([
+  "abstract",
+  "accessed",
+  "annote",
+  "archive",
+  "archive-place",
+  "author",
+  "authority",
+  "call-number",
+  "chapter-number",
+  "citation-label",
+  "citation-number",
+  "collection-editor",
+  "collection-number",
+  "collection-title",
+  "composer",
+  "container",
+  "container-author",
+  "container-title",
+  "container-title-short",
+  "dimensions",
+  "director",
+  "edition",
+  "editor",
+  "editorial-director",
+  "event",
+  "event-date",
+  "event-place",
+  "first-reference-note-number",
+  "genre",
+  "illustrator",
+  "interviewer",
+  "issue",
+  "issued",
+  "jurisdiction",
+  "keyword",
+  "language",
+  "locator",
+  "medium",
+  "note",
+  "number",
+  "number-of-pages",
+  "number-of-volumes",
+  "original-author",
+  "original-date",
+  "original-publisher",
+  "original-publisher-place",
+  "original-title",
+  "page",
+  "page-first",
+  "publisher",
+  "publisher-place",
+  "recipient",
+  "references",
+  "reviewed-author",
+  "reviewed-title",
+  "scale",
+  "section",
+  "source",
+  "status",
+  "submitted",
+  "title",
+  "title-short",
+  "translator",
+  "type",
+  "version",
+  "volume",
+  "year-suffix"
+]);
+var UPPERCASE_FIELDS = new Set(["doi", "isbn", "issn", "pmcid", "pmid", "url"]);
+function parseExtra(extra) {
+  if (!extra || !extra.trim())
+    return null;
+  const lines = [];
+  const fields = {};
+  for (const raw of extra.split(/\r?\n/)) {
+    const m3 = EXTRA_PAIR_RE.exec(raw);
+    if (!m3) {
+      lines.push({ raw, key: null });
+      continue;
+    }
+    const key = m3[1].trim();
+    const value = m3[2].trim();
+    if (!key || !value) {
+      lines.push({ raw, key: null });
+      continue;
+    }
+    lines.push({ raw, key, value });
+    if (!(key in fields))
+      fields[key] = value;
+  }
+  return { raw: extra, fields, lines };
+}
+function extraKeyToCslField(key) {
+  const normalized = key.toLowerCase().replace(/\s+/g, "-");
+  if (normalized === "archive-location")
+    return "archive_location";
+  if (UPPERCASE_FIELDS.has(normalized))
+    return normalized.toUpperCase();
+  if (EXTRA_CSL_FIELDS.has(normalized))
+    return normalized;
+  return null;
+}
+function extraKeyToContextProperty(key) {
+  const csl = extraKeyToCslField(key);
+  if (!csl)
+    return null;
+  if (/^[A-Z]+$/.test(csl))
+    return csl;
+  return csl.split(/[-_]/).map((part, i3) => i3 === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)).join("");
+}
+
+// src/template/markdown.ts
+var import_obsidian20 = __toModule(require("obsidian"));
+var HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"];
+var FENCE_RE = /^\s*(?:```|~~~)/;
+var CODE_SPAN_OR_ESCAPABLE_RE = /(`+[^`]*`+)|((?<!\\)[\[<])/g;
+function escapeOutsideCode(line) {
+  return line.replace(CODE_SPAN_OR_ESCAPABLE_RE, (match2, code, char) => code != null ? code : `\\${char}`);
+}
+function escapeMarkdown(text) {
+  let inFence = false;
+  return text.split("\n").map((line) => {
+    if (FENCE_RE.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    return inFence ? line : escapeOutsideCode(line);
+  }).join("\n");
+}
+function normalizeHeadingLevels(html, topLevel) {
+  var _a;
+  if (!html.trim())
+    return html;
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const headings = [];
+  for (const tag of HEADING_TAGS) {
+    headings.push(...Array.from(doc.body.getElementsByTagName(tag)));
+  }
+  if (headings.length === 0)
+    return html;
+  let min = Number.POSITIVE_INFINITY;
+  const levelOf = new Map();
+  for (const h3 of headings) {
+    const level = Number(h3.tagName.charAt(1));
+    levelOf.set(h3, level);
+    if (level < min)
+      min = level;
+  }
+  const delta = topLevel - min;
+  if (delta === 0)
+    return html;
+  for (const h3 of headings) {
+    const level = Math.min(6, Math.max(1, ((_a = levelOf.get(h3)) != null ? _a : min) + delta));
+    const replacement = doc.createElement(`h${level}`);
+    replacement.innerHTML = h3.innerHTML;
+    h3.replaceWith(replacement);
+  }
+  return doc.body.innerHTML;
+}
+function htmlToMarkdownText(html) {
+  if (!html || !html.trim())
+    return "";
+  return (0, import_obsidian20.htmlToMarkdown)(html).trim();
+}
+function htmlFieldToMarkdown(html) {
+  return escapeMarkdown(htmlToMarkdownText(html));
+}
+function noteHtmlToMarkdown(html, opts = {}) {
+  var _a;
+  if (!html || !html.trim())
+    return "";
+  const topLevel = (_a = opts.topLevel) != null ? _a : 3;
+  return escapeMarkdown((0, import_obsidian20.htmlToMarkdown)(normalizeHeadingLevels(html, topLevel)).trim());
+}
+
+// src/template/context.ts
+var CSL_TO_ZOTERO_ITEM_TYPE = {
+  "graphic": "artwork",
+  "song": "audioRecording",
+  "bill": "bill",
+  "post-weblog": "blogPost",
+  "book": "book",
+  "chapter": "bookSection",
+  "legal_case": "case",
+  "software": "computerProgram",
+  "paper-conference": "conferencePaper",
+  "dataset": "dataset",
+  "entry-dictionary": "dictionaryEntry",
+  "document": "document",
+  "personal_communication": "letter",
+  "entry-encyclopedia": "encyclopediaArticle",
+  "motion_picture": "videoRecording",
+  "post": "forumPost",
+  "hearing": "hearing",
+  "interview": "interview",
+  "article-journal": "journalArticle",
+  "article-magazine": "magazineArticle",
+  "manuscript": "manuscript",
+  "map": "map",
+  "article-newspaper": "newspaperArticle",
+  "patent": "patent",
+  "broadcast": "tvBroadcast",
+  "article": "preprint",
+  "speech": "presentation",
+  "report": "report",
+  "standard": "standard",
+  "legislation": "statute",
+  "thesis": "thesis",
+  "webpage": "webpage"
+};
+function cslTypeToZoteroItemType(cslType) {
+  var _a;
+  const t4 = typeof cslType === "string" && cslType ? cslType : "document";
+  return (_a = CSL_TO_ZOTERO_ITEM_TYPE[t4]) != null ? _a : t4;
+}
+var CSL_ROLE_TO_ZOTERO = {
+  author: "author",
+  editor: "editor",
+  translator: "translator",
+  contributor: "contributor",
+  "container-author": "bookAuthor",
+  "collection-editor": "seriesEditor",
+  director: "director",
+  interviewer: "interviewer",
+  composer: "composer",
+  producer: "producer",
+  "script-writer": "scriptwriter",
+  "reviewed-author": "reviewedAuthor",
+  performer: "performer",
+  lyricist: "wordsBy",
+  recipient: "recipient",
+  witness: "witness",
+  illustrator: "illustrator",
+  "editorial-director": "editorialDirector"
+};
+var CREATOR_ROLE_ORDER = [
+  "author",
+  "editor",
+  "translator",
+  "contributor",
+  "director",
+  "container-author",
+  "collection-editor",
+  "interviewer",
+  "composer",
+  "producer",
+  "script-writer",
+  "reviewed-author",
+  "performer",
+  "lyricist",
+  "illustrator",
+  "editorial-director",
+  "recipient",
+  "witness"
+];
+var PRIMARY_CREATOR_TYPE = {
+  artwork: "artist",
+  audioRecording: "performer",
+  computerProgram: "programmer",
+  film: "director",
+  interview: "interviewer",
+  map: "cartographer",
+  patent: "inventor",
+  podcast: "author",
+  presentation: "presenter",
+  radioBroadcast: "director",
+  tvBroadcast: "director",
+  videoRecording: "director"
+};
+function toCreator(name, role) {
+  const family = typeof name.family === "string" ? name.family : "";
+  const given = typeof name.given === "string" ? name.given : "";
+  const literal = typeof name.literal === "string" && name.literal ? name.literal : null;
+  const fullName = literal != null ? literal : [given, family].filter(Boolean).join(" ");
+  return { family, given, literal, role, fullName };
+}
+function entryCreators(entry) {
+  const out = [];
+  const seen = new Set();
+  const emit = (roleKey) => {
+    var _a;
+    const list = entry[roleKey];
+    if (!Array.isArray(list))
+      return;
+    const role = (_a = CSL_ROLE_TO_ZOTERO[roleKey]) != null ? _a : roleKey;
+    for (const name of list) {
+      if (!name || typeof name !== "object")
+        continue;
+      out.push(toCreator(name, role));
+    }
+    seen.add(roleKey);
+  };
+  for (const roleKey of CREATOR_ROLE_ORDER)
+    emit(roleKey);
+  for (const key of Object.keys(entry)) {
+    if (seen.has(key))
+      continue;
+    if (Array.isArray(entry[key]) && key !== "author")
+      emit(key);
+  }
+  return out;
+}
+function primaryCreatorTypeFor(itemType) {
+  var _a;
+  return (_a = PRIMARY_CREATOR_TYPE[itemType]) != null ? _a : "author";
+}
+function formatAuthorsShort(creators, primaryRole) {
+  const authors = creators.filter((c3) => !primaryRole || c3.role === primaryRole);
+  const list = authors.length ? authors : creators;
+  const surname = (c3) => c3.literal || c3.family || c3.fullName || "";
+  if (list.length === 0)
+    return "";
+  if (list.length === 1)
+    return surname(list[0]);
+  if (list.length === 2)
+    return `${surname(list[0])} and ${surname(list[1])}`;
+  return `${surname(list[0])} et al.`;
+}
+var pad2 = (n2) => n2 < 10 ? `0${n2}` : String(n2);
+function num(v3) {
+  const n2 = typeof v3 === "number" ? v3 : Number(v3);
+  return Number.isFinite(n2) ? Math.trunc(n2) : null;
+}
+function standaloneYear(text) {
+  const m3 = /(?:^|[^\d])([12]\d{3})(?:[^\d]|$)/.exec(text);
+  return m3 ? Number(m3[1]) : null;
+}
+function withToString(date, text) {
+  Object.defineProperty(date, "toString", {
+    value: () => text,
+    enumerable: false,
+    configurable: true
+  });
+  return date;
+}
+function toContextDate(issued) {
+  if (issued == null)
+    return null;
+  if (typeof issued === "string") {
+    const text = issued.trim();
+    if (!text)
+      return null;
+    const year2 = standaloneYear(text);
+    return year2 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: year2, month: null, day: null, raw: text }, String(year2));
+  }
+  const obj = issued;
+  const raw = typeof obj.raw === "string" ? obj.raw : typeof obj.literal === "string" ? obj.literal : "";
+  const parts = Array.isArray(obj["date-parts"]) ? obj["date-parts"][0] : void 0;
+  const arr = Array.isArray(parts) ? parts : [];
+  const year = num(arr[0]);
+  const month = num(arr[1]);
+  const day = num(arr[2]);
+  if (year == null) {
+    const text = raw.trim();
+    if (!text)
+      return null;
+    const y3 = standaloneYear(text);
+    return y3 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: y3, month: null, day: null, raw: text }, String(y3));
+  }
+  const rawOut = raw || String(year);
+  if (month != null && day != null) {
+    const value = `${year}-${pad2(month)}-${pad2(day)}`;
+    return withToString({ kind: "date", value, year, month, day, raw: rawOut }, value);
+  }
+  if (month != null) {
+    const value = `${year}-${pad2(month)}`;
+    return withToString({ kind: "yearMonth", value, year, month, day: null, raw: rawOut }, value);
+  }
+  return withToString({ kind: "year", value: null, year, month: null, day: null, raw: rawOut }, String(year));
+}
+function str(v3) {
+  if (v3 == null)
+    return null;
+  if (typeof v3 === "string")
+    return v3 ? v3 : null;
+  if (typeof v3 === "number" || typeof v3 === "boolean")
+    return String(v3);
+  return null;
+}
+function mdField(v3) {
+  const s3 = str(v3);
+  if (s3 == null)
+    return null;
+  return htmlToMarkdownText(s3) || null;
+}
+function isPersonal(groupID) {
+  return groupID == null || groupID === 1;
+}
+function indexedKeyFor(key, groupID) {
+  return groupID == null ? key : `${key}g${groupID}`;
+}
+function backlinkFor(key, groupID) {
+  return groupID == null ? `zotero://select/library/items/${key}` : `zotero://select/groups/${groupID}/items/${key}`;
+}
+function weblinkFor(key, groupID) {
+  if (groupID == null || !key)
+    return null;
+  return `https://www.zotero.org/groups/${groupID}/items/${key}`;
+}
+function noteLinkFor(notePath) {
+  var _a;
+  if (!notePath)
+    return () => null;
+  const base = notePath.replace(/\.md$/, "");
+  const defaultAlias = (_a = base.split("/").pop()) != null ? _a : base;
+  return (alias, subpath) => {
+    const target = subpath ? `${base}#${subpath}` : base;
+    return `[[${target}|${alias != null ? alias : defaultAlias}]]`;
+  };
+}
+function buildNoteContext(entry, children = {}) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+  const e3 = entry != null ? entry : {};
+  const rawGroup = e3.groupID;
+  const groupID = isPersonal(rawGroup) ? null : rawGroup;
+  const libraryID = groupID != null ? groupID : 1;
+  const key = (_b = (_a = str(e3._zoteroKey)) != null ? _a : str(e3.key)) != null ? _b : "";
+  const itemType = cslTypeToZoteroItemType(e3.type);
+  const creators = entryCreators(e3);
+  const primaryCreatorType = primaryCreatorTypeFor(itemType);
+  const authors = creators.filter((c3) => c3.role === primaryCreatorType);
+  const notePath = (_c = children.notePath) != null ? _c : null;
+  const ctx = {
+    key,
+    groupID,
+    libraryID,
+    indexedKey: indexedKeyFor(key, groupID),
+    itemType,
+    dateAdded: (_e = (_d = str(e3._dateAdded)) != null ? _d : str(e3.dateAdded)) != null ? _e : "",
+    dateModified: (_g = (_f = str(e3._dateModified)) != null ? _f : str(e3.dateModified)) != null ? _g : "",
+    backlink: backlinkFor(key, groupID),
+    weblink: weblinkFor(key, groupID),
+    notePath,
+    noteLink: noteLinkFor(notePath),
+    title: mdField(e3.title),
+    shortTitle: mdField(e3["title-short"]),
+    abstract: mdField(e3.abstract),
+    containerTitle: str(e3["container-title"]),
+    citationKey: str(e3.id),
+    citekey: str(e3.id),
+    date: toContextDate(e3.issued),
+    DOI: str(e3.DOI),
+    url: str(e3.URL),
+    ISBN: str(e3.ISBN),
+    ISSN: str(e3.ISSN),
+    volume: str(e3.volume),
+    issue: str(e3.issue),
+    pages: str(e3.page),
+    publisher: str(e3.publisher),
+    place: str(e3["publisher-place"]),
+    edition: str(e3.edition),
+    language: str(e3.language),
+    extra: parseExtra(e3._extra),
+    creators,
+    primaryCreatorType,
+    authors: authors.length ? authors : creators,
+    authorsShort: formatAuthorsShort(creators, primaryCreatorType),
+    tags: (Array.isArray(e3._tags) ? e3._tags : []).filter((t4) => typeof t4 === "string" && !!t4).map((name) => ({ name, type: "unknown" })),
+    collections: [],
+    annotations: (_h = children.annotations) != null ? _h : [],
+    attachments: (_i = children.attachments) != null ? _i : [],
+    notes: (_j = children.notes) != null ? _j : [],
+    relatedItems: []
+  };
+  const extra = ctx.extra;
+  if (extra) {
+    for (const [extraKey, value] of Object.entries(extra.fields)) {
+      const prop = extraKeyToContextProperty(extraKey);
+      if (!prop)
+        continue;
+      const current = ctx[prop];
+      if (current == null || current === "")
+        ctx[prop] = value;
+    }
+  }
+  return ctx;
+}
+
+// src/template/children.ts
+function asRecord(v3) {
+  return v3 && typeof v3 === "object" && !Array.isArray(v3) ? v3 : null;
+}
+function rawData(raw) {
+  var _a, _b, _c;
+  return (_c = (_b = asRecord((_a = asRecord(raw)) == null ? void 0 : _a.data)) != null ? _b : asRecord(raw)) != null ? _c : {};
+}
+function rawKey(raw, data) {
+  var _a, _b, _c;
+  return (_c = (_b = str2(data.key)) != null ? _b : str2((_a = asRecord(raw)) == null ? void 0 : _a.key)) != null ? _c : "";
+}
+function str2(v3) {
+  if (v3 == null)
+    return null;
+  if (typeof v3 === "string")
+    return v3 || null;
+  if (typeof v3 === "number" || typeof v3 === "boolean")
+    return String(v3);
+  return null;
+}
+function openLinkFor(key, groupID) {
+  return groupID == null ? `zotero://open/library/items/${key}` : `zotero://open/groups/${groupID}/items/${key}`;
+}
+function fileUrl(absPath) {
+  let p4 = absPath.replace(/\\/g, "/");
+  if (!p4.startsWith("/"))
+    p4 = `/${p4}`;
+  return `file://${p4.split("/").map(encodeURIComponent).join("/")}`;
+}
+function fileUrlToPath(href) {
+  const raw = href.replace(/^file:\/\//i, "").split(/[?#]/)[0];
+  try {
+    return decodeURIComponent(raw);
+  } catch (e3) {
+    return raw;
+  }
+}
+function fileUrlLink(absPath, defaultAlias, defaultSubpath = "") {
+  const href = fileUrl(absPath);
+  return (alias, subpath) => `[${alias != null ? alias : defaultAlias}](${href}${subpath != null ? subpath : defaultSubpath})`;
+}
+function basenamePath(p4) {
+  const clean = p4.replace(/[\\/]+$/, "");
+  const i3 = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
+  const name = i3 >= 0 ? clean.slice(i3 + 1) : clean;
+  return name || null;
+}
+function joinPath(base, ...rest) {
+  let out = base.replace(/[\\/]+$/, "");
+  for (const segment of rest) {
+    const clean = segment.replace(/^[\\/]+/, "").replace(/[\\/]+$/, "");
+    if (clean)
+      out += `/${clean}`;
+  }
+  return out;
+}
+var LINK_MODES = new Set([
+  "imported_file",
+  "imported_url",
+  "linked_file",
+  "linked_url",
+  "embedded_image"
+]);
+function linkModeOf(v3) {
+  const s3 = str2(v3);
+  return s3 && LINK_MODES.has(s3) ? s3 : "unknown";
+}
+function resolveAttachmentFilePath(raw, data, key, opts) {
+  var _a, _b, _c;
+  const enclosure = str2((_c = asRecord((_b = asRecord((_a = asRecord(raw)) == null ? void 0 : _a.links)) == null ? void 0 : _b.enclosure)) == null ? void 0 : _c.href);
+  if (enclosure)
+    return fileUrlToPath(enclosure);
+  const p4 = str2(data.path);
+  if (p4) {
+    if (/^attachments:/i.test(p4)) {
+      const rel = p4.replace(/^attachments:/i, "");
+      return opts.baseAttachmentPath ? joinPath(opts.baseAttachmentPath, rel) : null;
+    }
+    if (/^storage:/i.test(p4)) {
+      const filename2 = p4.replace(/^storage:/i, "");
+      return opts.dataDir ? joinPath(opts.dataDir, "storage", key, filename2) : null;
+    }
+    if (/^[a-zA-Z]:[\\/]/.test(p4) || p4.startsWith("/") || p4.startsWith("~"))
+      return p4;
+  }
+  const filename = str2(data.filename);
+  const mode = linkModeOf(data.linkMode);
+  if (opts.dataDir && filename && (mode === "imported_file" || mode === "imported_url")) {
+    return joinPath(opts.dataDir, "storage", key, filename);
+  }
+  return null;
+}
+function mapAttachment(raw, opts = {}) {
+  var _a, _b, _c;
+  const data = rawData(raw);
+  const key = rawKey(raw, data);
+  const groupID = (_a = opts.groupID) != null ? _a : null;
+  const filePath = resolveAttachmentFilePath(raw, data, key, opts);
+  const filename = (_b = str2(data.filename)) != null ? _b : filePath ? basenamePath(filePath) : null;
+  const fileLink = filePath ? fileUrlLink(filePath, (_c = filename != null ? filename : basenamePath(filePath)) != null ? _c : "attachment") : () => null;
+  return {
+    key,
+    indexedKey: indexedKeyFor(key, groupID),
+    filename,
+    contentType: str2(data.contentType),
+    linkMode: linkModeOf(data.linkMode),
+    backlink: openLinkFor(key, groupID),
+    filePath,
+    fileLink
+  };
+}
+function placeholderAttachment(key, opts) {
+  var _a;
+  const groupID = (_a = opts.groupID) != null ? _a : null;
+  return {
+    key,
+    indexedKey: indexedKeyFor(key, groupID),
+    filename: null,
+    contentType: null,
+    linkMode: "unknown",
+    backlink: openLinkFor(key, groupID),
+    filePath: null,
+    fileLink: () => null
+  };
+}
+function mapTags(rawTags) {
+  var _a;
+  if (!Array.isArray(rawTags))
+    return [];
+  const out = [];
+  for (const t4 of rawTags) {
+    const rec = asRecord(t4);
+    const name = typeof t4 === "string" ? t4 : (_a = str2(rec == null ? void 0 : rec.name)) != null ? _a : str2(rec == null ? void 0 : rec.tag);
+    if (!name)
+      continue;
+    out.push({ name, type: tagTypeOf(rec == null ? void 0 : rec.type) });
+  }
+  return out;
+}
+function tagTypeOf(v3) {
+  if (v3 === 1 || v3 === "auto" || v3 === "automatic")
+    return "auto";
+  if (v3 === 0 || v3 === "manual" || v3 === void 0 || v3 === null)
+    return "manual";
+  return "unknown";
+}
+function pageOf(position) {
+  const s3 = str2(position);
+  if (!s3)
+    return null;
+  try {
+    const idx = JSON.parse(s3).pageIndex;
+    return typeof idx === "number" && Number.isFinite(idx) ? idx + 1 : null;
+  } catch (e3) {
+    return null;
+  }
+}
+var ANNOTATION_TYPES = new Set([
+  "highlight",
+  "note",
+  "image",
+  "ink",
+  "underline",
+  "text"
+]);
+function annotationImageLink(key, type, opts) {
+  if (type !== "image" && type !== "ink")
+    return null;
+  if (!opts.dataDir)
+    return null;
+  const libraryPath = opts.groupID == null ? "library" : `groups/${opts.groupID}`;
+  const cachePath = joinPath(opts.dataDir, "cache", libraryPath, `${key}.png`);
+  return fileUrlLink(cachePath, `${key}.png`);
+}
+function mapAnnotation(raw, parentItem, parentAttachment, opts = {}) {
+  var _a, _b, _c, _d, _e, _f;
+  const data = rawData(raw);
+  const key = rawKey(raw, data);
+  const groupID = (_a = opts.groupID) != null ? _a : null;
+  const type = (_b = str2(data.annotationType)) != null ? _b : "unknown";
+  const colorHex = str2(data.annotationColor);
+  const page = pageOf(data.annotationPosition);
+  const commentHtml = str2(data.annotationComment);
+  const filePath = parentAttachment.filePath;
+  const fileLink = filePath ? fileUrlLink(filePath, (_d = (_c = parentAttachment.filename) != null ? _c : basenamePath(filePath)) != null ? _d : "attachment", page != null ? `#page=${page}` : "") : () => null;
+  return {
+    imgLink: annotationImageLink(key, type, opts),
+    comment: commentHtml ? htmlToMarkdownText(commentHtml) || null : null,
+    fileLink,
+    backlink: backlinkFor(key, groupID),
+    parentItem,
+    parentAttachment,
+    key,
+    indexedKey: indexedKeyFor(key, groupID),
+    libraryID: groupID != null ? groupID : 1,
+    type: ANNOTATION_TYPES.has(type) ? type : "unknown",
+    text: str2(data.annotationText),
+    commentHtml,
+    colorHex,
+    colorName: annotationColorToName(colorHex),
+    pageLabel: str2(data.annotationPageLabel),
+    page,
+    authorName: str2(data.annotationAuthorName),
+    isExternal: data.annotationIsExternal === true,
+    dateAdded: (_e = str2(data.dateAdded)) != null ? _e : "",
+    dateModified: (_f = str2(data.dateModified)) != null ? _f : "",
+    tags: mapTags(data.tags)
+  };
+}
+function mapNote(raw, opts = {}) {
+  var _a, _b, _c;
+  const data = rawData(raw);
+  const key = rawKey(raw, data);
+  const html = (_a = str2(data.note)) != null ? _a : str2(data.noteHtml);
+  return {
+    key,
+    indexedKey: indexedKeyFor(key, (_b = opts.groupID) != null ? _b : null),
+    title: str2(data.title),
+    noteLink: null,
+    text: html ? noteHtmlToMarkdown(html, { topLevel: (_c = opts.noteHeadingLevel) != null ? _c : 3 }) : null,
+    html
+  };
+}
+function applyChildren(ctx, raw, opts = {}) {
+  var _a, _b, _c;
+  const resolved = {
+    ...opts,
+    groupID: opts.groupID !== void 0 ? opts.groupID : ctx.groupID
+  };
+  const attachments = ((_a = raw.attachments) != null ? _a : []).map((r3) => mapAttachment(r3, resolved));
+  const byKey = new Map(attachments.map((a3) => [a3.key, a3]));
+  const annotations = ((_b = raw.annotations) != null ? _b : []).map((r3) => {
+    var _a2, _b2;
+    const parentKey = (_a2 = str2(rawData(r3).parentItem)) != null ? _a2 : "";
+    const parentAttachment = (_b2 = byKey.get(parentKey)) != null ? _b2 : placeholderAttachment(parentKey, resolved);
+    return mapAnnotation(r3, ctx, parentAttachment, resolved);
+  });
+  const notes = ((_c = raw.notes) != null ? _c : []).map((r3) => mapNote(r3, resolved));
+  ctx.attachments = attachments;
+  ctx.annotations = annotations;
+  ctx.notes = notes;
+  return ctx;
+}
+function buildNoteContextWithChildren(entry, raw, opts = {}) {
+  const ctx = buildNoteContext(entry, { notePath: opts.notePath });
+  return applyChildren(ctx, raw, opts);
+}
+
+// node_modules/eta/dist/index.mjs
+var fs = __toModule(require("node:fs"));
+var path = __toModule(require("node:path"));
+var EtaError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "Eta Error";
+  }
+};
+var EtaParseError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaParser Error";
+  }
+};
+var EtaRuntimeError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaRuntime Error";
+  }
+};
+var EtaFileResolutionError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaFileResolution Error";
+  }
+};
+var EtaNameResolutionError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaNameResolution Error";
+  }
+};
+function ParseErr(message, str3, indx) {
+  const whitespace = str3.slice(0, indx).split(/\n/);
+  const lineNo = whitespace.length;
+  const colNo = whitespace[lineNo - 1].length + 1;
+  message += " at line " + lineNo + " col " + colNo + ":\n\n  " + str3.split(/\n/)[lineNo - 1] + "\n  " + Array(colNo).join(" ") + "^";
+  throw new EtaParseError(message);
+}
+function RuntimeErr(originalError, str3, lineNo, path$1) {
+  const lines = str3.split("\n");
+  const start = Math.max(lineNo - 3, 0);
+  const end = Math.min(lines.length, lineNo + 3);
+  const filename = path$1;
+  const context = lines.slice(start, end).map((line, i3) => {
+    const curr = i3 + start + 1;
+    return (curr === lineNo ? " >> " : "    ") + curr + "| " + line;
+  }).join("\n");
+  const err = new EtaRuntimeError((filename ? filename + ":" + lineNo + "\n" : "line " + lineNo + "\n") + context + "\n\n" + originalError.message);
+  err.name = originalError.name;
+  err.cause = originalError;
+  throw err;
+}
+function readFile(path$1) {
+  let res = "";
+  try {
+    res = fs.readFileSync(path$1, "utf8");
+  } catch (err) {
+    if ((err == null ? void 0 : err.code) === "ENOENT")
+      throw new EtaFileResolutionError(`Could not find template: ${path$1}`);
+    else
+      throw err;
+  }
+  return res;
+}
+function resolvePath(templatePath, options) {
+  var _a;
+  let resolvedFilePath = "";
+  const views = this.config.views;
+  if (!views)
+    throw new EtaFileResolutionError("Views directory is not defined");
+  const baseFilePath = options == null ? void 0 : options.filepath;
+  const defaultExtension = this.config.defaultExtension === void 0 ? ".eta" : this.config.defaultExtension;
+  const cacheIndex = JSON.stringify({
+    filename: baseFilePath,
+    path: templatePath,
+    views: this.config.views
+  });
+  templatePath += path.extname(templatePath) ? "" : defaultExtension;
+  if (baseFilePath) {
+    if (this.config.cacheFilepaths && this.filepathCache[cacheIndex])
+      return this.filepathCache[cacheIndex];
+    if ((_a = absolutePathRegExp.exec(templatePath)) == null ? void 0 : _a.length) {
+      const formattedPath = templatePath.replace(/^\/*|^\\*/, "");
+      resolvedFilePath = path.join(views, formattedPath);
+    } else
+      resolvedFilePath = path.join(path.dirname(baseFilePath), templatePath);
+  } else
+    resolvedFilePath = path.join(views, templatePath);
+  if (dirIsChild(views, resolvedFilePath)) {
+    if (baseFilePath && this.config.cacheFilepaths)
+      this.filepathCache[cacheIndex] = resolvedFilePath;
+    return resolvedFilePath;
+  } else
+    throw new EtaFileResolutionError(`Template '${templatePath}' is not in the views directory`);
+}
+function dirIsChild(parent, dir) {
+  const relative2 = path.relative(parent, dir);
+  return relative2 && !relative2.startsWith("..") && !path.isAbsolute(relative2);
+}
+var absolutePathRegExp = /^\\|^\//;
+var AsyncFunction = (async () => {
+}).constructor;
+function compile(str3, options) {
+  const config = this.config;
+  const ctor = (options == null ? void 0 : options.async) ? AsyncFunction : Function;
+  try {
+    return new ctor(config.varName, "options", this.compileToString.call(this, str3, options));
+  } catch (e3) {
+    if (e3 instanceof SyntaxError)
+      throw new EtaParseError("Bad template syntax\n\n" + e3.message + "\n" + Array(e3.message.length + 1).join("=") + "\n" + this.compileToString.call(this, str3, options) + "\n");
+    else
+      throw e3;
+  }
+}
+function compileToString(str3, options) {
+  const config = this.config;
+  const isAsync = options == null ? void 0 : options.async;
+  const compileBody$1 = this.compileBody;
+  const buffer = this.parse.call(this, str3);
+  let res = `${config.functionHeader}
+let include = (__eta_t, __eta_d) => this.render(__eta_t, {...${config.varName}, ...(__eta_d ?? {})}, options);
+let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, {...${config.varName}, ...(__eta_d ?? {})}, options);
+
+let __eta = {res: "", e: this.config.escapeFunction, f: this.config.filterFunction, blocks: {}${config.debug ? ', line: 1, templateStr: "' + str3.replace(/\\|"/g, "\\$&").replace(/\r\n|\n|\r/g, "\\n") + '"' : ""}};
+
+function layout(path, data) {
+  __eta.layout = path;
+  __eta.layoutData = data;
+}${config.debug ? "try {" : ""}${config.useWith ? "with(" + config.varName + "||{}){" : ""}
+
+function ${config.outputFunctionName}(s){__eta.res+=s;}
+function capture(fn){const s=__eta.res;__eta.res='';try{fn();return __eta.res}finally{__eta.res=s;}}
+async function captureAsync(fn){const s=__eta.res;__eta.res='';try{await fn();return __eta.res}finally{__eta.res=s;}}
+function block(name,fn){if(__eta.layout){if(fn){__eta.blocks[name]=capture(fn);}return '';}const b=${config.varName}.__blocks||{};if(name in b){return b[name];}return fn?capture(fn):'';}
+async function blockAsync(name,fn){if(__eta.layout){if(fn){__eta.blocks[name]=await captureAsync(fn);}return '';}const b=${config.varName}.__blocks||{};if(name in b){return b[name];}return fn?await captureAsync(fn):'';}
+
+${compileBody$1.call(this, buffer)}
+if (__eta.layout) {
+  __eta.res = ${isAsync ? "await includeAsync" : "include"} (__eta.layout, {...${config.varName}, body: __eta.res, ...__eta.layoutData, __blocks: __eta.blocks});
+}
+${config.useWith ? "}" : ""}${config.debug ? "} catch (e) { this.RuntimeErr(e, __eta.templateStr, __eta.line, options.filepath) }" : ""}
+return __eta.res;
+`;
+  if (config.plugins)
+    for (let i3 = 0; i3 < config.plugins.length; i3++) {
+      const plugin = config.plugins[i3];
+      if (plugin.processFnString)
+        res = plugin.processFnString(res, config);
+    }
+  return res;
+}
+function compileBody(buff) {
+  const config = this.config;
+  let i3 = 0;
+  const buffLength = buff.length;
+  let returnStr = "";
+  for (; i3 < buffLength; i3++) {
+    const currentBlock = buff[i3];
+    if (typeof currentBlock === "string")
+      returnStr += "__eta.res+='" + currentBlock + "';\n";
+    else {
+      const type = currentBlock.t;
+      let content = currentBlock.val || "";
+      if (config.debug)
+        returnStr += "__eta.line=" + currentBlock.lineNo + "\n";
+      if (type === "r") {
+        if (config.autoFilter)
+          content = "__eta.f(" + content + ")";
+        returnStr += "__eta.res+=" + content + ";\n";
+      } else if (type === "i") {
+        if (config.autoFilter)
+          content = "__eta.f(" + content + ")";
+        if (config.autoEscape)
+          content = "__eta.e(" + content + ")";
+        returnStr += "__eta.res+=" + content + ";\n";
+      } else if (type === "e")
+        returnStr += content + "\n";
+      else if (Object.hasOwn(config.customTags, type))
+        returnStr += `__eta.res+=this.config.customTags[${JSON.stringify(type)}](${JSON.stringify(content)},${config.varName});
+`;
+    }
+  }
+  return returnStr;
+}
+function trimWS(str3, config, wsLeft, wsRight) {
+  let leftTrim;
+  let rightTrim;
+  if (Array.isArray(config.autoTrim)) {
+    leftTrim = config.autoTrim[1];
+    rightTrim = config.autoTrim[0];
+  } else
+    leftTrim = rightTrim = config.autoTrim;
+  if (wsLeft || wsLeft === false)
+    leftTrim = wsLeft;
+  if (wsRight || wsRight === false)
+    rightTrim = wsRight;
+  if (!rightTrim && !leftTrim)
+    return str3;
+  if (leftTrim === "slurp" && rightTrim === "slurp")
+    return str3.trim();
+  if (leftTrim === "_" || leftTrim === "slurp")
+    str3 = str3.trimStart();
+  else if (leftTrim === "-" || leftTrim === "nl")
+    str3 = str3.replace(/^(?:\r\n|\n|\r)/, "");
+  if (rightTrim === "_" || rightTrim === "slurp")
+    str3 = str3.trimEnd();
+  else if (rightTrim === "-" || rightTrim === "nl")
+    str3 = str3.replace(/(?:\r\n|\n|\r)$/, "");
+  return str3;
+}
+var escMap = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+};
+function replaceChar(s3) {
+  return escMap[s3];
+}
+function XMLEscape(str3) {
+  const newStr = String(str3);
+  if (/[&<>"']/.test(newStr))
+    return newStr.replace(/[&<>"']/g, replaceChar);
+  else
+    return newStr;
+}
+var defaultConfig = {
+  autoEscape: true,
+  autoFilter: false,
+  autoTrim: [false, "nl"],
+  cache: false,
+  cacheFilepaths: true,
+  customTags: {},
+  debug: false,
+  escapeFunction: XMLEscape,
+  filterFunction: (val) => String(val),
+  outputFunctionName: "output",
+  functionHeader: "",
+  parse: {
+    exec: "",
+    interpolate: "=",
+    raw: "~"
+  },
+  plugins: [],
+  rmWhitespace: false,
+  tags: ["<%", "%>"],
+  useWith: false,
+  varName: "it",
+  defaultExtension: ".eta"
+};
+var templateLitReg = /`(?:\\[\s\S]|\${(?:[^{}]|{(?:[^{}]|{[^}]*})*})*}|(?!\${)[^\\`])*`/g;
+var singleQuoteReg = /'(?:\\[\s\w"'\\`]|[^\n\r'\\])*?'/g;
+var doubleQuoteReg = /"(?:\\[\s\w"'\\`]|[^\n\r"\\])*?"/g;
+function escapeRegExp(string) {
+  return string.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&");
+}
+function getLineNo(str3, index) {
+  return str3.slice(0, index).split("\n").length;
+}
+function parse5(str3) {
+  const config = this.config;
+  let buffer = [];
+  let trimLeftOfNextStr = false;
+  let lastIndex = 0;
+  const parseOptions = config.parse;
+  const customTagPrefixes = Object.keys(config.customTags);
+  if (config.plugins)
+    for (let i3 = 0; i3 < config.plugins.length; i3++) {
+      const plugin = config.plugins[i3];
+      if (plugin.processTemplate)
+        str3 = plugin.processTemplate(str3, config);
+    }
+  if (config.rmWhitespace)
+    str3 = str3.replace(/[\r\n]+/g, "\n").replace(/^\s+|\s+$/gm, "");
+  templateLitReg.lastIndex = 0;
+  singleQuoteReg.lastIndex = 0;
+  doubleQuoteReg.lastIndex = 0;
+  function pushString(strng, shouldTrimRightOfString) {
+    if (strng) {
+      strng = trimWS(strng, config, trimLeftOfNextStr, shouldTrimRightOfString);
+      if (strng) {
+        strng = strng.replace(/\\|'/g, "\\$&").replace(/\r\n|\n|\r/g, "\\n");
+        buffer.push(strng);
+      }
+    }
+  }
+  const prefixes = [
+    parseOptions.exec,
+    parseOptions.interpolate,
+    parseOptions.raw,
+    ...customTagPrefixes
+  ].reduce((accumulator, prefix) => {
+    if (accumulator && prefix)
+      return accumulator + "|" + escapeRegExp(prefix);
+    else if (prefix)
+      return escapeRegExp(prefix);
+    else
+      return accumulator;
+  }, "");
+  const parseOpenReg = new RegExp(escapeRegExp(config.tags[0]) + "(-|_)?\\s*(" + prefixes + ")?\\s*", "g");
+  const parseCloseReg = new RegExp("'|\"|`|\\/\\*|(\\s*(-|_)?" + escapeRegExp(config.tags[1]) + ")", "g");
+  let m3;
+  while (m3 = parseOpenReg.exec(str3)) {
+    const precedingString = str3.slice(lastIndex, m3.index);
+    lastIndex = m3[0].length + m3.index;
+    const wsLeft = m3[1];
+    const prefix = m3[2] || "";
+    pushString(precedingString, wsLeft);
+    parseCloseReg.lastIndex = lastIndex;
+    let closeTag;
+    let currentObj = false;
+    while (closeTag = parseCloseReg.exec(str3))
+      if (closeTag[1]) {
+        const content = str3.slice(lastIndex, closeTag.index);
+        parseOpenReg.lastIndex = lastIndex = parseCloseReg.lastIndex;
+        trimLeftOfNextStr = closeTag[2];
+        currentObj = {
+          t: prefix === parseOptions.exec ? "e" : prefix === parseOptions.raw ? "r" : prefix === parseOptions.interpolate ? "i" : customTagPrefixes.includes(prefix) ? prefix : "",
+          val: content
+        };
+        break;
+      } else {
+        const char = closeTag[0];
+        if (char === "/*") {
+          const commentCloseInd = str3.indexOf("*/", parseCloseReg.lastIndex);
+          if (commentCloseInd === -1)
+            ParseErr("unclosed comment", str3, closeTag.index);
+          parseCloseReg.lastIndex = commentCloseInd;
+        } else if (char === "'") {
+          singleQuoteReg.lastIndex = closeTag.index;
+          if (singleQuoteReg.exec(str3))
+            parseCloseReg.lastIndex = singleQuoteReg.lastIndex;
+          else
+            ParseErr("unclosed string", str3, closeTag.index);
+        } else if (char === '"') {
+          doubleQuoteReg.lastIndex = closeTag.index;
+          if (doubleQuoteReg.exec(str3))
+            parseCloseReg.lastIndex = doubleQuoteReg.lastIndex;
+          else
+            ParseErr("unclosed string", str3, closeTag.index);
+        } else if (char === "`") {
+          templateLitReg.lastIndex = closeTag.index;
+          if (templateLitReg.exec(str3))
+            parseCloseReg.lastIndex = templateLitReg.lastIndex;
+          else
+            ParseErr("unclosed string", str3, closeTag.index);
+        }
+      }
+    if (currentObj) {
+      if (config.debug)
+        currentObj.lineNo = getLineNo(str3, m3.index);
+      buffer.push(currentObj);
+    } else
+      ParseErr("unclosed tag", str3, m3.index);
+  }
+  pushString(str3.slice(lastIndex, str3.length), false);
+  if (config.plugins)
+    for (let i3 = 0; i3 < config.plugins.length; i3++) {
+      const plugin = config.plugins[i3];
+      if (plugin.processAST)
+        buffer = plugin.processAST(buffer, config);
+    }
+  return buffer;
+}
+function handleCache(template, options) {
+  const templateStore = (options == null ? void 0 : options.async) ? this.templatesAsync : this.templatesSync;
+  if (this.resolvePath && this.readFile && !template.startsWith("@")) {
+    const templatePath = options.filepath;
+    const cachedTemplate = templateStore.get(templatePath);
+    if (this.config.cache && cachedTemplate)
+      return cachedTemplate;
+    else {
+      const templateString = this.readFile(templatePath);
+      const templateFn = this.compile(templateString, options);
+      if (this.config.cache)
+        templateStore.define(templatePath, templateFn);
+      return templateFn;
+    }
+  } else {
+    const cachedTemplate = templateStore.get(template);
+    if (cachedTemplate)
+      return cachedTemplate;
+    else
+      throw new EtaNameResolutionError(`Failed to get template '${template}'`);
+  }
+}
+function render(template, data, meta) {
+  let templateFn;
+  const options = {
+    ...meta,
+    async: false
+  };
+  if (typeof template === "string") {
+    if (this.resolvePath && this.readFile && !template.startsWith("@"))
+      options.filepath = this.resolvePath(template, options);
+    templateFn = handleCache.call(this, template, options);
+  } else
+    templateFn = template;
+  return templateFn.call(this, data, options);
+}
+function renderAsync(template, data, meta) {
+  let templateFn;
+  const options = {
+    ...meta,
+    async: true
+  };
+  if (typeof template === "string") {
+    if (this.resolvePath && this.readFile && !template.startsWith("@"))
+      options.filepath = this.resolvePath(template, options);
+    templateFn = handleCache.call(this, template, options);
+  } else
+    templateFn = template;
+  const res = templateFn.call(this, data, options);
+  return Promise.resolve(res);
+}
+function renderString(template, data) {
+  const templateFn = this.compile(template, { async: false });
+  return render.call(this, templateFn, data);
+}
+function renderStringAsync(template, data) {
+  const templateFn = this.compile(template, { async: true });
+  return renderAsync.call(this, templateFn, data);
+}
+var Cacher = class {
+  constructor(cache2) {
+    this.cache = cache2;
+  }
+  define(key, val) {
+    this.cache[key] = val;
+  }
+  get(key) {
+    return this.cache[key];
+  }
+  remove(key) {
+    delete this.cache[key];
+  }
+  reset() {
+    this.cache = {};
+  }
+  load(cacheObj) {
+    this.cache = {
+      ...this.cache,
+      ...cacheObj
+    };
+  }
+};
+var Eta$1 = class {
+  constructor(customConfig) {
+    __publicField(this, "config");
+    __publicField(this, "RuntimeErr", RuntimeErr);
+    __publicField(this, "compile", compile);
+    __publicField(this, "compileToString", compileToString);
+    __publicField(this, "compileBody", compileBody);
+    __publicField(this, "parse", parse5);
+    __publicField(this, "render", render);
+    __publicField(this, "renderAsync", renderAsync);
+    __publicField(this, "renderString", renderString);
+    __publicField(this, "renderStringAsync", renderStringAsync);
+    __publicField(this, "filepathCache", {});
+    __publicField(this, "templatesSync", new Cacher({}));
+    __publicField(this, "templatesAsync", new Cacher({}));
+    __publicField(this, "resolvePath", null);
+    __publicField(this, "readFile", null);
+    if (customConfig)
+      this.config = {
+        ...defaultConfig,
+        ...customConfig
+      };
+    else
+      this.config = { ...defaultConfig };
+    const reserved = [
+      this.config.parse.exec,
+      this.config.parse.interpolate,
+      this.config.parse.raw,
+      "-",
+      "_"
+    ];
+    for (const prefix of Object.keys(this.config.customTags))
+      if (reserved.includes(prefix))
+        throw new EtaError(`Custom tag prefix "${prefix}" conflicts with a built-in prefix`);
+  }
+  configure(customConfig) {
+    this.config = {
+      ...this.config,
+      ...customConfig
+    };
+  }
+  withConfig(customConfig) {
+    return {
+      ...this,
+      config: {
+        ...this.config,
+        ...customConfig
+      }
+    };
+  }
+  loadTemplate(name, template, options) {
+    if (typeof template === "string")
+      ((options == null ? void 0 : options.async) ? this.templatesAsync : this.templatesSync).define(name, this.compile(template, options));
+    else {
+      let templates = this.templatesSync;
+      if (template.constructor.name === "AsyncFunction" || (options == null ? void 0 : options.async))
+        templates = this.templatesAsync;
+      templates.define(name, template);
+    }
+  }
+};
+var Eta = class extends Eta$1 {
+  constructor() {
+    super(...arguments);
+    __publicField(this, "readFile", readFile);
+    __publicField(this, "resolvePath", resolvePath);
+  }
+};
+
+// src/template/blockquote.ts
+function formatBlockquote(content) {
+  const lines = content.trim().split("\n").map((line) => line.trim() === "" ? ">" : `> ${line}`);
+  return lines.filter((line, i3) => !(line === ">" && lines[i3 - 1] === ">")).join("\n");
+}
+
+// src/template/format.ts
+function formatCreator(creator, format2, link = false) {
+  const fmt = format2 != null ? format2 : creator.literal ? "{literal}" : "{family}, {given}";
+  let out = fmt.replace(/\{(family|given|literal|role|fullName)\}/g, (_m, token) => {
+    var _a;
+    return String((_a = creator[token]) != null ? _a : "");
+  });
+  out = out.replace(/\s+/g, " ").trim();
+  out = out.replace(/^[,;]+|[,;]+$/g, "").trim();
+  if (link && out)
+    out = `[[${out}]]`;
+  return out;
+}
+function groupCreatorsByType(creators, format2, opts = {}) {
+  var _a;
+  const link = opts.link !== false;
+  const suffix = (_a = opts.suffix) != null ? _a : "s";
+  const groups = new Map();
+  const add = (c3) => {
+    const name = formatCreator(c3, format2, link);
+    if (!name)
+      return;
+    const values = groups.get(c3.role);
+    if (values)
+      values.push(name);
+    else
+      groups.set(c3.role, [name]);
+  };
+  const orderedRoles = opts.roles ? [...opts.roles] : [];
+  for (const role of orderedRoles) {
+    for (const c3 of creators)
+      if (c3.role === role)
+        add(c3);
+  }
+  for (const c3 of creators) {
+    if (!orderedRoles.includes(c3.role))
+      add(c3);
+  }
+  return [...groups].map(([role, values]) => ({ key: `${role}${suffix}`, values }));
+}
+function creatorNames(creators, opts = {}) {
+  var _a;
+  const roles = opts.roles ? Array.isArray(opts.roles) ? opts.roles : [opts.roles] : null;
+  const list = roles ? creators.filter((c3) => roles.includes(c3.role)) : creators;
+  return list.map((c3) => {
+    var _a2;
+    return formatCreator(c3, opts.format, (_a2 = opts.link) != null ? _a2 : false);
+  }).filter(Boolean).join((_a = opts.join) != null ? _a : ", ");
+}
+function cap(s3) {
+  return s3 ? s3.charAt(0).toUpperCase() + s3.slice(1) : "";
+}
+function calloutLines(s3) {
+  return (s3 != null ? s3 : "").split(/\r?\n/).map((l4) => l4.trim() ? `> ${l4}` : ">");
+}
+function embed(link) {
+  return link ? `!${link}` : null;
+}
+function displayDate(value) {
+  if (!value)
+    return "";
+  const m3 = /^(\d{4}-\d{2}-\d{2})T/.exec(value);
+  return m3 ? m3[1] : value;
+}
+function imgUrl(a3) {
+  return typeof a3.imgLink === "function" ? a3.imgLink() : null;
+}
+function imgAlias(a3, alias) {
+  return typeof a3.imgLink === "function" ? a3.imgLink(alias) : null;
+}
+function renderAnnotationCallout(a3, opts = {}) {
+  var _a, _b;
+  const includeTags = opts.tags !== false;
+  const includeFooter = opts.footer !== false;
+  const colorRaw = (_a = a3.colorName) != null ? _a : "yellow";
+  const colorCap = cap(colorRaw);
+  const typeCap = cap(a3.type);
+  const tags = includeTags ? (_b = a3.tags) != null ? _b : [] : [];
+  const inner = [
+    `[!${colorRaw}-${a3.type}-annotation] ${colorCap} ${typeCap}`
+  ];
+  if (a3.comment || tags.length) {
+    inner.push("> [!ann-comment]");
+    if (a3.comment)
+      inner.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
+    for (const tag of tags)
+      inner.push(`> - [[${tag.name}]]`);
+  }
+  inner.push("");
+  if (a3.type === "highlight" && a3.text) {
+    inner.push(`> [!ann-highlight-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
+  } else if (a3.type === "underline" && a3.text) {
+    inner.push(`> [!ann-underline-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
+  } else if (a3.type === "image") {
+    inner.push(`> [!ann-image-${colorRaw}]`);
+    const url = imgUrl(a3);
+    if (url)
+      inner.push(`> ${embed(url)}`);
+    const view = imgAlias(a3, "view image");
+    if (view)
+      inner.push(`> - ${view}`);
+    inner.push("> - [[image annotations|images]]");
+  } else if (a3.type === "text" || a3.type === "note") {
+    inner.push(`> [!ann-text-${colorRaw}]Text comment\u2014click to view in context:`);
+    if (a3.comment)
+      inner.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
+  } else if (a3.type === "ink") {
+    inner.push(`> [!ann-ink-${colorRaw}]`);
+    const url = imgUrl(a3);
+    if (url)
+      inner.push(`> ${embed(url)}`);
+    const view = imgAlias(a3, "view ink image");
+    if (view)
+      inner.push(`> - ${view}`);
+  }
+  if (includeFooter) {
+    inner.push(`- [[${colorCap} annotations|${colorCap}]]`);
+    const page = a3.pageLabel ? `[${a3.pageLabel.includes("\u2013") ? "pp. " : "p. "}${a3.pageLabel}](${a3.backlink})` : `[View](${a3.backlink})`;
+    inner.push(`- (${page}, ${displayDate(a3.dateAdded)})`);
+  }
+  return formatBlockquote(inner.join("\n"));
+}
+function renderCallout(opts) {
+  var _a;
+  const head = `[!${opts.type}]${opts.collapse ? "-" : ""}${opts.title ? ` ${opts.title}` : ""}`;
+  const body = ((_a = opts.body) != null ? _a : "").split(/\r?\n/);
+  return formatBlockquote([head, ...body].join("\n"));
+}
+
+// src/template/merge.ts
+var MANAGED_OPEN = "%%sw-managed%%";
+var MANAGED_CLOSE = "%%/sw-managed%%";
+var FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+function splitNote(content) {
+  const m3 = FRONTMATTER_RE.exec(content);
+  if (!m3)
+    return { frontmatter: null, body: content };
+  return { frontmatter: m3[1], body: content.slice(m3[0].length) };
+}
+function joinNote(frontmatter, body) {
+  const fm = frontmatter.replace(/\r\n?/g, "\n").replace(/^\n+|\n+$/g, "");
+  return `---
+${fm}
+---
+${body}`;
+}
+var KEY_RE = /^([A-Za-z0-9_][^:\n]*?)[ \t]*:(?:[ \t]|$)/;
+function unquoteKey(key) {
+  const k4 = key.trim();
+  if (k4.length >= 2 && (k4[0] === '"' && k4.endsWith('"') || k4[0] === "'" && k4.endsWith("'"))) {
+    return k4.slice(1, -1);
+  }
+  return k4;
+}
+function parseFrontmatter(frontmatter) {
+  const props = [];
+  let current = null;
+  for (const line of frontmatter.replace(/\r\n?/g, "\n").split("\n")) {
+    const m3 = !/^[ \t]/.test(line) ? KEY_RE.exec(line) : null;
+    if (m3) {
+      if (current)
+        props.push(current);
+      current = { key: unquoteKey(m3[1]), lines: [line] };
+    } else if (current) {
+      current.lines.push(line);
+    } else if (line.trim()) {
+      props.push({ key: "", lines: [line] });
+    }
+  }
+  if (current)
+    props.push(current);
+  return props;
+}
+function isListBlock(lines) {
+  return lines.length >= 1 && /:[ \t]*$/.test(lines[0]) && lines.slice(1).length > 0 && lines.slice(1).every((l4) => /^[ \t]*-[ \t]/.test(l4));
+}
+function appendListItems(existing, generated) {
+  var _a;
+  const head = (_a = existing[0]) != null ? _a : generated[0];
+  const seen = new Set(existing.slice(1).map((l4) => l4.trim()));
+  const out = [...existing.slice(1)];
+  for (const item of generated.slice(1)) {
+    if (seen.has(item.trim()))
+      continue;
+    seen.add(item.trim());
+    out.push(item);
+  }
+  return [head, ...out];
+}
+function reconcile(merge2, existing, generated) {
+  const has = !!existing && existing.length > 0;
+  switch (merge2) {
+    case "keep":
+      return has ? existing : generated;
+    case "append":
+      if (!has)
+        return generated;
+      if (isListBlock(existing) && isListBlock(generated)) {
+        return appendListItems(existing, generated);
+      }
+      return generated;
+    case "replace":
+    default:
+      return generated;
+  }
+}
+function mergeFrontmatter(existingFrontmatter, specs) {
+  const existing = parseFrontmatter(existingFrontmatter != null ? existingFrontmatter : "");
+  const byKey = new Map(specs.map((s3) => [s3.key, s3]));
+  const emitted = new Set();
+  const out = [];
+  for (const prop of existing) {
+    const spec = byKey.get(prop.key);
+    if (!spec) {
+      out.push(...prop.lines);
+      continue;
+    }
+    emitted.add(spec.key);
+    out.push(...reconcile(spec.merge, prop.lines, spec.lines));
+  }
+  for (const spec of specs) {
+    if (emitted.has(spec.key))
+      continue;
+    out.push(...reconcile(spec.merge, void 0, spec.lines));
+  }
+  return out.join("\n");
+}
+function findManagedRegion(body) {
+  const start = body.indexOf(MANAGED_OPEN);
+  if (start === -1)
+    return null;
+  const close2 = body.indexOf(MANAGED_CLOSE, start + MANAGED_OPEN.length);
+  if (close2 === -1)
+    return null;
+  return { start, end: close2 + MANAGED_CLOSE.length };
+}
+function mergeManagedRegion(existingBody, renderedBody) {
+  const rendered = findManagedRegion(renderedBody);
+  if (!rendered)
+    return existingBody;
+  const existing = findManagedRegion(existingBody);
+  if (!existing)
+    return existingBody;
+  return existingBody.slice(0, existing.start) + renderedBody.slice(rendered.start, rendered.end) + existingBody.slice(existing.end);
+}
+function mergeNote(existing, rendered, specs) {
+  const prior = splitNote(existing);
+  const fresh = splitNote(rendered);
+  const frontmatter = mergeFrontmatter(prior.frontmatter, specs);
+  const body = prior.frontmatter === null ? prior.body : mergeManagedRegion(prior.body, fresh.body);
+  return joinNote(frontmatter, body);
+}
+
+// src/template/yaml.ts
+var INDENT = "  ";
+var INDICATOR_RE = /^[\s\-?:,[\]{}#&*!|>'"%@`]/;
+var NUMBER_LIKE_RE = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
+var BOOL_NULL_LIKE_RE = /^(?:true|false|null|~|yes|no|on|off)$/i;
+var KEY_SAFE_RE = /^[A-Za-z0-9_.-]+$/;
+function needsQuotes(value, quote = "auto") {
+  if (quote === "always")
+    return true;
+  if (quote === "never")
+    return false;
+  if (value === "")
+    return true;
+  if (value !== value.trim())
+    return true;
+  if (INDICATOR_RE.test(value))
+    return true;
+  if (/:\s/.test(value) || /\s#/.test(value))
+    return true;
+  if (/["\\\t]/.test(value))
+    return true;
+  if (BOOL_NULL_LIKE_RE.test(value))
+    return true;
+  if (NUMBER_LIKE_RE.test(value))
+    return true;
+  return false;
+}
+function quoteString(value) {
+  return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+}
+function serializeScalar(value, quote) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : "null";
+  }
+  if (typeof value === "boolean")
+    return value ? "true" : "false";
+  return needsQuotes(value, quote) ? quoteString(value) : value;
+}
+function serializeBlockScalar(value) {
+  const lines = value.replace(/\r\n?/g, "\n").split("\n");
+  if (lines.length > 1 && lines[lines.length - 1] === "")
+    lines.pop();
+  const body = lines.map((line) => line === "" ? "" : INDENT + line).join("\n");
+  return `|-
+${body}`;
+}
+function serializeKey(key) {
+  return KEY_SAFE_RE.test(key) ? key : quoteString(key);
+}
+function serializeProperty(key, value, opts = {}) {
+  var _a;
+  const quote = (_a = opts.quote) != null ? _a : "auto";
+  const k4 = serializeKey(key);
+  if (value === null || value === void 0)
+    return [];
+  if (Array.isArray(value)) {
+    if (value.length === 0)
+      return opts.force ? [`${k4}: []`] : [];
+    return [
+      `${k4}:`,
+      ...value.map((item) => `${INDENT}- ${serializeScalar(item, quote)}`)
+    ];
+  }
+  if (typeof value === "string") {
+    if (value === "")
+      return opts.force ? [`${k4}: ""`] : [];
+    if (/[\n\r]/.test(value)) {
+      return `${k4}: ${serializeBlockScalar(value)}`.split("\n");
+    }
+    return [`${k4}: ${serializeScalar(value, quote)}`];
+  }
+  return [`${k4}: ${serializeScalar(value, quote)}`];
+}
+var YamlBuilder = class {
+  constructor() {
+    this.lines = [];
+    this.specs = [];
+    this.open = false;
+    this.finished = false;
+  }
+  get isOpen() {
+    return this.open;
+  }
+  start() {
+    if (this.open)
+      throw new Error("[sw yaml] start_YAML() called twice");
+    if (this.finished) {
+      throw new Error("[sw yaml] start_YAML() called after end_YAML()");
+    }
+    this.open = true;
+  }
+  add(key, value, opts) {
+    var _a;
+    this.assertOpen("add_property");
+    if (typeof key !== "string" || !key.trim()) {
+      throw new Error("[sw yaml] add_property() needs a non-empty key");
+    }
+    const lines = serializeProperty(key, value, opts);
+    this.lines.push(...lines);
+    this.specs.push({ key, merge: (_a = opts == null ? void 0 : opts.merge) != null ? _a : "replace", lines });
+  }
+  fieldSpecs() {
+    return this.specs.map((s3) => ({ ...s3, lines: [...s3.lines] }));
+  }
+  addRaw(text) {
+    this.assertOpen("add_raw_yaml");
+    if (typeof text !== "string")
+      return;
+    const body = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+    if (body)
+      this.lines.push(...body.split("\n"));
+  }
+  end() {
+    if (!this.open)
+      throw new Error("[sw yaml] end_YAML() without start_YAML()");
+    this.open = false;
+    this.finished = true;
+    return ["---", ...this.lines, "---", ""].join("\n");
+  }
+  assertOpen(fn2) {
+    if (!this.open)
+      throw new Error(`[sw yaml] ${fn2}() outside start_YAML()`);
+  }
+};
+
+// src/template/note-helpers.ts
+var STATE_KEY = "__sw";
+function todayIso(now = new Date()) {
+  const y3 = now.getFullYear();
+  const m3 = String(now.getMonth() + 1).padStart(2, "0");
+  const d3 = String(now.getDate()).padStart(2, "0");
+  return `${y3}-${m3}-${d3}`;
+}
+function prepareTemplateData(ctx, extras = {}) {
+  var _a, _b;
+  const state = {
+    yaml: new YamlBuilder(),
+    options: (_a = extras.options) != null ? _a : {},
+    importDate: (_b = extras.importDate) != null ? _b : todayIso(),
+    isFirstImport: extras.isFirstImport !== false,
+    fileName: null,
+    notesRendered: false
+  };
+  ctx[STATE_KEY] = state;
+  return ctx;
+}
+function defaultFileName(ctx) {
+  var _a, _b;
+  const key = (_b = (_a = ctx.citekey) != null ? _a : ctx.citationKey) != null ? _b : ctx.key;
+  return key ? `@${key}` : "";
+}
+var NoteHelpers = class {
+  stateOf(ctx) {
+    const existing = ctx[STATE_KEY];
+    if (existing)
+      return existing;
+    prepareTemplateData(ctx);
+    return ctx[STATE_KEY];
+  }
+  startYAML(ctx) {
+    this.stateOf(ctx).yaml.start();
+  }
+  addProperty(ctx, key, value, opts) {
+    this.stateOf(ctx).yaml.add(key, value, opts);
+  }
+  addRawYAML(ctx, text) {
+    this.stateOf(ctx).yaml.addRaw(text);
+  }
+  endYAML(ctx) {
+    return this.stateOf(ctx).yaml.end();
+  }
+  fieldSpecs(ctx) {
+    return this.stateOf(ctx).yaml.fieldSpecs();
+  }
+  mergeInto(ctx, existing, rendered) {
+    if (!existing)
+      return rendered;
+    return mergeNote(existing, rendered, this.fieldSpecs(ctx));
+  }
+  setFileName(ctx, name) {
+    this.stateOf(ctx).fileName = (name == null ? void 0 : name.trim()) ? name.trim() : null;
+  }
+  fileName(ctx) {
+    var _a;
+    return (_a = this.stateOf(ctx).fileName) != null ? _a : defaultFileName(ctx);
+  }
+  creatorsByType(ctx, format2, opts) {
+    const state = this.stateOf(ctx);
+    return groupCreatorsByType(ctx.creators, format2 != null ? format2 : state.options.creatorFormat, opts);
+  }
+  creatorNames(ctx, role, format2, opts) {
+    var _a;
+    const state = this.stateOf(ctx);
+    const roles = role != null ? role : opts == null ? void 0 : opts.roles;
+    return creatorNames(ctx.creators, {
+      ...opts,
+      roles,
+      format: (_a = format2 != null ? format2 : opts == null ? void 0 : opts.format) != null ? _a : state.options.creatorFormat
+    });
+  }
+  primaryCreators(ctx) {
+    return ctx.authors.length ? ctx.authors : ctx.creators;
+  }
+  zoteroNotes(ctx, opts = {}) {
+    var _a, _b, _c, _d;
+    const state = this.stateOf(ctx);
+    state.notesRendered = true;
+    if (!ctx.notes.length)
+      return "";
+    const mode = (_b = (_a = opts.mode) != null ? _a : state.options.notesMode) != null ? _b : "inline";
+    const level = (_d = (_c = opts.level) != null ? _c : state.options.notesHeadingLevel) != null ? _d : 3;
+    const render2 = (note) => {
+      var _a2;
+      if (mode === "link" && note.noteLink) {
+        const link2 = note.noteLink();
+        if (link2)
+          return link2;
+      }
+      if (note.html)
+        return noteHtmlToMarkdown(note.html, { topLevel: level });
+      if (note.text)
+        return note.text;
+      const link = (_a2 = note.noteLink) == null ? void 0 : _a2.call(note);
+      return link != null ? link : "";
+    };
+    return ctx.notes.map(render2).filter((chunk) => chunk && chunk.trim()).join("\n\n");
+  }
+  annotationCallout(ctx, annotation, opts) {
+    const state = this.stateOf(ctx);
+    return renderAnnotationCallout(annotation, { ...state.options.annotation, ...opts });
+  }
+  callout(ctx, opts) {
+    this.stateOf(ctx);
+    return renderCallout(opts);
+  }
+  wikilink(_ctx, target, alias) {
+    if (!target)
+      return "";
+    return alias ? `[[${target}|${alias}]]` : `[[${target}]]`;
+  }
+  linkNote(ctx, alias, subpath) {
+    var _a;
+    return (_a = ctx.noteLink(alias, subpath)) != null ? _a : "";
+  }
+  mdHtml(_ctx, html) {
+    return htmlFieldToMarkdown(html);
+  }
+  heading(_ctx, level, text) {
+    const l4 = Math.min(6, Math.max(1, Math.floor(level) || 1));
+    return `${"#".repeat(l4)} ${text != null ? text : ""}`.trimEnd();
+  }
+  escapeMd(_ctx, text) {
+    return escapeMarkdown(text != null ? text : "");
+  }
+  importDate(ctx) {
+    return this.stateOf(ctx).importDate;
+  }
+  isFirstImport(ctx) {
+    return this.stateOf(ctx).isFirstImport;
+  }
+  shortTitle(ctx) {
+    var _a;
+    if (ctx.shortTitle)
+      return ctx.shortTitle;
+    const title = (_a = ctx.title) != null ? _a : "";
+    const at = title.indexOf(":");
+    if (at === -1)
+      return null;
+    return title.slice(0, at).trim() || null;
+  }
+  aliases(ctx) {
+    var _a;
+    const title = (_a = ctx.title) != null ? _a : "";
+    const short = this.shortTitle(ctx);
+    const useTitle = short != null ? short : title;
+    const out = [];
+    const creators = this.primaryCreators(ctx);
+    const year = ctx.date ? String(ctx.date.year) : "";
+    if (creators.length) {
+      const first = creators[0].family || creators[0].literal || creators[0].fullName;
+      const authlist = creators.length > 2 ? `${first} et al.` : creators.length === 2 ? `${first} and ${creators[1].family || creators[1].literal || creators[1].fullName}` : first;
+      if (authlist && useTitle) {
+        out.push(`${authlist}${year ? ` - ${year}` : ""} - ${useTitle}`);
+      }
+    }
+    if (title)
+      out.push(title);
+    if (short && short !== title)
+      out.push(short);
+    return [...new Set(out)];
+  }
+  relatedLinks(ctx) {
+    const out = [];
+    for (const item of ctx.relatedItems) {
+      if (item.citationKey)
+        out.push(`[[@${item.citationKey}]]`);
+    }
+    for (const tag of ctx.tags) {
+      if (tag.name)
+        out.push(`[[${tag.name}]]`);
+    }
+    return out;
+  }
+  attachmentLinks(ctx) {
+    return ctx.attachments.filter((a3) => a3.key).map((a3) => {
+      var _a;
+      const label = ((_a = a3.filename) != null ? _a : a3.key).replace(/"/g, '\\"');
+      return `[${label}](${a3.backlink})`;
+    });
+  }
+  attachmentsWithAnnotations(ctx) {
+    const keys = new Set(ctx.annotations.map((a3) => {
+      var _a;
+      return (_a = a3.parentAttachment) == null ? void 0 : _a.key;
+    }).filter(Boolean));
+    return ctx.attachments.filter((a3) => keys.has(a3.key));
+  }
+};
+
+// src/template/zotlit-helpers.ts
+function basename(path2, ext = ".md") {
+  if (ext !== "" && isOnlySlashes(path2))
+    return path2 === ext ? "" : path2;
+  const name = finalSegment(path2);
+  if (ext === "" || name === "")
+    return name;
+  if (path2 === ext)
+    return "";
+  if (name === ext)
+    return name;
+  return name.endsWith(ext) ? name.slice(0, -ext.length) : name;
+}
+function finalSegment(path2) {
+  let end = path2.length;
+  while (end > 0 && path2.charCodeAt(end - 1) === 47)
+    end--;
+  if (end === 0)
+    return "";
+  const start = path2.lastIndexOf("/", end - 1) + 1;
+  return path2.slice(start, end);
+}
+function isOnlySlashes(path2) {
+  if (path2.length === 0)
+    return false;
+  for (let i3 = 0; i3 < path2.length; i3++) {
+    if (path2.charCodeAt(i3) !== 47)
+      return false;
+  }
+  return true;
+}
+function embed2(link, alias, subpath) {
+  if (!link)
+    return "";
+  const rendered = link(alias, subpath);
+  return rendered ? `!${rendered}` : "";
+}
+var MAX_SUFFIX_LENGTH = 64;
+function filenameSuffix(length = 6, prepend = "_", append = "") {
+  if (!Number.isInteger(length) || length < 1 || length > MAX_SUFFIX_LENGTH) {
+    throw new Error(`suffix() length must be an integer in 1..${MAX_SUFFIX_LENGTH}, got ${length}`);
+  }
+  for (const [name, value] of [
+    ["prepend", prepend],
+    ["append", append]
+  ]) {
+    if (/[:%]/.test(value)) {
+      throw new Error(`suffix() ${name} must not contain ':' or '%', got ${JSON.stringify(value)}`);
+    }
+  }
+  return `%zt-suffix:${length}:${prepend}:${append}%`;
+}
+function coerceOutput(value) {
+  if (value === null || value === void 0)
+    return "";
+  if (value instanceof Date)
+    return value.toISOString();
+  const T4 = globalThis.Temporal;
+  if (T4 && value instanceof T4.Instant) {
+    return value.toZonedDateTimeISO(T4.Now.timeZoneId()).toPlainDate().toString();
+  }
+  return String(value);
+}
+
+// src/template/engine.ts
+var TEMPLATE_DATA_ROOT = "item";
+function replaceOnce(source, needle, replacement, label) {
+  const at = source.indexOf(needle);
+  if (at === -1) {
+    throw new Error(`[sw template] eta codegen changed (no ${label} helper); update includeDataPlugin`);
+  }
+  return source.slice(0, at) + replacement + source.slice(at + needle.length);
+}
+var includeDataPlugin = {
+  processFnString(fnString, config) {
+    var _a;
+    const varName = (_a = config == null ? void 0 : config.varName) != null ? _a : "it";
+    const spread = `{...${varName}, ...(__eta_d ?? {})}`;
+    const out = replaceOnce(fnString, `let include = (__eta_t, __eta_d) => this.render(__eta_t, ${spread}, options);`, `let include = (__eta_t, __eta_d) => this.render(__eta_t, __eta_d ?? ${varName}, options);`, "include");
+    return replaceOnce(out, `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, ${spread}, options);`, `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, __eta_d ?? ${varName}, options);`, "includeAsync");
+  }
+};
+var NoteTemplateEngine = class extends Eta {
+  constructor(dataRoot = TEMPLATE_DATA_ROOT) {
+    const d3 = dataRoot;
+    super({
+      cache: true,
+      varName: dataRoot,
+      autoTrim: [true, true],
+      autoEscape: false,
+      autoFilter: true,
+      filterFunction: coerceOutput,
+      functionHeader: `const bq = (fn) => output(this.bqHelper(capture(fn))); const basename = this.basenameHelper; const suffix = this.suffixHelper; const embed = this.embedHelper; const start_YAML = () => this.noteHelpers.startYAML(${d3}); const end_YAML = () => this.noteHelpers.endYAML(${d3}); const add_property = (k, v, o) => this.noteHelpers.addProperty(${d3}, k, v, o); const add_raw_yaml = (t) => this.noteHelpers.addRawYAML(${d3}, t); const merge_into = (existing, rendered) => this.noteHelpers.mergeInto(${d3}, existing, rendered); const set_file_name = (n) => this.noteHelpers.setFileName(${d3}, n); const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d3}, f, o); const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d3}, r, f, o); const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d3}, o); const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d3}, a, o); const callout = (o) => this.noteHelpers.callout(${d3}, o); const wikilink = (t, a) => this.noteHelpers.wikilink(${d3}, t, a); const link_note = (a, s) => this.noteHelpers.linkNote(${d3}, a, s); const md_html = (h) => this.noteHelpers.mdHtml(${d3}, h); const heading = (l, t) => this.noteHelpers.heading(${d3}, l, t); const escape_md = (t) => this.noteHelpers.escapeMd(${d3}, t); const import_date = () => this.noteHelpers.importDate(${d3}); const is_first_import = () => this.noteHelpers.isFirstImport(${d3}); const short_title = () => this.noteHelpers.shortTitle(${d3}); const aliases = () => this.noteHelpers.aliases(${d3}); const related_links = () => this.noteHelpers.relatedLinks(${d3}); const attachment_links = () => this.noteHelpers.attachmentLinks(${d3}); const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d3}); `,
+      plugins: [includeDataPlugin]
+    });
+    this.bqHelper = formatBlockquote;
+    this.basenameHelper = basename;
+    this.suffixHelper = filenameSuffix;
+    this.embedHelper = embed2;
+    this.noteHelpers = new NoteHelpers();
+  }
+};
+function makeEta(dataRoot = TEMPLATE_DATA_ROOT) {
+  return new NoteTemplateEngine(dataRoot);
+}
+
+// src/template/render.ts
+function renderNote(entry, children, opts) {
+  var _a;
+  const ctx = buildNoteContextWithChildren(entry, children, {
+    groupID: opts.groupID,
+    dataDir: opts.dataDir,
+    baseAttachmentPath: opts.baseAttachmentPath,
+    notePath: opts.notePath,
+    noteHeadingLevel: opts.noteHeadingLevel
+  });
+  prepareTemplateData(ctx, {
+    options: opts.options,
+    importDate: opts.importDate
+  });
+  const engine = makeEta();
+  const rendered = engine.renderString(opts.templateSource, ctx);
+  const content = engine.noteHelpers.mergeInto(ctx, (_a = opts.existingContent) != null ? _a : null, rendered);
+  return { content, fileName: engine.noteHelpers.fileName(ctx) };
+}
+
+// src/noteImport.ts
+var TEMPLATE_ASSET = "sw-note-templates/sw-note.eta.md";
+var EMPTY_CHILDREN = {
+  attachments: [],
+  annotations: [],
+  notes: []
+};
+function expandHome(p4) {
+  if (p4 === "~" || p4 === "~/")
+    return require("os").homedir();
+  if (p4.startsWith("~/"))
+    return require("os").homedir() + p4.slice(1);
+  return p4;
+}
+function resolveZoteroDataDir(configured) {
+  var _a, _b;
+  const custom = (configured != null ? configured : "").trim();
+  if (custom)
+    return expandHome(custom);
+  try {
+    const os = require("os");
+    const fs2 = require("fs");
+    const path2 = require("path");
+    const home = os.homedir();
+    const platform = (_a = window.process) == null ? void 0 : _a.platform;
+    const candidates = platform === "win32" ? [path2.join((_b = process.env.APPDATA) != null ? _b : "", "Zotero", "Zotero")] : platform === "darwin" ? [path2.join(home, "Zotero")] : [path2.join(home, "Zotero"), path2.join(home, ".zotero", "zotero")];
+    for (const c3 of candidates) {
+      if (c3 && fs2.existsSync(c3))
+        return c3;
+    }
+  } catch (e3) {
+  }
+  return null;
+}
+function literatureNoteFolder(plugin) {
+  var _a;
+  const zotlitFolder = getZotlitLiteratureFolder(plugin.app);
+  const settingsFolder = ((_a = plugin.settings.literatureNoteFolder) != null ? _a : "").trim();
+  return plugin.settings.useZotlitLiteratureFolder ? zotlitFolder || settingsFolder || "_2 Bibliographic notes" : settingsFolder || zotlitFolder || "_2 Bibliographic notes";
+}
+async function readTemplate(plugin) {
+  const dir = plugin.manifest.dir;
+  if (!dir)
+    return null;
+  const path2 = (0, import_obsidian21.normalizePath)(`${dir}/${TEMPLATE_ASSET}`);
+  try {
+    return await plugin.app.vault.adapter.read(path2);
+  } catch (e3) {
+    console.warn("[sw:import] note template not found at", path2, e3);
+    return null;
+  }
+}
+async function fetchChildren(plugin, entry) {
+  const key = entry == null ? void 0 : entry._zoteroKey;
+  if (!key)
+    return EMPTY_CHILDREN;
+  const libraryID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
+  try {
+    const children = await fetchItemChildrenNative(plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT, key, libraryID);
+    return children != null ? children : EMPTY_CHILDREN;
+  } catch (e3) {
+    console.warn("[sw:import] child fetch failed; importing metadata only", e3);
+    return EMPTY_CHILDREN;
+  }
+}
+async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = {}) {
+  var _a, _b;
+  const app2 = plugin.app;
+  const templateSource = await readTemplate(plugin);
+  if (!templateSource)
+    return false;
+  const children = await fetchChildren(plugin, entry);
+  const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : null;
+  const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
+  const folder = literatureNoteFolder(plugin);
+  const first = renderNote(entry, children, {
+    templateSource,
+    groupID,
+    dataDir,
+    noteHeadingLevel: (_a = plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3
+  });
+  const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, "");
+  const notePath = folder ? (0, import_obsidian21.normalizePath)(`${folder}/${base}.md`) : `${base}.md`;
+  let existing = null;
+  if (await app2.vault.adapter.exists(notePath)) {
+    try {
+      existing = await app2.vault.adapter.read(notePath);
+    } catch (e3) {
+      existing = null;
+    }
+  }
+  const { content } = renderNote(entry, children, {
+    templateSource,
+    groupID,
+    dataDir,
+    notePath,
+    noteHeadingLevel: (_b = plugin.settings.ownNoteNotesHeadingLevel) != null ? _b : 3,
+    existingContent: existing
+  });
+  if (folder && !await app2.vault.adapter.exists((0, import_obsidian21.normalizePath)(folder))) {
+    await app2.vault.adapter.mkdir((0, import_obsidian21.normalizePath)(folder));
+  }
+  if (existing != null) {
+    const known = app2.vault.getAbstractFileByPath(notePath);
+    if (known instanceof import_obsidian21.TFile) {
+      await app2.vault.modify(known, content);
+    } else {
+      await app2.vault.adapter.write(notePath, content);
+    }
+    return true;
+  }
+  await app2.vault.create(notePath, content);
+  if (opts.open !== false) {
+    await app2.workspace.openLinkText(notePath, sourceFile.path, true);
+  }
+  return true;
+}
+
 // src/bib/bibManager.ts
 var import_fast_deep_equal3 = __toModule(require_fast_deep_equal());
 var normalizeDiacritics = (s3) => s3.normalize("NFD").replace(/\p{Mn}/gu, "");
@@ -90722,8 +92884,8 @@ function cslEntryHtmlToMarkdown(html) {
 }
 var RENDER_CACHE_VERSION = 3;
 var CITED_KEYS_INDEX_VERSION = 2;
-var fuseFn = (obj, path) => {
-  const val = Fuse.config.getFn(obj, path);
+var fuseFn = (obj, path2) => {
+  const val = Fuse.config.getFn(obj, path2);
   if (typeof val === "string")
     return normalizeDiacritics(val);
   if (Array.isArray(val))
@@ -90768,7 +92930,7 @@ function resolveScopedPath(file, scopedPath) {
   if (isAbsolutePath(scopedPath))
     return scopedPath;
   const noteDir = file.path.split("/").slice(0, -1).join("/");
-  return (0, import_obsidian20.normalizePath)(noteDir ? `${noteDir}/${scopedPath}` : scopedPath);
+  return (0, import_obsidian22.normalizePath)(noteDir ? `${noteDir}/${scopedPath}` : scopedPath);
 }
 function fastHash(input) {
   let h3 = 2166136261;
@@ -90844,7 +93006,7 @@ var ZoteroOfflineAlert = class {
       return;
     const el = createDiv({ cls: "sw-zotero-alert" });
     const icon = el.createSpan({ cls: "sw-zotero-alert-icon" });
-    (0, import_obsidian20.setIcon)(icon, "lucide-plug-zap");
+    (0, import_obsidian22.setIcon)(icon, "lucide-plug-zap");
     el.createSpan({
       cls: "sw-zotero-alert-text",
       text: "ScholarWeft: can\u2019t connect to Zotero. Make sure Zotero is open, and that no other vault is connected to it (only one vault can connect at a time). Citations format automatically once it connects."
@@ -90852,7 +93014,7 @@ var ZoteroOfflineAlert = class {
     const retry = el.createEl("button", { cls: "sw-zotero-alert-retry", text: "Retry now" });
     retry.onClickEvent(() => (onRetryExternal != null ? onRetryExternal : this.onRetry)());
     const dismiss = el.createSpan({ cls: "sw-zotero-alert-dismiss clickable-icon" });
-    (0, import_obsidian20.setIcon)(dismiss, "lucide-x");
+    (0, import_obsidian22.setIcon)(dismiss, "lucide-x");
     dismiss.setAttr("aria-label", "Dismiss");
     dismiss.onClickEvent(() => this.hide());
     anchor.prepend(el);
@@ -90887,7 +93049,7 @@ function promptZotLitFallback(reason) {
       settled = true;
       resolve(v3);
     };
-    class Prompt extends import_obsidian20.Modal {
+    class Prompt extends import_obsidian22.Modal {
       onOpen() {
         this.titleEl.setText("ZotLit could not create this note");
         this.contentEl.createEl("p", {
@@ -90955,14 +93117,14 @@ var BibManager = class {
     this.warming = false;
     this.warmingSkipPDFs = false;
     this.warmingSkipLRU = false;
-    this.scheduleRenderedCacheSave = (0, import_obsidian20.debounce)(() => {
+    this.scheduleRenderedCacheSave = (0, import_obsidian22.debounce)(() => {
       void this.saveRenderedCache();
     }, 2500);
     this.plugin = plugin;
     this.initPromise = new PromiseCapability();
     this.fileCache = new SimpleLRU({ max: 10 });
     plugin.registerEvent(plugin.app.vault.on("modify", (file) => {
-      const p4 = (0, import_obsidian20.normalizePath)(file.path);
+      const p4 = (0, import_obsidian22.normalizePath)(file.path);
       if (!this.watchedBibPaths.has(p4))
         return;
       const { settings } = plugin;
@@ -91219,8 +93381,8 @@ var BibManager = class {
     const paths = (_a = settings.bibliographyPaths) != null ? _a : [];
     if (!paths.length)
       return;
-    const CACHE_DIR2 = (0, import_obsidian20.normalizePath)(SW_CACHE_DIR);
-    const BIB_CACHE_PATH = (0, import_obsidian20.normalizePath)(`${CACHE_DIR2}/bib-parsed.json`);
+    const CACHE_DIR2 = (0, import_obsidian22.normalizePath)(SW_CACHE_DIR);
+    const BIB_CACHE_PATH = (0, import_obsidian22.normalizePath)(`${CACHE_DIR2}/bib-parsed.json`);
     const pandoc = (_b = settings.pathToPandoc) != null ? _b : "";
     const cacheMap = new Map();
     try {
@@ -91254,7 +93416,7 @@ var BibManager = class {
       let bib = null;
       if (!isAbsolutePath(resolved)) {
         try {
-          const stat = await app.vault.adapter.stat((0, import_obsidian20.normalizePath)(resolved));
+          const stat = await app.vault.adapter.stat((0, import_obsidian22.normalizePath)(resolved));
           const cached = cacheMap.get(resolved);
           if (stat && cached && cached.mtime === stat.mtime && cached.size === stat.size && cached.pandoc === pandoc) {
             bib = cached.entries;
@@ -91273,7 +93435,7 @@ var BibManager = class {
         }
         if (!isAbsolutePath(resolved)) {
           try {
-            const stat = await app.vault.adapter.stat((0, import_obsidian20.normalizePath)(resolved));
+            const stat = await app.vault.adapter.stat((0, import_obsidian22.normalizePath)(resolved));
             if (stat) {
               cacheMap.set(resolved, { mtime: stat.mtime, size: stat.size, pandoc, entries: bib });
               cacheModified = true;
@@ -91283,7 +93445,7 @@ var BibManager = class {
         }
       }
       if (!isAbsolutePath(resolved)) {
-        this.globalWatchedBibPaths.add((0, import_obsidian20.normalizePath)(resolved));
+        this.globalWatchedBibPaths.add((0, import_obsidian22.normalizePath)(resolved));
       }
       for (const entry of bib) {
         this.bibCache.set(entry.id, { ...entry, _source: "bib" });
@@ -91934,10 +94096,10 @@ var BibManager = class {
       try {
         let text;
         if (isAbsolutePath(p4)) {
-          const buf = await import_obsidian20.FileSystemAdapter.readLocalFile(p4);
+          const buf = await import_obsidian22.FileSystemAdapter.readLocalFile(p4);
           text = new TextDecoder().decode(buf);
         } else {
-          text = await app.vault.adapter.read((0, import_obsidian20.normalizePath)(p4));
+          text = await app.vault.adapter.read((0, import_obsidian22.normalizePath)(p4));
         }
         for (const m3 of text.matchAll(/@\w+\s*\{\s*([^,\s\n]+)\s*,/gm)) {
           keys.add(m3[1].trim());
@@ -92020,11 +94182,11 @@ var BibManager = class {
   }
   async saveZLinks() {
     try {
-      const dir = (0, import_obsidian20.normalizePath)(SW_CACHE_DIR);
+      const dir = (0, import_obsidian22.normalizePath)(SW_CACHE_DIR);
       if (!await app.vault.adapter.exists(dir)) {
         await app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write((0, import_obsidian20.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`), JSON.stringify({
+      await app.vault.adapter.write((0, import_obsidian22.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`), JSON.stringify({
         links: Object.fromEntries(this.zCitekeyToLinks),
         pdfs: Object.fromEntries(this.zCitekeyToPDFLinks)
       }));
@@ -92034,7 +94196,7 @@ var BibManager = class {
   }
   async loadZLinks() {
     try {
-      const raw = await app.vault.adapter.read((0, import_obsidian20.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`));
+      const raw = await app.vault.adapter.read((0, import_obsidian22.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`));
       const data = JSON.parse(raw);
       if (data == null ? void 0 : data.links) {
         for (const [k4, v3] of Object.entries(data.links)) {
@@ -92067,15 +94229,15 @@ var BibManager = class {
           openPaths.add(v3.file.path);
       });
       const candidates = [];
-      for (const [path, keys] of this.citedKeysByFile) {
+      for (const [path2, keys] of this.citedKeysByFile) {
         if (!keys.size)
           continue;
-        if (openPaths.has(path))
+        if (openPaths.has(path2))
           continue;
-        if (this.renderedCache.has(path))
+        if (this.renderedCache.has(path2))
           continue;
-        const file = app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian20.TFile)
+        const file = app.vault.getAbstractFileByPath(path2);
+        if (file instanceof import_obsidian22.TFile)
           candidates.push(file);
       }
       candidates.sort((a3, b3) => {
@@ -92126,7 +94288,7 @@ var BibManager = class {
           });
           e3.oncontextmenu = (evt) => {
             evt.preventDefault();
-            new import_obsidian20.Menu().addItem((item) => item.setTitle(t("Copy citekey")).setIcon("lucide-copy").onClick(() => copyTextToClipboard(`@${citekey}`))).addItem((item) => item.setTitle(t("Copy reference")).setIcon("lucide-copy").onClick(() => copyElToClipboard(e3))).showAtMouseEvent(evt);
+            new import_obsidian22.Menu().addItem((item) => item.setTitle(t("Copy citekey")).setIcon("lucide-copy").onClick(() => copyTextToClipboard(`@${citekey}`))).addItem((item) => item.setTitle(t("Copy reference")).setIcon("lucide-copy").onClick(() => copyElToClipboard(e3))).showAtMouseEvent(evt);
           };
         }
         this.ensureZLink(citekey);
@@ -92143,22 +94305,22 @@ var BibManager = class {
         wrapper.createDiv({ cls: "sw-entry-btns" }, (div) => {
           if (hasConflict) {
             div.createDiv("clickable-icon sw-conflict-icon", (div2) => {
-              (0, import_obsidian20.setIcon)(div2, "lucide-alert-triangle");
+              (0, import_obsidian22.setIcon)(div2, "lucide-alert-triangle");
               div2.setAttr("aria-label", t("This entry exists in both your .bib file and Zotero. Zotero data is shown."));
             });
           }
           if (litNote) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian20.setIcon)(div2, "sticky-note");
+              (0, import_obsidian22.setIcon)(div2, "sticky-note");
               div2.setAttr("aria-label", t("Open literature note"));
               div2.onClickEvent((evt) => {
-                const newPane = import_obsidian20.Keymap.isModEvent(evt);
+                const newPane = import_obsidian22.Keymap.isModEvent(evt);
                 app.workspace.openLinkText(litNote.linkText, file.path, newPane);
               });
             });
           } else if (canCreateNote) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian20.setIcon)(div2, "lucide-file-plus");
+              (0, import_obsidian22.setIcon)(div2, "lucide-file-plus");
               div2.setAttr("aria-label", t("Create literature note"));
               div2.onClickEvent(async () => {
                 await this.createLiteratureNote(citekey, file);
@@ -92167,7 +94329,7 @@ var BibManager = class {
           }
           if (zLink) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian20.setIcon)(div2, "lucide-external-link");
+              (0, import_obsidian22.setIcon)(div2, "lucide-external-link");
               div2.setAttr("aria-label", t("Open in Zotero"));
               div2.onClickEvent(() => {
                 activeWindow.open(zLink, "_blank");
@@ -92177,7 +94339,7 @@ var BibManager = class {
           if (zPDFLinks) {
             zPDFLinks.forEach((link) => {
               div.createDiv("clickable-icon", (div2) => {
-                (0, import_obsidian20.setIcon)(div2, "lucide-file-text");
+                (0, import_obsidian22.setIcon)(div2, "lucide-file-text");
                 div2.setAttr("aria-label", pathBasename(link));
                 div2.onClickEvent(() => {
                   activeWindow.open(`file://${encodeURI(link)}`, "_blank");
@@ -92203,7 +94365,7 @@ var BibManager = class {
     });
     if (!targetView) {
       await this.plugin.app.workspace.openLinkText(sourceFile.path, "", false);
-      targetView = (_a = this.plugin.app.workspace.getActiveViewOfType(import_obsidian20.MarkdownView)) != null ? _a : null;
+      targetView = (_a = this.plugin.app.workspace.getActiveViewOfType(import_obsidian22.MarkdownView)) != null ? _a : null;
     }
     if (!(targetView == null ? void 0 : targetView.editor))
       return;
@@ -92216,9 +94378,17 @@ var BibManager = class {
     editor.scrollIntoView({ from: pos, to: pos }, true);
     editor.focus();
   }
-  async createLiteratureNote(citekey, sourceFile) {
+  async createLiteratureNote(citekey, sourceFile, opts = {}) {
     var _a, _b, _c, _d, _e, _f, _g;
     const entry = this.bibCache.get(citekey);
+    if (this.plugin.settings.useOwnNoteTemplate === true) {
+      const ok = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
+        open: opts.open !== false
+      });
+      if (ok)
+        return;
+      console.warn("[sw:import] own note template unavailable; using the fallback path");
+    }
     if (this.plugin.settings.createNotesWithZotLit !== false) {
       const zoteroItemKey2 = entry == null ? void 0 : entry._zoteroKey;
       const groupId2 = entry == null ? void 0 : entry.groupID;
@@ -92247,7 +94417,7 @@ var BibManager = class {
     const settingsFolder = ((_g = this.plugin.settings.literatureNoteFolder) != null ? _g : "").trim();
     const folder = this.plugin.settings.useZotlitLiteratureFolder ? zotlitFolder || settingsFolder || "_2 Bibliographic notes" : settingsFolder || zotlitFolder || "_2 Bibliographic notes";
     const filename = `@${citekey}.md`;
-    const notePath = folder ? (0, import_obsidian20.normalizePath)(`${folder}/${filename}`) : filename;
+    const notePath = folder ? (0, import_obsidian22.normalizePath)(`${folder}/${filename}`) : filename;
     if (await app.vault.adapter.exists(notePath)) {
       await app.workspace.openLinkText(notePath, sourceFile.path, true);
       return;
@@ -92266,8 +94436,8 @@ var BibManager = class {
 # ${title}
 
 `;
-    if (folder && !await app.vault.adapter.exists((0, import_obsidian20.normalizePath)(folder))) {
-      await app.vault.adapter.mkdir((0, import_obsidian20.normalizePath)(folder));
+    if (folder && !await app.vault.adapter.exists((0, import_obsidian22.normalizePath)(folder))) {
+      await app.vault.adapter.mkdir((0, import_obsidian22.normalizePath)(folder));
     }
     await app.vault.create(notePath, content);
     await app.workspace.openLinkText(notePath, sourceFile.path, true);
@@ -92287,7 +94457,7 @@ var BibManager = class {
         failed: res.failed
       });
       if (res.inserted) {
-        new import_obsidian20.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
+        new import_obsidian22.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
       }
     } catch (e3) {
       console.warn("[sw:notes] fill threw for", file.path, e3);
@@ -92298,7 +94468,7 @@ var BibManager = class {
     if (this.plugin.settings.insertZoteroNotesOnCreate === false)
       return;
     debugLog("[sw:notes] fill start", citekey, "expectCreation=", expectCreation);
-    let file = sourceFile && ((_a = this.plugin) == null ? void 0 : _a.app.vault.getAbstractFileByPath(sourceFile.path)) instanceof import_obsidian20.TFile ? sourceFile : null;
+    let file = sourceFile && ((_a = this.plugin) == null ? void 0 : _a.app.vault.getAbstractFileByPath(sourceFile.path)) instanceof import_obsidian22.TFile ? sourceFile : null;
     if (!file) {
       const sourcePath = (_d = (_c = sourceFile == null ? void 0 : sourceFile.path) != null ? _c : (_b = app.workspace.getActiveFile()) == null ? void 0 : _b.path) != null ? _d : "";
       const attempts = Math.max(expectCreation ? 6 : 4, 4);
@@ -92327,7 +94497,7 @@ var BibManager = class {
         failed: res.failed
       });
       if (res.inserted) {
-        new import_obsidian20.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
+        new import_obsidian22.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
       }
     } catch (e3) {
       console.warn("[sw:notes] fill threw for", citekey, e3);
@@ -92337,9 +94507,9 @@ var BibManager = class {
     var _a;
     const results = [];
     const dir = app.vault.getAbstractFileByPath(folder);
-    if (!(dir instanceof import_obsidian20.TFolder))
+    if (!(dir instanceof import_obsidian22.TFolder))
       return results;
-    const files = dir.children.filter((f3) => f3 instanceof import_obsidian20.TFile && /^@.+\.md$/.test(f3.name));
+    const files = dir.children.filter((f3) => f3 instanceof import_obsidian22.TFile && /^@.+\.md$/.test(f3.name));
     for (const file of files) {
       try {
         const content = await app.vault.read(file);
@@ -92350,7 +94520,7 @@ var BibManager = class {
         const stem = file.basename.startsWith("@") ? file.basename.slice(1) : file.basename;
         if (stem === citekey)
           continue;
-        const newPath = (0, import_obsidian20.normalizePath)(file.path.replace(/[^/]+$/, `@${citekey}.md`));
+        const newPath = (0, import_obsidian22.normalizePath)(file.path.replace(/[^/]+$/, `@${citekey}.md`));
         if (app.vault.getAbstractFileByPath(newPath))
           continue;
         await app.vault.rename(file, newPath);
@@ -92434,8 +94604,8 @@ var BibManager = class {
       return;
     await this.indexFileCitekeys(file);
   }
-  removeFromCitedKeysIndex(path) {
-    if (this.citedKeysByFile.delete(path))
+  removeFromCitedKeysIndex(path2) {
+    if (this.citedKeysByFile.delete(path2))
       this.citedKeysIndexDirty = true;
   }
   getCitedKeys() {
@@ -92471,7 +94641,7 @@ var BibManager = class {
     this.citedKeysBuiltAt = (data == null ? void 0 : data.version) === CITED_KEYS_INDEX_VERSION ? (_b = data.builtAt) != null ? _b : 0 : 0;
   }
   renderedCachePath() {
-    return (0, import_obsidian20.normalizePath)(`${SW_CACHE_DIR}/rendered-citations.json`);
+    return (0, import_obsidian22.normalizePath)(`${SW_CACHE_DIR}/rendered-citations.json`);
   }
   async loadRenderedCache() {
     if (this.renderedCacheLoaded)
@@ -92497,7 +94667,7 @@ var BibManager = class {
     for (const [p4, v3] of this.renderedCache)
       notes[p4] = v3;
     try {
-      const dir = (0, import_obsidian20.normalizePath)(SW_CACHE_DIR);
+      const dir = (0, import_obsidian22.normalizePath)(SW_CACHE_DIR);
       if (!await app.vault.adapter.exists(dir)) {
         await app.vault.adapter.mkdir(dir);
       }
@@ -92637,7 +94807,7 @@ var BibManager = class {
       for (const k4 of this.getCitedKeys())
         citekeys.add(k4);
     } else {
-      const view = app.workspace.getActiveViewOfType(import_obsidian20.MarkdownView);
+      const view = app.workspace.getActiveViewOfType(import_obsidian22.MarkdownView);
       if (view == null ? void 0 : view.file) {
         await this.indexFileCitekeys(view.file);
         (await this.citekeysInFile(view.file)).forEach((k4) => citekeys.add(k4));
@@ -92670,7 +94840,7 @@ var BibManager = class {
         for (const key of missing) {
           if (getLitNoteForCitekey(key, sourcePath, app))
             continue;
-          await this.createLiteratureNote(key, sourceFile2);
+          await this.createLiteratureNote(key, sourceFile2, { open: false });
           created2++;
           onProgress == null ? void 0 : onProgress(created2, missing.length);
           await new Promise((r3) => setTimeout(r3, 250));
@@ -92679,7 +94849,7 @@ var BibManager = class {
       return { created: created2, missing: [], missingKeys: missing };
     }
     let created = 0;
-    if (this.plugin.settings.createNotesWithZotLit !== false) {
+    if (this.plugin.settings.createNotesWithZotLit !== false && this.plugin.settings.useOwnNoteTemplate !== true) {
       created = await createLitNotesViaZotLitBulk(app, refs, onProgress);
       if (created >= refs.length) {
         for (const key of missing) {
@@ -92695,7 +94865,7 @@ var BibManager = class {
         break;
       if (getLitNoteForCitekey(key, sourcePath, app))
         continue;
-      await this.createLiteratureNote(key, sourceFile);
+      await this.createLiteratureNote(key, sourceFile, { open: false });
       created++;
       onProgress == null ? void 0 : onProgress(created, total);
       await new Promise((r3) => setTimeout(r3, 250));
@@ -92748,7 +94918,7 @@ var BibManager = class {
     if ((_a = settings == null ? void 0 : settings.bibliography) == null ? void 0 : _a.length) {
       for (const scopedBibPath of settings.bibliography) {
         if (!isAbsolutePath(scopedBibPath)) {
-          paths.add((0, import_obsidian20.normalizePath)(scopedBibPath));
+          paths.add((0, import_obsidian22.normalizePath)(scopedBibPath));
         }
       }
     }
@@ -92761,12 +94931,12 @@ var BibManager = class {
   }
   rebuildWatchedBibPaths() {
     this.watchedBibPaths.clear();
-    for (const path of this.globalWatchedBibPaths) {
-      this.watchedBibPaths.add(path);
+    for (const path2 of this.globalWatchedBibPaths) {
+      this.watchedBibPaths.add(path2);
     }
     for (const paths of this.scopedWatchedBibPaths.values()) {
-      for (const path of paths) {
-        this.watchedBibPaths.add(path);
+      for (const path2 of paths) {
+        this.watchedBibPaths.add(path2);
       }
     }
   }
@@ -92792,11 +94962,11 @@ var BibManager = class {
   }
   getCacheForPath(filePath) {
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian20.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian22.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       return cache2;
     }
-    if (file instanceof import_obsidian20.TFile) {
+    if (file instanceof import_obsidian22.TFile) {
       const entry = this.renderedCache.get(file.path);
       if (entry && this.persistedEntryIsCurrent(file, entry)) {
         const result = this.fileCacheFromPersisted(file, entry);
@@ -92810,7 +94980,7 @@ var BibManager = class {
   }
   getResolution(filePath, key) {
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian20.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian22.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       return {
         isResolved: cache2.resolvedKeys.has(key),
@@ -92825,7 +94995,7 @@ var BibManager = class {
   getCitationsForSection(filePath, lineStart, lineEnd) {
     var _a, _b, _c, _d;
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian20.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian22.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       const mCache = app.metadataCache.getCache(filePath);
       const exact = (_a = mCache.sections) == null ? void 0 : _a.find((s3) => s3.position.start.line === lineStart && s3.position.end.line === lineEnd);
@@ -92844,7 +95014,7 @@ var BibManager = class {
 };
 
 // src/citeSuggest/citeSuggest.ts
-var import_obsidian21 = __toModule(require("obsidian"));
+var import_obsidian23 = __toModule(require("obsidian"));
 var SUGGEST_DEBUG = false;
 var LOG = SUGGEST_DEBUG ? (...args) => console.log("[sw:suggest]", ...args) : (..._args) => {
 };
@@ -92910,7 +95080,7 @@ function isLoadingSuggestion(s3) {
 var triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 var doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
 var DOUBLE_AT_PREFIX = "\0";
-var CiteSuggest = class extends import_obsidian21.EditorSuggest {
+var CiteSuggest = class extends import_obsidian23.EditorSuggest {
   constructor(app2, plugin) {
     super(app2);
     this.limit = 20;
@@ -92925,7 +95095,7 @@ var CiteSuggest = class extends import_obsidian21.EditorSuggest {
     });
     this.setInstructions([
       {
-        command: import_obsidian21.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
+        command: import_obsidian23.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
         purpose: "Wrap cite key with brackets"
       }
     ]);
@@ -93188,7 +95358,7 @@ var CiteSuggest = class extends import_obsidian21.EditorSuggest {
 };
 
 // src/exportModal.ts
-var import_obsidian22 = __toModule(require("obsidian"));
+var import_obsidian24 = __toModule(require("obsidian"));
 
 // src/convertCitations.ts
 var SPECIAL_RE = new RegExp("\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|\\[\\[@([^|\\]\\s]+)\\]\\]|\u27E6", "g");
@@ -93196,27 +95366,27 @@ function splitAuthorInText(expanded) {
   const m3 = /\s+-\s*$/.exec(expanded);
   return m3 ? { text: expanded.slice(0, m3.index).trimEnd(), narrative: true } : { text: expanded, narrative: false };
 }
-function rewriteContainers(str) {
+function rewriteContainers(str3) {
   var _a, _b;
   const containers = [];
   let scan = 0;
-  while (scan < str.length) {
-    const open2 = str.indexOf("[", scan);
+  while (scan < str3.length) {
+    const open2 = str3.indexOf("[", scan);
     if (open2 === -1)
       break;
-    if (str[open2 + 1] === "[") {
+    if (str3[open2 + 1] === "[") {
       scan = open2 + 2;
       continue;
     }
     let depth = 0;
     let close2 = -1;
-    for (let i3 = open2 + 1; i3 < str.length; i3++) {
-      if (str[i3] === "[" && str[i3 + 1] === "[") {
+    for (let i3 = open2 + 1; i3 < str3.length; i3++) {
+      if (str3[i3] === "[" && str3[i3 + 1] === "[") {
         depth++;
         i3++;
-      } else if (str[i3] === "[" && str[i3 + 1] !== "[") {
+      } else if (str3[i3] === "[" && str3[i3 + 1] !== "[") {
         depth++;
-      } else if (str[i3] === "]" && str[i3 + 1] === "]") {
+      } else if (str3[i3] === "]" && str3[i3 + 1] === "]") {
         if (depth > 0) {
           depth--;
           i3++;
@@ -93224,7 +95394,7 @@ function rewriteContainers(str) {
           close2 = i3;
           break;
         }
-      } else if (str[i3] === "]" && str[i3 + 1] !== "]") {
+      } else if (str3[i3] === "]" && str3[i3 + 1] !== "]") {
         if (depth > 0) {
           depth--;
         } else {
@@ -93235,7 +95405,7 @@ function rewriteContainers(str) {
     }
     if (close2 === -1)
       break;
-    const container = mergeContainerExpression(str.slice(open2, close2 + 1));
+    const container = mergeContainerExpression(str3.slice(open2, close2 + 1));
     if (container) {
       const mergedParts = [];
       let firstNarrative = false;
@@ -93260,11 +95430,11 @@ function rewriteContainers(str) {
   let ci = 0;
   let m3;
   SPECIAL_RE.lastIndex = 0;
-  while (m3 = SPECIAL_RE.exec(str)) {
+  while (m3 = SPECIAL_RE.exec(str3)) {
     while (ci < containers.length && containers[ci].open < m3.index) {
       const c3 = containers[ci];
       if (c3.open > emittedUntil) {
-        out += str.slice(last, c3.open);
+        out += str3.slice(last, c3.open);
         out += c3.merged;
         last = c3.close + 1;
         emittedUntil = c3.close;
@@ -93273,7 +95443,7 @@ function rewriteContainers(str) {
     }
     if (isInside(m3.index))
       continue;
-    out += str.slice(last, m3.index);
+    out += str3.slice(last, m3.index);
     const full = m3[0];
     const key = (_b = m3[1]) != null ? _b : m3[3];
     const alias = m3[2];
@@ -93289,14 +95459,14 @@ function rewriteContainers(str) {
   while (ci < containers.length) {
     const c3 = containers[ci];
     if (c3.open > emittedUntil) {
-      out += str.slice(last, c3.open);
+      out += str3.slice(last, c3.open);
       out += c3.merged;
       last = c3.close + 1;
       emittedUntil = c3.close;
     }
     ci++;
   }
-  out += str.slice(last);
+  out += str3.slice(last);
   return out;
 }
 function convertCitationsInText(text) {
@@ -93369,8 +95539,8 @@ function pluginScriptsDir(plugin) {
   return `${base}/${dir}/scripts`;
 }
 function hiddenSidecar(p4, suffix) {
-  const path = require("path");
-  return path.join(path.dirname(p4), `.${path.basename(p4)}${suffix}`);
+  const path2 = require("path");
+  return path2.join(path2.dirname(p4), `.${path2.basename(p4)}${suffix}`);
 }
 function expandTilde(p4) {
   if (p4 === "~")
@@ -93537,23 +95707,23 @@ async function runDocumentCompiler(plugin, file, opts) {
   }
   env.SW_PANDOC = pandoc;
   if (opts.skipRecompile && opts.compiledMdPath) {
-    const fs = require("fs");
-    if (fs.existsSync(opts.compiledMdPath)) {
-      const converted = await convertCitationsForExport(plugin, fs.readFileSync(opts.compiledMdPath, "utf-8"));
+    const fs2 = require("fs");
+    if (fs2.existsSync(opts.compiledMdPath)) {
+      const converted = await convertCitationsForExport(plugin, fs2.readFileSync(opts.compiledMdPath, "utf-8"));
       const convPath = hiddenSidecar(opts.compiledMdPath, ".swcitations.md");
-      fs.writeFileSync(convPath, converted, "utf-8");
+      fs2.writeFileSync(convPath, converted, "utf-8");
       try {
         return toResult2(await execCompiler(buildArgs(opts.compiledMdPath, convPath)));
       } finally {
         try {
-          fs.unlinkSync(convPath);
+          fs2.unlinkSync(convPath);
         } catch (e3) {
         }
       }
     }
   }
   try {
-    const fs = require("fs");
+    const fs2 = require("fs");
     const prepArgs = [
       "--prepare-convert",
       "--format",
@@ -93570,22 +95740,22 @@ async function runDocumentCompiler(plugin, file, opts) {
       prepArgs.push("--template", templateName);
     const prep = await execCompiler([absMaster, ...prepArgs]);
     const mdPath = (prep.stdout.trim().split("\n").pop() || "").trim();
-    if (!mdPath || !fs.existsSync(mdPath)) {
+    if (!mdPath || !fs2.existsSync(mdPath)) {
       throw new Error("prepare-convert did not return a usable markdown path");
     }
-    const converted = await convertCitationsForExport(plugin, fs.readFileSync(mdPath, "utf-8"));
+    const converted = await convertCitationsForExport(plugin, fs2.readFileSync(mdPath, "utf-8"));
     const convPath = hiddenSidecar(mdPath, ".swcitations.md");
-    fs.writeFileSync(convPath, converted, "utf-8");
+    fs2.writeFileSync(convPath, converted, "utf-8");
     try {
       return toResult2(await execCompiler(buildArgs(mdPath, convPath)));
     } finally {
       try {
-        fs.unlinkSync(convPath);
+        fs2.unlinkSync(convPath);
       } catch (e3) {
       }
       if (mdPath !== absMaster && !opts.keepIntermediateMd) {
         try {
-          fs.unlinkSync(mdPath);
+          fs2.unlinkSync(mdPath);
         } catch (e3) {
         }
       }
@@ -93606,11 +95776,11 @@ async function runDocumentCompiler(plugin, file, opts) {
 // src/exportModal.ts
 function listTemplates(dir, format2) {
   try {
-    const fs = require("fs");
-    if (!fs.existsSync(dir))
+    const fs2 = require("fs");
+    if (!fs2.existsSync(dir))
       return [];
     const exts = format2 === "docx" ? [".docx"] : format2 === "odt" ? [".odt"] : format2 === "latex" ? [".tex"] : [".docx", ".odt", ".tex"];
-    return fs.readdirSync(dir).filter((f3) => exts.some((ext) => f3.toLowerCase().endsWith(ext))).sort();
+    return fs2.readdirSync(dir).filter((f3) => exts.some((ext) => f3.toLowerCase().endsWith(ext))).sort();
   } catch (e3) {
     return [];
   }
@@ -93622,7 +95792,7 @@ var DEFAULT_BIBLIOGRAPHY = true;
 var MAX_LEVEL = 6;
 var FOOTNOTE_RESTART_LABEL = "Restart footnote and figure numbering per chapter";
 var FOOTNOTE_RESTART_ODT_NOTE = " (not available for ODT exports with native word-processor endnotes)";
-var ZoteroWarningModal = class extends import_obsidian22.Modal {
+var ZoteroWarningModal = class extends import_obsidian24.Modal {
   constructor(app2, needCount, liveFields, decide) {
     super(app2);
     this.needCount = needCount;
@@ -93663,7 +95833,7 @@ var ZoteroWarningModal = class extends import_obsidian22.Modal {
 function askZotero(app2, needCount, liveFields) {
   return new Promise((resolve) => new ZoteroWarningModal(app2, needCount, liveFields, resolve).open());
 }
-var ExportModal = class extends import_obsidian22.Modal {
+var ExportModal = class extends import_obsidian24.Modal {
   constructor(app2, plugin, file) {
     super(app2);
     this.cslStyleHasList = false;
@@ -94453,9 +96623,9 @@ var ExportModal = class extends import_obsidian22.Modal {
     }
     if (applied > 0) {
       void this.plugin.saveSettings();
-      new import_obsidian22.Notice("Reset to this note's properties.");
+      new import_obsidian24.Notice("Reset to this note's properties.");
     } else {
-      new import_obsidian22.Notice("This note has no export properties to reset to.");
+      new import_obsidian24.Notice("This note has no export properties to reset to.");
     }
     this.syncFormatState(this.formatSelect.value);
   }
@@ -94507,7 +96677,7 @@ var ExportModal = class extends import_obsidian22.Modal {
         this.sameSourceCb.checked = false;
       }
     } catch (e3) {
-      new import_obsidian22.Notice("Directory picker unavailable \u2014 type the path into the box above.");
+      new import_obsidian24.Notice("Directory picker unavailable \u2014 type the path into the box above.");
     }
   }
   effectiveNotesMode() {
@@ -94544,14 +96714,14 @@ var ExportModal = class extends import_obsidian22.Modal {
   }
   async run() {
     var _a, _b, _c;
-    if (!import_obsidian22.Platform.isDesktop) {
-      new import_obsidian22.Notice("Document compile/export is only available on desktop.");
+    if (!import_obsidian24.Platform.isDesktop) {
+      new import_obsidian24.Notice("Document compile/export is only available on desktop.");
       return;
     }
     const opts = this.options();
     const missing = this.formatMissing(opts.format);
     if (missing.length > 0) {
-      new import_obsidian22.Notice(`This export needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
+      new import_obsidian24.Notice(`This export needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
       return;
     }
     let tempBiblio = null;
@@ -94623,7 +96793,7 @@ var ExportModal = class extends import_obsidian22.Modal {
     await this.plugin.saveSettings();
     this.close();
     const label = opts.format === "md" ? "Compiling outline\u2026" : opts.format === "odt" ? "Compiling + exporting to ODT\u2026" : opts.format === "latex" ? "Compiling + exporting to LaTeX\u2026" : opts.format === "pdf" ? "Compiling + exporting to PDF\u2026" : "Compiling + exporting to DOCX\u2026";
-    const progress = new import_obsidian22.Notice(label, 0);
+    const progress = new import_obsidian24.Notice(label, 0);
     const res = await runDocumentCompiler(this.plugin, this.file, opts).finally(() => {
       if (tempBiblio) {
         try {
@@ -94634,14 +96804,14 @@ var ExportModal = class extends import_obsidian22.Modal {
     });
     progress.hide();
     if (!res.ok) {
-      new import_obsidian22.Notice(`Document compiler failed:
+      new import_obsidian24.Notice(`Document compiler failed:
 ${res.stderr}`, 8e3);
       console.error("[scholar-weft] DocumentCompiler failed:", res.stderr);
       return;
     }
     const outPath = (_c = (_b = res.outputPath) != null ? _b : res.stdout.trim().split("\n").pop()) != null ? _c : "";
     const doneLabel = opts.format === "md" ? `Compiled: ${outPath}` : `Exported: ${outPath}`;
-    new import_obsidian22.Notice(doneLabel, 6e3);
+    new import_obsidian24.Notice(doneLabel, 6e3);
   }
   async writeStaticBibliography(keys) {
     const entries = [];
@@ -94658,11 +96828,11 @@ ${res.stderr}`, 8e3);
     }
     if (entries.length === 0)
       return null;
-    const fs = require("fs");
+    const fs2 = require("fs");
     const os = require("os");
     const nodePath = require("path");
     const p4 = nodePath.join(os.tmpdir(), `sw-static-${Date.now()}.json`);
-    fs.writeFileSync(p4, JSON.stringify(entries), "utf-8");
+    fs2.writeFileSync(p4, JSON.stringify(entries), "utf-8");
     return p4;
   }
   async citedKeysFromText() {
@@ -94681,7 +96851,7 @@ ${res.stderr}`, 8e3);
 };
 
 // src/importModal.ts
-var import_obsidian24 = __toModule(require("obsidian"));
+var import_obsidian26 = __toModule(require("obsidian"));
 
 // src/importCompiler.ts
 function execFileAsync2(file, args, options) {
@@ -94735,7 +96905,7 @@ async function runImportScript(plugin, inputPath, outputPath) {
 }
 
 // src/pandocToLinked.ts
-var import_obsidian23 = __toModule(require("obsidian"));
+var import_obsidian25 = __toModule(require("obsidian"));
 function aliasFor(a3) {
   let alias = (a3.prefix || "") + "@" + (a3.suffix || "");
   alias = alias.trim();
@@ -94884,11 +97054,11 @@ function rewritePandocToLinked(body, resolvable, allowUnresolved = false) {
 async function convertVault(plugin) {
   const resolvable = new Set(plugin.bibManager.bibCache.keys());
   if (!resolvable.size) {
-    new import_obsidian23.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
+    new import_obsidian25.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
     return;
   }
   const files = plugin.app.vault.getMarkdownFiles().filter((f3) => !f3.path.endsWith(".bk") && !f3.path.endsWith(".bk.md"));
-  const progress = new import_obsidian23.Notice(`Converting citations across ${files.length} files\u2026`, 0);
+  const progress = new import_obsidian25.Notice(`Converting citations across ${files.length} files\u2026`, 0);
   let convertedFiles = 0;
   let totalSkipped = 0;
   try {
@@ -94920,13 +97090,13 @@ async function convertVault(plugin) {
   }
   const skippedNote = totalSkipped > 0 ? `
 Skipped ${totalSkipped} citations (unresolved/unparseable \u2014 see console)` : "";
-  new import_obsidian23.Notice(convertedFiles > 0 ? `Converted citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.${skippedNote}` : `No pandoc citations found in vault.`, 6e3);
+  new import_obsidian25.Notice(convertedFiles > 0 ? `Converted citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.${skippedNote}` : `No pandoc citations found in vault.`, 6e3);
 }
 async function convertActiveNote(plugin, file, { allowUnresolved = false } = {}) {
   const content = await plugin.app.vault.read(file);
   const resolvable = new Set(plugin.bibManager.bibCache.keys());
   if (!allowUnresolved && !resolvable.size) {
-    new import_obsidian23.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
+    new import_obsidian25.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
     return { converted: 0, skipped: [] };
   }
   let body = content;
@@ -94938,7 +97108,7 @@ async function convertActiveNote(plugin, file, { allowUnresolved = false } = {})
   }
   const { out, report } = rewritePandocToLinked(body, resolvable, allowUnresolved);
   if (out === body) {
-    new import_obsidian23.Notice(`No pandoc citations found in ${file.basename}.`, 4e3);
+    new import_obsidian25.Notice(`No pandoc citations found in ${file.basename}.`, 4e3);
     return report;
   }
   const bkPath = `${file.path}.bk`;
@@ -94948,7 +97118,7 @@ async function convertActiveNote(plugin, file, { allowUnresolved = false } = {})
   await plugin.app.vault.modify(file, frontmatter + out);
   const skippedNote = report.skipped.length > 0 ? `
 Skipped ${report.skipped.length} (unresolved/unparseable \u2014 see console)` : "";
-  new import_obsidian23.Notice(`Converted citations in ${file.basename}.${skippedNote}`, 6e3);
+  new import_obsidian25.Notice(`Converted citations in ${file.basename}.${skippedNote}`, 6e3);
   if (report.skipped.length) {
     console.warn("[scholar-weft] skipped pandoc citations:", report.skipped.map((s3) => `${s3.text} (${s3.reason})`));
   }
@@ -94986,7 +97156,7 @@ function pathForDroppedFile(file) {
   }
   return file.path;
 }
-var ImportModal = class extends import_obsidian24.Modal {
+var ImportModal = class extends import_obsidian26.Modal {
   constructor(app2, plugin) {
     super(app2);
     this.inputPath = "";
@@ -95109,12 +97279,12 @@ var ImportModal = class extends import_obsidian24.Modal {
         return;
       const filePath = pathForDroppedFile(file);
       if (!filePath) {
-        new import_obsidian24.Notice("[ScholarWeft] Could not read the file path from the dropped file.");
+        new import_obsidian26.Notice("[ScholarWeft] Could not read the file path from the dropped file.");
         return;
       }
       const lower = filePath.toLowerCase();
       if (!lower.endsWith(".docx") && !lower.endsWith(".odt")) {
-        new import_obsidian24.Notice("[ScholarWeft] Please drop a .docx or .odt file.");
+        new import_obsidian26.Notice("[ScholarWeft] Please drop a .docx or .odt file.");
         return;
       }
       this.selectFile(filePath, file.name);
@@ -95217,13 +97387,13 @@ var ImportModal = class extends import_obsidian24.Modal {
   async run() {
     if (!this.inputPath)
       return;
-    if (!import_obsidian24.Platform.isDesktop) {
-      new import_obsidian24.Notice("Document import is only available on desktop.");
+    if (!import_obsidian26.Platform.isDesktop) {
+      new import_obsidian26.Notice("Document import is only available on desktop.");
       return;
     }
     const missing = this.importMissing();
     if (missing.length > 0) {
-      new import_obsidian24.Notice(`Document import needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
+      new import_obsidian26.Notice(`Document import needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
       return;
     }
     const doConvert = this.convertCb.checked;
@@ -95234,29 +97404,29 @@ var ImportModal = class extends import_obsidian24.Modal {
     this.saveLastOutputDir();
     this.close();
     const nodePath = require("path");
-    const fs = require("fs");
+    const fs2 = require("fs");
     const os = require("os");
-    const basename = nodePath.basename(this.inputPath).replace(/\.(docx|odt)$/i, "");
-    const tmpOutput = nodePath.join(os.tmpdir(), `${basename}.sw-import.md`);
-    const progress = new import_obsidian24.Notice("Importing document\u2026 Zotero must be running.", 0);
+    const basename2 = nodePath.basename(this.inputPath).replace(/\.(docx|odt)$/i, "");
+    const tmpOutput = nodePath.join(os.tmpdir(), `${basename2}.sw-import.md`);
+    const progress = new import_obsidian26.Notice("Importing document\u2026 Zotero must be running.", 0);
     const result = await runImportScript(this.plugin, this.inputPath, tmpOutput);
     if (!result.ok) {
       progress.hide();
-      new import_obsidian24.Notice(`[ScholarWeft] Import failed:
+      new import_obsidian26.Notice(`[ScholarWeft] Import failed:
 ${result.stderr}`, 1e4);
       console.error("[scholar-weft] Import failed:", result.stderr);
       return;
     }
     let mdContent;
     try {
-      mdContent = fs.readFileSync(tmpOutput, "utf-8");
+      mdContent = fs2.readFileSync(tmpOutput, "utf-8");
       try {
-        fs.unlinkSync(tmpOutput);
+        fs2.unlinkSync(tmpOutput);
       } catch (e3) {
       }
     } catch (e3) {
       progress.hide();
-      new import_obsidian24.Notice(`[ScholarWeft] Import failed: could not read converted file.
+      new import_obsidian26.Notice(`[ScholarWeft] Import failed: could not read converted file.
 ${e3}`, 8e3);
       return;
     }
@@ -95271,7 +97441,7 @@ ${e3}`, 8e3);
       const { out } = rewritePandocToLinked(body, new Set(), true);
       mdContent = frontmatter + out;
     }
-    const stem = (outFilename || `${basename}.md`).replace(/\.md$/i, "") || basename;
+    const stem = (outFilename || `${basename2}.md`).replace(/\.md$/i, "") || basename2;
     const filename = `${stem}.md`;
     if (outFolder) {
       try {
@@ -95284,7 +97454,7 @@ ${e3}`, 8e3);
     let newFile;
     try {
       const existing = this.app.vault.getAbstractFileByPath(vaultRelPath);
-      if (existing instanceof import_obsidian24.TFile && overwrite) {
+      if (existing instanceof import_obsidian26.TFile && overwrite) {
         await this.app.vault.modify(existing, mdContent);
         newFile = existing;
       } else if (existing) {
@@ -95301,15 +97471,15 @@ ${e3}`, 8e3);
       }
     } catch (e3) {
       progress.hide();
-      new import_obsidian24.Notice(`[ScholarWeft] Import failed: could not create note in vault.
+      new import_obsidian26.Notice(`[ScholarWeft] Import failed: could not create note in vault.
 ${e3}`, 8e3);
       return;
     }
     await this.app.workspace.getLeaf(false).openFile(newFile);
     progress.hide();
-    new import_obsidian24.Notice(`Imported: ${newFile.basename}`, 5e3);
+    new import_obsidian26.Notice(`Imported: ${newFile.basename}`, 5e3);
     if (doLitNotes) {
-      const litProgress = new import_obsidian24.Notice("Creating missing literature notes\u2026", 0);
+      const litProgress = new import_obsidian26.Notice("Creating missing literature notes\u2026", 0);
       try {
         const { created, missingKeys } = await this.plugin.bibManager.createMissingLitNotes({ file: newFile }, (done, total) => {
           var _a;
@@ -95317,11 +97487,11 @@ ${e3}`, 8e3);
         });
         litProgress.hide();
         if (missingKeys.length) {
-          new import_obsidian24.Notice(`Created ${created} of ${missingKeys.length} missing literature note(s).`, 5e3);
+          new import_obsidian26.Notice(`Created ${created} of ${missingKeys.length} missing literature note(s).`, 5e3);
         }
       } catch (e3) {
         litProgress.hide();
-        new import_obsidian24.Notice(`[ScholarWeft] Literature note creation failed: ${e3}`, 6e3);
+        new import_obsidian26.Notice(`[ScholarWeft] Literature note creation failed: ${e3}`, 6e3);
         console.error("[scholar-weft] lit note creation error:", e3);
       }
     }
@@ -95333,8 +97503,8 @@ ${e3}`, 8e3);
 };
 
 // src/modals/citekeyRenameModal.ts
-var import_obsidian25 = __toModule(require("obsidian"));
-var CitekeyRenameModal = class extends import_obsidian25.Modal {
+var import_obsidian27 = __toModule(require("obsidian"));
+var CitekeyRenameModal = class extends import_obsidian27.Modal {
   constructor(app2, plan, onConfirm, showLitNotesOption = true, alsoUnresolved = []) {
     super(app2);
     this.plan = plan;
@@ -95462,8 +97632,8 @@ var CitekeyRenameModal = class extends import_obsidian25.Modal {
 };
 
 // src/modals/conflictModal.ts
-var import_obsidian26 = __toModule(require("obsidian"));
-var ConflictModal = class extends import_obsidian26.Modal {
+var import_obsidian28 = __toModule(require("obsidian"));
+var ConflictModal = class extends import_obsidian28.Modal {
   constructor(app2, conflicts, onResolve) {
     super(app2);
     this.conflicts = conflicts;
@@ -95478,7 +97648,7 @@ var ConflictModal = class extends import_obsidian26.Modal {
       text: `${names} also ${this.conflicts.length > 1 ? "provide" : "provides"} a reference list. ScholarWeft has its own, so with ${this.conflicts.length > 1 ? "them" : "it"} enabled you'll see more than one. Disable ${this.conflicts.length > 1 ? "them" : "it"}, or keep both and stop this prompt.`
     });
     const disableLabel = this.conflicts.length === 1 ? `Disable \u201C${this.conflicts[0].name}\u201D` : "Disable these plugins";
-    new import_obsidian26.Setting(contentEl).addButton((b3) => b3.setButtonText(disableLabel).setCta().onClick(() => {
+    new import_obsidian28.Setting(contentEl).addButton((b3) => b3.setButtonText(disableLabel).setCta().onClick(() => {
       this.onResolve(this.conflicts.map((c3) => c3.id), false);
       this.close();
     })).addButton((b3) => b3.setButtonText("Keep both and don't ask again").onClick(() => {
@@ -95492,7 +97662,7 @@ var ConflictModal = class extends import_obsidian26.Modal {
 };
 
 // src/linkedToPandoc.ts
-var import_obsidian27 = __toModule(require("obsidian"));
+var import_obsidian29 = __toModule(require("obsidian"));
 function singleToPandoc(key, alias) {
   const a3 = (alias != null ? alias : "").trim();
   if (!a3 || a3 === "@")
@@ -95564,7 +97734,7 @@ async function convertNoteToPandoc(plugin, file) {
   }
   const { out, changed } = rewriteLinkedToPandoc(body);
   if (!changed) {
-    new import_obsidian27.Notice(`No linked citations found in ${file.basename}.`, 4e3);
+    new import_obsidian29.Notice(`No linked citations found in ${file.basename}.`, 4e3);
     return;
   }
   const bkPath = `${file.path}.bk`;
@@ -95572,11 +97742,11 @@ async function convertNoteToPandoc(plugin, file) {
     await plugin.app.vault.adapter.write(bkPath, content);
   }
   await plugin.app.vault.modify(file, frontmatter + out);
-  new import_obsidian27.Notice(`Reverted linked citations to pandoc-style in ${file.basename}.`, 5e3);
+  new import_obsidian29.Notice(`Reverted linked citations to pandoc-style in ${file.basename}.`, 5e3);
 }
 async function convertVaultToPandoc(plugin) {
   const files = plugin.app.vault.getMarkdownFiles().filter((f3) => !f3.path.endsWith(".bk") && !f3.path.endsWith(".bk.md"));
-  const progress = new import_obsidian27.Notice(`Reverting citations across ${files.length} files\u2026`, 0);
+  const progress = new import_obsidian29.Notice(`Reverting citations across ${files.length} files\u2026`, 0);
   let convertedFiles = 0;
   try {
     for (const file of files) {
@@ -95601,7 +97771,7 @@ async function convertVaultToPandoc(plugin) {
   } finally {
     progress.hide();
   }
-  new import_obsidian27.Notice(convertedFiles > 0 ? `Reverted linked citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.` : `No linked citations found in vault.`, 6e3);
+  new import_obsidian29.Notice(convertedFiles > 0 ? `Reverted linked citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.` : `No linked citations found in vault.`, 6e3);
 }
 
 // src/main.ts
@@ -95611,7 +97781,7 @@ function looksLikeReferenceListPlugin(id, name) {
 }
 var bibliographyExtensions = new Set(["bib", "json", "yaml", "yml"]);
 function isBibliographyFile(file) {
-  return file instanceof import_obsidian28.TFile && bibliographyExtensions.has(file.extension);
+  return file instanceof import_obsidian30.TFile && bibliographyExtensions.has(file.extension);
 }
 function posixDirname(p4) {
   const idx = p4.lastIndexOf("/");
@@ -95637,9 +97807,9 @@ function getFileRelativePath(sourceFile, targetPath) {
 function bibliographyMatchesPath(sourceFile, bibliography, targetPath) {
   var _a, _b, _c;
   const sourceDir = posixDirname(sourceFile.path);
-  const normalizedBibliography = (0, import_obsidian28.normalizePath)(bibliography);
-  const noteRelativePath = (0, import_obsidian28.normalizePath)(`${sourceDir}/${normalizedBibliography}`);
-  const vaultRelativePath = (0, import_obsidian28.normalizePath)(normalizedBibliography);
+  const normalizedBibliography = (0, import_obsidian30.normalizePath)(bibliography);
+  const noteRelativePath = (0, import_obsidian30.normalizePath)(`${sourceDir}/${normalizedBibliography}`);
+  const vaultRelativePath = (0, import_obsidian30.normalizePath)(normalizedBibliography);
   if (noteRelativePath === targetPath || vaultRelativePath === targetPath) {
     return true;
   }
@@ -95668,7 +97838,7 @@ function updateBibliographyPath(sourceFile, bibliography, oldPath, newPath) {
   }
   return getUpdatedPath(bibliography);
 }
-var ReferenceList = class extends import_obsidian28.Plugin {
+var ReferenceList = class extends import_obsidian30.Plugin {
   constructor() {
     super(...arguments);
     this.cacheDir = SW_CACHE_DIR;
@@ -95676,29 +97846,29 @@ var ReferenceList = class extends import_obsidian28.Plugin {
     this._fillingLitNotes = new Set();
     this.statusBarText = null;
     this.suggestPosition = null;
-    this.persistCitedKeysIndex = (0, import_obsidian28.debounce)(async () => {
+    this.persistCitedKeysIndex = (0, import_obsidian30.debounce)(async () => {
       if (!this.bibManager.citedKeysIndexDirty)
         return;
       if (this.bibManager.indexMdCount <= 0)
         return;
       try {
-        const path = (0, import_obsidian28.normalizePath)(`${this.cacheDir}/cited-keys.json`);
-        if (!await this.app.vault.adapter.exists((0, import_obsidian28.normalizePath)(this.cacheDir))) {
-          await this.app.vault.adapter.mkdir((0, import_obsidian28.normalizePath)(this.cacheDir));
+        const path2 = (0, import_obsidian30.normalizePath)(`${this.cacheDir}/cited-keys.json`);
+        if (!await this.app.vault.adapter.exists((0, import_obsidian30.normalizePath)(this.cacheDir))) {
+          await this.app.vault.adapter.mkdir((0, import_obsidian30.normalizePath)(this.cacheDir));
         }
-        await this.app.vault.adapter.write(path, JSON.stringify(this.bibManager.serializeCitedKeysIndex()));
+        await this.app.vault.adapter.write(path2, JSON.stringify(this.bibManager.serializeCitedKeysIndex()));
         this.bibManager.citedKeysIndexDirty = false;
       } catch (e3) {
         console.warn("[lc] persistCitedKeysIndex: error", e3);
       }
     }, 2e3);
-    this.persistRenderedCache = (0, import_obsidian28.debounce)(async () => {
+    this.persistRenderedCache = (0, import_obsidian30.debounce)(async () => {
       await this.bibManager.saveRenderedCache();
     }, 3e3);
-    this.persistZLinks = (0, import_obsidian28.debounce)(async () => {
+    this.persistZLinks = (0, import_obsidian30.debounce)(async () => {
       await this.bibManager.saveZLinks();
     }, 5e3);
-    this.emitSettingsUpdate = (0, import_obsidian28.debounce)((cb) => {
+    this.emitSettingsUpdate = (0, import_obsidian30.debounce)((cb) => {
       var _a;
       if (this.initPromise.settled) {
         (_a = this.view) == null ? void 0 : _a.contentEl.toggleClass("collapsed-links", !!this.settings.hideLinks);
@@ -95711,7 +97881,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       const run = ++this.processReferencesRun;
       const isCurrent = () => run === this.processReferencesRun;
       const { settings, view } = this;
-      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
       const scopedSettings = activeView ? getScopedSettings(activeView.file) : null;
       if (!((_a = settings.bibliographyPaths) == null ? void 0 : _a.length) && !settings.pullFromZotero && !((_b = scopedSettings == null ? void 0 : scopedSettings.bibliography) == null ? void 0 : _b.length)) {
         return view == null ? void 0 : view.setMessage(t("Please provide the path to your bibliography file in the ScholarWeft plugin settings."));
@@ -95747,8 +97917,8 @@ var ReferenceList = class extends import_obsidian28.Plugin {
   }
   async migrateCacheDir() {
     const adapter = this.app.vault.adapter;
-    const next = (0, import_obsidian28.normalizePath)(SW_CACHE_DIR);
-    const prev = (0, import_obsidian28.normalizePath)(SW_CACHE_DIR_LEGACY);
+    const next = (0, import_obsidian30.normalizePath)(SW_CACHE_DIR);
+    const prev = (0, import_obsidian30.normalizePath)(SW_CACHE_DIR_LEGACY);
     try {
       if (await adapter.exists(next))
         return;
@@ -95772,7 +97942,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
     } else {
       this.registerView(viewType, (leaf) => new ReferenceListView(leaf, this));
     }
-    this.emitter = new import_obsidian28.Events();
+    this.emitter = new import_obsidian30.Events();
     this.bibManager = new BibManager(this);
     if (this._pendingCitedKeysIndex) {
       this.bibManager.deserializeCitedKeysIndex(this._pendingCitedKeysIndex);
@@ -95798,7 +97968,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       const { settings, bibManager } = this;
       debugLog("[sw:main] initPromise.then fired \u2014 starting bib load");
       const hasSources = ((_b = (_a2 = settings.bibliographyPaths) == null ? void 0 : _a2.length) != null ? _b : 0) > 0 || settings.pullFromZotero;
-      const loadNotice = hasSources ? new import_obsidian28.Notice("ScholarWeft: preparing your references\u2026", 0) : null;
+      const loadNotice = hasSources ? new import_obsidian30.Notice("ScholarWeft: preparing your references\u2026", 0) : null;
       const setNotice = (msg) => {
         try {
           loadNotice == null ? void 0 : loadNotice.setMessage(`ScholarWeft: ${msg}`);
@@ -95881,7 +98051,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         const entries = cache2.bib.findAll(".csl-entry");
         if (!entries.length)
           return;
-        const text = entries.map((e3) => (0, import_obsidian28.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
+        const text = entries.map((e3) => (0, import_obsidian30.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
         editor.replaceSelection(text);
       }
     });
@@ -95889,7 +98059,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       id: "snapshot-bibliography",
       name: t("Save bibliography snapshot for this note"),
       checkCallback: (checking) => {
-        const view = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+        const view = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
         if (!(view == null ? void 0 : view.file))
           return false;
         const entries = this.bibManager.snapshotEntries(view.file);
@@ -95905,10 +98075,10 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       name: t("Create literature notes for citations lacking notes (current note)"),
       callback: async () => {
         var _a2;
-        const view = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+        const view = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
         if (!(view == null ? void 0 : view.file))
           return;
-        const progress = new import_obsidian28.Notice("Creating literature notes\u2026", 0);
+        const progress = new import_obsidian30.Notice("Creating literature notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes({ file: view.file }, (done, total) => {
           var _a3;
@@ -95917,7 +98087,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         progress.hide();
         await this.fillZoteroNotesForCitekeys(missingKeys, view.file);
         this.processReferences();
-        new import_obsidian28.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations.` : "All citations in this note already have literature notes.", 6e3);
+        new import_obsidian30.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations.` : "All citations in this note already have literature notes.", 6e3);
       }
     });
     this.addCommand({
@@ -95925,7 +98095,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       name: t("Create literature notes for citations lacking notes (vault)"),
       callback: async () => {
         var _a2;
-        const progress = new import_obsidian28.Notice("Creating literature notes\u2026", 0);
+        const progress = new import_obsidian30.Notice("Creating literature notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes({ allVault: true }, (done, total) => {
           var _a3;
@@ -95934,7 +98104,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         progress.hide();
         await this.fillZoteroNotesForCitekeys(missingKeys, null);
         this.processReferences();
-        new import_obsidian28.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations vault-wide.` : "All cited works in the vault already have literature notes.", 6e3);
+        new import_obsidian30.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations vault-wide.` : "All cited works in the vault already have literature notes.", 6e3);
       }
     });
     this.addCommand({
@@ -95942,7 +98112,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       name: t("Insert Zotero notes into literature notes (vault)"),
       callback: async () => {
         var _a2;
-        const progress = new import_obsidian28.Notice("Inserting Zotero notes\u2026", 0);
+        const progress = new import_obsidian30.Notice("Inserting Zotero notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const r3 = await insertZoteroNotesVaultWide(this.app, {
           zoteroPort: this.settings.zoteroPort,
@@ -95962,28 +98132,28 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         if (r3.failed.length) {
           lines.push(`${r3.failed.length} could not be read from Zotero \u2014 is Zotero running? (see the developer console)`);
         }
-        new import_obsidian28.Notice(`ScholarWeft: ${lines.join("\n")}`, 1e4);
+        new import_obsidian30.Notice(`ScholarWeft: ${lines.join("\n")}`, 1e4);
         if (r3.skipped.length) {
           debugLog('ScholarWeft: notes skipped because "## Notes" already had content:\n' + r3.skipped.join("\n"));
         }
       }
     });
-    if (import_obsidian28.Platform.isDesktop) {
+    if (import_obsidian30.Platform.isDesktop) {
       this.addCommand({
         id: "compile-export-book",
         name: t("Compile and export the current document (DOCX, ODT, PDF, LaTeX)"),
         callback: () => {
           var _a2;
-          const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian28.MarkdownView)) == null ? void 0 : _a2.file;
+          const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a2.file;
           if (!file) {
-            new import_obsidian28.Notice(t("Open the note you want to export, then run this command again."), 6e3);
+            new import_obsidian30.Notice(t("Open the note you want to export, then run this command again."), 6e3);
             return;
           }
           new ExportModal(app2, this, file).open();
         }
       });
     }
-    if (import_obsidian28.Platform.isDesktop) {
+    if (import_obsidian30.Platform.isDesktop) {
       this.addCommand({
         id: "import-document",
         name: t("Import a Word or ODT document with Zotero citations"),
@@ -95997,7 +98167,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       name: t("Convert pandoc citations to linked citations (current note)"),
       checkCallback: (checking) => {
         var _a2;
-        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian28.MarkdownView)) == null ? void 0 : _a2.file;
+        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a2.file;
         if (!file)
           return false;
         if (!checking) {
@@ -96018,7 +98188,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       name: t("Revert linked citations to pandoc-style citations (current note)"),
       checkCallback: (checking) => {
         var _a2;
-        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian28.MarkdownView)) == null ? void 0 : _a2.file;
+        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a2.file;
         if (!file)
           return false;
         if (!checking)
@@ -96047,32 +98217,32 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         var _a2;
         const count = Object.keys((_a2 = this.settings.citekeyRenameHistory) != null ? _a2 : {}).length;
         if (!count) {
-          new import_obsidian28.Notice("Citekey rename history is already empty.");
+          new import_obsidian30.Notice("Citekey rename history is already empty.");
           return;
         }
         this.settings.citekeyRenameHistory = {};
         this.saveSettings();
-        new import_obsidian28.Notice(`Cleared ${count} citekey rename record${count !== 1 ? "s" : ""}.`);
+        new import_obsidian30.Notice(`Cleared ${count} citekey rename record${count !== 1 ? "s" : ""}.`);
       }
     });
     document.body.toggleClass("sw-tooltips", this.settings.showCitekeyTooltips !== false);
     document.body.toggleClass("sw-decorations", (_a = this.settings.showCitationDecorations) != null ? _a : true);
     this.applyCitationColors();
-    this.registerEvent(app2.metadataCache.on("changed", (0, import_obsidian28.debounce)(async (file) => {
+    this.registerEvent(app2.metadataCache.on("changed", (0, import_obsidian30.debounce)(async (file) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
-      const activeView = app2.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+      const activeView = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
       if (activeView && file === activeView.file) {
         this.processReferences();
       }
     }, 100, true)));
-    this.registerEvent(app2.workspace.on("active-leaf-change", (0, import_obsidian28.debounce)(async (leaf) => {
+    this.registerEvent(app2.workspace.on("active-leaf-change", (0, import_obsidian30.debounce)(async (leaf) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       app2.workspace.iterateRootLeaves((rootLeaf) => {
         var _a2;
         if (rootLeaf === leaf) {
-          if (leaf.view instanceof import_obsidian28.MarkdownView) {
+          if (leaf.view instanceof import_obsidian30.MarkdownView) {
             this.processReferences();
           } else {
             (_a2 = this.view) == null ? void 0 : _a2.setNoContentMessage();
@@ -96080,27 +98250,27 @@ var ReferenceList = class extends import_obsidian28.Plugin {
         }
       });
     }, 100, true)));
-    this.registerEvent(app2.vault.on("rename", (0, import_obsidian28.debounce)(async (file, oldPath) => {
+    this.registerEvent(app2.vault.on("rename", (0, import_obsidian30.debounce)(async (file, oldPath) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       if (isBibliographyFile(file)) {
         await this.updateBibliographyFrontmatter(oldPath, file.path);
       }
       this.bibManager.removeFromCitedKeysIndex(oldPath);
-      if (file instanceof import_obsidian28.TFile) {
+      if (file instanceof import_obsidian30.TFile) {
         await this.bibManager.updateCitedKeysIndex(file);
         this.persistCitedKeysIndex();
       }
       this.persistRenderedCache();
-      const activeView = app2.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
-      if ((activeView == null ? void 0 : activeView.file) instanceof import_obsidian28.TFile) {
+      const activeView = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+      if ((activeView == null ? void 0 : activeView.file) instanceof import_obsidian30.TFile) {
         this.bibManager.fileCache.delete(activeView.file);
         this.processReferences();
       }
     }, 100, true)));
-    this.registerEvent(app2.vault.on("modify", (0, import_obsidian28.debounce)(async (file) => {
+    this.registerEvent(app2.vault.on("modify", (0, import_obsidian30.debounce)(async (file) => {
       var _a2;
-      if (!(file instanceof import_obsidian28.TFile))
+      if (!(file instanceof import_obsidian30.TFile))
         return;
       await this.bibManager.updateCitedKeysIndex(file);
       this.persistCitedKeysIndex();
@@ -96111,8 +98281,8 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       }
       void this.maybeFillNewLiteratureNote(file);
     }, 150, true)));
-    this.registerEvent(app2.vault.on("create", (0, import_obsidian28.debounce)(async (file) => {
-      if (!(file instanceof import_obsidian28.TFile))
+    this.registerEvent(app2.vault.on("create", (0, import_obsidian30.debounce)(async (file) => {
+      if (!(file instanceof import_obsidian30.TFile))
         return;
       await this.bibManager.updateCitedKeysIndex(file);
       this.persistCitedKeysIndex();
@@ -96124,11 +98294,11 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       this.persistCitedKeysIndex();
     }));
     this.registerEvent(app2.vault.on("create", (file) => {
-      if (file instanceof import_obsidian28.TFile)
+      if (file instanceof import_obsidian30.TFile)
         this.maybeFillIfInLitNoteFolder(file);
     }));
     this.registerEvent(app2.vault.on("modify", (file) => {
-      if (file instanceof import_obsidian28.TFile)
+      if (file instanceof import_obsidian30.TFile)
         this.maybeFillIfInLitNoteFolder(file);
     }));
     (async () => {
@@ -96137,7 +98307,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       this.setStatusBarIdle();
-      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
       if (activeView == null ? void 0 : activeView.file) {
         this.bibManager.invalidateFile(activeView.file);
       }
@@ -96366,7 +98536,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       return;
     const res = await installZotlitTemplates(this);
     if (res.folderConfigured) {
-      new import_obsidian28.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER2}/`);
+      new import_obsidian30.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER2}/`);
     }
   }
   onunload() {
@@ -96379,8 +98549,8 @@ var ReferenceList = class extends import_obsidian28.Plugin {
   }
   async updateBibliographyFrontmatter(oldPath, newPath) {
     var _a;
-    oldPath = (0, import_obsidian28.normalizePath)(oldPath);
-    newPath = (0, import_obsidian28.normalizePath)(newPath);
+    oldPath = (0, import_obsidian30.normalizePath)(oldPath);
+    newPath = (0, import_obsidian30.normalizePath)(newPath);
     for (const file of this.app.vault.getMarkdownFiles()) {
       const metadata = this.app.metadataCache.getFileCache(file);
       if (!((_a = metadata == null ? void 0 : metadata.frontmatter) == null ? void 0 : _a.bibliography))
@@ -96415,14 +98585,14 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       if (isOpen)
         return;
       const { settings } = this;
-      const menu = new import_obsidian28.Menu().addSections(["settings", "actions"]).addItem((item) => item.setSection("settings").setIcon("lucide-message-square").setTitle(t("Show citekey tooltips")).setChecked(!!settings.showCitekeyTooltips).onClick(() => {
+      const menu = new import_obsidian30.Menu().addSections(["settings", "actions"]).addItem((item) => item.setSection("settings").setIcon("lucide-message-square").setTitle(t("Show citekey tooltips")).setChecked(!!settings.showCitekeyTooltips).onClick(() => {
         this.settings.showCitekeyTooltips = !settings.showCitekeyTooltips;
         this.saveSettings();
       })).addItem((item) => item.setSection("settings").setIcon("lucide-at-sign").setTitle(t("Show citekey suggestions")).setChecked(!!settings.enableCiteKeyCompletion).onClick(() => {
         this.settings.enableCiteKeyCompletion = !settings.enableCiteKeyCompletion;
         this.saveSettings();
       })).addItem((item) => item.setSection("actions").setIcon("lucide-rotate-cw").setTitle(t("Refresh bibliography")).onClick(async () => {
-        const activeView = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+        const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
         if (activeView) {
           const file = activeView.file;
           if (this.bibManager.fileCache.has(file)) {
@@ -96454,7 +98624,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
   }
   setStatusBarLoading() {
     this.statusBarIcon.addClass("is-loading");
-    (0, import_obsidian28.setIcon)(this.statusBarIcon, "lucide-loader");
+    (0, import_obsidian30.setIcon)(this.statusBarIcon, "lucide-loader");
   }
   setStatusBarMessage(msg) {
     this.setStatusBarLoading();
@@ -96467,7 +98637,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
   }
   setStatusBarIdle() {
     this.statusBarIcon.removeClass("is-loading");
-    (0, import_obsidian28.setIcon)(this.statusBarIcon, "lucide-at-sign");
+    (0, import_obsidian30.setIcon)(this.statusBarIcon, "lucide-at-sign");
     this.statusBarIcon.setAttr("aria-label", t("ScholarWeft settings"));
     const el = this.statusBarText;
     if (el) {
@@ -96498,7 +98668,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;
     void this.ensureCitedKeysIndex();
-    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
     if (activeView) {
       this.processReferences();
     }
@@ -96533,7 +98703,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
     var _a, _b, _c, _d;
     const saved = (_a = await this.loadData()) != null ? _a : {};
     try {
-      const indexPath = (0, import_obsidian28.normalizePath)(`${this.cacheDir}/cited-keys.json`);
+      const indexPath = (0, import_obsidian30.normalizePath)(`${this.cacheDir}/cited-keys.json`);
       const cached = await this.app.vault.adapter.read(indexPath);
       const parsed = JSON.parse(cached);
       if (parsed && typeof parsed === "object" && !parsed.builtAt) {
@@ -96581,7 +98751,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       suggests.push(this.citeSuggest);
   }
   suggestWantsFront() {
-    const view = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView);
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
     const editor = view == null ? void 0 : view.editor;
     if (!editor)
       return false;
@@ -96624,23 +98794,23 @@ var ReferenceList = class extends import_obsidian28.Plugin {
   }
   async autoUpdateCurrentNote(renameMap) {
     var _a;
-    const file = (_a = this.app.workspace.getActiveViewOfType(import_obsidian28.MarkdownView)) == null ? void 0 : _a.file;
+    const file = (_a = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a.file;
     if (!file || !renameMap.size)
       return;
     const changed = await this.bibManager.applyRenamesInFile(file, renameMap);
     if (changed.length) {
       const summary = changed.map((c3) => `@${c3.oldKey} \u2192 @${c3.newKey}`).join(", ");
-      new import_obsidian28.Notice(`Auto-updated citekeys in current note: ${summary}`);
+      new import_obsidian30.Notice(`Auto-updated citekeys in current note: ${summary}`);
     }
   }
   async showCitekeyRenameDialog(overrideMap) {
     var _a;
     const renameMap = (_a = overrideMap != null ? overrideMap : this.settings.citekeyRenameHistory) != null ? _a : {};
     if (!Object.keys(renameMap).length) {
-      new import_obsidian28.Notice("No citekey rename history found.");
+      new import_obsidian30.Notice("No citekey rename history found.");
       return;
     }
-    const progress = new import_obsidian28.Notice("Scanning vault for stale citekeys\u2026", 0);
+    const progress = new import_obsidian30.Notice("Scanning vault for stale citekeys\u2026", 0);
     let plan;
     try {
       plan = await this.bibManager.findCitekeyUsagesInVault(renameMap);
@@ -96648,7 +98818,7 @@ var ReferenceList = class extends import_obsidian28.Plugin {
       progress.hide();
     }
     if (!plan.size) {
-      new import_obsidian28.Notice("No stale citekeys found in vault notes.");
+      new import_obsidian30.Notice("No stale citekeys found in vault notes.");
       return;
     }
     new CitekeyRenameModal(this.app, plan, async (includeLitNotes) => {
@@ -96662,14 +98832,14 @@ var ReferenceList = class extends import_obsidian28.Plugin {
 Renamed ${renamed.length} literature note${renamed.length !== 1 ? "s" : ""}: ` + renamed.map((r3) => `${r3.from.split("/").pop()} \u2192 ${r3.to.split("/").pop()}`).join(", ");
         }
       }
-      new import_obsidian28.Notice(msg, 6e3);
+      new import_obsidian30.Notice(msg, 6e3);
     }).open();
   }
   async showUnresolvedCitekeyDialog(file) {
     var _a;
     const fileCache = this.bibManager.fileCache.get(file);
     if (!fileCache || !fileCache.unresolvedKeys.size) {
-      new import_obsidian28.Notice("No unresolved citations in the current note.");
+      new import_obsidian30.Notice("No unresolved citations in the current note.");
       return;
     }
     const history = (_a = this.settings.citekeyRenameHistory) != null ? _a : {};
@@ -96690,11 +98860,11 @@ Renamed ${renamed.length} literature note${renamed.length !== 1 ? "s" : ""}: ` +
     }
     new CitekeyRenameModal(this.app, plan, async (_includeLitNotes) => {
       await this.bibManager.applyRenames(plan);
-      new import_obsidian28.Notice(`Updated stale citekeys in current note.`);
+      new import_obsidian30.Notice(`Updated stale citekeys in current note.`);
     }, false, trulyUnresolved).open();
   }
 };
-var BibSnapshotModal = class extends import_obsidian28.Modal {
+var BibSnapshotModal = class extends import_obsidian30.Modal {
   constructor(app2, plugin, file, entries) {
     super(app2);
     this.plugin = plugin;
@@ -96710,7 +98880,7 @@ var BibSnapshotModal = class extends import_obsidian28.Modal {
     });
     const folder = (_b = (_a = this.file.parent) == null ? void 0 : _a.path) != null ? _b : "";
     const stem = this.file.basename;
-    const defaultPath = (0, import_obsidian28.normalizePath)((folder ? folder + "/" : "") + stem + "-bibliography.bib");
+    const defaultPath = (0, import_obsidian30.normalizePath)((folder ? folder + "/" : "") + stem + "-bibliography.bib");
     const inputWrap = contentEl.createDiv({ cls: "sw-snapshot-input-wrap" });
     inputWrap.createEl("label", { text: t("Save as") });
     const input = inputWrap.createEl("input", {
@@ -96745,7 +98915,7 @@ var BibSnapshotModal = class extends import_obsidian28.Modal {
     var _a, _b;
     if (!rawPath)
       return;
-    const savePath = (0, import_obsidian28.normalizePath)(rawPath);
+    const savePath = (0, import_obsidian30.normalizePath)(rawPath);
     try {
       const dir = savePath.includes("/") ? savePath.substring(0, savePath.lastIndexOf("/")) : "";
       if (dir && !await this.app.vault.adapter.exists(dir)) {
@@ -96753,7 +98923,7 @@ var BibSnapshotModal = class extends import_obsidian28.Modal {
       }
       await this.app.vault.adapter.write(savePath, cslToBibTeX(this.entries));
       const noteDir = (_b = (_a = this.file.parent) == null ? void 0 : _a.path) != null ? _b : "";
-      const relPath = noteDir ? (0, import_obsidian28.normalizePath)(savePath).replace((0, import_obsidian28.normalizePath)(noteDir) + "/", "") : savePath;
+      const relPath = noteDir ? (0, import_obsidian30.normalizePath)(savePath).replace((0, import_obsidian30.normalizePath)(noteDir) + "/", "") : savePath;
       await this.app.fileManager.processFrontMatter(this.file, (fm) => {
         const existing = Array.isArray(fm.bibliography) ? fm.bibliography : fm.bibliography ? [fm.bibliography] : [];
         if (!existing.includes(relPath) && !existing.includes(savePath)) {
@@ -96761,11 +98931,11 @@ var BibSnapshotModal = class extends import_obsidian28.Modal {
         }
         fm.bibliography = existing.length === 1 ? existing[0] : existing;
       });
-      new import_obsidian28.Notice(`Bibliography saved to ${savePath}`);
+      new import_obsidian30.Notice(`Bibliography saved to ${savePath}`);
       this.plugin.bibManager.reinit(true);
       this.close();
     } catch (e3) {
-      new import_obsidian28.Notice(`Failed to save bibliography: ${e3.message}`);
+      new import_obsidian30.Notice(`Failed to save bibliography: ${e3.message}`);
     }
   }
   onClose() {

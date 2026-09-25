@@ -56,6 +56,15 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
   createNotesWithZotLit: true,
+  /**
+   * When true, literature notes are rendered with ScholarWeft's own bundled
+   * single-file template (`sw-note-templates/sw-note.eta.md`) instead of
+   * ZotLit's. Re-importing refreshes only the managed frontmatter fields and
+   * the `%%sw-managed%%` region. Off by default while it is being proven.
+   */
+  useOwnNoteTemplate: false,
+  /** Heading level a child note's top heading is shifted to when inlined (default 3). */
+  ownNoteNotesHeadingLevel: 3,
   /** Auto-insert an item's Zotero child notes into a literature note when it is
    *  created (by ScholarWeft or by ZotLit). See the settings interface. */
   insertZoteroNotesOnCreate: true,
@@ -184,6 +193,14 @@ export interface ReferenceListSettings {
    * plugin's own basic template is used instead.
    */
   createNotesWithZotLit?: boolean;
+  /**
+   * When true, literature notes are rendered with ScholarWeft's own bundled
+   * single-file template instead of ZotLit's, and re-importing refreshes the
+   * managed frontmatter fields + `%%sw-managed%%` region. Off by default.
+   */
+  useOwnNoteTemplate?: boolean;
+  /** Heading level a child note's top heading is shifted to when inlined (default 3). */
+  ownNoteNotesHeadingLevel?: number;
   /**
    * When true, a newly created literature note gets the item's Zotero child
    * notes inserted automatically (into its managed "## Notes" section), so it
@@ -971,6 +988,44 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       ['zotero', 'zotlit'],
       t('Creating literature notes needs Zotero for citekey and metadata lookup; ZotLit is optional and adds richer templates.')
     );
+
+    const useOwn = this.plugin.settings.useOwnNoteTemplate === true;
+
+    new Setting(containerEl)
+      .setName(t("Use ScholarWeft's own note template"))
+      .setDesc(
+        t(
+          "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven."
+        )
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(useOwn).onChange((value) => {
+          this.plugin.settings.useOwnNoteTemplate = value;
+          this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (useOwn) {
+      new Setting(containerEl)
+        .setName(t('Child-note heading level'))
+        .setDesc(
+          t(
+            'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.'
+          )
+        )
+        .addSlider((slider) =>
+          slider
+            .setLimits(1, 6, 1)
+            .setValue(this.plugin.settings.ownNoteNotesHeadingLevel ?? 3)
+            .setDynamicTooltip()
+            .onChange((value) => {
+              this.plugin.settings.ownNoteNotesHeadingLevel = value;
+              this.plugin.saveSettings();
+            })
+        );
+      return;
+    }
 
     const useZotlitFolder = !!this.plugin.settings.useZotlitLiteratureFolder;
     const zotlitFolder = getZotlitLiteratureFolder(this.app);

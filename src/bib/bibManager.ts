@@ -36,6 +36,7 @@ import {
 } from 'src/zotlit';
 import { cite } from 'src/parser/citeproc';
 import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
+import { createOrUpdateOwnNote } from 'src/noteImport';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
@@ -2385,8 +2386,22 @@ export class BibManager {
     editor.focus();
   }
 
-  async createLiteratureNote(citekey: string, sourceFile: TFile) {
+  async createLiteratureNote(
+    citekey: string,
+    sourceFile: TFile,
+    opts: { open?: boolean } = {}
+  ) {
     const entry = this.bibCache.get(citekey) as any;
+
+    // Our own single-file template path, when the user selected it. Falls
+    // through to the ZotLit/basic paths only if the template asset is missing.
+    if (this.plugin.settings.useOwnNoteTemplate === true) {
+      const ok = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
+        open: opts.open !== false,
+      });
+      if (ok) return;
+      console.warn('[sw:import] own note template unavailable; using the fallback path');
+    }
 
     // Route to ZotLit when the user enabled it and ZotLit is available, so the
     // note is rendered with ZotLit's templates. ZotLit's note feature takes an
@@ -3090,7 +3105,7 @@ export class BibManager {
       if (sourceFile) {
         for (const key of missing) {
           if (getLitNoteForCitekey(key, sourcePath, app)) continue;
-          await this.createLiteratureNote(key, sourceFile);
+          await this.createLiteratureNote(key, sourceFile, { open: false });
           created++;
           onProgress?.(created, missing.length);
           await new Promise((r) => setTimeout(r, 250));
@@ -3103,7 +3118,10 @@ export class BibManager {
     // fall through to per-note creation (which itself falls back to the
     // plugin's own template when ZotLit can't create a given item).
     let created = 0;
-    if (this.plugin.settings.createNotesWithZotLit !== false) {
+    if (
+      this.plugin.settings.createNotesWithZotLit !== false &&
+      this.plugin.settings.useOwnNoteTemplate !== true
+    ) {
       created = await createLitNotesViaZotLitBulk(app, refs, onProgress);
       if (created >= refs.length) {
         // ZotLit created them all. Fold in each note's Zotero child notes here
@@ -3126,7 +3144,7 @@ export class BibManager {
     for (const key of missing) {
       if (!sourceFile) break;
       if (getLitNoteForCitekey(key, sourcePath, app)) continue;
-      await this.createLiteratureNote(key, sourceFile);
+      await this.createLiteratureNote(key, sourceFile, { open: false });
       created++;
       onProgress?.(created, total);
       await new Promise((r) => setTimeout(r, 250));

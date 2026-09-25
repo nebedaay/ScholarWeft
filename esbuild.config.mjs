@@ -165,7 +165,11 @@ const options = {
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtins],
+		...builtins,
+		// `node:`-prefixed builtins (eta's ESM build imports `node:fs`/`node:path`).
+		// Externalised so they resolve to Electron's own modules, not the bundle.
+		...builtins.map((m) => `node:${m}`),
+	],
 	format: "cjs",
 	target: "es2018",
 	logLevel: "info",
