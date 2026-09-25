@@ -159,6 +159,27 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   }
   if (data.dateAdded) csl._dateAdded = data.dateAdded;
 
+  // Ordered creators with Zotero's OWN `creatorType`, retained because the CSL
+  // role grouping above is lossy for templates: it collapses two pairs
+  // (`interviewee`→author, `castMember`→performer) and loses the cross-role
+  // order Zotero shows. Better BibTeX never provides this, so the context
+  // builder falls back to the CSL groups when `_creators` is absent.
+  if (data.creators?.length) {
+    const creators = data.creators
+      .filter((c: any) => c && typeof c === 'object')
+      .map((c: any) => {
+        const out: any = { role: c.creatorType || 'author' };
+        if (c.name) out.literal = c.name;
+        else {
+          if (c.lastName) out.family = c.lastName;
+          if (c.firstName) out.given = c.firstName;
+        }
+        return out;
+      })
+      .filter((c: any) => c.literal || c.family || c.given);
+    if (creators.length) csl._creators = creators;
+  }
+
   // Internal metadata — not CSL fields.
   if (data.dateModified) csl._dateModified = data.dateModified;
   // item.key is the 8-char Zotero item key (top-level, not inside data).

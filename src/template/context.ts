@@ -27,6 +27,14 @@ import type { ItemExtra } from '../bib/extra';
 import { ZOTERO_TYPE_TO_CSL } from '../bib/zotero-csl';
 import { htmlToMarkdownText } from './markdown';
 
+/** A creator as retained from the native Zotero API (`_creators`). */
+export interface CachedCreator {
+  role: string;
+  family?: string;
+  given?: string;
+  literal?: string;
+}
+
 /** A cached CSL entry: the CSL fields plus the internal fields we retain. */
 export interface CachedEntry extends PartialCSLEntry {
   /** Zotero's free-text `extra` field, kept verbatim. */
@@ -35,6 +43,11 @@ export interface CachedEntry extends PartialCSLEntry {
   _tags?: string[];
   /** ISO timestamp of when Zotero added the item. */
   _dateAdded?: string;
+  /**
+   * Ordered creators with Zotero's own `creatorType` role, retained on the
+   * native path. Absent for BBT entries, whose CSL role groups are used instead.
+   */
+  _creators?: CachedCreator[];
   /** Zotero item key (`EKUBHHNW`). */
   _zoteroKey?: string;
   /** CSL fields we read by name; not all are in `PartialCSLEntry`. */
@@ -346,8 +359,18 @@ function toCreator(name: CSLName, role: string): NoteContextCreator {
   return { family, given, literal, role, fullName };
 }
 
-/** Every creator on the entry, grouped by CSL role and flattened. */
+/** Every creator on the entry. Prefers native `_creators` for exact roles. */
 export function entryCreators(entry: CachedEntry): NoteContextCreator[] {
+  // Native path: Zotero's own order and creatorType are authoritative.
+  const native = entry._creators;
+  if (Array.isArray(native) && native.length) {
+    return native
+      .filter((c): c is CachedCreator => !!c && typeof c === 'object')
+      .map((c) =>
+        toCreator(c as CSLName, typeof c.role === 'string' && c.role ? c.role : 'author')
+      );
+  }
+
   const out: NoteContextCreator[] = [];
   const seen = new Set<string>();
   const emit = (roleKey: string) => {

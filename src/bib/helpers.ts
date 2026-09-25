@@ -583,6 +583,28 @@ export async function getZBibNative(
   return { list: applyGroupID(cslItems, groupId), version };
 }
 
+/** CSL creator-list keys, used to detect a cache that predates `_creators`. */
+const CSL_CREATOR_KEYS = [
+  'author',
+  'editor',
+  'translator',
+  'contributor',
+  'container-author',
+  'collection-editor',
+  'director',
+  'interviewer',
+  'composer',
+  'producer',
+  'script-writer',
+  'reviewed-author',
+  'performer',
+  'lyricist',
+  'recipient',
+  'witness',
+  'illustrator',
+  'editorial-director',
+];
+
 export async function refreshZBibNative(
   port: string = DEFAULT_ZOTERO_PORT,
   _cacheDir: string,
@@ -596,13 +618,21 @@ export async function refreshZBibNative(
 
   // One-time migration: caches written before per-item `_version` tracking
   // have no versions on most entries, so per-key render-cache invalidation
-  // can't work. Force a full re-fetch (since=0) so every entry gets its
-  // version written back. Cheap enough to run once; skipped once migrated.
+  // can't work. The same pass backfills `_creators` (ordered creators with
+  // Zotero's own creatorType), which older caches lack. Force a full re-fetch
+  // (since=0) so every entry gets both written back; skipped once migrated.
   const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
   const list0 = cacheData.items as CSLList;
   let versionedCount = 0;
-  for (const it of list0) if (it._version != null) versionedCount++;
-  if (list0.length && versionedCount < list0.length) {
+  let creatorsMissing = false;
+  for (const it of list0) {
+    if (it._version != null) versionedCount++;
+    const hasCreators =
+      !Array.isArray((it as any)._creators) &&
+      CSL_CREATOR_KEYS.some((k) => Array.isArray((it as any)[k]) && (it as any)[k].length);
+    if (hasCreators) creatorsMissing = true;
+  }
+  if (list0.length && (versionedCount < list0.length || creatorsMissing)) {
     sinceVersion = 0;
   }
 

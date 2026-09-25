@@ -67726,7 +67726,7 @@ var CREATOR_TYPE_TO_CSL_ROLE = {
   castMember: "performer"
 };
 function zoteroItemToCSL(item, groupId) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
   const data = item.data;
   if (!(data == null ? void 0 : data.citationKey))
     return null;
@@ -67822,6 +67822,22 @@ function zoteroItemToCSL(item, groupId) {
   }
   if (data.dateAdded)
     csl._dateAdded = data.dateAdded;
+  if ((_k = data.creators) == null ? void 0 : _k.length) {
+    const creators = data.creators.filter((c3) => c3 && typeof c3 === "object").map((c3) => {
+      const out = { role: c3.creatorType || "author" };
+      if (c3.name)
+        out.literal = c3.name;
+      else {
+        if (c3.lastName)
+          out.family = c3.lastName;
+        if (c3.firstName)
+          out.given = c3.firstName;
+      }
+      return out;
+    }).filter((c3) => c3.literal || c3.family || c3.given);
+    if (creators.length)
+      csl._creators = creators;
+  }
   if (data.dateModified)
     csl._dateModified = data.dateModified;
   if (item.key)
@@ -68216,6 +68232,26 @@ async function getZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, loa
   await app.vault.adapter.write(cachePath, JSON.stringify({ items: cslItems, version }));
   return { list: applyGroupID(cslItems, groupId), version };
 }
+var CSL_CREATOR_KEYS = [
+  "author",
+  "editor",
+  "translator",
+  "contributor",
+  "container-author",
+  "collection-editor",
+  "director",
+  "interviewer",
+  "composer",
+  "producer",
+  "script-writer",
+  "reviewed-author",
+  "performer",
+  "lyricist",
+  "recipient",
+  "witness",
+  "illustrator",
+  "editorial-director"
+];
 async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, sinceVersion) {
   if (!await isZoteroRunningNative(port))
     return null;
@@ -68225,10 +68261,15 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
   const list0 = cacheData.items;
   let versionedCount = 0;
-  for (const it of list0)
+  let creatorsMissing = false;
+  for (const it of list0) {
     if (it._version != null)
       versionedCount++;
-  if (list0.length && versionedCount < list0.length) {
+    const hasCreators = !Array.isArray(it._creators) && CSL_CREATOR_KEYS.some((k4) => Array.isArray(it[k4]) && it[k4].length);
+    if (hasCreators)
+      creatorsMissing = true;
+  }
+  if (list0.length && (versionedCount < list0.length || creatorsMissing)) {
     sinceVersion = 0;
   }
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
@@ -91079,6 +91120,10 @@ function toCreator(name, role) {
   return { family, given, literal, role, fullName };
 }
 function entryCreators(entry) {
+  const native = entry._creators;
+  if (Array.isArray(native) && native.length) {
+    return native.filter((c3) => !!c3 && typeof c3 === "object").map((c3) => toCreator(c3, typeof c3.role === "string" && c3.role ? c3.role : "author"));
+  }
   const out = [];
   const seen = new Set();
   const emit = (roleKey) => {
