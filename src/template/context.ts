@@ -134,6 +134,8 @@ export interface NoteContextAnnotation {
   isExternal: boolean;
   dateAdded: string;
   dateModified: string;
+  /** Zotero's PDF reading-order key (`annotationSortIndex`). */
+  sortIndex: string | null;
   tags: NoteContextTag[];
 }
 

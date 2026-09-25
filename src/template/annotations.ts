@@ -1,0 +1,105 @@
+// Annotation post-processing for the note context.
+//
+// Two transformations, both ported from the user's `zotlit-content.eta.md` so
+// our own template and the ZotLit-compatible set produce identical regions:
+//
+//  1. ORDER — ZotLit (and Zotero's reader) show annotations in PDF reading
+//     order (`annotationSortIndex`), but the local API returns them in
+//     date-added order, which looked reversed.
+//  2. "+" CONTINUATIONS — an annotation whose comment begins with "+" is a
+//     continuation of the PREVIOUS annotation on the same attachment: its text
+//     is appended after " ... " (chaining across several "+" annotations), page
+//     labels become a range, tags union, and the marker itself is stripped. A
+//     "+" that cannot merge (different attachment, or no text — e.g. an image
+//     annotation) is still emitted, just without the marker.
+
+import type { NoteContextAnnotation, NoteContextTag } from './context';
+
+/** Leading plus, with any spaces after it. */
+const CONTINUATION = /^\+\s*/;
+
+export const CONTINUATION_SEPARATOR = ' ... ';
+
+/**
+ * Zotero's own reading order: `annotationSortIndex`, then date added, then key.
+ * Annotations always carry a sort index; the fallbacks only matter for
+ * hand-built contexts.
+ */
+export function sortAnnotations(
+  annotations: NoteContextAnnotation[]
+): NoteContextAnnotation[] {
+  return [...annotations].sort((a, b) => {
+    if (a.sortIndex && b.sortIndex && a.sortIndex !== b.sortIndex) {
+      return a.sortIndex < b.sortIndex ? -1 : 1;
+    }
+    if (a.sortIndex && !b.sortIndex) return -1;
+    if (!a.sortIndex && b.sortIndex) return 1;
+    if (a.dateAdded !== b.dateAdded) return a.dateAdded < b.dateAdded ? -1 : 1;
+    return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+  });
+}
+
+function unionTags(
+  previous: NoteContextTag[] | undefined,
+  extra: NoteContextTag[]
+): NoteContextTag[] {
+  const seen = new Set((previous ?? []).map((t) => t.name));
+  return [...(previous ?? []), ...extra.filter((t) => !seen.has(t.name))];
+}
+
+/** Fold "+"-continuation annotations into the annotation they continue. */
+export function mergeContinuationAnnotations(
+  annotations: NoteContextAnnotation[],
+  separator: string = CONTINUATION_SEPARATOR
+): NoteContextAnnotation[] {
+  const merged: NoteContextAnnotation[] = [];
+  let previous: NoteContextAnnotation | null = null;
+
+  for (const original of annotations) {
+    const a: NoteContextAnnotation = { ...original };
+    const isContinuation =
+      typeof a.comment === 'string' && CONTINUATION.test(a.comment);
+
+    if (
+      isContinuation &&
+      previous &&
+      a.parentAttachment?.key === previous.parentAttachment?.key &&
+      a.text
+    ) {
+      a.comment = a.comment.replace(CONTINUATION, '');
+      const text = [previous.text?.trim(), a.text.trim()]
+        .filter(Boolean)
+        .join(separator);
+      previous.text = text || null;
+      const comment = [previous.comment, a.comment]
+        .filter((c) => c && c.trim())
+        .join(separator);
+      previous.comment = comment || null;
+      if (
+        a.pageLabel &&
+        previous.pageLabel &&
+        previous.pageLabel !== a.pageLabel
+      ) {
+        previous.pageLabel = `${previous.pageLabel.split('–')[0]}–${a.pageLabel}`;
+      }
+      if (a.tags?.length) {
+        previous.tags = unionTags(previous.tags, a.tags);
+      }
+      continue;
+    }
+
+    // A lone "+" never reaches the output — even when it cannot merge.
+    if (isContinuation) a.comment = a.comment.replace(CONTINUATION, '') || null;
+    merged.push(a);
+    previous = a;
+  }
+
+  return merged;
+}
+
+/** Sort into reading order, then fold continuations. */
+export function processAnnotations(
+  annotations: NoteContextAnnotation[]
+): NoteContextAnnotation[] {
+  return mergeContinuationAnnotations(sortAnnotations(annotations));
+}

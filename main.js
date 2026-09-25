@@ -89097,6 +89097,59 @@ var import_obsidian21 = __toModule(require("obsidian"));
 // src/noteImport.ts
 var import_obsidian20 = __toModule(require("obsidian"));
 
+// src/template/annotations.ts
+var CONTINUATION = /^\+\s*/;
+var CONTINUATION_SEPARATOR = " ... ";
+function sortAnnotations(annotations) {
+  return [...annotations].sort((a3, b3) => {
+    if (a3.sortIndex && b3.sortIndex && a3.sortIndex !== b3.sortIndex) {
+      return a3.sortIndex < b3.sortIndex ? -1 : 1;
+    }
+    if (a3.sortIndex && !b3.sortIndex)
+      return -1;
+    if (!a3.sortIndex && b3.sortIndex)
+      return 1;
+    if (a3.dateAdded !== b3.dateAdded)
+      return a3.dateAdded < b3.dateAdded ? -1 : 1;
+    return a3.key < b3.key ? -1 : a3.key > b3.key ? 1 : 0;
+  });
+}
+function unionTags(previous, extra) {
+  const seen = new Set((previous != null ? previous : []).map((t4) => t4.name));
+  return [...previous != null ? previous : [], ...extra.filter((t4) => !seen.has(t4.name))];
+}
+function mergeContinuationAnnotations(annotations, separator = CONTINUATION_SEPARATOR) {
+  var _a, _b, _c, _d;
+  const merged2 = [];
+  let previous = null;
+  for (const original of annotations) {
+    const a3 = { ...original };
+    const isContinuation = typeof a3.comment === "string" && CONTINUATION.test(a3.comment);
+    if (isContinuation && previous && ((_a = a3.parentAttachment) == null ? void 0 : _a.key) === ((_b = previous.parentAttachment) == null ? void 0 : _b.key) && a3.text) {
+      a3.comment = a3.comment.replace(CONTINUATION, "");
+      const text = [(_c = previous.text) == null ? void 0 : _c.trim(), a3.text.trim()].filter(Boolean).join(separator);
+      previous.text = text || null;
+      const comment = [previous.comment, a3.comment].filter((c3) => c3 && c3.trim()).join(separator);
+      previous.comment = comment || null;
+      if (a3.pageLabel && previous.pageLabel && previous.pageLabel !== a3.pageLabel) {
+        previous.pageLabel = `${previous.pageLabel.split("\u2013")[0]}\u2013${a3.pageLabel}`;
+      }
+      if ((_d = a3.tags) == null ? void 0 : _d.length) {
+        previous.tags = unionTags(previous.tags, a3.tags);
+      }
+      continue;
+    }
+    if (isContinuation)
+      a3.comment = a3.comment.replace(CONTINUATION, "") || null;
+    merged2.push(a3);
+    previous = a3;
+  }
+  return merged2;
+}
+function processAnnotations(annotations) {
+  return mergeContinuationAnnotations(sortAnnotations(annotations));
+}
+
 // src/template/color.ts
 var ANNOTATION_COLOR_NAMES = {
   "#FFD400": "yellow",
@@ -89812,6 +89865,7 @@ function mapAnnotation(raw, parentItem, parentAttachment, opts = {}) {
     isExternal: data.annotationIsExternal === true,
     dateAdded: (_e = str2(data.dateAdded)) != null ? _e : "",
     dateModified: (_f = str2(data.dateModified)) != null ? _f : "",
+    sortIndex: str2(data.annotationSortIndex),
     tags: mapTags(data.tags)
   };
 }
@@ -89845,7 +89899,7 @@ function applyChildren(ctx, raw, opts = {}) {
   });
   const notes = ((_c = raw.notes) != null ? _c : []).map((r3) => mapNote(r3, resolved));
   ctx.attachments = attachments;
-  ctx.annotations = annotations;
+  ctx.annotations = processAnnotations(annotations);
   ctx.notes = notes;
   return ctx;
 }

@@ -16,6 +16,7 @@
 // notes as links only, while {@link NoteContextNote.text} carries the note's
 // Markdown, which is what removes the separate "insert Zotero notes" step.
 
+import { processAnnotations } from './annotations';
 import { annotationColorToName } from './color';
 import {
   backlinkFor,
@@ -339,6 +340,7 @@ export function mapAnnotation(
     isExternal: data.annotationIsExternal === true,
     dateAdded: str(data.dateAdded) ?? '',
     dateModified: str(data.dateModified) ?? '',
+    sortIndex: str(data.annotationSortIndex),
     tags: mapTags(data.tags),
   };
 }
@@ -399,7 +401,7 @@ export function applyChildren(
   const notes = (raw.notes ?? []).map((r) => mapNote(r, resolved));
 
   ctx.attachments = attachments;
-  ctx.annotations = annotations;
+  ctx.annotations = processAnnotations(annotations);
   ctx.notes = notes;
   return ctx;
 }
