@@ -90,9 +90,10 @@ export function normalizeHeadingLevels(html: string, topLevel: number): string {
 
 /**
  * Convert one of Zotero's HTML-capable text fields (title, abstract, `extra`…)
- * to Markdown WITHOUT escaping — for frontmatter, where property values
- * legitimately contain `[[wikilinks]]` and where `[` / `<` display fine. The
- * HTML parser also resolves entities to their unicode characters.
+ * to Markdown WITHOUT escaping. The destination is unknown here — a template may
+ * put the value in frontmatter (where `[[wikilinks]]` are intentional) or in the
+ * body (where it should be wrapped with `escape_md`). The HTML parser also
+ * resolves entities to their unicode characters, so none are emitted verbatim.
  */
 export function htmlToMarkdownText(html: string | null | undefined): string {
   if (!html || !html.trim()) return '';

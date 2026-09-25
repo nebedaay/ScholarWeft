@@ -21,6 +21,12 @@ import type { EtaConfig } from 'eta';
 import { Liquid } from 'liquidjs';
 
 import { formatBlockquote } from './blockquote';
+import {
+  basename,
+  coerceOutput,
+  embed,
+  filenameSuffix,
+} from './zotlit-helpers';
 
 /**
  * Variable name our note templates read their data from.
@@ -36,15 +42,45 @@ export const TEMPLATE_DATA_ROOT = 'item';
 export const ZOTLIT_TEMPLATE_DATA_ROOT = 'zt';
 
 /**
- * ZotLit overrides Eta's `include` so that an explicit second argument REPLACES
- * the data root instead of merging into it.
+ * ZotLit overrides Eta's `include`/`includeAsync` so an explicit second argument
+ * REPLACES the data root instead of merging into it (eta-4 spreads the parent
+ * data, which breaks v1 templates that pass arrays through `include`).
+ *
+ * Both helpers are rewritten: eta emits both into every compiled template, so
+ * leaving the async one raw would silently reintroduce the spread bug on any
+ * `renderAsync` path. A missing pattern means eta's codegen changed — fail loud
+ * rather than no-op.
  */
+function replaceOnce(
+  source: string,
+  needle: string,
+  replacement: string,
+  label: string
+): string {
+  const at = source.indexOf(needle);
+  if (at === -1) {
+    throw new Error(
+      `[sw template] eta codegen changed (no ${label} helper); update includeDataPlugin`
+    );
+  }
+  return source.slice(0, at) + replacement + source.slice(at + needle.length);
+}
+
 const includeDataPlugin: NonNullable<EtaConfig['plugins']>[number] = {
   processFnString(fnString, config) {
     const varName = config?.varName ?? 'it';
-    return fnString.replace(
-      `let include = (__eta_t, __eta_d) => this.render(__eta_t, {...${varName}, ...(__eta_d ?? {})}, options);`,
-      `let include = (__eta_t, __eta_d) => this.render(__eta_t, __eta_d ?? ${varName}, options);`
+    const spread = `{...${varName}, ...(__eta_d ?? {})}`;
+    const out = replaceOnce(
+      fnString,
+      `let include = (__eta_t, __eta_d) => this.render(__eta_t, ${spread}, options);`,
+      `let include = (__eta_t, __eta_d) => this.render(__eta_t, __eta_d ?? ${varName}, options);`,
+      'include'
+    );
+    return replaceOnce(
+      out,
+      `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, ${spread}, options);`,
+      `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, __eta_d ?? ${varName}, options);`,
+      'includeAsync'
     );
   },
 };
@@ -52,13 +88,22 @@ const includeDataPlugin: NonNullable<EtaConfig['plugins']>[number] = {
 /**
  * Eta engine with the template helpers attached.
  *
+ * Mirrors ZotLit's `TemplateEngine` (`packages/templates/src/index.ts`,
+ * AGPL-3.0 — see NOTICE.md) so a template written for ZotLit renders the same
+ * with only `zt` → our data root changed: the same `functionHeader` globals
+ * (`bq`/`basename`/`suffix`/`embed`), the `coerceOutput` filter, and the
+ * include-data override.
+ *
  * The helpers must live on the INSTANCE: the injected `functionHeader` calls
- * `this.bqHelper(...)`, so a plain `Eta` (or a `configure()` afterwards) throws
- * "this.bqHelper is not a function". Same shape as ZotLit's `TemplateEngine`.
+ * `this.bqHelper(...)` etc., so a plain `Eta` (or a `configure()` afterwards)
+ * throws "this.bqHelper is not a function".
  */
 export class NoteTemplateEngine extends Eta {
   /** `bq` wraps captured output in callout-safe blockquote prefixes. */
   readonly bqHelper = formatBlockquote;
+  readonly basenameHelper = basename;
+  readonly suffixHelper = filenameSuffix;
+  readonly embedHelper = embed;
 
   constructor(dataRoot: string = TEMPLATE_DATA_ROOT) {
     super({
@@ -67,7 +112,12 @@ export class NoteTemplateEngine extends Eta {
       autoTrim: [true, true],
       autoEscape: false,
       autoFilter: true,
-      functionHeader: 'const bq = (fn) => output(this.bqHelper(capture(fn)));',
+      filterFunction: coerceOutput,
+      functionHeader:
+        'const bq = (fn) => output(this.bqHelper(capture(fn))); ' +
+        'const basename = this.basenameHelper; ' +
+        'const suffix = this.suffixHelper; ' +
+        'const embed = this.embedHelper;',
       plugins: [includeDataPlugin],
     } as unknown as EtaConfig);
   }

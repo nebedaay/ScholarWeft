@@ -494,9 +494,11 @@ function str(v: unknown): string | null {
 
 /**
  * A field Zotero can store HTML in (title, short title, abstract), converted to
- * Markdown — italics survive into the frontmatter and, on export, into the
- * document. NOT escaped: these land in frontmatter, whose values may contain
- * intentional `[[wikilinks]]`; escaping is body-only.
+ * Markdown so italics etc. survive wherever a template puts it. Deliberately NOT
+ * escaped: a template may place the value in frontmatter (where it can hold
+ * intentional `[[wikilinks]]`) or in the body (where it should be wrapped with
+ * the `escape_md` helper). Escaping is a destination decision, not a field one,
+ * so the context never assumes where the value is used.
  */
 function mdField(v: unknown): string | null {
   const s = str(v);
