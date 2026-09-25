@@ -23,13 +23,17 @@ import { Liquid } from 'liquidjs';
 import { formatBlockquote } from './blockquote';
 
 /**
- * Variable name the bundled templates read their data from.
+ * Variable name our note templates read their data from.
  *
- * ZotLit's templates expect `zt`; that is why it appears here at all. Authoring
- * our own templates would let this be renamed — it is a one-line change, not a
- * constraint of the renderer.
+ * Our own templates (`sw-note-templates/`) use `item.…`. The ZotLit-compatible
+ * set (`sw-zotlit-templates/`, rendered by ZotLit itself) uses `zt`, so the root
+ * is a parameter of the render, not a fixed constant — callers pass whichever
+ * their template set expects.
  */
-export const TEMPLATE_DATA_ROOT = 'zt';
+export const TEMPLATE_DATA_ROOT = 'item';
+
+/** Data root used by the ZotLit-compatible templates ZotLit renders. */
+export const ZOTLIT_TEMPLATE_DATA_ROOT = 'zt';
 
 /**
  * ZotLit overrides Eta's `include` so that an explicit second argument REPLACES
@@ -45,18 +49,32 @@ const includeDataPlugin: NonNullable<EtaConfig['plugins']>[number] = {
   },
 };
 
-export function makeEta(): Eta {
-  return new Eta({
-    cache: true,
-    varName: TEMPLATE_DATA_ROOT,
-    autoTrim: [true, true],
-    autoEscape: false,
-    autoFilter: true,
-    // `bq` wraps captured output in callout-safe blockquote prefixes.
-    functionHeader:
-      'const bq = (fn) => output(this.bqHelper(capture(fn)));',
-    plugins: [includeDataPlugin],
-  } as unknown as EtaConfig);
+/**
+ * Eta engine with the template helpers attached.
+ *
+ * The helpers must live on the INSTANCE: the injected `functionHeader` calls
+ * `this.bqHelper(...)`, so a plain `Eta` (or a `configure()` afterwards) throws
+ * "this.bqHelper is not a function". Same shape as ZotLit's `TemplateEngine`.
+ */
+export class NoteTemplateEngine extends Eta {
+  /** `bq` wraps captured output in callout-safe blockquote prefixes. */
+  readonly bqHelper = formatBlockquote;
+
+  constructor(dataRoot: string = TEMPLATE_DATA_ROOT) {
+    super({
+      cache: true,
+      varName: dataRoot,
+      autoTrim: [true, true],
+      autoEscape: false,
+      autoFilter: true,
+      functionHeader: 'const bq = (fn) => output(this.bqHelper(capture(fn)));',
+      plugins: [includeDataPlugin],
+    } as unknown as EtaConfig);
+  }
+}
+
+export function makeEta(dataRoot: string = TEMPLATE_DATA_ROOT): NoteTemplateEngine {
+  return new NoteTemplateEngine(dataRoot);
 }
 
 /** Liquid renders the filename template (`.liquid.md`). */
