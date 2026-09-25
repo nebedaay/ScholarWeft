@@ -126,6 +126,29 @@ describe('renderAnnotationCallout() — image/ink', () => {
     expect(out).toContain('> [!blue-image-annotation] Blue Image');
     expect(out).toContain('> > - [[image annotations|images]]');
   });
+
+  it('renders "+" media continuations in the same callout, separated by "..."', () => {
+    const continuation = annotation({
+      key: 'B',
+      type: 'image',
+      colorName: 'blue',
+      imgLink: (alias?: string) => (alias ? `[[b.png|${alias}]]` : '[[b.png]]'),
+    });
+    const out = renderAnnotationCallout(
+      annotation({
+        type: 'image',
+        colorName: 'blue',
+        imgLink,
+        continuationMedia: [continuation],
+      })
+    );
+    // Both images sit in one callout, with a `...` line between the blocks.
+    expect(out).toContain('> > ![[img.png]]');
+    expect(out).toContain('> > ![[b.png]]');
+    expect(out).toContain('> ...');
+    // The sub-callout id appears once, not per image.
+    expect(out.match(/\[!ann-image-blue\]/g)).toHaveLength(1);
+  });
 });
 
 describe('renderCallout()', () => {

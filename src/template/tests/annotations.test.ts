@@ -101,10 +101,29 @@ describe('mergeContinuationAnnotations', () => {
     expect(merged[1].comment).toBeNull();
   });
 
-  it('keeps a "+" annotation with no text (e.g. an image) but strips the marker', () => {
+  it('folds a "+" image into the previous image callout as extra media', () => {
+    const img = () => 'file:///x.png';
     const merged = mergeContinuationAnnotations([
-      ann({ key: 'a', type: 'image', text: null }),
-      ann({ key: 'b', type: 'image', text: null, comment: '+' }),
+      ann({ key: 'a', type: 'image', text: null, imgLink: img, pageLabel: '6' }),
+      ann({
+        key: 'b',
+        type: 'image',
+        text: null,
+        imgLink: img,
+        comment: '+',
+        pageLabel: '7',
+      }),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].pageLabel).toBe('6–7');
+    expect(merged[0].continuationMedia).toHaveLength(1);
+    expect(merged[0].continuationMedia?.[0].key).toBe('b');
+  });
+
+  it('keeps a "+" comment-only annotation (no content) but strips the marker', () => {
+    const merged = mergeContinuationAnnotations([
+      ann({ key: 'a', text: 'one' }),
+      ann({ key: 'b', type: 'text', text: null, comment: '+' }),
     ]);
     expect(merged).toHaveLength(2);
     expect(merged[1].comment).toBeNull();

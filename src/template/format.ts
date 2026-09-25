@@ -8,6 +8,7 @@
 // same conversion + `escapeMarkdown` pipeline as every other piece of body
 // content — one escaping rule, no per-callout variants.
 
+import { CONTINUATION_MEDIA_SEPARATOR } from './annotations';
 import { formatBlockquote } from './blockquote';
 import { htmlFieldToMarkdown } from './markdown';
 import type {
@@ -151,6 +152,49 @@ function imgAlias(a: NoteContextAnnotation, alias: string): string | null {
   return typeof a.imgLink === 'function' ? a.imgLink(alias) : null;
 }
 
+/**
+ * The content block for ONE annotation (the `[!ann-…]` sub-callout + its body):
+ * excerpt text, an image/ink embed, or a text-comment body. Continuation media
+ * is rendered by repeating this for each folded annotation.
+ */
+/**
+ * The sub-callout header for the PRIMARY annotation, chosen by its type. `null`
+ * when the type has no content block.
+ */
+function annotationHeader(
+  a: NoteContextAnnotation,
+  colorRaw: string
+): string | null {
+  if ((a.type === 'highlight' || a.type === 'underline') && a.text) {
+    return `> [!ann-${a.type}-text-${colorRaw}]`;
+  }
+  if (a.type === 'image') return `> [!ann-image-${colorRaw}]`;
+  if (a.type === 'ink') return `> [!ann-ink-${colorRaw}]`;
+  if (a.type === 'text' || a.type === 'note') {
+    return `> [!ann-text-${colorRaw}]Text comment—click to view in context:`;
+  }
+  return null;
+}
+
+/**
+ * The body of ONE annotation's content block (no header): excerpt text, an
+ * image/ink embed, or a text-comment body.
+ */
+function annotationBodyLines(a: NoteContextAnnotation): string[] {
+  const lines: string[] = [];
+  if ((a.type === 'highlight' || a.type === 'underline') && a.text) {
+    lines.push(...calloutLines(htmlFieldToMarkdown(a.text)));
+  } else if (a.type === 'image' || a.type === 'ink') {
+    const url = imgUrl(a);
+    if (url) lines.push(`> ${embed(url)}`);
+    const view = imgAlias(a, a.type === 'ink' ? 'view ink image' : 'view image');
+    if (view) lines.push(`> - ${view}`);
+  } else if (a.type === 'text' || a.type === 'note') {
+    if (a.comment) lines.push(...calloutLines(htmlFieldToMarkdown(a.comment)));
+  }
+  return lines;
+}
+
 export interface AnnotationCalloutOptions {
   /** Include the annotation's tags as `[[tag]]` lines. Default true. */
   tags?: boolean;
@@ -187,26 +231,20 @@ export function renderAnnotationCallout(
 
   inner.push('');
 
-  if (a.type === 'highlight' && a.text) {
-    inner.push(`> [!ann-highlight-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a.text)));
-  } else if (a.type === 'underline' && a.text) {
-    inner.push(`> [!ann-underline-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a.text)));
-  } else if (a.type === 'image') {
-    inner.push(`> [!ann-image-${colorRaw}]`);
-    const url = imgUrl(a);
-    if (url) inner.push(`> ${embed(url)}`);
-    const view = imgAlias(a, 'view image');
-    if (view) inner.push(`> - ${view}`);
-    inner.push('> - [[image annotations|images]]');
-  } else if (a.type === 'text' || a.type === 'note') {
-    inner.push(`> [!ann-text-${colorRaw}]Text comment—click to view in context:`);
-    if (a.comment) inner.push(...calloutLines(htmlFieldToMarkdown(a.comment)));
-  } else if (a.type === 'ink') {
-    inner.push(`> [!ann-ink-${colorRaw}]`);
-    const url = imgUrl(a);
-    if (url) inner.push(`> ${embed(url)}`);
-    const view = imgAlias(a, 'view ink image');
-    if (view) inner.push(`> - ${view}`);
+  // The annotation's own content, then any image/ink folded in by "+"
+  // continuations — all inside ONE sub-callout, separated by a "..." line, so
+  // a selection spanning pages reads as a single quote (like merged text).
+  const header = annotationHeader(a, colorRaw);
+  if (header) {
+    const body = annotationBodyLines(a);
+    for (const m of a.continuationMedia ?? []) {
+      body.push(CONTINUATION_MEDIA_SEPARATOR);
+      body.push(...annotationBodyLines(m));
+    }
+    if (a.type === 'image' || a.continuationMedia?.some((m) => m.type === 'image')) {
+      body.push('> - [[image annotations|images]]');
+    }
+    inner.push(header, ...body);
   }
 
   if (includeFooter) {

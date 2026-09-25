@@ -136,6 +136,12 @@ export interface NoteContextAnnotation {
   dateModified: string;
   /** Zotero's PDF reading-order key (`annotationSortIndex`). */
   sortIndex: string | null;
+  /**
+   * Image/ink blocks folded in by "+" continuations, in reading order. They
+   * render as extra content blocks in this annotation's callout, separated by
+   * `" ... "`. Text continuations are joined into `text` instead.
+   */
+  continuationMedia?: NoteContextAnnotation[];
   tags: NoteContextTag[];
 }
 

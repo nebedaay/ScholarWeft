@@ -7,18 +7,24 @@
 //     order (`annotationSortIndex`), but the local API returns them in
 //     date-added order, which looked reversed.
 //  2. "+" CONTINUATIONS — an annotation whose comment begins with "+" is a
-//     continuation of the PREVIOUS annotation on the same attachment: its text
-//     is appended after " ... " (chaining across several "+" annotations), page
-//     labels become a range, tags union, and the marker itself is stripped. A
-//     "+" that cannot merge (different attachment, or no text — e.g. an image
-//     annotation) is still emitted, just without the marker.
+//     continuation of the PREVIOUS annotation on the same attachment. Its
+//     CONTENT is appended after " ... " (chaining across several "+"
+//     annotations): excerpt text joins the previous text, image/ink content is
+//     carried as extra blocks in the same callout, page labels become a range,
+//     tags union, and the marker itself is stripped. A "+" on an annotation
+//     with NO content (a pure comment) is still emitted, just without the
+//     marker — there is nothing to join.
 
 import type { NoteContextAnnotation, NoteContextTag } from './context';
 
 /** Leading plus, with any spaces after it. */
 const CONTINUATION = /^\+\s*/;
 
+/** Joins excerpt text / comments of merged annotations. */
 export const CONTINUATION_SEPARATOR = ' ... ';
+
+/** A standalone line placed between merged media blocks in the callout. */
+export const CONTINUATION_MEDIA_SEPARATOR = '...';
 
 /**
  * Zotero's own reading order: `annotationSortIndex`, then date added, then key.
@@ -47,6 +53,21 @@ function unionTags(
   return [...(previous ?? []), ...extra.filter((t) => !seen.has(t.name))];
 }
 
+function isMedia(a: NoteContextAnnotation): boolean {
+  return a.type === 'image' || a.type === 'ink';
+}
+
+/**
+ * Does this annotation carry content that can join a previous one? Excerpt text
+ * for highlights/underlines, an image for image/ink annotations. A pure comment
+ * (`text`/`note`, or a highlight with no excerpt) has nothing to join.
+ */
+export function hasMergeableContent(a: NoteContextAnnotation): boolean {
+  if ((a.type === 'highlight' || a.type === 'underline') && a.text) return true;
+  if (isMedia(a) && a.imgLink) return true;
+  return false;
+}
+
 /** Fold "+"-continuation annotations into the annotation they continue. */
 export function mergeContinuationAnnotations(
   annotations: NoteContextAnnotation[],
@@ -64,13 +85,20 @@ export function mergeContinuationAnnotations(
       isContinuation &&
       previous &&
       a.parentAttachment?.key === previous.parentAttachment?.key &&
-      a.text
+      hasMergeableContent(a)
     ) {
       a.comment = a.comment.replace(CONTINUATION, '');
-      const text = [previous.text?.trim(), a.text.trim()]
-        .filter(Boolean)
-        .join(separator);
-      previous.text = text || null;
+      // Excerpt text joins the previous annotation's text...
+      if (a.text) {
+        previous.text =
+          [previous.text?.trim(), a.text.trim()]
+            .filter(Boolean)
+            .join(separator) || null;
+      }
+      // ...and image/ink content is carried as an extra block in that callout.
+      if (isMedia(a) && a.imgLink) {
+        previous.continuationMedia = [...(previous.continuationMedia ?? []), a];
+      }
       const comment = [previous.comment, a.comment]
         .filter((c) => c && c.trim())
         .join(separator);

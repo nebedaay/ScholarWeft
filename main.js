@@ -89629,6 +89629,7 @@ function shouldUpdateOwnNote(existing) {
 // src/template/annotations.ts
 var CONTINUATION = /^\+\s*/;
 var CONTINUATION_SEPARATOR = " ... ";
+var CONTINUATION_MEDIA_SEPARATOR = "...";
 function sortAnnotations(annotations) {
   return [...annotations].sort((a3, b3) => {
     if (a3.sortIndex && b3.sortIndex && a3.sortIndex !== b3.sortIndex) {
@@ -89647,23 +89648,37 @@ function unionTags(previous, extra) {
   const seen = new Set((previous != null ? previous : []).map((t4) => t4.name));
   return [...previous != null ? previous : [], ...extra.filter((t4) => !seen.has(t4.name))];
 }
+function isMedia(a3) {
+  return a3.type === "image" || a3.type === "ink";
+}
+function hasMergeableContent(a3) {
+  if ((a3.type === "highlight" || a3.type === "underline") && a3.text)
+    return true;
+  if (isMedia(a3) && a3.imgLink)
+    return true;
+  return false;
+}
 function mergeContinuationAnnotations(annotations, separator = CONTINUATION_SEPARATOR) {
-  var _a, _b, _c, _d;
+  var _a, _b, _c, _d, _e;
   const merged2 = [];
   let previous = null;
   for (const original of annotations) {
     const a3 = { ...original };
     const isContinuation = typeof a3.comment === "string" && CONTINUATION.test(a3.comment);
-    if (isContinuation && previous && ((_a = a3.parentAttachment) == null ? void 0 : _a.key) === ((_b = previous.parentAttachment) == null ? void 0 : _b.key) && a3.text) {
+    if (isContinuation && previous && ((_a = a3.parentAttachment) == null ? void 0 : _a.key) === ((_b = previous.parentAttachment) == null ? void 0 : _b.key) && hasMergeableContent(a3)) {
       a3.comment = a3.comment.replace(CONTINUATION, "");
-      const text = [(_c = previous.text) == null ? void 0 : _c.trim(), a3.text.trim()].filter(Boolean).join(separator);
-      previous.text = text || null;
+      if (a3.text) {
+        previous.text = [(_c = previous.text) == null ? void 0 : _c.trim(), a3.text.trim()].filter(Boolean).join(separator) || null;
+      }
+      if (isMedia(a3) && a3.imgLink) {
+        previous.continuationMedia = [...(_d = previous.continuationMedia) != null ? _d : [], a3];
+      }
       const comment = [previous.comment, a3.comment].filter((c3) => c3 && c3.trim()).join(separator);
       previous.comment = comment || null;
       if (a3.pageLabel && previous.pageLabel && previous.pageLabel !== a3.pageLabel) {
         previous.pageLabel = `${previous.pageLabel.split("\u2013")[0]}\u2013${a3.pageLabel}`;
       }
-      if ((_d = a3.tags) == null ? void 0 : _d.length) {
+      if ((_e = a3.tags) == null ? void 0 : _e.length) {
         previous.tags = unionTags(previous.tags, a3.tags);
       }
       continue;
@@ -90543,8 +90558,38 @@ function imgUrl(a3) {
 function imgAlias(a3, alias) {
   return typeof a3.imgLink === "function" ? a3.imgLink(alias) : null;
 }
+function annotationHeader(a3, colorRaw) {
+  if ((a3.type === "highlight" || a3.type === "underline") && a3.text) {
+    return `> [!ann-${a3.type}-text-${colorRaw}]`;
+  }
+  if (a3.type === "image")
+    return `> [!ann-image-${colorRaw}]`;
+  if (a3.type === "ink")
+    return `> [!ann-ink-${colorRaw}]`;
+  if (a3.type === "text" || a3.type === "note") {
+    return `> [!ann-text-${colorRaw}]Text comment\u2014click to view in context:`;
+  }
+  return null;
+}
+function annotationBodyLines(a3) {
+  const lines = [];
+  if ((a3.type === "highlight" || a3.type === "underline") && a3.text) {
+    lines.push(...calloutLines(htmlFieldToMarkdown(a3.text)));
+  } else if (a3.type === "image" || a3.type === "ink") {
+    const url = imgUrl(a3);
+    if (url)
+      lines.push(`> ${embed(url)}`);
+    const view = imgAlias(a3, a3.type === "ink" ? "view ink image" : "view image");
+    if (view)
+      lines.push(`> - ${view}`);
+  } else if (a3.type === "text" || a3.type === "note") {
+    if (a3.comment)
+      lines.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
+  }
+  return lines;
+}
 function renderAnnotationCallout(a3, opts = {}) {
-  var _a, _b;
+  var _a, _b, _c, _d;
   const includeTags = opts.tags !== false;
   const includeFooter = opts.footer !== false;
   const colorRaw = (_a = a3.colorName) != null ? _a : "yellow";
@@ -90562,31 +90607,17 @@ function renderAnnotationCallout(a3, opts = {}) {
       inner.push(`> - [[${tag.name}]]`);
   }
   inner.push("");
-  if (a3.type === "highlight" && a3.text) {
-    inner.push(`> [!ann-highlight-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
-  } else if (a3.type === "underline" && a3.text) {
-    inner.push(`> [!ann-underline-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
-  } else if (a3.type === "image") {
-    inner.push(`> [!ann-image-${colorRaw}]`);
-    const url = imgUrl(a3);
-    if (url)
-      inner.push(`> ${embed(url)}`);
-    const view = imgAlias(a3, "view image");
-    if (view)
-      inner.push(`> - ${view}`);
-    inner.push("> - [[image annotations|images]]");
-  } else if (a3.type === "text" || a3.type === "note") {
-    inner.push(`> [!ann-text-${colorRaw}]Text comment\u2014click to view in context:`);
-    if (a3.comment)
-      inner.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
-  } else if (a3.type === "ink") {
-    inner.push(`> [!ann-ink-${colorRaw}]`);
-    const url = imgUrl(a3);
-    if (url)
-      inner.push(`> ${embed(url)}`);
-    const view = imgAlias(a3, "view ink image");
-    if (view)
-      inner.push(`> - ${view}`);
+  const header = annotationHeader(a3, colorRaw);
+  if (header) {
+    const body = annotationBodyLines(a3);
+    for (const m3 of (_c = a3.continuationMedia) != null ? _c : []) {
+      body.push(CONTINUATION_MEDIA_SEPARATOR);
+      body.push(...annotationBodyLines(m3));
+    }
+    if (a3.type === "image" || ((_d = a3.continuationMedia) == null ? void 0 : _d.some((m3) => m3.type === "image"))) {
+      body.push("> - [[image annotations|images]]");
+    }
+    inner.push(header, ...body);
   }
   if (includeFooter) {
     inner.push(`- [[${colorCap} annotations|${colorCap}]]`);
