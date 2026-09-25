@@ -91605,7 +91605,7 @@ async function pickZoteroItems(port = DEFAULT_ZOTERO_PORT) {
     throw: false
   });
   if (res.status === 503) {
-    throw new Error("Zotero is already showing a picker or another integration dialog \u2014 try again in a moment.");
+    throw new Error("Zotero is already showing a picker or another integration is using it. Close any open Zotero citation dialog; if none is open, another plugin (for example Zotero Integration) may be holding the picker \u2014 disable it and try again.");
   }
   if (res.status !== 200) {
     throw new Error(`Zotero picker failed (HTTP ${res.status}).`);
@@ -98547,6 +98547,27 @@ var ReferenceList = class extends import_obsidian33.Plugin {
       }
     });
     this.addCommand({
+      id: "update-literature-note",
+      name: t("Update this literature note"),
+      checkCallback: (checking) => {
+        var _a2, _b;
+        const file = this.app.workspace.getActiveFile();
+        const stable = file && ((_b = (_a2 = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a2.frontmatter) == null ? void 0 : _b["zotero-key"]);
+        if (typeof stable !== "string" || !stable)
+          return false;
+        if (!checking)
+          void this.updateActiveLiteratureNote();
+        return true;
+      }
+    });
+    this.addCommand({
+      id: "update-all-literature-notes",
+      name: t("Update all literature notes in the vault"),
+      callback: async () => {
+        await this.updateAllLiteratureNotes();
+      }
+    });
+    this.addCommand({
       id: "insert-bibliography",
       name: t("Insert bibliography at cursor"),
       editorCallback: (editor, view) => {
@@ -99205,7 +99226,7 @@ var ReferenceList = class extends import_obsidian33.Plugin {
     var _a;
     const port = this.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
     if (!await isZoteroRunning(port)) {
-      new import_obsidian33.Notice("Zotero (with Better BibTeX) is not running \u2014 the item picker needs it.");
+      new import_obsidian33.Notice("Zotero\u2019s picker isn\u2019t responding. Make sure Zotero is running with Better BibTeX installed (the picker needs it). If it is, another integration may be holding the picker \u2014 close any open Zotero citation dialog, or disable the other plugin (e.g. Zotero Integration), then try again.", 12e3);
       return;
     }
     const anchor = (_a = this.app.workspace.getActiveFile()) != null ? _a : this.app.vault.getMarkdownFiles()[0];
@@ -99262,6 +99283,85 @@ var ReferenceList = class extends import_obsidian33.Plugin {
       }
     }
     return null;
+  }
+  findCitekeyByStableKey(stable) {
+    var _a;
+    const match2 = /^(.*?)(?:g(\d+))?$/.exec(stable);
+    const key = (_a = match2 == null ? void 0 : match2[1]) != null ? _a : stable;
+    const groupID = (match2 == null ? void 0 : match2[2]) ? Number(match2[2]) : null;
+    for (const [citekey, entry] of this.bibManager.bibCache) {
+      const e3 = entry;
+      if ((e3 == null ? void 0 : e3._zoteroKey) !== key)
+        continue;
+      if (groupID != null && e3.groupID !== groupID)
+        continue;
+      return citekey;
+    }
+    return null;
+  }
+  async updateLiteratureNote(file) {
+    var _a, _b;
+    if (this.settings.useOwnNoteTemplate !== true)
+      return false;
+    const stable = (_b = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
+    if (typeof stable !== "string" || !stable)
+      return false;
+    const citekey = this.findCitekeyByStableKey(stable);
+    if (!citekey)
+      return false;
+    let existing;
+    try {
+      existing = await this.app.vault.cachedRead(file);
+    } catch (e3) {
+      return false;
+    }
+    if (!shouldUpdateOwnNote(existing))
+      return false;
+    try {
+      await this.bibManager.createLiteratureNote(citekey, file, { open: false });
+      return true;
+    } catch (e3) {
+      console.warn("[sw:update] failed for", file.path, e3);
+      return false;
+    }
+  }
+  async updateActiveLiteratureNote() {
+    if (this.settings.useOwnNoteTemplate !== true) {
+      new import_obsidian33.Notice("Enable \u201CUse ScholarWeft\u2019s own note template\u201D to update notes this way.", 8e3);
+      return;
+    }
+    const file = this.app.workspace.getActiveFile();
+    if (!file)
+      return;
+    const ok = await this.updateLiteratureNote(file);
+    new import_obsidian33.Notice(ok ? `Updated ${file.basename}.` : `\u201C${file.basename}\u201D was not updated (ZotLit-managed, or its item is not in the loaded library).`, 8e3);
+  }
+  async updateAllLiteratureNotes() {
+    if (this.settings.useOwnNoteTemplate !== true) {
+      new import_obsidian33.Notice("Enable \u201CUse ScholarWeft\u2019s own note template\u201D to update notes this way.", 8e3);
+      return;
+    }
+    const files = this.app.vault.getMarkdownFiles().filter((f3) => {
+      var _a, _b;
+      const stable = (_b = (_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
+      return typeof stable === "string" && !!stable;
+    });
+    if (!files.length) {
+      new import_obsidian33.Notice("No literature notes with a \u201Czotero-key\u201D were found.");
+      return;
+    }
+    const progress = new import_obsidian33.Notice(`Updating literature notes\u2026 0/${files.length}`, 0);
+    let updated = 0;
+    let skipped = 0;
+    for (const file of files) {
+      if (await this.updateLiteratureNote(file))
+        updated++;
+      else
+        skipped++;
+      progress.setMessage(`Updating literature notes\u2026 ${updated + skipped}/${files.length}`);
+    }
+    progress.hide();
+    new import_obsidian33.Notice(`Updated ${updated} literature note(s)${skipped ? `, skipped ${skipped}` : ""}.`, 8e3);
   }
   async getCitekeysForFile(file) {
     var _a, _b;

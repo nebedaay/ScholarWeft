@@ -49,7 +49,10 @@ export async function pickZoteroItems(
 
   if (res.status === 503) {
     throw new Error(
-      'Zotero is already showing a picker or another integration dialog — try again in a moment.'
+      'Zotero is already showing a picker or another integration is using it. ' +
+        'Close any open Zotero citation dialog; if none is open, another plugin ' +
+        '(for example Zotero Integration) may be holding the picker — disable it ' +
+        'and try again.'
     );
   }
   if (res.status !== 200) {

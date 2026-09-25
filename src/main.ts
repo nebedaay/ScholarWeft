@@ -52,6 +52,7 @@ import {
   installZotlitTemplatesWithNotice,
 } from './zotlitTemplates';
 import { getLitNoteForCitekey, getZotlitLiteratureFolder } from './zotlit';
+import { shouldUpdateOwnNote } from './template/note-lookup';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import {
   insertZoteroNotesForFiles,
@@ -430,6 +431,30 @@ export default class ReferenceList extends Plugin {
       name: t('Import literature notes from Zotero…'),
       callback: async () => {
         await this.importLiteratureNotesFromZotero();
+      },
+    });
+
+    this.addCommand({
+      id: 'update-literature-note',
+      name: t('Update this literature note'),
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const stable =
+          file &&
+          this.app.metadataCache.getFileCache(file)?.frontmatter?.[
+            'zotero-key'
+          ];
+        if (typeof stable !== 'string' || !stable) return false;
+        if (!checking) void this.updateActiveLiteratureNote();
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: 'update-all-literature-notes',
+      name: t('Update all literature notes in the vault'),
+      callback: async () => {
+        await this.updateAllLiteratureNotes();
       },
     });
 
@@ -1407,7 +1432,12 @@ export default class ReferenceList extends Plugin {
     const port = this.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
     if (!(await isZoteroRunning(port))) {
       new Notice(
-        'Zotero (with Better BibTeX) is not running — the item picker needs it.'
+        'Zotero’s picker isn’t responding. Make sure Zotero is running with ' +
+          'Better BibTeX installed (the picker needs it). If it is, another ' +
+          'integration may be holding the picker — close any open Zotero ' +
+          'citation dialog, or disable the other plugin (e.g. Zotero ' +
+          'Integration), then try again.',
+        12000
       );
       return;
     }
@@ -1474,6 +1504,116 @@ export default class ReferenceList extends Plugin {
       }
     }
     return null;
+  }
+
+  /**
+   * Resolve a `zotero-key` frontmatter value — `KEY` (My Library) or
+   * `KEYgGROUPID` (a group library) — to a citekey in the loaded library. The
+   * group suffix is checked too, so the same item key in two libraries is not
+   * confused.
+   */
+  private findCitekeyByStableKey(stable: string): string | null {
+    const match = /^(.*?)(?:g(\d+))?$/.exec(stable);
+    const key = match?.[1] ?? stable;
+    const groupID = match?.[2] ? Number(match[2]) : null;
+    for (const [citekey, entry] of this.bibManager.bibCache) {
+      const e = entry as { _zoteroKey?: string; groupID?: number };
+      if (e?._zoteroKey !== key) continue;
+      if (groupID != null && e.groupID !== groupID) continue;
+      return citekey;
+    }
+    return null;
+  }
+
+  /**
+   * Re-render ONE literature note from our own template, locating it by its
+   * stable `zotero-key` (so a renamed note updates in place). Returns false when
+   * the note is not ours — a ZotLit-managed note, no `zotero-key`, or an item
+   * that is not in the loaded library.
+   */
+  async updateLiteratureNote(file: TFile): Promise<boolean> {
+    if (this.settings.useOwnNoteTemplate !== true) return false;
+    const stable =
+      this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
+    if (typeof stable !== 'string' || !stable) return false;
+    const citekey = this.findCitekeyByStableKey(stable);
+    if (!citekey) return false;
+    let existing: string;
+    try {
+      existing = await this.app.vault.cachedRead(file);
+    } catch {
+      return false;
+    }
+    if (!shouldUpdateOwnNote(existing)) return false;
+    try {
+      await this.bibManager.createLiteratureNote(citekey, file, { open: false });
+      return true;
+    } catch (e) {
+      console.warn('[sw:update] failed for', file.path, e);
+      return false;
+    }
+  }
+
+  /** "Update this literature note" — the active note, located by `zotero-key`. */
+  private async updateActiveLiteratureNote(): Promise<void> {
+    if (this.settings.useOwnNoteTemplate !== true) {
+      new Notice(
+        'Enable “Use ScholarWeft’s own note template” to update notes this way.',
+        8000
+      );
+      return;
+    }
+    const file = this.app.workspace.getActiveFile();
+    if (!file) return;
+    const ok = await this.updateLiteratureNote(file);
+    new Notice(
+      ok
+        ? `Updated ${file.basename}.`
+        : `“${file.basename}” was not updated (ZotLit-managed, or its item is not in the loaded library).`,
+      8000
+    );
+  }
+
+  /**
+   * "Update all literature notes in the vault" — a middle ground between
+   * updating one note and importing every Zotero item: re-render every note
+   * that carries a `zotero-key` and is ours to manage.
+   */
+  private async updateAllLiteratureNotes(): Promise<void> {
+    if (this.settings.useOwnNoteTemplate !== true) {
+      new Notice(
+        'Enable “Use ScholarWeft’s own note template” to update notes this way.',
+        8000
+      );
+      return;
+    }
+    const files = this.app.vault.getMarkdownFiles().filter((f) => {
+      const stable =
+        this.app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'];
+      return typeof stable === 'string' && !!stable;
+    });
+    if (!files.length) {
+      new Notice('No literature notes with a “zotero-key” were found.');
+      return;
+    }
+
+    const progress = new Notice(`Updating literature notes… 0/${files.length}`, 0);
+    let updated = 0;
+    let skipped = 0;
+    for (const file of files) {
+      if (await this.updateLiteratureNote(file)) updated++;
+      else skipped++;
+      progress.setMessage(
+        `Updating literature notes… ${updated + skipped}/${files.length}`
+      );
+    }
+    progress.hide();
+    new Notice(
+      `Updated ${updated} literature note(s)${
+        skipped ? `, skipped ${skipped}` : ''
+      }.`,
+      8000
+    );
   }
 
   async getCitekeysForFile(file?: TFile) {
