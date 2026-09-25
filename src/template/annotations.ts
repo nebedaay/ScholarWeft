@@ -7,13 +7,16 @@
 //     order (`annotationSortIndex`), but the local API returns them in
 //     date-added order, which looked reversed.
 //  2. "+" CONTINUATIONS — an annotation whose comment begins with "+" is a
-//     continuation of the PREVIOUS annotation on the same attachment. Its
-//     CONTENT is appended after " ... " (chaining across several "+"
+//     continuation of the PREVIOUS annotation when ALL of these hold:
+//       - it has content to join (excerpt text on highlight/underline, an image
+//         on image/ink — a pure comment selects nothing and cannot join);
+//       - it is the SAME type as the previous annotation;
+//       - it is on the SAME attachment (PDF/document).
+//     Its content is appended after " ... " (chaining across several "+"
 //     annotations): excerpt text joins the previous text, image/ink content is
 //     carried as extra blocks in the same callout, page labels become a range,
-//     tags union, and the marker itself is stripped. A "+" on an annotation
-//     with NO content (a pure comment) is still emitted, just without the
-//     marker — there is nothing to join.
+//     tags union, and the marker itself is stripped. A "+" that cannot join is
+//     still emitted, just without the marker.
 
 import type { NoteContextAnnotation, NoteContextTag } from './context';
 
@@ -68,7 +71,14 @@ export function hasMergeableContent(a: NoteContextAnnotation): boolean {
   return false;
 }
 
-/** Fold "+"-continuation annotations into the annotation they continue. */
+/**
+ * Fold "+"-continuation annotations into the annotation they continue, in one
+ * pass over the whole annotations list. A continuation joins only when it has
+ * content, is the SAME type as the previous annotation, and shares its
+ * attachment; otherwise it is emitted unchanged (marker stripped). Callers pass
+ * the full annotations array — the function handles every annotation type
+ * itself, so no template has to reimplement the rule.
+ */
 export function mergeContinuationAnnotations(
   annotations: NoteContextAnnotation[],
   separator: string = CONTINUATION_SEPARATOR
@@ -84,6 +94,7 @@ export function mergeContinuationAnnotations(
     if (
       isContinuation &&
       previous &&
+      a.type === previous.type &&
       a.parentAttachment?.key === previous.parentAttachment?.key &&
       hasMergeableContent(a)
     ) {

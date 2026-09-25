@@ -214,6 +214,43 @@ describe('re-import merge', () => {
   });
 });
 
+describe('mergeAnnotations helper', () => {
+  it('applies the "+" continuation rule to a passed list', () => {
+    const ctx = buildNoteContext(entry);
+    const ann = (o: Record<string, unknown>) => ({
+      imgLink: null,
+      comment: null,
+      fileLink: () => null,
+      backlink: '',
+      parentItem: null,
+      parentAttachment: { key: 'PDF' },
+      key: 'K',
+      indexedKey: 'K',
+      libraryID: 1,
+      type: 'highlight',
+      text: null,
+      commentHtml: null,
+      colorHex: null,
+      colorName: 'yellow',
+      pageLabel: null,
+      page: null,
+      authorName: null,
+      isExternal: false,
+      dateAdded: '',
+      dateModified: '',
+      sortIndex: null,
+      tags: [],
+      ...o,
+    });
+    const merged = helpers.mergeAnnotations(ctx, [
+      ann({ key: 'a', text: 'one', sortIndex: '00001' }),
+      ann({ key: 'b', text: 'two', comment: '+', sortIndex: '00002' }),
+    ] as never);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].text).toBe('one ... two');
+  });
+});
+
 describe('todayIso', () => {
   it('formats a local date', () => {
     expect(todayIso(new Date(2026, 8, 25))).toBe('2026-09-25');

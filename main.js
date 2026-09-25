@@ -89665,7 +89665,7 @@ function mergeContinuationAnnotations(annotations, separator = CONTINUATION_SEPA
   for (const original of annotations) {
     const a3 = { ...original };
     const isContinuation = typeof a3.comment === "string" && CONTINUATION.test(a3.comment);
-    if (isContinuation && previous && ((_a = a3.parentAttachment) == null ? void 0 : _a.key) === ((_b = previous.parentAttachment) == null ? void 0 : _b.key) && hasMergeableContent(a3)) {
+    if (isContinuation && previous && a3.type === previous.type && ((_a = a3.parentAttachment) == null ? void 0 : _a.key) === ((_b = previous.parentAttachment) == null ? void 0 : _b.key) && hasMergeableContent(a3)) {
       a3.comment = a3.comment.replace(CONTINUATION, "");
       if (a3.text) {
         previous.text = [(_c = previous.text) == null ? void 0 : _c.trim(), a3.text.trim()].filter(Boolean).join(separator) || null;
@@ -91016,6 +91016,10 @@ var NoteHelpers = class {
     };
     return ctx.notes.map(render2).filter((chunk) => chunk && chunk.trim()).join("\n\n");
   }
+  mergeAnnotations(ctx, annotations) {
+    this.stateOf(ctx);
+    return processAnnotations(annotations);
+  }
   annotationCallout(ctx, annotation, opts) {
     const state = this.stateOf(ctx);
     return renderAnnotationCallout(annotation, { ...state.options.annotation, ...opts });
@@ -91200,7 +91204,7 @@ var NoteTemplateEngine = class extends Eta {
       autoEscape: false,
       autoFilter: true,
       filterFunction: coerceOutput,
-      functionHeader: `const bq = (fn) => output(this.bqHelper(capture(fn))); const basename = this.basenameHelper; const suffix = this.suffixHelper; const embed = this.embedHelper; const start_YAML = () => this.noteHelpers.startYAML(${d3}); const end_YAML = () => this.noteHelpers.endYAML(${d3}); const add_property = (k, v, o) => this.noteHelpers.addProperty(${d3}, k, v, o); const add_raw_yaml = (t) => this.noteHelpers.addRawYAML(${d3}, t); const merge_into = (existing, rendered) => this.noteHelpers.mergeInto(${d3}, existing, rendered); const set_file_name = (n) => this.noteHelpers.setFileName(${d3}, n); const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d3}, f, o); const creator_values = (r, f, o) => this.noteHelpers.creatorValues(${d3}, r, f, o); const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d3}, r, f, o); const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d3}, o); const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d3}, a, o); const callout = (o) => this.noteHelpers.callout(${d3}, o); const wikilink = (t, a) => this.noteHelpers.wikilink(${d3}, t, a); const link_note = (a, s) => this.noteHelpers.linkNote(${d3}, a, s); const md_html = (h) => this.noteHelpers.mdHtml(${d3}, h); const heading = (l, t) => this.noteHelpers.heading(${d3}, l, t); const escape_md = (t) => this.noteHelpers.escapeMd(${d3}, t); const import_date = () => this.noteHelpers.importDate(${d3}); const is_first_import = () => this.noteHelpers.isFirstImport(${d3}); const short_title = () => this.noteHelpers.shortTitle(${d3}); const aliases = () => this.noteHelpers.aliases(${d3}); const related_links = () => this.noteHelpers.relatedLinks(${d3}); const attachment_links = () => this.noteHelpers.attachmentLinks(${d3}); const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d3}); `,
+      functionHeader: `const bq = (fn) => output(this.bqHelper(capture(fn))); const basename = this.basenameHelper; const suffix = this.suffixHelper; const embed = this.embedHelper; const start_YAML = () => this.noteHelpers.startYAML(${d3}); const end_YAML = () => this.noteHelpers.endYAML(${d3}); const add_property = (k, v, o) => this.noteHelpers.addProperty(${d3}, k, v, o); const add_raw_yaml = (t) => this.noteHelpers.addRawYAML(${d3}, t); const merge_into = (existing, rendered) => this.noteHelpers.mergeInto(${d3}, existing, rendered); const set_file_name = (n) => this.noteHelpers.setFileName(${d3}, n); const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d3}, f, o); const creator_values = (r, f, o) => this.noteHelpers.creatorValues(${d3}, r, f, o); const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d3}, r, f, o); const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d3}, o); const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d3}, a, o); const merge_annotations = (as) => this.noteHelpers.mergeAnnotations(${d3}, as); const callout = (o) => this.noteHelpers.callout(${d3}, o); const wikilink = (t, a) => this.noteHelpers.wikilink(${d3}, t, a); const link_note = (a, s) => this.noteHelpers.linkNote(${d3}, a, s); const md_html = (h) => this.noteHelpers.mdHtml(${d3}, h); const heading = (l, t) => this.noteHelpers.heading(${d3}, l, t); const escape_md = (t) => this.noteHelpers.escapeMd(${d3}, t); const import_date = () => this.noteHelpers.importDate(${d3}); const is_first_import = () => this.noteHelpers.isFirstImport(${d3}); const short_title = () => this.noteHelpers.shortTitle(${d3}); const aliases = () => this.noteHelpers.aliases(${d3}); const related_links = () => this.noteHelpers.relatedLinks(${d3}); const attachment_links = () => this.noteHelpers.attachmentLinks(${d3}); const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d3}); `,
       plugins: [includeDataPlugin]
     });
     this.bqHelper = formatBlockquote;

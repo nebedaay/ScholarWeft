@@ -135,6 +135,7 @@ export class NoteTemplateEngine extends Eta {
         `const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d}, r, f, o); ` +
         `const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d}, o); ` +
         `const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d}, a, o); ` +
+        `const merge_annotations = (as) => this.noteHelpers.mergeAnnotations(${d}, as); ` +
         `const callout = (o) => this.noteHelpers.callout(${d}, o); ` +
         `const wikilink = (t, a) => this.noteHelpers.wikilink(${d}, t, a); ` +
         `const link_note = (a, s) => this.noteHelpers.linkNote(${d}, a, s); ` +

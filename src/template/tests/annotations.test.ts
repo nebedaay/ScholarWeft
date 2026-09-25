@@ -120,6 +120,16 @@ describe('mergeContinuationAnnotations', () => {
     expect(merged[0].continuationMedia?.[0].key).toBe('b');
   });
 
+  it('does not merge across annotation types, even with content', () => {
+    const img = () => 'file:///x.png';
+    const merged = mergeContinuationAnnotations([
+      ann({ key: 'a', type: 'highlight', text: 'one' }),
+      ann({ key: 'b', type: 'image', text: null, imgLink: img, comment: '+' }),
+    ]);
+    expect(merged).toHaveLength(2);
+    expect(merged[1].comment).toBeNull();
+  });
+
   it('keeps a "+" comment-only annotation (no content) but strips the marker', () => {
     const merged = mergeContinuationAnnotations([
       ann({ key: 'a', text: 'one' }),

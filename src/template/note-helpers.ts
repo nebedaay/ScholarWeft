@@ -18,7 +18,9 @@
 //             template's `for … add_property(g.key, g.values)` loop
 //             creator_names(role?, format?, opts?) → string
 //   notes     zotero_notes({ mode?, level? })
-//   callouts  annotation_callout(annotation, opts?) / callout(opts)
+//   callouts  annotation_callout(annotation, opts?) / callout(opts) /
+//             merge_annotations(annotations)  (the "+" continuation rule; the
+//             import path already applies it to item.annotations)
 //   values    wikilink / link_note / md_html / heading / escape_md
 //   state     import_date() / is_first_import()
 //   re-import merge_into(existing, rendered)  (frontmatter specs + managed region)
@@ -38,6 +40,7 @@ import {
   type CreatorFormatOptions,
   type CreatorNamesOptions,
 } from './format';
+import { processAnnotations } from './annotations';
 import { escapeMarkdown, htmlFieldToMarkdown, noteHtmlToMarkdown } from './markdown';
 import { mergeNote } from './merge';
 import {
@@ -274,6 +277,20 @@ export class NoteHelpers {
   }
 
   // ── Callouts ──
+
+  /**
+   * Fold "+"-continuation annotations. The import path already applies this to
+   * `item.annotations` before rendering, so templates normally never call it;
+   * it is exposed so a template that assembles its own annotation list (e.g.
+   * from several attachments) gets the same behaviour for free.
+   */
+  mergeAnnotations(
+    ctx: NoteContext,
+    annotations: NoteContextAnnotation[]
+  ): NoteContextAnnotation[] {
+    this.stateOf(ctx);
+    return processAnnotations(annotations);
+  }
 
   annotationCallout(
     ctx: NoteContext,
