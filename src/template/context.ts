@@ -25,6 +25,7 @@ import type { CSLName, PartialCSLEntry } from '../bib/types';
 import { extraKeyToContextProperty, parseExtra } from '../bib/extra';
 import type { ItemExtra } from '../bib/extra';
 import { ZOTERO_TYPE_TO_CSL } from '../bib/zotero-csl';
+import { htmlToMarkdownText } from './markdown';
 
 /** A cached CSL entry: the CSL fields plus the internal fields we retain. */
 export interface CachedEntry extends PartialCSLEntry {
@@ -491,6 +492,18 @@ function str(v: unknown): string | null {
   return null;
 }
 
+/**
+ * A field Zotero can store HTML in (title, short title, abstract), converted to
+ * Markdown — italics survive into the frontmatter and, on export, into the
+ * document. NOT escaped: these land in frontmatter, whose values may contain
+ * intentional `[[wikilinks]]`; escaping is body-only.
+ */
+function mdField(v: unknown): string | null {
+  const s = str(v);
+  if (s == null) return null;
+  return htmlToMarkdownText(s) || null;
+}
+
 /** Personal library in Zotero is library/group id 1. */
 function isPersonal(groupID: unknown): boolean {
   return groupID == null || groupID === 1;
@@ -566,9 +579,9 @@ export function buildNoteContext(
     notePath,
     noteLink: noteLinkFor(notePath),
 
-    title: str(e.title),
-    shortTitle: str(e['title-short']),
-    abstract: str(e.abstract),
+    title: mdField(e.title),
+    shortTitle: mdField(e['title-short']),
+    abstract: mdField(e.abstract),
     containerTitle: str(e['container-title']),
     citationKey: str(e.id),
     citekey: str(e.id),

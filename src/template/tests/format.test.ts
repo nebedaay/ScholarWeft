@@ -1,7 +1,20 @@
-import * as fs from 'fs';
-import * as path from 'path';
+jest.mock(
+  'obsidian',
+  () => ({
+    // A minimal stand-in for Obsidian's converter: inline tags → Markdown.
+    htmlToMarkdown: (html: string) =>
+      html
+        .replace(/<i>/g, '*')
+        .replace(/<\/i>/g, '*')
+        .replace(/<b>/g, '**')
+        .replace(/<\/b>/g, '**')
+        .replace(/<\/p>/g, '\n\n')
+        .replace(/<p>/g, '')
+        .replace(/<[^>]+>/g, ''),
+  }),
+  { virtual: true }
+);
 
-import { makeEta } from '../engine';
 import {
   creatorNames,
   displayDate,
@@ -11,19 +24,6 @@ import {
   renderCallout,
 } from '../format';
 import type { NoteContextAnnotation, NoteContextCreator } from '../context';
-
-// ─── Annotation parity with the real template ───────────────────────────────
-
-const TEMPLATE = path.join(
-  process.cwd(),
-  'sw-note-templates',
-  'zotlit-annotation.eta.md'
-);
-
-function renderTemplate(data: Record<string, unknown>): string {
-  const src = fs.readFileSync(TEMPLATE, 'utf8');
-  return makeEta().renderString(src, data).trim();
-}
 
 function annotation(
   overrides: Partial<NoteContextAnnotation> = {}
@@ -54,35 +54,31 @@ function annotation(
   };
 }
 
-describe('renderAnnotationCallout() matches the Eta annotation template', () => {
-  const cases: Array<[string, NoteContextAnnotation]> = [
-    ['highlight with text, comment and tags', annotation({
-      type: 'highlight',
-      text: 'Quoted [text] & more',
-      comment: 'First line\n\nSecond paragraph',
-      tags: [{ name: 'sufism', type: 'unknown' }],
-    })],
-    ['highlight with no comment', annotation({ type: 'highlight', text: 'Just text' })],
-    ['underline', annotation({ type: 'underline', text: 'Underlined' })],
-    ['text with a comment', annotation({ type: 'text', comment: 'A note' })],
-    ['note with no comment', annotation({ type: 'note' })],
-    ['annotation with no page', annotation({ type: 'highlight', text: 'x', pageLabel: null })],
-    ['a page range', annotation({ type: 'highlight', text: 'x', pageLabel: '4–6' })],
-  ];
-
-  it.each(cases)('%s', (_name, a) => {
-    expect(renderAnnotationCallout(a)).toBe(renderTemplate(a as unknown as Record<string, unknown>));
+describe('renderAnnotationCallout()', () => {
+  it('keeps the ZT Eta callout structure', () => {
+    const out = renderAnnotationCallout(
+      annotation({ type: 'highlight', text: 'x' })
+    );
+    expect(out).toContain('> [!yellow-highlight-annotation] Yellow Highlight');
+    expect(out).toContain('> > [!ann-highlight-text-yellow]');
+    expect(out).toContain('> - [[Yellow annotations|Yellow]]');
+    expect(out).toContain('- ([p. 116](zotero://open/');
   });
 
-  it('can omit the tags and footer', () => {
-    const a = annotation({
-      type: 'highlight',
-      text: 'x',
-      tags: [{ name: 't', type: 'unknown' }],
-    });
-    const out = renderAnnotationCallout(a, { tags: false, footer: false });
-    expect(out).not.toContain('[[t]]');
-    expect(out).not.toContain('annotations|');
+  it('sends the excerpt, comment and tags through the shared pipeline', () => {
+    const out = renderAnnotationCallout(
+      annotation({
+        type: 'highlight',
+        text: 'Quoted [text] & more',
+        comment: '<i>First</i> [[note]]',
+        tags: [{ name: 'sufism', type: 'unknown' }],
+      })
+    );
+    // HTML → Markdown for the italic, `[`/`<` escaped, `&` untouched.
+    expect(out).toContain('> > *First* \\[\\[note]]');
+    expect(out).toContain('> > Quoted \\[text] & more');
+    expect(out).toContain('> > - [[sufism]]');
+    expect(out).not.toContain('[[note]]');
   });
 
   it('renders an ISO annotation timestamp as its date', () => {
@@ -92,18 +88,25 @@ describe('renderAnnotationCallout() matches the Eta annotation template', () => 
     expect(out).toContain(', 2022-02-12)');
     expect(out).not.toContain('T17:19:53Z');
   });
-});
 
-describe('displayDate()', () => {
-  it('reduces an ISO timestamp to its date and passes a date through', () => {
-    expect(displayDate('2022-02-12T17:19:53Z')).toBe('2022-02-12');
-    expect(displayDate('2022-02-12')).toBe('2022-02-12');
-    expect(displayDate(null)).toBe('');
-    expect(displayDate(undefined)).toBe('');
+  it('falls back to a [View] link when there is no page label', () => {
+    const out = renderAnnotationCallout(
+      annotation({ type: 'highlight', text: 'x', pageLabel: null })
+    );
+    expect(out).toContain('- ([View](');
+  });
+
+  it('can omit the tags and footer', () => {
+    const out = renderAnnotationCallout(
+      annotation({ type: 'highlight', text: 'x', tags: [{ name: 't', type: 'unknown' }] }),
+      { tags: false, footer: false }
+    );
+    expect(out).not.toContain('[[t]]');
+    expect(out).not.toContain('annotations|');
   });
 });
 
-describe('renderAnnotationCallout() — image/ink (template needs an embed helper)', () => {
+describe('renderAnnotationCallout() — image/ink', () => {
   const imgLink = (alias?: string) =>
     alias ? `[[img.png|${alias}]]` : '[[img.png]]';
 
@@ -213,5 +216,14 @@ describe('creatorNames()', () => {
   it('returns a joined string and filters by role', () => {
     expect(creatorNames(creators, { roles: 'author', format: '{family}' })).toBe('Smith, Jones');
     expect(creatorNames(creators, { roles: ['editor'], format: '{fullName}' })).toBe('Ada Lee');
+  });
+});
+
+describe('displayDate()', () => {
+  it('reduces an ISO timestamp to its date and passes a date through', () => {
+    expect(displayDate('2022-02-12T17:19:53Z')).toBe('2022-02-12');
+    expect(displayDate('2022-02-12')).toBe('2022-02-12');
+    expect(displayDate(null)).toBe('');
+    expect(displayDate(undefined)).toBe('');
   });
 });

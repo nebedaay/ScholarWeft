@@ -89,14 +89,22 @@ export function normalizeHeadingLevels(html: string, topLevel: number): string {
 }
 
 /**
- * Convert one of Zotero's HTML-capable text fields (title, abstract, `extra`,
- * a note body…) to Markdown and neutralise stray Markdown characters. Headings
- * are left as-is; use {@link noteHtmlToMarkdown} for a child note, which also
- * nests its headings under the note's own section.
+ * Convert one of Zotero's HTML-capable text fields (title, abstract, `extra`…)
+ * to Markdown WITHOUT escaping — for frontmatter, where property values
+ * legitimately contain `[[wikilinks]]` and where `[` / `<` display fine. The
+ * HTML parser also resolves entities to their unicode characters.
+ */
+export function htmlToMarkdownText(html: string | null | undefined): string {
+  if (!html || !html.trim()) return '';
+  return htmlToMarkdown(html).trim();
+}
+
+/**
+ * Convert an HTML field to Markdown for BODY output: same conversion, then the
+ * shared {@link escapeMarkdown} so stray `[` / `<` can't become a link or tag.
  */
 export function htmlFieldToMarkdown(html: string | null | undefined): string {
-  if (!html || !html.trim()) return '';
-  return escapeMarkdown(htmlToMarkdown(html).trim());
+  return escapeMarkdown(htmlToMarkdownText(html));
 }
 
 export interface NoteMarkdownOptions {

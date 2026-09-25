@@ -1,3 +1,12 @@
+jest.mock(
+  'obsidian',
+  () => ({
+    htmlToMarkdown: (html: string) =>
+      html.replace(/<i>/g, '*').replace(/<\/i>/g, '*'),
+  }),
+  { virtual: true }
+);
+
 import {
   buildNoteContext,
   cslTypeToZoteroItemType,
@@ -69,6 +78,19 @@ describe('buildNoteContext() — identity', () => {
     expect(c.attachments).toEqual([]);
     expect(c.annotations).toEqual([]);
     expect(c.notes).toEqual([]);
+  });
+
+  it('converts HTML fields but does not escape brackets (frontmatter-safe)', () => {
+    const c = buildNoteContext({
+      id: 'x',
+      type: 'book',
+      title: 'A <i>B</i> [c]',
+      'title-short': '<i>S</i>',
+      abstract: '<i>D</i>',
+    });
+    expect(c.title).toBe('A *B* [c]');
+    expect(c.shortTitle).toBe('*S*');
+    expect(c.abstract).toBe('*D*');
   });
 });
 

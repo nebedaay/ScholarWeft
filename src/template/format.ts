@@ -1,12 +1,15 @@
 // Formatters behind the template helpers: creators and callouts.
 //
-// These are pure (no Obsidian, no I/O) so a template can delegate all the
-// whitespace-sensitive Markdown to code. `renderAnnotationCallout()` reproduces
-// the current `sw-note-templates/zotlit-annotation.eta.md` output exactly — the
-// parity is enforced by a test that renders the real template and compares — so
-// moving a note template onto the helpers does not change its output.
+// These are pure apart from the shared HTML→Markdown conversion
+// (`htmlFieldToMarkdown`, which uses Obsidian's converter) so a template can
+// delegate all the whitespace-sensitive Markdown to code. `renderAnnotationCallout()`
+// keeps the ZT Eta annotation template's STRUCTURE (callout ids, nesting,
+// highlight/ink bodies, footer) but sends its comment and excerpt through the
+// same conversion + `escapeMarkdown` pipeline as every other piece of body
+// content — one escaping rule, no per-callout variants.
 
 import { formatBlockquote } from './blockquote';
+import { htmlFieldToMarkdown } from './markdown';
 import type {
   NoteContextAnnotation,
   NoteContextCreator,
@@ -123,31 +126,6 @@ function cap(s: string | null | undefined): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 }
 
-/** Escape HTML special characters for Markdown text. */
-export function escapeAnnotationHtml(s: string | null | undefined): string {
-  return (s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-/** Escape annotation TEXT: HTML first, then Markdown brackets. */
-export function escapeAnnotationText(s: string | null | undefined): string {
-  return escapeAnnotationHtml(s).replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-}
-
-/** Zotero comments are "plain text flavoured with `<i>`/`<b>`". */
-export function mdComment(s: string | null | undefined): string {
-  return (s ?? '')
-    .replace(/<i>/g, '*')
-    .replace(/<\/i>/g, '*')
-    .replace(/<b>/g, '**')
-    .replace(/<\/b>/g, '**')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
 /** Every line (including blanks) gets a `>` so content stays in the callout. */
 function calloutLines(s: string | null | undefined): string[] {
   return (s ?? '').split(/\r?\n/).map((l) => (l.trim() ? `> ${l}` : '>'));
@@ -203,16 +181,16 @@ export function renderAnnotationCallout(
 
   if (a.comment || tags.length) {
     inner.push('> [!ann-comment]');
-    if (a.comment) inner.push(...calloutLines(mdComment(a.comment)));
+    if (a.comment) inner.push(...calloutLines(htmlFieldToMarkdown(a.comment)));
     for (const tag of tags) inner.push(`> - [[${tag.name}]]`);
   }
 
   inner.push('');
 
   if (a.type === 'highlight' && a.text) {
-    inner.push(`> [!ann-highlight-text-${colorRaw}]`, `> ${escapeAnnotationText(a.text)}`);
+    inner.push(`> [!ann-highlight-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a.text)));
   } else if (a.type === 'underline' && a.text) {
-    inner.push(`> [!ann-underline-text-${colorRaw}]`, `> ${escapeAnnotationText(a.text)}`);
+    inner.push(`> [!ann-underline-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a.text)));
   } else if (a.type === 'image') {
     inner.push(`> [!ann-image-${colorRaw}]`);
     const url = imgUrl(a);
@@ -222,7 +200,7 @@ export function renderAnnotationCallout(
     inner.push('> - [[image annotations|images]]');
   } else if (a.type === 'text' || a.type === 'note') {
     inner.push(`> [!ann-text-${colorRaw}]Text comment—click to view in context:`);
-    if (a.comment) inner.push(...calloutLines(mdComment(a.comment)));
+    if (a.comment) inner.push(...calloutLines(htmlFieldToMarkdown(a.comment)));
   } else if (a.type === 'ink') {
     inner.push(`> [!ann-ink-${colorRaw}]`);
     const url = imgUrl(a);

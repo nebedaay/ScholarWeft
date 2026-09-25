@@ -10,6 +10,7 @@ import { htmlToMarkdown } from 'obsidian';
 import {
   escapeMarkdown,
   htmlFieldToMarkdown,
+  htmlToMarkdownText,
   normalizeHeadingLevels,
   noteHtmlToMarkdown,
 } from '../markdown';
@@ -117,5 +118,11 @@ describe('htmlFieldToMarkdown()', () => {
     expect(htmlFieldToMarkdown('<i>A [title]</i>')).toBe('A \\[title]');
     expect(htmlFieldToMarkdown('')).toBe('');
     expect(htmlFieldToMarkdown(null)).toBe('');
+  });
+
+  it('htmlToMarkdownText converts WITHOUT escaping (frontmatter use)', () => {
+    mockConvert.mockReturnValueOnce('A [title]');
+    expect(htmlToMarkdownText('<i>A [title]</i>')).toBe('A [title]');
+    expect(htmlToMarkdownText('')).toBe('');
   });
 });
