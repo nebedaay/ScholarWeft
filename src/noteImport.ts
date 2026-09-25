@@ -8,12 +8,16 @@
 // and the `%%sw-managed%%` region are refreshed; the user's own properties and
 // writing are preserved.
 
-import { App, TFile, normalizePath } from 'obsidian';
+import { App, Notice, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { DEFAULT_ZOTERO_PORT, fetchItemChildrenNative } from './bib/helpers';
 import type { RawZoteroChildren } from './template/children';
 import { indexedKeyFor, type CachedEntry } from './template/context';
-import { matchNoteByZoteroKey } from './template/note-lookup';
+import {
+  findAvailableNotePath,
+  matchNoteByZoteroKey,
+  shouldUpdateOwnNote,
+} from './template/note-lookup';
 import { renderNote } from './template/render';
 import { getZotlitLiteratureFolder } from './zotlit';
 
@@ -126,6 +130,11 @@ function findNoteByZoteroKey(
   return matchNoteByZoteroKey(candidates, folder, zoteroKey);
 }
 
+/** Every vault path, so a fresh note name can be checked without I/O. */
+function vaultPaths(app: App): Set<string> {
+  return new Set(app.vault.getFiles().map((f) => f.path));
+}
+
 /**
  * Create or update a literature note from our own template. Returns `false`
  * (and no file change) when the template asset is missing, so the caller can
@@ -155,17 +164,33 @@ export async function createOrUpdateOwnNote(
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
   });
   const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, '');
-  let notePath = folder ? normalizePath(`${folder}/${base}.md`) : `${base}.md`;
-
-  // Prefer an existing note found by its stable Zotero key when the filename
-  // no longer matches (a citekey rename would otherwise create a duplicate).
   const stableKey = indexedKeyFor(
     typeof entry?._zoteroKey === 'string' ? entry._zoteroKey : '',
     groupID
   );
-  if (stableKey && !(await app.vault.adapter.exists(notePath))) {
-    const byKey = findNoteByZoteroKey(app, folder, stableKey);
-    if (byKey) notePath = byKey;
+
+  // Locate by the stable Zotero key FIRST, as ZotLit does: the note that owns
+  // this item is the one to update, whatever its filename.
+  let notePath: string | null = stableKey
+    ? findNoteByZoteroKey(app, folder, stableKey)
+    : null;
+
+  // Otherwise use the conventional filename — but NEVER overwrite a foreign
+  // note sitting at that name (another library's copy, another work with a
+  // similar title, or a user's own note saved there). A suffixed name
+  // (`@citekeya`, `@citekeyb`, …) is created instead.
+  if (!notePath) {
+    const desired = folder ? normalizePath(`${folder}/${base}.md`) : `${base}.md`;
+    if (await app.vault.adapter.exists(desired)) {
+      notePath = findAvailableNotePath(base, folder, vaultPaths(app));
+      console.warn('[sw:import] note name taken; importing as', notePath);
+      new Notice(
+        `“${base}.md” already exists; the imported note was saved as “${notePath.split('/').pop()}”.`,
+        8000
+      );
+    } else {
+      notePath = desired;
+    }
   }
 
   let existing: string | null = null;
@@ -175,6 +200,13 @@ export async function createOrUpdateOwnNote(
     } catch {
       existing = null;
     }
+  }
+
+  // A ZotLit-managed note belongs to ZotLit; never rewrite it with our region.
+  if (existing != null && !shouldUpdateOwnNote(existing)) {
+    console.warn('[sw:import] leaving the ZotLit-managed note alone:', notePath);
+    new Notice(`“${notePath.split('/').pop()}” is managed by ZotLit; skipped.`, 8000);
+    return false;
   }
 
   // Second pass: with the real note path (for `note_link`) and existing content

@@ -212,6 +212,10 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(at('attachments')).toBeLessThan(at('aliases'));
   });
 
+  it('always writes related, even when empty', () => {
+    expect(out).toContain('related: []');
+  });
+
   it('writes the stable zotero-key from the item key', () => {
     expect(out).toContain('zotero-key: EKUBHHNW');
     // It sits with the other Zotero identifiers (after zotero-link).

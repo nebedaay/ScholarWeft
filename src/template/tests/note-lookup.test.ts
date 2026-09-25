@@ -4,7 +4,12 @@ jest.mock(
   { virtual: true }
 );
 
-import { matchNoteByZoteroKey } from '../note-lookup';
+import {
+  findAvailableNotePath,
+  matchNoteByZoteroKey,
+  shouldUpdateOwnNote,
+  suffixCandidate,
+} from '../note-lookup';
 
 const candidates = [
   { path: '_2 Bibliographic notes/@old2020.md', zoteroKey: 'EKUBHHNW' },
@@ -38,5 +43,40 @@ describe('matchNoteByZoteroKey', () => {
   it('returns null for an empty key or no match', () => {
     expect(matchNoteByZoteroKey(candidates, '', '')).toBeNull();
     expect(matchNoteByZoteroKey(candidates, '', 'NOPE0000')).toBeNull();
+  });
+});
+
+describe('suffixCandidate', () => {
+  it('suffixes a, b, … z, aa like the user asked for', () => {
+    expect(suffixCandidate('@k', 0)).toBe('@k');
+    expect(suffixCandidate('@k', 1)).toBe('@ka');
+    expect(suffixCandidate('@k', 2)).toBe('@kb');
+    expect(suffixCandidate('@k', 26)).toBe('@kz');
+    expect(suffixCandidate('@k', 27)).toBe('@kaa');
+  });
+});
+
+describe('findAvailableNotePath', () => {
+  it('avoids every taken name instead of overwriting', () => {
+    const taken = new Set([
+      '_2 Bibliographic notes/@k.md',
+      '_2 Bibliographic notes/@ka.md',
+    ]);
+    expect(
+      findAvailableNotePath('@k', '_2 Bibliographic notes', taken)
+    ).toBe('_2 Bibliographic notes/@kb.md');
+  });
+
+  it('uses the plain name when it is free', () => {
+    expect(findAvailableNotePath('@k', '', new Set())).toBe('@k.md');
+  });
+});
+
+describe('shouldUpdateOwnNote', () => {
+  it('leaves ZotLit-managed notes alone', () => {
+    expect(shouldUpdateOwnNote('%%zt-managed%%\n## Annotations')).toBe(false);
+    expect(shouldUpdateOwnNote('%%sw-managed%%\n## Annotations')).toBe(true);
+    expect(shouldUpdateOwnNote('## Notes\nplain')).toBe(true);
+    expect(shouldUpdateOwnNote(null)).toBe(true);
   });
 });
