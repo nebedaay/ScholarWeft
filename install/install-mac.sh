@@ -18,6 +18,14 @@ skip() { SKIPPED+=("$*"); }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# The app's own version (CFBundleShortVersionString). NOTE: this is NOT the
+# INSTALLER version — only Obsidian's "Show debug info" reveals that — but it is
+# what changes when the app is replaced, so it makes a refresh verifiable.
+obsidian_app_version() {
+  /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+    /Applications/Obsidian.app/Contents/Info.plist 2>/dev/null || true
+}
+
 # The app hosting this shell — needed to tell the user exactly which app to grant
 # Full Disk Access to (macOS hides protected folders from it until then).
 terminal_app_name() {
@@ -56,18 +64,33 @@ FONT_SPECS=(
 
 # Bump when the script changes, and print it at start-up so it's obvious which
 # copy is running (a stale download has caused confusion).
-SCRIPT_REV="2026-09-24b"
+SCRIPT_REV="2026-09-24e"
 
 DONE=(); FAILED=(); SKIPPED=()
 # Set once the user declines Homebrew, so later brew-needing steps don't keep
 # re-asking.
 _BREW_DECLINED=0
 
+# This script asks questions as it goes. If stdin isn't a terminal (e.g. it was
+# run as `curl … | bash`), `read` consumes the SCRIPT TEXT instead of the
+# keyboard — so prompts are skipped and steps run as if answered. Refuse rather
+# than act without consent.
+if [ ! -t 0 ]; then
+  echo "This setup asks before each step, so it needs an interactive terminal —"
+  echo "it can't be piped (as in 'curl … | bash')."
+  echo
+  echo "Download it, then run it directly:"
+  echo "  curl -fsSL https://raw.githubusercontent.com/nebedaay/ScholarWeft/main/install/install-mac.sh -o install-mac.sh"
+  echo "  bash install-mac.sh"
+  exit 1
+fi
+
 ask() { # <question> [label-for-summary]  → single keypress: y / n / q
   local a
   while :; do
     printf '%s [y/n/q] ' "$1"
-    IFS= read -r -n 1 a || exit 0
+    # Read from the terminal explicitly, so a redirected stdin can't feed answers.
+    IFS= read -r -n 1 a </dev/tty || exit 0
     printf '\n'
     case "${a:-}" in
       [yY]) return 0 ;;
@@ -76,6 +99,18 @@ ask() { # <question> [label-for-summary]  → single keypress: y / n / q
       *) printf '  Please press y, n, or q.\n' ;;
     esac
   done
+}
+
+# Like `ask`, but requires the user to TYPE a word (not a single keypress) —
+# used for anything destructive, where a stray keystroke must not trigger it.
+# Enter / anything else declines.
+ask_type() { # <question> <required-word> [label-for-summary]
+  local answer
+  printf '%s ' "$1"
+  IFS= read -r answer </dev/tty || exit 0
+  if [ "$answer" = "$2" ]; then return 0; fi
+  [ -n "${3:-}" ] && skip "$3"
+  return 1
 }
 
 # Remind the user to quit an app (Obsidian/Zotero) and offer to retry while a
@@ -578,6 +613,79 @@ if [ "$OBSIDIAN_APP" = 0 ] || [ "$ZOTERO_APP" = 0 ]; then
     else fail "Install apps" "Homebrew is needed to install the apps (see https://brew.sh)"; fi
   fi
 fi
+
+# Refresh Obsidian for an existing install. Obsidian has TWO version numbers:
+# the APP self-updates, but the INSTALLER only changes when Obsidian is
+# reinstalled — and plugins (ZotLit especially) refuse to load on an installer
+# below 1.13.4. The installer version isn't readable from disk (only the app's
+# Info.plist version is), so we ask the user, and word it so their answer picks
+# between "you need this" and "you'd still benefit".
+if [ "$OBSIDIAN_APP" = 1 ]; then
+  echo
+  echo "  Obsidian is installed. We recommend periodically REFRESHING it (reinstalling,"
+  echo "  not just updating), which keeps its installer compatible with plugins."
+  echo "    • Check Settings → About → Installer version."
+  echo "    • Below 1.13.4, or unsure? You need to reinstall Obsidian to use ZotLit."
+  echo "    • Higher? Still worth refreshing if you haven't in a while."
+  echo "  Refreshing replaces the app; your vaults, plugins and settings are untouched."
+  if ask "  Refresh Obsidian now?" "Refresh Obsidian"; then
+    if ensure_brew; then
+      # `brew upgrade`/`reinstall` only work on a cask BREW installed: they
+      # uninstall-then-reinstall using the options it was originally installed
+      # with, and fail on an app installed manually (e.g. dragged from the .dmg).
+      # Obsidian's cask is a plain app copy — no sudo, no prompts.
+      if brew list --cask --versions obsidian >/dev/null 2>&1; then
+        local before; before="$(obsidian_app_version)"
+        step "Refreshing Obsidian (Homebrew-managed)${before:+ — was $before}…"
+        if brew upgrade --cask obsidian || brew reinstall --cask obsidian; then
+          local after; after="$(obsidian_app_version)"
+          pass "Refreshed Obsidian (installer updated)${after:+ — now version $after}"
+        else
+          fail "Refresh Obsidian" "brew failed — reinstall from https://obsidian.md/download"
+        fi
+      else
+        # Manually installed: brew won't replace it in place, so the app has to
+        # go first. Deleting an application is destructive, so this needs a
+        # TYPED confirmation — a stray keypress must not start it — and we move
+        # the app to the Trash rather than deleting it, so it can be restored.
+        echo
+        echo "  Refreshing replaces the current Obsidian with a fresh copy: it has to be"
+        echo "  deleted and reinstalled. Your vaults, plugins and settings are NOT inside"
+        echo "  the app, so they are safe."
+        echo
+        echo "    • To let this script do it, type:  yes"
+        echo "    • To do it yourself later: quit Obsidian, delete it from Applications,"
+        echo "      then reinstall from https://obsidian.md/download"
+        echo "    • Anything else (including just pressing Return) skips this step."
+        echo
+        if ask_type "  Refresh Obsidian now? (yes/n/q):" "yes" "Refresh Obsidian"; then
+          if _retry_while "Obsidian is still running — please quit it (Cmd+Q), then retry." \
+                          "Refresh Obsidian" pgrep -x Obsidian; then
+            step "Moving Obsidian to the Trash…"
+            osascript -e 'tell application "Finder" to delete (POSIX file "/Applications/Obsidian.app" as alias)' >/dev/null 2>&1
+            # Verify it actually went: `osascript` reports success even when the
+            # Finder delete is refused (e.g. missing automation permission), so
+            # never proceed on its exit status alone.
+            if [ -d /Applications/Obsidian.app ]; then
+              fail "Refresh Obsidian" "Obsidian is still in /Applications — delete it there, then reinstall from https://obsidian.md/download"
+            else
+              pass "Moved Obsidian to the Trash (restore it from there if this fails)"
+              step "Reinstalling Obsidian…"
+              if brew install --cask obsidian; then
+                local after; after="$(obsidian_app_version)"
+                pass "Refreshed Obsidian (installer updated)${after:+ — now version $after}"
+              else
+                fail "Refresh Obsidian" "install failed — Obsidian is in your Trash; reinstall from https://obsidian.md/download"
+              fi
+            fi
+          fi
+        else
+          echo "  Skipped. You can refresh Obsidian yourself any time (see above)."
+        fi
+      fi
+    else fail "Refresh Obsidian" "Homebrew is needed; reinstall from https://obsidian.md/download"; fi
+  fi
+fi
 # A freshly installed app has no vault/profile yet; say so before the steps
 # that need one (the vault search and the Zotero steps pause and offer a retry).
 if [ "$OBSIDIAN_APP" = 0 ] && [ -d /Applications/Obsidian.app ]; then
@@ -599,10 +707,9 @@ if ask "Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settin
       # INSTALLER even when the app is current — and the installer only updates
       # by reinstalling Obsidian. Flag it now, before the plugins are relied on,
       # since the symptom otherwise looks like a failed install.
-      echo "  Reminder: if a plugin won't turn on (ZotLit is the usual one), check"
-      echo "  Obsidian → Settings → About → Installer version. If it's behind the app"
-      echo "  version, reinstall Obsidian from https://obsidian.md/download — your"
-      echo "  vault and settings are untouched."
+      echo "  Reminder: if a plugin won't turn on (ZotLit is the usual one), its"
+      echo "  INSTALLER is probably below 1.13.4. Re-run this script and say yes to"
+      echo "  \"Refresh Obsidian\" (or reinstall from https://obsidian.md/download)."
       disable_conflicting_plugins "$VAULT"
       install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
       install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"

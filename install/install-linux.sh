@@ -17,15 +17,30 @@ skip() { SKIPPED+=("$*"); }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-SCRIPT_REV="2026-09-24b"
+SCRIPT_REV="2026-09-24e"
 
 DONE=(); FAILED=(); SKIPPED=()
+
+# This script asks questions as it goes. If stdin isn't a terminal (e.g. it was
+# run as `curl … | bash`), `read` consumes the SCRIPT TEXT instead of the
+# keyboard — so prompts are skipped and steps run as if answered. Refuse rather
+# than act without consent.
+if [ ! -t 0 ]; then
+  echo "This setup asks before each step, so it needs an interactive terminal —"
+  echo "it can't be piped (as in 'curl … | bash')."
+  echo
+  echo "Download it, then run it directly:"
+  echo "  curl -fsSL https://raw.githubusercontent.com/nebedaay/ScholarWeft/main/install/install-linux.sh -o install-linux.sh"
+  echo "  bash install-linux.sh"
+  exit 1
+fi
 
 ask() { # <question> [label-for-summary]  → single keypress: y / n / q
   local a
   while :; do
     printf '%s [y/n/q] ' "$1"
-    IFS= read -r -n 1 a || exit 0
+    # Read from the terminal explicitly, so a redirected stdin can't feed answers.
+    IFS= read -r -n 1 a </dev/tty || exit 0
     printf '\n'
     case "${a:-}" in
       [yY]) return 0 ;;
@@ -34,6 +49,18 @@ ask() { # <question> [label-for-summary]  → single keypress: y / n / q
       *) printf '  Please press y, n, or q.\n' ;;
     esac
   done
+}
+
+# Like `ask`, but requires the user to TYPE a word (not a single keypress) —
+# used for anything destructive, where a stray keystroke must not trigger it.
+# Enter / anything else declines.
+ask_type() { # <question> <required-word> [label-for-summary]
+  local answer
+  printf '%s ' "$1"
+  IFS= read -r answer </dev/tty || exit 0
+  if [ "$answer" = "$2" ]; then return 0; fi
+  [ -n "${3:-}" ] && skip "$3"
+  return 1
 }
 
 # Remind the user to quit an app (Obsidian/Zotero) and offer to retry while a
@@ -424,6 +451,34 @@ if [ "$had_obsidian" = 0 ] || [ "$had_zotero" = 0 ]; then
     else fail "Install apps" "Flatpak is not installed (get the apps from obsidian.md and zotero.org)"; fi
   fi
 fi
+
+# Refresh Obsidian for an existing install: the APP self-updates, but the
+# INSTALLER only changes on a reinstall, and plugins (ZotLit especially) won't
+# load on an installer below 1.13.4. The installer version isn't readable from
+# disk, so we ask, wording it so the answer covers both cases.
+if [ "$had_obsidian" = 1 ]; then
+  echo
+  echo "  Obsidian is installed. We recommend periodically REFRESHING it (reinstalling,"
+  echo "  not just updating), which keeps its installer compatible with plugins."
+  echo "    • Check Settings → About → Installer version."
+  echo "    • Below 1.13.4, or unsure? You need to reinstall Obsidian to use ZotLit."
+  echo "    • Higher? Still worth refreshing if you haven't in a while."
+  echo "  Refreshing replaces the app; your vaults, plugins and settings are untouched."
+  if ask "  Refresh Obsidian now?" "Refresh Obsidian"; then
+    if have flatpak && flatpak info md.obsidian.Obsidian >/dev/null 2>&1; then
+      before="$(flatpak info md.obsidian.Obsidian 2>/dev/null | sed -n 's/^ *Version: *//p' | head -1)"
+      step "Refreshing Obsidian${before:+ — was $before}…"
+      if flatpak update -y md.obsidian.Obsidian; then
+        after="$(flatpak info md.obsidian.Obsidian 2>/dev/null | sed -n 's/^ *Version: *//p' | head -1)"
+        pass "Refreshed Obsidian (installer updated)${after:+ — now version $after}"
+      else
+        fail "Refresh Obsidian" "flatpak update failed — reinstall from https://obsidian.md/download"
+      fi
+    else
+      fail "Refresh Obsidian" "not a Flatpak install; reinstall from https://obsidian.md/download"
+    fi
+  fi
+fi
 # A freshly installed app has no vault/profile yet; say so before the steps
 # that need one (the vault search and the Zotero steps pause and offer a retry).
 if [ "$had_obsidian" = 0 ] && have obsidian; then
@@ -444,10 +499,9 @@ if ask "Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settin
       # ZotLit (and sometimes others) refuse to load on an old Obsidian
       # INSTALLER even when the app is current — and the installer only updates
       # by reinstalling Obsidian. Flag it now, before the plugins are relied on.
-      echo "  Reminder: if a plugin won't turn on (ZotLit is the usual one), check"
-      echo "  Obsidian → Settings → About → Installer version. If it's behind the app"
-      echo "  version, reinstall Obsidian from https://obsidian.md/download — your"
-      echo "  vault and settings are untouched."
+      echo "  Reminder: if a plugin won't turn on (ZotLit is the usual one), its"
+      echo "  INSTALLER is probably below 1.13.4. Re-run this script and say yes to"
+      echo "  \"Refresh Obsidian\" (or reinstall from https://obsidian.md/download)."
       disable_conflicting_plugins "$VAULT"
       install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
       install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"

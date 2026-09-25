@@ -18,16 +18,29 @@ macOS blocks apps from folders such as **Documents**, **Desktop**, **Downloads**
 
 (Windows and Linux: skip this step.)
 
-#### 2. Everyone: update Obsidian's *installer* if it's behind
+#### 2. Everyone: check Obsidian's *installer* version
 
 Obsidian has **two** version numbers, and the one that matters here isn't the one that updates itself:
 
 - the **app** version updates automatically, and
-- the **installer** version only changes when you download Obsidian again and replace it.
+- the **installer** version only changes when Obsidian is **reinstalled**.
 
-Plugins — **ZotLit especially** — can refuse to load, or error when you enable them, on an old installer. The script installs ZotLit's files, but a stale installer stops them from working, which looks like a script failure.
+**The installer being behind the app version is normal** — it happens every time the app updates, and it is not a problem in itself. What matters is the **threshold**: plugins — **ZotLit especially** — will not load on an installer **below 1.13.4**. (If you don't use ZotLit, an older installer is usually fine.)
 
-**Check it:** open Obsidian → **Settings → About** (or run **Show debug info** from the command palette) and read the **Installer version**. If it's behind the app version, download the latest from <https://obsidian.md/download> and replace your current copy (on macOS, drag the new **Obsidian** into **Applications** and choose **Replace**). Your vaults, plugins, and settings are untouched.
+**Check it:** open Obsidian → **Settings → About** (or run **Show debug info** from the command palette) and read the **Installer version**.
+
+- **Below 1.13.4, or unsure?** You need to reinstall Obsidian for ZotLit to work.
+- **1.13.4 or higher?** You're fine. It's still worth refreshing occasionally, but nothing is broken.
+
+**Reinstalling Obsidian is easy, and the setup script offers to do it:** it asks *"Refresh Obsidian now?"* and reinstalls the app for you (through Homebrew, Flatpak, or winget, depending on your system). That replaces the app and updates its installer; **your vaults, plugins, and settings are untouched.**
+
+- If Obsidian was installed through your package manager, the script updates it in place.
+- If it was installed by hand (dragged from the download), the old app has to be removed first. The script **explains this and asks you to type `yes`** before doing anything — nothing is deleted by a stray keypress. If you prefer, decline and do it yourself: quit Obsidian, delete it from Applications, then reinstall.
+- Either way the old app goes to the **Trash**, so it can be restored if anything goes wrong.
+
+> **This doesn't commit you to the terminal.** Refreshing is a one-off: Obsidian keeps updating itself afterwards exactly as before, and doing so doesn't break anything. You only need the terminal again if you want to refresh a second time.
+
+If you'd rather do it by hand: download the latest from <https://obsidian.md/download> and replace your current copy (on macOS, drag the new **Obsidian** into **Applications** and choose **Replace**).
 
 ### What the script does
 
@@ -78,7 +91,7 @@ It is **interactive** (`y` / `n` / `q` as single keypresses before each step), s
 
 Download: <https://obsidian.md/download>
 
-> **Already have Obsidian? You may need to update its *installer*, not just the app.** Obsidian has two version numbers. The **app** version updates itself automatically, but the **installer** version only changes when you install Obsidian again from a fresh download — and some plugins (ZotLit in particular) need a recent installer. Check **Settings → About** (or run **Show debug info** from the command palette) and look at **Installer version**. If it is behind your app version, or a plugin won't turn on, download the latest version of Obsidian from <https://obsidian.md/download> and replace your current version with it; your vaults, plugins, and settings are untouched.
+> **Already have Obsidian?** Check its **Installer version** (**Settings → About**, or **Show debug info**). The installer being behind the app version is normal and harmless — but plugins (ZotLit in particular) won't load on an installer **below 1.13.4**. If yours is below that, reinstall Obsidian; the [setup script](#the-easy-way-run-the-setup-script) offers a one-step **Refresh Obsidian**, or download the latest from <https://obsidian.md/download> and replace your copy. Your vaults, plugins, and settings are untouched.
 
 **macOS**
 1. Open the downloaded `.dmg`, drag **Obsidian** into the **Applications** folder, then open it from Applications.
@@ -141,7 +154,7 @@ BBT generates citekeys automatically. If an item has no citekey yet, right-click
 
 ZotLit creates rich literature notes from Zotero items (annotations, metadata) and powers ScholarWeft's `@@` full-text search. It needs Better BibTeX from Step 3, and it has **two halves**: the Obsidian plugin below, and a small add-on inside Zotero (you'll see `zotlit@aidenlx.site` in Zotero's Add-ons). The [setup script](#the-easy-way-run-the-setup-script) can download and install the Zotero half for you when Zotero is closed; otherwise follow ZotLit's own instructions (<https://zotlit.aidenlx.top/>).
 
-> **ZotLit won't enable, or errors when you turn it on?** This is almost always an out-of-date Obsidian **installer** (not the app). Re-download the latest installer from <https://obsidian.md/download>, reinstall Obsidian, and try again — see [Step 1](#1-install-obsidian). Your vault and settings are untouched.
+> **ZotLit won't enable, or errors when you turn it on?** This is almost always an Obsidian **installer below 1.13.4** (not an out-of-date app). Re-run the [setup script](#the-easy-way-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> and try again — see [Step 1](#1-install-obsidian). Your vault and settings are untouched.
 
 1. In **Obsidian**: **Settings** (gear, bottom-left) → **Community plugins**.
 2. If you see **Restricted mode** / **Turn on community plugins**, click **Turn on community plugins** and confirm.
@@ -328,7 +341,7 @@ Open **Settings → ScholarWeft**.
 
 ## Troubleshooting
 
-**A plugin (e.g. ZotLit) won't enable, or errors when you enable it.** Your Obsidian **installer** is probably older than the app. The app updates itself, but the installer only updates when you reinstall from a fresh download. Check **Settings → About** (or run **Show debug info**) for the **Installer version**, then download the latest installer from <https://obsidian.md/download> and reinstall Obsidian — your vault and settings are untouched.
+**A plugin (e.g. ZotLit) won't enable, or errors when you enable it.** Your Obsidian **installer** is probably **below 1.13.4**. (An installer older than the app version is normal and harmless — the threshold is what matters.) Check **Settings → About** (or **Show debug info**) for the **Installer version**. Re-run the [setup script](#the-easy-way-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> — your vault and settings are untouched.
 
 **“Cannot connect to Zotero.”** Three usual causes, in order:
 

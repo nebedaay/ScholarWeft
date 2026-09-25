@@ -9,7 +9,7 @@
 
 # Bump when the script changes, and print it at start-up so it's obvious which
 # copy is running (a stale download has caused confusion).
-$script:SCRIPT_REV = '2026-09-24b'
+$script:SCRIPT_REV = '2026-09-24e'
 
 $ErrorActionPreference = 'Stop'
 $script:Done = @(); $script:Failed = @(); $script:Skipped = @()
@@ -294,6 +294,10 @@ function Ensure-Python {
 
 function Winget($id) { Step "Installing $id..."; winget install --id $id -e --accept-source-agreements --accept-package-agreements }
 
+# Reinstall/refresh: `--force` replaces an existing install regardless of how it
+# was originally installed (winget otherwise treats it as already present).
+function Winget-Refresh($id) { Step "Refreshing $id..."; winget install --id $id -e --force --accept-source-agreements --accept-package-agreements }
+
 # ═════════════════════════════════════════════════════════════════════════════
 Say "ScholarWeft setup (script $($script:SCRIPT_REV))"
 Write-Host "  Running: $PSCommandPath"
@@ -310,6 +314,34 @@ if (-not (Have obsidian) -or -not (Have zotero)) {
   }
 }
 
+# Refresh Obsidian for an existing install: the APP self-updates, but the
+# INSTALLER only changes on a reinstall, and plugins (ZotLit especially) won't
+# load on an installer below 1.13.4. The installer version isn't readable from
+# disk, so we ask, wording it so the answer covers both cases.
+if (Have obsidian) {
+  Write-Host ''
+  Write-Host '  Obsidian is installed. We recommend periodically REFRESHING it (reinstalling,'
+  Write-Host '  not just updating), which keeps its installer compatible with plugins.'
+  Write-Host '    - Check Settings -> About -> Installer version.'
+  Write-Host '    - Below 1.13.4, or unsure? You need to reinstall Obsidian to use ZotLit.'
+  Write-Host '    - Higher? Still worth refreshing if you have not in a while.'
+  Write-Host '  Refreshing replaces the app; your vaults, plugins and settings are untouched.'
+  if (Ask '  Refresh Obsidian now?' 'Refresh Obsidian') {
+    if (Have winget) {
+      # `--force` reinstalls over an existing app. It replaces the app but not
+      # always the installer cleanly, so if it reports failure we point at the
+      # manual reinstall rather than implying it worked.
+      $ver = (Get-Item (Get-Command obsidian -ErrorAction SilentlyContinue).Source -ErrorAction SilentlyContinue).VersionInfo.ProductVersion
+      if (Winget-Refresh 'Obsidian.Obsidian') { Pass "Refreshed Obsidian (installer updated)$(if ($ver) { " - now version $ver" })" }
+      else {
+        Fail 'Refresh Obsidian' 'winget failed - uninstall Obsidian, then reinstall from https://obsidian.md/download'
+      }
+    } else {
+      Fail 'Refresh Obsidian' 'winget is not available; reinstall from https://obsidian.md/download'
+    }
+  }
+}
+
 # Locate the vault up front, so it's clear where plugins would go before we ask.
 Locate-Vaults
 
@@ -320,10 +352,9 @@ if (Ask 'Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their setti
     # ZotLit (and sometimes others) refuse to load on an old Obsidian INSTALLER
     # even when the app is current — and the installer only updates by
     # reinstalling Obsidian. Flag it now, before the plugins are relied on.
-    Write-Host '  Reminder: if a plugin won''t turn on (ZotLit is the usual one), check'
-    Write-Host '  Obsidian -> Settings -> About -> Installer version. If it''s behind the app'
-    Write-Host '  version, reinstall Obsidian from https://obsidian.md/download - your'
-    Write-Host '  vault and settings are untouched.'
+    Write-Host '  Reminder: if a plugin won''t turn on (ZotLit is the usual one), its'
+    Write-Host '  INSTALLER is probably below 1.13.4. Re-run this script and say yes to'
+    Write-Host '  "Refresh Obsidian" (or reinstall from https://obsidian.md/download).'
     Disable-ConflictingPlugins $script:Vault
     Install-ObsidianPlugin 'nebedaay/ScholarWeft' 'scholar-weft' $script:Vault
     Install-ObsidianPlugin 'PKM-er/obsidian-zotlit' 'zotlit' $script:Vault
