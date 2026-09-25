@@ -231,15 +231,15 @@ export function renderAnnotationCallout(
   inner.push('');
 
   // The annotation's own content, then any image/ink folded in by "+"
-  // continuations — all inside ONE sub-callout, separated by a "..." line, so
-  // a selection spanning pages reads as a single quote (like merged text).
+  // continuations — all inside ONE sub-callout, so a selection spanning pages
+  // reads as a single quote (like merged text).
   const header = annotationHeader(a, colorRaw);
   if (header) {
     const body = annotationBodyLines(a);
-    // Image/ink continuations are already distinct blocks, so they follow one
-    // another with no separator line.
+    // Each image/ink continuation is its own block; a blank line between blocks
+    // keeps them visually separate (an empty string renders as a lone `>`).
     for (const m of a.continuationMedia ?? []) {
-      body.push(...annotationBodyLines(m));
+      body.push('', ...annotationBodyLines(m));
     }
     if (a.type === 'image' || a.continuationMedia?.some((m) => m.type === 'image')) {
       body.push('> - [[image annotations|images]]');

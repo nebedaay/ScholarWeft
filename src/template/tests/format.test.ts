@@ -127,7 +127,7 @@ describe('renderAnnotationCallout() — image/ink', () => {
     expect(out).toContain('> > - [[image annotations|images]]');
   });
 
-  it('renders "+" media continuations in one callout with no separator line', () => {
+  it('renders "+" media continuations in one callout, blank-line separated', () => {
     const continuation = annotation({
       key: 'B',
       type: 'image',
@@ -142,9 +142,10 @@ describe('renderAnnotationCallout() — image/ink', () => {
         continuationMedia: [continuation],
       })
     );
-    // Both images sit in one callout, back to back.
+    // Both images sit in one callout, with a blank `>` line between blocks.
     expect(out).toContain('> > ![[img.png]]');
     expect(out).toContain('> > ![[b.png]]');
+    expect(out).toContain('>\n> > ![[b.png]]');
     expect(out).not.toContain('> ...');
     // The sub-callout id appears once, not per image.
     expect(out.match(/\[!ann-image-blue\]/g)).toHaveLength(1);
