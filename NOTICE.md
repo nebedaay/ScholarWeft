@@ -129,7 +129,9 @@ adapted from its source:
   colours are mapped to the nearest current colour rather than given their own
   names; that mapping is ScholarWeft's choice, not ZotLit's.
 
-`src/template/engine.ts` reproduces ZotLit's Eta configuration (variable name,
+`src/template/engine.ts` reproduces ZotLit's Eta configuration (data-root name,
 auto-trim, `bq`/`basename`/`suffix`/`embed` helpers, and `include` semantics) so
-templates render identically. The full AGPL-3.0 license text is available at:
+the bundled templates render identically. Only the data-root binding uses
+ZotLit's `zt` name, because these templates are written against it; ScholarWeft's
+own code uses its own naming. The full AGPL-3.0 license text is available at:
 https://www.gnu.org/licenses/agpl-3.0.html

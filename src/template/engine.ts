@@ -4,24 +4,32 @@
 // template). Both are bundled into main.js (combined ~88 KB minified) so the
 // engine always travels with the templates it renders.
 //
-// The Eta configuration below mirrors ZotLit's (`packages/templates/src/index.ts`,
+// The Eta configuration mirrors ZotLit's (`packages/templates/src/index.ts`,
 // AGPL-3.0 — see NOTICE.md) because the bundled templates were written against
-// it. In particular:
-//   - `varName: "zt"` — the data root is exposed as `zt`; without it templates
-//     fail with "zt is not defined".
-//   - `functionHeader` — injects `bq`/`basename`/`suffix`/`embed` as globals, so
+// it. The parts that matter:
+//   - The data root is exposed under TEMPLATE_DATA_ROOT. This is the ONE place
+//     that knows about ZotLit's naming: the templates read their data from `zt`,
+//     so that name is a property of THESE templates, not of ScholarWeft. Our own
+//     code uses its own names throughout.
+//   - `functionHeader` injects `bq`/`basename`/`suffix`/`embed` as globals, so
 //     templates can call them without importing anything.
 //   - `include` REPLACES the data root rather than merging it (ZotLit overrides
-//     Eta's default). Templates here always pass `zt` explicitly, so this only
-//     matters for an `include()` with no second argument.
+//     Eta's default). Templates here always pass the root explicitly, so this
+//     only matters for an `include()` with no second argument.
 import { Eta } from 'eta';
 import type { EtaConfig } from 'eta';
 import { Liquid } from 'liquidjs';
 
 import { formatBlockquote } from './blockquote';
 
-/** Eta variable name the templates read their data from. */
-export const ZT_ROOT = 'zt';
+/**
+ * Variable name the bundled templates read their data from.
+ *
+ * ZotLit's templates expect `zt`; that is why it appears here at all. Authoring
+ * our own templates would let this be renamed — it is a one-line change, not a
+ * constraint of the renderer.
+ */
+export const TEMPLATE_DATA_ROOT = 'zt';
 
 /**
  * ZotLit overrides Eta's `include` so that an explicit second argument REPLACES
@@ -40,7 +48,7 @@ const includeDataPlugin: NonNullable<EtaConfig['plugins']>[number] = {
 export function makeEta(): Eta {
   return new Eta({
     cache: true,
-    varName: ZT_ROOT,
+    varName: TEMPLATE_DATA_ROOT,
     autoTrim: [true, true],
     autoEscape: false,
     autoFilter: true,
