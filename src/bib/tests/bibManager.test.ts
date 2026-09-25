@@ -45,6 +45,7 @@ import { BibManager } from '../bibManager';
 import { bibPathsToCSL, searchZoteroBBT } from '../helpers';
 import { parseBibFile } from '../bibtex';
 import { ZOTERO_TYPE_TO_CSL, zoteroItemToCSL } from '../zotero-csl';
+import { parseExtra } from '../extra';
 import { SimpleLRU } from '../lru';
 import { locales, styles } from 'src/parser/tests/styles';
 import { PromiseCapability } from 'src/helpers';
@@ -262,6 +263,89 @@ describe('zoteroItemToCSL()', () => {
 
   it('returns null when citationKey is missing', () => {
     expect(zoteroItemToCSL({ data: { itemType: 'book' } }, 1)).toBeNull();
+  });
+
+  it('retains extra, tags, dateAdded and shortTitle for the template context', () => {
+    const result = zoteroItemToCSL(
+      baseItem({
+        extra: 'Original Date: 1950\nPublisher: Routledge',
+        tags: [{ tag: 'sufism' }, { tag: 'west africa' }],
+        dateAdded: '2022-02-12T17:19:53Z',
+        shortTitle: 'Short',
+      }),
+      1
+    ) as any;
+    expect(result._extra).toBe('Original Date: 1950\nPublisher: Routledge');
+    expect(result._tags).toEqual(['sufism', 'west africa']);
+    expect(result._dateAdded).toBe('2022-02-12T17:19:53Z');
+    expect(result['title-short']).toBe('Short');
+  });
+
+  it('omits the new fields entirely when Zotero has no value for them', () => {
+    // Templates test for presence, so an empty array/string must not appear as
+    // though it were data.
+    const result = zoteroItemToCSL(baseItem(), 1) as any;
+    expect(result._extra).toBeUndefined();
+    expect(result._tags).toBeUndefined();
+    expect(result._dateAdded).toBeUndefined();
+    expect(result['title-short']).toBeUndefined();
+  });
+
+  it('drops non-string tag entries rather than passing them through', () => {
+    const result = zoteroItemToCSL(
+      baseItem({ tags: [{ tag: 'ok' }, { tag: '' }, {}, null] }),
+      1
+    ) as any;
+    expect(result._tags).toEqual(['ok']);
+  });
+
+  it('handles a real Zotero item end to end (captured from the local API)', () => {
+    // The item this project has been using as a fixture. Kept verbatim so a
+    // change to the mapping shows up against real data, not a tidy synthetic.
+    const real = {
+      key: 'EKUBHHNW',
+      version: 0,
+      data: {
+        key: 'EKUBHHNW',
+        version: 0,
+        itemType: 'book',
+        title: 'Bughyat al-mustafīd li-sharḥ munyat al-murīd',
+        date: '2005',
+        language: 'ar',
+        extra: '{:original-date:}',
+        place: 'Beirut',
+        publisher: 'Dār al-Jīl',
+        citationKey: 'alsaihBughyatAlmustafid2005',
+        creators: [
+          { firstName: 'Muḥammad al-ʿArabī b.', lastName: 'Al-Sāʾiḥ', creatorType: 'author' },
+          { firstName: 'Saʿīd Maḥmūd', lastName: 'ʿUqayyil', creatorType: 'editor' },
+        ],
+        tags: [],
+        collections: [],
+        relations: {},
+        dateAdded: '2022-02-12T17:19:53Z',
+        dateModified: '2025-01-02T20:35:01Z',
+      },
+    };
+    const r = zoteroItemToCSL(real, 1) as any;
+
+    expect(r.id).toBe('alsaihBughyatAlmustafid2005');
+    expect(r.type).toBe('book');
+    expect(r.publisher).toBe('Dār al-Jīl');
+    expect(r['publisher-place']).toBe('Beirut');
+    expect(r.language).toBe('ar');
+    expect(r.issued).toEqual({ 'date-parts': [[2005]] });
+    expect(r.author).toEqual([
+      { family: 'Al-Sāʾiḥ', given: 'Muḥammad al-ʿArabī b.' },
+    ]);
+    expect(r.editor).toEqual([{ family: 'ʿUqayyil', given: 'Saʿīd Maḥmūd' }]);
+    expect(r._zoteroKey).toBe('EKUBHHNW');
+    expect(r._dateAdded).toBe('2022-02-12T17:19:53Z');
+    // Present but valueless: retained verbatim, and parsed as a text row.
+    expect(r._extra).toBe('{:original-date:}');
+    expect(parseExtra(r._extra)!.fields).toEqual({});
+    // An empty tag list must not appear as data.
+    expect(r._tags).toBeUndefined();
   });
 
   it('maps a journal article correctly', () => {

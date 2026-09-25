@@ -142,6 +142,22 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   if (data.seriesNumber) csl['collection-number'] = data.seriesNumber;
   if (data.conferenceName) csl['event-title'] = data.conferenceName;
   if (data.section) csl.section = data.section;
+  // Zotero's Short Title maps to the CSL short form of the title.
+  if (data.shortTitle) csl['title-short'] = data.shortTitle;
+
+  // Retained for the note-template context (`src/template`). None of these are
+  // CSL fields proper: `extra` is Zotero's free-text catch-all (parsed on
+  // demand by `src/bib/extra.ts`), and tags/dateAdded have no CSL equivalent.
+  // They cost nothing extra to keep — the item payload is already fetched and
+  // walked here — and retaining them avoids a per-item request at import time.
+  if (data.extra) csl._extra = data.extra;
+  if (data.tags?.length) {
+    const tags = data.tags
+      .map((t: any) => t?.tag)
+      .filter((t: unknown): t is string => typeof t === 'string' && !!t);
+    if (tags.length) csl._tags = tags;
+  }
+  if (data.dateAdded) csl._dateAdded = data.dateAdded;
 
   // Internal metadata — not CSL fields.
   if (data.dateModified) csl._dateModified = data.dateModified;
