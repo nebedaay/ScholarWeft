@@ -20747,7 +20747,7 @@ __export(exports, {
   default: () => ReferenceList
 });
 var import_state2 = __toModule(require("@codemirror/state"));
-var import_obsidian30 = __toModule(require("obsidian"));
+var import_obsidian31 = __toModule(require("obsidian"));
 
 // src/editorExtension.ts
 var import_language = __toModule(require("@codemirror/language"));
@@ -89091,6 +89091,2338 @@ var ReferenceListView = class extends import_obsidian18.ItemView {
   }
 };
 
+// src/dataExplorer.ts
+var import_obsidian21 = __toModule(require("obsidian"));
+
+// src/noteImport.ts
+var import_obsidian20 = __toModule(require("obsidian"));
+
+// src/template/color.ts
+var ANNOTATION_COLOR_NAMES = {
+  "#FFD400": "yellow",
+  "#FF6666": "red",
+  "#5FB236": "green",
+  "#2EA8E5": "blue",
+  "#A28AE5": "purple",
+  "#E56EEE": "magenta",
+  "#F19837": "orange",
+  "#AAAAAA": "gray",
+  "#FF8C19": "yellow",
+  "#A6507B": "purple"
+};
+function annotationColorToName(raw) {
+  var _a;
+  if (!raw)
+    return null;
+  return (_a = ANNOTATION_COLOR_NAMES[raw.toUpperCase()]) != null ? _a : null;
+}
+
+// src/bib/extra.ts
+var EXTRA_PAIR_RE = /^([A-Za-z][\w .-]*?)\s*[:=]\s*(.+)$/;
+var EXTRA_CSL_FIELDS = new Set([
+  "abstract",
+  "accessed",
+  "annote",
+  "archive",
+  "archive-place",
+  "author",
+  "authority",
+  "call-number",
+  "chapter-number",
+  "citation-label",
+  "citation-number",
+  "collection-editor",
+  "collection-number",
+  "collection-title",
+  "composer",
+  "container",
+  "container-author",
+  "container-title",
+  "container-title-short",
+  "dimensions",
+  "director",
+  "edition",
+  "editor",
+  "editorial-director",
+  "event",
+  "event-date",
+  "event-place",
+  "first-reference-note-number",
+  "genre",
+  "illustrator",
+  "interviewer",
+  "issue",
+  "issued",
+  "jurisdiction",
+  "keyword",
+  "language",
+  "locator",
+  "medium",
+  "note",
+  "number",
+  "number-of-pages",
+  "number-of-volumes",
+  "original-author",
+  "original-date",
+  "original-publisher",
+  "original-publisher-place",
+  "original-title",
+  "page",
+  "page-first",
+  "publisher",
+  "publisher-place",
+  "recipient",
+  "references",
+  "reviewed-author",
+  "reviewed-title",
+  "scale",
+  "section",
+  "source",
+  "status",
+  "submitted",
+  "title",
+  "title-short",
+  "translator",
+  "type",
+  "version",
+  "volume",
+  "year-suffix"
+]);
+var UPPERCASE_FIELDS = new Set(["doi", "isbn", "issn", "pmcid", "pmid", "url"]);
+function parseExtra(extra) {
+  if (!extra || !extra.trim())
+    return null;
+  const lines = [];
+  const fields = {};
+  for (const raw of extra.split(/\r?\n/)) {
+    const m3 = EXTRA_PAIR_RE.exec(raw);
+    if (!m3) {
+      lines.push({ raw, key: null });
+      continue;
+    }
+    const key = m3[1].trim();
+    const value = m3[2].trim();
+    if (!key || !value) {
+      lines.push({ raw, key: null });
+      continue;
+    }
+    lines.push({ raw, key, value });
+    if (!(key in fields))
+      fields[key] = value;
+  }
+  return { raw: extra, fields, lines };
+}
+function extraKeyToCslField(key) {
+  const normalized = key.toLowerCase().replace(/\s+/g, "-");
+  if (normalized === "archive-location")
+    return "archive_location";
+  if (UPPERCASE_FIELDS.has(normalized))
+    return normalized.toUpperCase();
+  if (EXTRA_CSL_FIELDS.has(normalized))
+    return normalized;
+  return null;
+}
+function extraKeyToContextProperty(key) {
+  const csl = extraKeyToCslField(key);
+  if (!csl)
+    return null;
+  if (/^[A-Z]+$/.test(csl))
+    return csl;
+  return csl.split(/[-_]/).map((part, i3) => i3 === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)).join("");
+}
+
+// src/template/markdown.ts
+var import_obsidian19 = __toModule(require("obsidian"));
+var HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"];
+var FENCE_RE = /^\s*(?:```|~~~)/;
+var CODE_SPAN_OR_ESCAPABLE_RE = /(`+[^`]*`+)|((?<!\\)[\[<])/g;
+function escapeOutsideCode(line) {
+  return line.replace(CODE_SPAN_OR_ESCAPABLE_RE, (match2, code, char) => code != null ? code : `\\${char}`);
+}
+function escapeMarkdown(text) {
+  let inFence = false;
+  return text.split("\n").map((line) => {
+    if (FENCE_RE.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    return inFence ? line : escapeOutsideCode(line);
+  }).join("\n");
+}
+function normalizeHeadingLevels(html, topLevel) {
+  var _a;
+  if (!html.trim())
+    return html;
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const headings = [];
+  for (const tag of HEADING_TAGS) {
+    headings.push(...Array.from(doc.body.getElementsByTagName(tag)));
+  }
+  if (headings.length === 0)
+    return html;
+  let min = Number.POSITIVE_INFINITY;
+  const levelOf = new Map();
+  for (const h3 of headings) {
+    const level = Number(h3.tagName.charAt(1));
+    levelOf.set(h3, level);
+    if (level < min)
+      min = level;
+  }
+  const delta = topLevel - min;
+  if (delta === 0)
+    return html;
+  for (const h3 of headings) {
+    const level = Math.min(6, Math.max(1, ((_a = levelOf.get(h3)) != null ? _a : min) + delta));
+    const replacement = doc.createElement(`h${level}`);
+    replacement.innerHTML = h3.innerHTML;
+    h3.replaceWith(replacement);
+  }
+  return doc.body.innerHTML;
+}
+function htmlToMarkdownText(html) {
+  if (!html || !html.trim())
+    return "";
+  return (0, import_obsidian19.htmlToMarkdown)(html).trim();
+}
+function htmlFieldToMarkdown(html) {
+  return escapeMarkdown(htmlToMarkdownText(html));
+}
+function noteHtmlToMarkdown(html, opts = {}) {
+  var _a;
+  if (!html || !html.trim())
+    return "";
+  const topLevel = (_a = opts.topLevel) != null ? _a : 3;
+  return escapeMarkdown((0, import_obsidian19.htmlToMarkdown)(normalizeHeadingLevels(html, topLevel)).trim());
+}
+
+// src/template/context.ts
+var CSL_TO_ZOTERO_ITEM_TYPE = {
+  "graphic": "artwork",
+  "song": "audioRecording",
+  "bill": "bill",
+  "post-weblog": "blogPost",
+  "book": "book",
+  "chapter": "bookSection",
+  "legal_case": "case",
+  "software": "computerProgram",
+  "paper-conference": "conferencePaper",
+  "dataset": "dataset",
+  "entry-dictionary": "dictionaryEntry",
+  "document": "document",
+  "personal_communication": "letter",
+  "entry-encyclopedia": "encyclopediaArticle",
+  "motion_picture": "videoRecording",
+  "post": "forumPost",
+  "hearing": "hearing",
+  "interview": "interview",
+  "article-journal": "journalArticle",
+  "article-magazine": "magazineArticle",
+  "manuscript": "manuscript",
+  "map": "map",
+  "article-newspaper": "newspaperArticle",
+  "patent": "patent",
+  "broadcast": "tvBroadcast",
+  "article": "preprint",
+  "speech": "presentation",
+  "report": "report",
+  "standard": "standard",
+  "legislation": "statute",
+  "thesis": "thesis",
+  "webpage": "webpage"
+};
+function cslTypeToZoteroItemType(cslType) {
+  var _a;
+  const t4 = typeof cslType === "string" && cslType ? cslType : "document";
+  return (_a = CSL_TO_ZOTERO_ITEM_TYPE[t4]) != null ? _a : t4;
+}
+var CSL_ROLE_TO_ZOTERO = {
+  author: "author",
+  editor: "editor",
+  translator: "translator",
+  contributor: "contributor",
+  "container-author": "bookAuthor",
+  "collection-editor": "seriesEditor",
+  director: "director",
+  interviewer: "interviewer",
+  composer: "composer",
+  producer: "producer",
+  "script-writer": "scriptwriter",
+  "reviewed-author": "reviewedAuthor",
+  performer: "performer",
+  lyricist: "wordsBy",
+  recipient: "recipient",
+  witness: "witness",
+  illustrator: "illustrator",
+  "editorial-director": "editorialDirector"
+};
+var CREATOR_ROLE_ORDER = [
+  "author",
+  "editor",
+  "translator",
+  "contributor",
+  "director",
+  "container-author",
+  "collection-editor",
+  "interviewer",
+  "composer",
+  "producer",
+  "script-writer",
+  "reviewed-author",
+  "performer",
+  "lyricist",
+  "illustrator",
+  "editorial-director",
+  "recipient",
+  "witness"
+];
+var PRIMARY_CREATOR_TYPE = {
+  artwork: "artist",
+  audioRecording: "performer",
+  computerProgram: "programmer",
+  film: "director",
+  interview: "interviewer",
+  map: "cartographer",
+  patent: "inventor",
+  podcast: "author",
+  presentation: "presenter",
+  radioBroadcast: "director",
+  tvBroadcast: "director",
+  videoRecording: "director"
+};
+function toCreator(name, role) {
+  const family = typeof name.family === "string" ? name.family : "";
+  const given = typeof name.given === "string" ? name.given : "";
+  const literal = typeof name.literal === "string" && name.literal ? name.literal : null;
+  const fullName = literal != null ? literal : [given, family].filter(Boolean).join(" ");
+  return { family, given, literal, role, fullName };
+}
+function entryCreators(entry) {
+  const native = entry._creators;
+  if (Array.isArray(native) && native.length) {
+    return native.filter((c3) => !!c3 && typeof c3 === "object").map((c3) => toCreator(c3, typeof c3.role === "string" && c3.role ? c3.role : "author"));
+  }
+  const out = [];
+  const seen = new Set();
+  const emit = (roleKey) => {
+    var _a;
+    const list = entry[roleKey];
+    if (!Array.isArray(list))
+      return;
+    const role = (_a = CSL_ROLE_TO_ZOTERO[roleKey]) != null ? _a : roleKey;
+    for (const name of list) {
+      if (!name || typeof name !== "object")
+        continue;
+      out.push(toCreator(name, role));
+    }
+    seen.add(roleKey);
+  };
+  for (const roleKey of CREATOR_ROLE_ORDER)
+    emit(roleKey);
+  for (const key of Object.keys(entry)) {
+    if (seen.has(key))
+      continue;
+    if (Array.isArray(entry[key]) && key !== "author")
+      emit(key);
+  }
+  return out;
+}
+function primaryCreatorTypeFor(itemType) {
+  var _a;
+  return (_a = PRIMARY_CREATOR_TYPE[itemType]) != null ? _a : "author";
+}
+function formatAuthorsShort(creators, primaryRole) {
+  const authors = creators.filter((c3) => !primaryRole || c3.role === primaryRole);
+  const list = authors.length ? authors : creators;
+  const surname = (c3) => c3.literal || c3.family || c3.fullName || "";
+  if (list.length === 0)
+    return "";
+  if (list.length === 1)
+    return surname(list[0]);
+  if (list.length === 2)
+    return `${surname(list[0])} and ${surname(list[1])}`;
+  return `${surname(list[0])} et al.`;
+}
+var pad2 = (n2) => n2 < 10 ? `0${n2}` : String(n2);
+function num(v3) {
+  const n2 = typeof v3 === "number" ? v3 : Number(v3);
+  return Number.isFinite(n2) ? Math.trunc(n2) : null;
+}
+function standaloneYear(text) {
+  const m3 = /(?:^|[^\d])([12]\d{3})(?:[^\d]|$)/.exec(text);
+  return m3 ? Number(m3[1]) : null;
+}
+function withToString(date, text) {
+  Object.defineProperty(date, "toString", {
+    value: () => text,
+    enumerable: false,
+    configurable: true
+  });
+  return date;
+}
+function toContextDate(issued) {
+  if (issued == null)
+    return null;
+  if (typeof issued === "string") {
+    const text = issued.trim();
+    if (!text)
+      return null;
+    const year2 = standaloneYear(text);
+    return year2 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: year2, month: null, day: null, raw: text }, String(year2));
+  }
+  const obj = issued;
+  const raw = typeof obj.raw === "string" ? obj.raw : typeof obj.literal === "string" ? obj.literal : "";
+  const parts = Array.isArray(obj["date-parts"]) ? obj["date-parts"][0] : void 0;
+  const arr = Array.isArray(parts) ? parts : [];
+  const year = num(arr[0]);
+  const month = num(arr[1]);
+  const day = num(arr[2]);
+  if (year == null) {
+    const text = raw.trim();
+    if (!text)
+      return null;
+    const y3 = standaloneYear(text);
+    return y3 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: y3, month: null, day: null, raw: text }, String(y3));
+  }
+  const rawOut = raw || String(year);
+  if (month != null && day != null) {
+    const value = `${year}-${pad2(month)}-${pad2(day)}`;
+    return withToString({ kind: "date", value, year, month, day, raw: rawOut }, value);
+  }
+  if (month != null) {
+    const value = `${year}-${pad2(month)}`;
+    return withToString({ kind: "yearMonth", value, year, month, day: null, raw: rawOut }, value);
+  }
+  return withToString({ kind: "year", value: null, year, month: null, day: null, raw: rawOut }, String(year));
+}
+function str(v3) {
+  if (v3 == null)
+    return null;
+  if (typeof v3 === "string")
+    return v3 ? v3 : null;
+  if (typeof v3 === "number" || typeof v3 === "boolean")
+    return String(v3);
+  return null;
+}
+function mdField(v3) {
+  const s3 = str(v3);
+  if (s3 == null)
+    return null;
+  return htmlToMarkdownText(s3) || null;
+}
+function isPersonal(groupID) {
+  return groupID == null || groupID === 1;
+}
+function indexedKeyFor(key, groupID) {
+  return groupID == null ? key : `${key}g${groupID}`;
+}
+function backlinkFor(key, groupID) {
+  return groupID == null ? `zotero://select/library/items/${key}` : `zotero://select/groups/${groupID}/items/${key}`;
+}
+function weblinkFor(key, groupID) {
+  if (groupID == null || !key)
+    return null;
+  return `https://www.zotero.org/groups/${groupID}/items/${key}`;
+}
+function noteLinkFor(notePath) {
+  var _a;
+  if (!notePath)
+    return () => null;
+  const base = notePath.replace(/\.md$/, "");
+  const defaultAlias = (_a = base.split("/").pop()) != null ? _a : base;
+  return (alias, subpath) => {
+    const target = subpath ? `${base}#${subpath}` : base;
+    return `[[${target}|${alias != null ? alias : defaultAlias}]]`;
+  };
+}
+function buildNoteContext(entry, children = {}) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+  const e3 = entry != null ? entry : {};
+  const rawGroup = e3.groupID;
+  const groupID = isPersonal(rawGroup) ? null : rawGroup;
+  const libraryID = groupID != null ? groupID : 1;
+  const key = (_b = (_a = str(e3._zoteroKey)) != null ? _a : str(e3.key)) != null ? _b : "";
+  const itemType = cslTypeToZoteroItemType(e3.type);
+  const creators = entryCreators(e3);
+  const primaryCreatorType = primaryCreatorTypeFor(itemType);
+  const authors = creators.filter((c3) => c3.role === primaryCreatorType);
+  const notePath = (_c = children.notePath) != null ? _c : null;
+  const ctx = {
+    key,
+    groupID,
+    libraryID,
+    indexedKey: indexedKeyFor(key, groupID),
+    itemType,
+    dateAdded: (_e = (_d = str(e3._dateAdded)) != null ? _d : str(e3.dateAdded)) != null ? _e : "",
+    dateModified: (_g = (_f = str(e3._dateModified)) != null ? _f : str(e3.dateModified)) != null ? _g : "",
+    backlink: backlinkFor(key, groupID),
+    weblink: weblinkFor(key, groupID),
+    notePath,
+    noteLink: noteLinkFor(notePath),
+    title: mdField(e3.title),
+    shortTitle: mdField(e3["title-short"]),
+    abstract: mdField(e3.abstract),
+    containerTitle: str(e3["container-title"]),
+    citationKey: str(e3.id),
+    citekey: str(e3.id),
+    date: toContextDate(e3.issued),
+    DOI: str(e3.DOI),
+    url: str(e3.URL),
+    ISBN: str(e3.ISBN),
+    ISSN: str(e3.ISSN),
+    volume: str(e3.volume),
+    issue: str(e3.issue),
+    pages: str(e3.page),
+    publisher: str(e3.publisher),
+    place: str(e3["publisher-place"]),
+    edition: str(e3.edition),
+    language: str(e3.language),
+    series: str(e3["collection-title"]),
+    seriesNumber: str(e3["collection-number"]),
+    numberOfVolumes: str(e3["number-of-volumes"]),
+    extra: parseExtra(e3._extra),
+    creators,
+    primaryCreatorType,
+    authors: authors.length ? authors : creators,
+    authorsShort: formatAuthorsShort(creators, primaryCreatorType),
+    tags: (Array.isArray(e3._tags) ? e3._tags : []).filter((t4) => typeof t4 === "string" && !!t4).map((name) => ({ name, type: "unknown" })),
+    collections: [],
+    annotations: (_h = children.annotations) != null ? _h : [],
+    attachments: (_i = children.attachments) != null ? _i : [],
+    notes: (_j = children.notes) != null ? _j : [],
+    relatedItems: []
+  };
+  const extra = ctx.extra;
+  if (extra) {
+    for (const [extraKey, value] of Object.entries(extra.fields)) {
+      const prop = extraKeyToContextProperty(extraKey);
+      if (!prop)
+        continue;
+      const current = ctx[prop];
+      if (current == null || current === "")
+        ctx[prop] = value;
+    }
+  }
+  return ctx;
+}
+
+// src/template/children.ts
+function asRecord(v3) {
+  return v3 && typeof v3 === "object" && !Array.isArray(v3) ? v3 : null;
+}
+function rawData(raw) {
+  var _a, _b, _c;
+  return (_c = (_b = asRecord((_a = asRecord(raw)) == null ? void 0 : _a.data)) != null ? _b : asRecord(raw)) != null ? _c : {};
+}
+function rawKey(raw, data) {
+  var _a, _b, _c;
+  return (_c = (_b = str2(data.key)) != null ? _b : str2((_a = asRecord(raw)) == null ? void 0 : _a.key)) != null ? _c : "";
+}
+function str2(v3) {
+  if (v3 == null)
+    return null;
+  if (typeof v3 === "string")
+    return v3 || null;
+  if (typeof v3 === "number" || typeof v3 === "boolean")
+    return String(v3);
+  return null;
+}
+function openLinkFor(key, groupID) {
+  return groupID == null ? `zotero://open/library/items/${key}` : `zotero://open/groups/${groupID}/items/${key}`;
+}
+function fileUrl(absPath) {
+  let p4 = absPath.replace(/\\/g, "/");
+  if (!p4.startsWith("/"))
+    p4 = `/${p4}`;
+  return `file://${p4.split("/").map(encodeURIComponent).join("/")}`;
+}
+function fileUrlToPath(href) {
+  const raw = href.replace(/^file:\/\//i, "").split(/[?#]/)[0];
+  try {
+    return decodeURIComponent(raw);
+  } catch (e3) {
+    return raw;
+  }
+}
+function fileUrlLink(absPath, defaultAlias, defaultSubpath = "") {
+  const href = fileUrl(absPath);
+  return (alias, subpath) => `[${alias != null ? alias : defaultAlias}](${href}${subpath != null ? subpath : defaultSubpath})`;
+}
+function basenamePath(p4) {
+  const clean = p4.replace(/[\\/]+$/, "");
+  const i3 = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
+  const name = i3 >= 0 ? clean.slice(i3 + 1) : clean;
+  return name || null;
+}
+function joinPath(base, ...rest) {
+  let out = base.replace(/[\\/]+$/, "");
+  for (const segment of rest) {
+    const clean = segment.replace(/^[\\/]+/, "").replace(/[\\/]+$/, "");
+    if (clean)
+      out += `/${clean}`;
+  }
+  return out;
+}
+var LINK_MODES = new Set([
+  "imported_file",
+  "imported_url",
+  "linked_file",
+  "linked_url",
+  "embedded_image"
+]);
+function linkModeOf(v3) {
+  const s3 = str2(v3);
+  return s3 && LINK_MODES.has(s3) ? s3 : "unknown";
+}
+function resolveAttachmentFilePath(raw, data, key, opts) {
+  var _a, _b, _c;
+  const enclosure = str2((_c = asRecord((_b = asRecord((_a = asRecord(raw)) == null ? void 0 : _a.links)) == null ? void 0 : _b.enclosure)) == null ? void 0 : _c.href);
+  if (enclosure)
+    return fileUrlToPath(enclosure);
+  const p4 = str2(data.path);
+  if (p4) {
+    if (/^attachments:/i.test(p4)) {
+      const rel = p4.replace(/^attachments:/i, "");
+      return opts.baseAttachmentPath ? joinPath(opts.baseAttachmentPath, rel) : null;
+    }
+    if (/^storage:/i.test(p4)) {
+      const filename2 = p4.replace(/^storage:/i, "");
+      return opts.dataDir ? joinPath(opts.dataDir, "storage", key, filename2) : null;
+    }
+    if (/^[a-zA-Z]:[\\/]/.test(p4) || p4.startsWith("/") || p4.startsWith("~"))
+      return p4;
+  }
+  const filename = str2(data.filename);
+  const mode = linkModeOf(data.linkMode);
+  if (opts.dataDir && filename && (mode === "imported_file" || mode === "imported_url")) {
+    return joinPath(opts.dataDir, "storage", key, filename);
+  }
+  return null;
+}
+function mapAttachment(raw, opts = {}) {
+  var _a, _b, _c;
+  const data = rawData(raw);
+  const key = rawKey(raw, data);
+  const groupID = (_a = opts.groupID) != null ? _a : null;
+  const filePath = resolveAttachmentFilePath(raw, data, key, opts);
+  const filename = (_b = str2(data.filename)) != null ? _b : filePath ? basenamePath(filePath) : null;
+  const fileLink = filePath ? fileUrlLink(filePath, (_c = filename != null ? filename : basenamePath(filePath)) != null ? _c : "attachment") : () => null;
+  return {
+    key,
+    indexedKey: indexedKeyFor(key, groupID),
+    filename,
+    contentType: str2(data.contentType),
+    linkMode: linkModeOf(data.linkMode),
+    backlink: openLinkFor(key, groupID),
+    filePath,
+    fileLink
+  };
+}
+function placeholderAttachment(key, opts) {
+  var _a;
+  const groupID = (_a = opts.groupID) != null ? _a : null;
+  return {
+    key,
+    indexedKey: indexedKeyFor(key, groupID),
+    filename: null,
+    contentType: null,
+    linkMode: "unknown",
+    backlink: openLinkFor(key, groupID),
+    filePath: null,
+    fileLink: () => null
+  };
+}
+function mapTags(rawTags) {
+  var _a;
+  if (!Array.isArray(rawTags))
+    return [];
+  const out = [];
+  for (const t4 of rawTags) {
+    const rec = asRecord(t4);
+    const name = typeof t4 === "string" ? t4 : (_a = str2(rec == null ? void 0 : rec.name)) != null ? _a : str2(rec == null ? void 0 : rec.tag);
+    if (!name)
+      continue;
+    out.push({ name, type: tagTypeOf(rec == null ? void 0 : rec.type) });
+  }
+  return out;
+}
+function tagTypeOf(v3) {
+  if (v3 === 1 || v3 === "auto" || v3 === "automatic")
+    return "auto";
+  if (v3 === 0 || v3 === "manual" || v3 === void 0 || v3 === null)
+    return "manual";
+  return "unknown";
+}
+function pageOf(position) {
+  const s3 = str2(position);
+  if (!s3)
+    return null;
+  try {
+    const idx = JSON.parse(s3).pageIndex;
+    return typeof idx === "number" && Number.isFinite(idx) ? idx + 1 : null;
+  } catch (e3) {
+    return null;
+  }
+}
+var ANNOTATION_TYPES = new Set([
+  "highlight",
+  "note",
+  "image",
+  "ink",
+  "underline",
+  "text"
+]);
+function annotationImageLink(key, type, opts) {
+  if (type !== "image" && type !== "ink")
+    return null;
+  if (!opts.dataDir)
+    return null;
+  const libraryPath = opts.groupID == null ? "library" : `groups/${opts.groupID}`;
+  const cachePath = joinPath(opts.dataDir, "cache", libraryPath, `${key}.png`);
+  return fileUrlLink(cachePath, `${key}.png`);
+}
+function mapAnnotation(raw, parentItem, parentAttachment, opts = {}) {
+  var _a, _b, _c, _d, _e, _f;
+  const data = rawData(raw);
+  const key = rawKey(raw, data);
+  const groupID = (_a = opts.groupID) != null ? _a : null;
+  const type = (_b = str2(data.annotationType)) != null ? _b : "unknown";
+  const colorHex = str2(data.annotationColor);
+  const page = pageOf(data.annotationPosition);
+  const commentHtml = str2(data.annotationComment);
+  const filePath = parentAttachment.filePath;
+  const fileLink = filePath ? fileUrlLink(filePath, (_d = (_c = parentAttachment.filename) != null ? _c : basenamePath(filePath)) != null ? _d : "attachment", page != null ? `#page=${page}` : "") : () => null;
+  return {
+    imgLink: annotationImageLink(key, type, opts),
+    comment: commentHtml ? htmlToMarkdownText(commentHtml) || null : null,
+    fileLink,
+    backlink: backlinkFor(key, groupID),
+    parentItem,
+    parentAttachment,
+    key,
+    indexedKey: indexedKeyFor(key, groupID),
+    libraryID: groupID != null ? groupID : 1,
+    type: ANNOTATION_TYPES.has(type) ? type : "unknown",
+    text: str2(data.annotationText),
+    commentHtml,
+    colorHex,
+    colorName: annotationColorToName(colorHex),
+    pageLabel: str2(data.annotationPageLabel),
+    page,
+    authorName: str2(data.annotationAuthorName),
+    isExternal: data.annotationIsExternal === true,
+    dateAdded: (_e = str2(data.dateAdded)) != null ? _e : "",
+    dateModified: (_f = str2(data.dateModified)) != null ? _f : "",
+    tags: mapTags(data.tags)
+  };
+}
+function mapNote(raw, opts = {}) {
+  var _a, _b, _c;
+  const data = rawData(raw);
+  const key = rawKey(raw, data);
+  const html = (_a = str2(data.note)) != null ? _a : str2(data.noteHtml);
+  return {
+    key,
+    indexedKey: indexedKeyFor(key, (_b = opts.groupID) != null ? _b : null),
+    title: str2(data.title),
+    noteLink: null,
+    text: html ? noteHtmlToMarkdown(html, { topLevel: (_c = opts.noteHeadingLevel) != null ? _c : 3 }) : null,
+    html
+  };
+}
+function applyChildren(ctx, raw, opts = {}) {
+  var _a, _b, _c;
+  const resolved = {
+    ...opts,
+    groupID: opts.groupID !== void 0 ? opts.groupID : ctx.groupID
+  };
+  const attachments = ((_a = raw.attachments) != null ? _a : []).map((r3) => mapAttachment(r3, resolved));
+  const byKey = new Map(attachments.map((a3) => [a3.key, a3]));
+  const annotations = ((_b = raw.annotations) != null ? _b : []).map((r3) => {
+    var _a2, _b2;
+    const parentKey = (_a2 = str2(rawData(r3).parentItem)) != null ? _a2 : "";
+    const parentAttachment = (_b2 = byKey.get(parentKey)) != null ? _b2 : placeholderAttachment(parentKey, resolved);
+    return mapAnnotation(r3, ctx, parentAttachment, resolved);
+  });
+  const notes = ((_c = raw.notes) != null ? _c : []).map((r3) => mapNote(r3, resolved));
+  ctx.attachments = attachments;
+  ctx.annotations = annotations;
+  ctx.notes = notes;
+  return ctx;
+}
+function buildNoteContextWithChildren(entry, raw, opts = {}) {
+  const ctx = buildNoteContext(entry, { notePath: opts.notePath });
+  return applyChildren(ctx, raw, opts);
+}
+
+// node_modules/eta/dist/index.mjs
+var fs = __toModule(require("node:fs"));
+var path = __toModule(require("node:path"));
+var EtaError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "Eta Error";
+  }
+};
+var EtaParseError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaParser Error";
+  }
+};
+var EtaRuntimeError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaRuntime Error";
+  }
+};
+var EtaFileResolutionError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaFileResolution Error";
+  }
+};
+var EtaNameResolutionError = class extends EtaError {
+  constructor(message) {
+    super(message);
+    this.name = "EtaNameResolution Error";
+  }
+};
+function ParseErr(message, str3, indx) {
+  const whitespace = str3.slice(0, indx).split(/\n/);
+  const lineNo = whitespace.length;
+  const colNo = whitespace[lineNo - 1].length + 1;
+  message += " at line " + lineNo + " col " + colNo + ":\n\n  " + str3.split(/\n/)[lineNo - 1] + "\n  " + Array(colNo).join(" ") + "^";
+  throw new EtaParseError(message);
+}
+function RuntimeErr(originalError, str3, lineNo, path$1) {
+  const lines = str3.split("\n");
+  const start = Math.max(lineNo - 3, 0);
+  const end = Math.min(lines.length, lineNo + 3);
+  const filename = path$1;
+  const context = lines.slice(start, end).map((line, i3) => {
+    const curr = i3 + start + 1;
+    return (curr === lineNo ? " >> " : "    ") + curr + "| " + line;
+  }).join("\n");
+  const err = new EtaRuntimeError((filename ? filename + ":" + lineNo + "\n" : "line " + lineNo + "\n") + context + "\n\n" + originalError.message);
+  err.name = originalError.name;
+  err.cause = originalError;
+  throw err;
+}
+function readFile(path$1) {
+  let res = "";
+  try {
+    res = fs.readFileSync(path$1, "utf8");
+  } catch (err) {
+    if ((err == null ? void 0 : err.code) === "ENOENT")
+      throw new EtaFileResolutionError(`Could not find template: ${path$1}`);
+    else
+      throw err;
+  }
+  return res;
+}
+function resolvePath(templatePath, options) {
+  var _a;
+  let resolvedFilePath = "";
+  const views = this.config.views;
+  if (!views)
+    throw new EtaFileResolutionError("Views directory is not defined");
+  const baseFilePath = options == null ? void 0 : options.filepath;
+  const defaultExtension = this.config.defaultExtension === void 0 ? ".eta" : this.config.defaultExtension;
+  const cacheIndex = JSON.stringify({
+    filename: baseFilePath,
+    path: templatePath,
+    views: this.config.views
+  });
+  templatePath += path.extname(templatePath) ? "" : defaultExtension;
+  if (baseFilePath) {
+    if (this.config.cacheFilepaths && this.filepathCache[cacheIndex])
+      return this.filepathCache[cacheIndex];
+    if ((_a = absolutePathRegExp.exec(templatePath)) == null ? void 0 : _a.length) {
+      const formattedPath = templatePath.replace(/^\/*|^\\*/, "");
+      resolvedFilePath = path.join(views, formattedPath);
+    } else
+      resolvedFilePath = path.join(path.dirname(baseFilePath), templatePath);
+  } else
+    resolvedFilePath = path.join(views, templatePath);
+  if (dirIsChild(views, resolvedFilePath)) {
+    if (baseFilePath && this.config.cacheFilepaths)
+      this.filepathCache[cacheIndex] = resolvedFilePath;
+    return resolvedFilePath;
+  } else
+    throw new EtaFileResolutionError(`Template '${templatePath}' is not in the views directory`);
+}
+function dirIsChild(parent, dir) {
+  const relative2 = path.relative(parent, dir);
+  return relative2 && !relative2.startsWith("..") && !path.isAbsolute(relative2);
+}
+var absolutePathRegExp = /^\\|^\//;
+var AsyncFunction = (async () => {
+}).constructor;
+function compile(str3, options) {
+  const config = this.config;
+  const ctor = (options == null ? void 0 : options.async) ? AsyncFunction : Function;
+  try {
+    return new ctor(config.varName, "options", this.compileToString.call(this, str3, options));
+  } catch (e3) {
+    if (e3 instanceof SyntaxError)
+      throw new EtaParseError("Bad template syntax\n\n" + e3.message + "\n" + Array(e3.message.length + 1).join("=") + "\n" + this.compileToString.call(this, str3, options) + "\n");
+    else
+      throw e3;
+  }
+}
+function compileToString(str3, options) {
+  const config = this.config;
+  const isAsync = options == null ? void 0 : options.async;
+  const compileBody$1 = this.compileBody;
+  const buffer = this.parse.call(this, str3);
+  let res = `${config.functionHeader}
+let include = (__eta_t, __eta_d) => this.render(__eta_t, {...${config.varName}, ...(__eta_d ?? {})}, options);
+let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, {...${config.varName}, ...(__eta_d ?? {})}, options);
+
+let __eta = {res: "", e: this.config.escapeFunction, f: this.config.filterFunction, blocks: {}${config.debug ? ', line: 1, templateStr: "' + str3.replace(/\\|"/g, "\\$&").replace(/\r\n|\n|\r/g, "\\n") + '"' : ""}};
+
+function layout(path, data) {
+  __eta.layout = path;
+  __eta.layoutData = data;
+}${config.debug ? "try {" : ""}${config.useWith ? "with(" + config.varName + "||{}){" : ""}
+
+function ${config.outputFunctionName}(s){__eta.res+=s;}
+function capture(fn){const s=__eta.res;__eta.res='';try{fn();return __eta.res}finally{__eta.res=s;}}
+async function captureAsync(fn){const s=__eta.res;__eta.res='';try{await fn();return __eta.res}finally{__eta.res=s;}}
+function block(name,fn){if(__eta.layout){if(fn){__eta.blocks[name]=capture(fn);}return '';}const b=${config.varName}.__blocks||{};if(name in b){return b[name];}return fn?capture(fn):'';}
+async function blockAsync(name,fn){if(__eta.layout){if(fn){__eta.blocks[name]=await captureAsync(fn);}return '';}const b=${config.varName}.__blocks||{};if(name in b){return b[name];}return fn?await captureAsync(fn):'';}
+
+${compileBody$1.call(this, buffer)}
+if (__eta.layout) {
+  __eta.res = ${isAsync ? "await includeAsync" : "include"} (__eta.layout, {...${config.varName}, body: __eta.res, ...__eta.layoutData, __blocks: __eta.blocks});
+}
+${config.useWith ? "}" : ""}${config.debug ? "} catch (e) { this.RuntimeErr(e, __eta.templateStr, __eta.line, options.filepath) }" : ""}
+return __eta.res;
+`;
+  if (config.plugins)
+    for (let i3 = 0; i3 < config.plugins.length; i3++) {
+      const plugin = config.plugins[i3];
+      if (plugin.processFnString)
+        res = plugin.processFnString(res, config);
+    }
+  return res;
+}
+function compileBody(buff) {
+  const config = this.config;
+  let i3 = 0;
+  const buffLength = buff.length;
+  let returnStr = "";
+  for (; i3 < buffLength; i3++) {
+    const currentBlock = buff[i3];
+    if (typeof currentBlock === "string")
+      returnStr += "__eta.res+='" + currentBlock + "';\n";
+    else {
+      const type = currentBlock.t;
+      let content = currentBlock.val || "";
+      if (config.debug)
+        returnStr += "__eta.line=" + currentBlock.lineNo + "\n";
+      if (type === "r") {
+        if (config.autoFilter)
+          content = "__eta.f(" + content + ")";
+        returnStr += "__eta.res+=" + content + ";\n";
+      } else if (type === "i") {
+        if (config.autoFilter)
+          content = "__eta.f(" + content + ")";
+        if (config.autoEscape)
+          content = "__eta.e(" + content + ")";
+        returnStr += "__eta.res+=" + content + ";\n";
+      } else if (type === "e")
+        returnStr += content + "\n";
+      else if (Object.hasOwn(config.customTags, type))
+        returnStr += `__eta.res+=this.config.customTags[${JSON.stringify(type)}](${JSON.stringify(content)},${config.varName});
+`;
+    }
+  }
+  return returnStr;
+}
+function trimWS(str3, config, wsLeft, wsRight) {
+  let leftTrim;
+  let rightTrim;
+  if (Array.isArray(config.autoTrim)) {
+    leftTrim = config.autoTrim[1];
+    rightTrim = config.autoTrim[0];
+  } else
+    leftTrim = rightTrim = config.autoTrim;
+  if (wsLeft || wsLeft === false)
+    leftTrim = wsLeft;
+  if (wsRight || wsRight === false)
+    rightTrim = wsRight;
+  if (!rightTrim && !leftTrim)
+    return str3;
+  if (leftTrim === "slurp" && rightTrim === "slurp")
+    return str3.trim();
+  if (leftTrim === "_" || leftTrim === "slurp")
+    str3 = str3.trimStart();
+  else if (leftTrim === "-" || leftTrim === "nl")
+    str3 = str3.replace(/^(?:\r\n|\n|\r)/, "");
+  if (rightTrim === "_" || rightTrim === "slurp")
+    str3 = str3.trimEnd();
+  else if (rightTrim === "-" || rightTrim === "nl")
+    str3 = str3.replace(/(?:\r\n|\n|\r)$/, "");
+  return str3;
+}
+var escMap = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+};
+function replaceChar(s3) {
+  return escMap[s3];
+}
+function XMLEscape(str3) {
+  const newStr = String(str3);
+  if (/[&<>"']/.test(newStr))
+    return newStr.replace(/[&<>"']/g, replaceChar);
+  else
+    return newStr;
+}
+var defaultConfig = {
+  autoEscape: true,
+  autoFilter: false,
+  autoTrim: [false, "nl"],
+  cache: false,
+  cacheFilepaths: true,
+  customTags: {},
+  debug: false,
+  escapeFunction: XMLEscape,
+  filterFunction: (val) => String(val),
+  outputFunctionName: "output",
+  functionHeader: "",
+  parse: {
+    exec: "",
+    interpolate: "=",
+    raw: "~"
+  },
+  plugins: [],
+  rmWhitespace: false,
+  tags: ["<%", "%>"],
+  useWith: false,
+  varName: "it",
+  defaultExtension: ".eta"
+};
+var templateLitReg = /`(?:\\[\s\S]|\${(?:[^{}]|{(?:[^{}]|{[^}]*})*})*}|(?!\${)[^\\`])*`/g;
+var singleQuoteReg = /'(?:\\[\s\w"'\\`]|[^\n\r'\\])*?'/g;
+var doubleQuoteReg = /"(?:\\[\s\w"'\\`]|[^\n\r"\\])*?"/g;
+function escapeRegExp(string) {
+  return string.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&");
+}
+function getLineNo(str3, index) {
+  return str3.slice(0, index).split("\n").length;
+}
+function parse4(str3) {
+  const config = this.config;
+  let buffer = [];
+  let trimLeftOfNextStr = false;
+  let lastIndex = 0;
+  const parseOptions = config.parse;
+  const customTagPrefixes = Object.keys(config.customTags);
+  if (config.plugins)
+    for (let i3 = 0; i3 < config.plugins.length; i3++) {
+      const plugin = config.plugins[i3];
+      if (plugin.processTemplate)
+        str3 = plugin.processTemplate(str3, config);
+    }
+  if (config.rmWhitespace)
+    str3 = str3.replace(/[\r\n]+/g, "\n").replace(/^\s+|\s+$/gm, "");
+  templateLitReg.lastIndex = 0;
+  singleQuoteReg.lastIndex = 0;
+  doubleQuoteReg.lastIndex = 0;
+  function pushString(strng, shouldTrimRightOfString) {
+    if (strng) {
+      strng = trimWS(strng, config, trimLeftOfNextStr, shouldTrimRightOfString);
+      if (strng) {
+        strng = strng.replace(/\\|'/g, "\\$&").replace(/\r\n|\n|\r/g, "\\n");
+        buffer.push(strng);
+      }
+    }
+  }
+  const prefixes = [
+    parseOptions.exec,
+    parseOptions.interpolate,
+    parseOptions.raw,
+    ...customTagPrefixes
+  ].reduce((accumulator, prefix) => {
+    if (accumulator && prefix)
+      return accumulator + "|" + escapeRegExp(prefix);
+    else if (prefix)
+      return escapeRegExp(prefix);
+    else
+      return accumulator;
+  }, "");
+  const parseOpenReg = new RegExp(escapeRegExp(config.tags[0]) + "(-|_)?\\s*(" + prefixes + ")?\\s*", "g");
+  const parseCloseReg = new RegExp("'|\"|`|\\/\\*|(\\s*(-|_)?" + escapeRegExp(config.tags[1]) + ")", "g");
+  let m3;
+  while (m3 = parseOpenReg.exec(str3)) {
+    const precedingString = str3.slice(lastIndex, m3.index);
+    lastIndex = m3[0].length + m3.index;
+    const wsLeft = m3[1];
+    const prefix = m3[2] || "";
+    pushString(precedingString, wsLeft);
+    parseCloseReg.lastIndex = lastIndex;
+    let closeTag;
+    let currentObj = false;
+    while (closeTag = parseCloseReg.exec(str3))
+      if (closeTag[1]) {
+        const content = str3.slice(lastIndex, closeTag.index);
+        parseOpenReg.lastIndex = lastIndex = parseCloseReg.lastIndex;
+        trimLeftOfNextStr = closeTag[2];
+        currentObj = {
+          t: prefix === parseOptions.exec ? "e" : prefix === parseOptions.raw ? "r" : prefix === parseOptions.interpolate ? "i" : customTagPrefixes.includes(prefix) ? prefix : "",
+          val: content
+        };
+        break;
+      } else {
+        const char = closeTag[0];
+        if (char === "/*") {
+          const commentCloseInd = str3.indexOf("*/", parseCloseReg.lastIndex);
+          if (commentCloseInd === -1)
+            ParseErr("unclosed comment", str3, closeTag.index);
+          parseCloseReg.lastIndex = commentCloseInd;
+        } else if (char === "'") {
+          singleQuoteReg.lastIndex = closeTag.index;
+          if (singleQuoteReg.exec(str3))
+            parseCloseReg.lastIndex = singleQuoteReg.lastIndex;
+          else
+            ParseErr("unclosed string", str3, closeTag.index);
+        } else if (char === '"') {
+          doubleQuoteReg.lastIndex = closeTag.index;
+          if (doubleQuoteReg.exec(str3))
+            parseCloseReg.lastIndex = doubleQuoteReg.lastIndex;
+          else
+            ParseErr("unclosed string", str3, closeTag.index);
+        } else if (char === "`") {
+          templateLitReg.lastIndex = closeTag.index;
+          if (templateLitReg.exec(str3))
+            parseCloseReg.lastIndex = templateLitReg.lastIndex;
+          else
+            ParseErr("unclosed string", str3, closeTag.index);
+        }
+      }
+    if (currentObj) {
+      if (config.debug)
+        currentObj.lineNo = getLineNo(str3, m3.index);
+      buffer.push(currentObj);
+    } else
+      ParseErr("unclosed tag", str3, m3.index);
+  }
+  pushString(str3.slice(lastIndex, str3.length), false);
+  if (config.plugins)
+    for (let i3 = 0; i3 < config.plugins.length; i3++) {
+      const plugin = config.plugins[i3];
+      if (plugin.processAST)
+        buffer = plugin.processAST(buffer, config);
+    }
+  return buffer;
+}
+function handleCache(template, options) {
+  const templateStore = (options == null ? void 0 : options.async) ? this.templatesAsync : this.templatesSync;
+  if (this.resolvePath && this.readFile && !template.startsWith("@")) {
+    const templatePath = options.filepath;
+    const cachedTemplate = templateStore.get(templatePath);
+    if (this.config.cache && cachedTemplate)
+      return cachedTemplate;
+    else {
+      const templateString = this.readFile(templatePath);
+      const templateFn = this.compile(templateString, options);
+      if (this.config.cache)
+        templateStore.define(templatePath, templateFn);
+      return templateFn;
+    }
+  } else {
+    const cachedTemplate = templateStore.get(template);
+    if (cachedTemplate)
+      return cachedTemplate;
+    else
+      throw new EtaNameResolutionError(`Failed to get template '${template}'`);
+  }
+}
+function render(template, data, meta) {
+  let templateFn;
+  const options = {
+    ...meta,
+    async: false
+  };
+  if (typeof template === "string") {
+    if (this.resolvePath && this.readFile && !template.startsWith("@"))
+      options.filepath = this.resolvePath(template, options);
+    templateFn = handleCache.call(this, template, options);
+  } else
+    templateFn = template;
+  return templateFn.call(this, data, options);
+}
+function renderAsync(template, data, meta) {
+  let templateFn;
+  const options = {
+    ...meta,
+    async: true
+  };
+  if (typeof template === "string") {
+    if (this.resolvePath && this.readFile && !template.startsWith("@"))
+      options.filepath = this.resolvePath(template, options);
+    templateFn = handleCache.call(this, template, options);
+  } else
+    templateFn = template;
+  const res = templateFn.call(this, data, options);
+  return Promise.resolve(res);
+}
+function renderString(template, data) {
+  const templateFn = this.compile(template, { async: false });
+  return render.call(this, templateFn, data);
+}
+function renderStringAsync(template, data) {
+  const templateFn = this.compile(template, { async: true });
+  return renderAsync.call(this, templateFn, data);
+}
+var Cacher = class {
+  constructor(cache2) {
+    this.cache = cache2;
+  }
+  define(key, val) {
+    this.cache[key] = val;
+  }
+  get(key) {
+    return this.cache[key];
+  }
+  remove(key) {
+    delete this.cache[key];
+  }
+  reset() {
+    this.cache = {};
+  }
+  load(cacheObj) {
+    this.cache = {
+      ...this.cache,
+      ...cacheObj
+    };
+  }
+};
+var Eta$1 = class {
+  constructor(customConfig) {
+    __publicField(this, "config");
+    __publicField(this, "RuntimeErr", RuntimeErr);
+    __publicField(this, "compile", compile);
+    __publicField(this, "compileToString", compileToString);
+    __publicField(this, "compileBody", compileBody);
+    __publicField(this, "parse", parse4);
+    __publicField(this, "render", render);
+    __publicField(this, "renderAsync", renderAsync);
+    __publicField(this, "renderString", renderString);
+    __publicField(this, "renderStringAsync", renderStringAsync);
+    __publicField(this, "filepathCache", {});
+    __publicField(this, "templatesSync", new Cacher({}));
+    __publicField(this, "templatesAsync", new Cacher({}));
+    __publicField(this, "resolvePath", null);
+    __publicField(this, "readFile", null);
+    if (customConfig)
+      this.config = {
+        ...defaultConfig,
+        ...customConfig
+      };
+    else
+      this.config = { ...defaultConfig };
+    const reserved = [
+      this.config.parse.exec,
+      this.config.parse.interpolate,
+      this.config.parse.raw,
+      "-",
+      "_"
+    ];
+    for (const prefix of Object.keys(this.config.customTags))
+      if (reserved.includes(prefix))
+        throw new EtaError(`Custom tag prefix "${prefix}" conflicts with a built-in prefix`);
+  }
+  configure(customConfig) {
+    this.config = {
+      ...this.config,
+      ...customConfig
+    };
+  }
+  withConfig(customConfig) {
+    return {
+      ...this,
+      config: {
+        ...this.config,
+        ...customConfig
+      }
+    };
+  }
+  loadTemplate(name, template, options) {
+    if (typeof template === "string")
+      ((options == null ? void 0 : options.async) ? this.templatesAsync : this.templatesSync).define(name, this.compile(template, options));
+    else {
+      let templates = this.templatesSync;
+      if (template.constructor.name === "AsyncFunction" || (options == null ? void 0 : options.async))
+        templates = this.templatesAsync;
+      templates.define(name, template);
+    }
+  }
+};
+var Eta = class extends Eta$1 {
+  constructor() {
+    super(...arguments);
+    __publicField(this, "readFile", readFile);
+    __publicField(this, "resolvePath", resolvePath);
+  }
+};
+
+// src/template/blockquote.ts
+function formatBlockquote(content) {
+  const lines = content.trim().split("\n").map((line) => line.trim() === "" ? ">" : `> ${line}`);
+  return lines.filter((line, i3) => !(line === ">" && lines[i3 - 1] === ">")).join("\n");
+}
+
+// src/template/format.ts
+function formatCreator(creator, format2, link = false) {
+  const fmt = format2 != null ? format2 : creator.literal ? "{literal}" : "{family}, {given}";
+  let out = fmt.replace(/\{(family|given|literal|role|fullName)\}/g, (_m, token) => {
+    var _a;
+    return String((_a = creator[token]) != null ? _a : "");
+  });
+  out = out.replace(/\s+/g, " ").trim();
+  out = out.replace(/^[,;]+|[,;]+$/g, "").trim();
+  if (link && out)
+    out = `[[${out}]]`;
+  return out;
+}
+function groupCreatorsByType(creators, format2, opts = {}) {
+  var _a;
+  const link = opts.link !== false;
+  const suffix = (_a = opts.suffix) != null ? _a : "s";
+  const groups = new Map();
+  const add = (c3) => {
+    const name = formatCreator(c3, format2, link);
+    if (!name)
+      return;
+    const values = groups.get(c3.role);
+    if (values)
+      values.push(name);
+    else
+      groups.set(c3.role, [name]);
+  };
+  const orderedRoles = opts.roles ? [...opts.roles] : [];
+  for (const role of orderedRoles) {
+    for (const c3 of creators)
+      if (c3.role === role)
+        add(c3);
+  }
+  for (const c3 of creators) {
+    if (!orderedRoles.includes(c3.role))
+      add(c3);
+  }
+  return [...groups].map(([role, values]) => ({ key: `${role}${suffix}`, values }));
+}
+function creatorNames(creators, opts = {}) {
+  var _a;
+  const roles = opts.roles ? Array.isArray(opts.roles) ? opts.roles : [opts.roles] : null;
+  const list = roles ? creators.filter((c3) => roles.includes(c3.role)) : creators;
+  return list.map((c3) => {
+    var _a2;
+    return formatCreator(c3, opts.format, (_a2 = opts.link) != null ? _a2 : false);
+  }).filter(Boolean).join((_a = opts.join) != null ? _a : ", ");
+}
+function cap(s3) {
+  return s3 ? s3.charAt(0).toUpperCase() + s3.slice(1) : "";
+}
+function calloutLines(s3) {
+  return (s3 != null ? s3 : "").split(/\r?\n/).map((l4) => l4.trim() ? `> ${l4}` : ">");
+}
+function embed(link) {
+  return link ? `!${link}` : null;
+}
+function displayDate(value) {
+  if (!value)
+    return "";
+  const m3 = /^(\d{4}-\d{2}-\d{2})T/.exec(value);
+  return m3 ? m3[1] : value;
+}
+function imgUrl(a3) {
+  return typeof a3.imgLink === "function" ? a3.imgLink() : null;
+}
+function imgAlias(a3, alias) {
+  return typeof a3.imgLink === "function" ? a3.imgLink(alias) : null;
+}
+function renderAnnotationCallout(a3, opts = {}) {
+  var _a, _b;
+  const includeTags = opts.tags !== false;
+  const includeFooter = opts.footer !== false;
+  const colorRaw = (_a = a3.colorName) != null ? _a : "yellow";
+  const colorCap = cap(colorRaw);
+  const typeCap = cap(a3.type);
+  const tags = includeTags ? (_b = a3.tags) != null ? _b : [] : [];
+  const inner = [
+    `[!${colorRaw}-${a3.type}-annotation] ${colorCap} ${typeCap}`
+  ];
+  if (a3.comment || tags.length) {
+    inner.push("> [!ann-comment]");
+    if (a3.comment)
+      inner.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
+    for (const tag of tags)
+      inner.push(`> - [[${tag.name}]]`);
+  }
+  inner.push("");
+  if (a3.type === "highlight" && a3.text) {
+    inner.push(`> [!ann-highlight-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
+  } else if (a3.type === "underline" && a3.text) {
+    inner.push(`> [!ann-underline-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
+  } else if (a3.type === "image") {
+    inner.push(`> [!ann-image-${colorRaw}]`);
+    const url = imgUrl(a3);
+    if (url)
+      inner.push(`> ${embed(url)}`);
+    const view = imgAlias(a3, "view image");
+    if (view)
+      inner.push(`> - ${view}`);
+    inner.push("> - [[image annotations|images]]");
+  } else if (a3.type === "text" || a3.type === "note") {
+    inner.push(`> [!ann-text-${colorRaw}]Text comment\u2014click to view in context:`);
+    if (a3.comment)
+      inner.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
+  } else if (a3.type === "ink") {
+    inner.push(`> [!ann-ink-${colorRaw}]`);
+    const url = imgUrl(a3);
+    if (url)
+      inner.push(`> ${embed(url)}`);
+    const view = imgAlias(a3, "view ink image");
+    if (view)
+      inner.push(`> - ${view}`);
+  }
+  if (includeFooter) {
+    inner.push(`- [[${colorCap} annotations|${colorCap}]]`);
+    const page = a3.pageLabel ? `[${a3.pageLabel.includes("\u2013") ? "pp. " : "p. "}${a3.pageLabel}](${a3.backlink})` : `[View](${a3.backlink})`;
+    inner.push(`- (${page}, ${displayDate(a3.dateAdded)})`);
+  }
+  return formatBlockquote(inner.join("\n"));
+}
+function renderCallout(opts) {
+  var _a;
+  const head = `[!${opts.type}]${opts.collapse ? "-" : ""}${opts.title ? ` ${opts.title}` : ""}`;
+  const body = ((_a = opts.body) != null ? _a : "").split(/\r?\n/);
+  return formatBlockquote([head, ...body].join("\n"));
+}
+
+// src/template/merge.ts
+var MANAGED_OPEN = "%%sw-managed%%";
+var MANAGED_CLOSE = "%%/sw-managed%%";
+var FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+function splitNote(content) {
+  const m3 = FRONTMATTER_RE.exec(content);
+  if (!m3)
+    return { frontmatter: null, body: content };
+  return { frontmatter: m3[1], body: content.slice(m3[0].length) };
+}
+function joinNote(frontmatter, body) {
+  const fm = frontmatter.replace(/\r\n?/g, "\n").replace(/^\n+|\n+$/g, "");
+  return `---
+${fm}
+---
+${body}`;
+}
+var KEY_RE = /^([A-Za-z0-9_][^:\n]*?)[ \t]*:(?:[ \t]|$)/;
+function unquoteKey(key) {
+  const k4 = key.trim();
+  if (k4.length >= 2 && (k4[0] === '"' && k4.endsWith('"') || k4[0] === "'" && k4.endsWith("'"))) {
+    return k4.slice(1, -1);
+  }
+  return k4;
+}
+function parseFrontmatter(frontmatter) {
+  const props = [];
+  let current = null;
+  for (const line of frontmatter.replace(/\r\n?/g, "\n").split("\n")) {
+    const m3 = !/^[ \t]/.test(line) ? KEY_RE.exec(line) : null;
+    if (m3) {
+      if (current)
+        props.push(current);
+      current = { key: unquoteKey(m3[1]), lines: [line] };
+    } else if (current) {
+      current.lines.push(line);
+    } else if (line.trim()) {
+      props.push({ key: "", lines: [line] });
+    }
+  }
+  if (current)
+    props.push(current);
+  return props;
+}
+function isListBlock(lines) {
+  return lines.length >= 1 && /:[ \t]*$/.test(lines[0]) && lines.slice(1).length > 0 && lines.slice(1).every((l4) => /^[ \t]*-[ \t]/.test(l4));
+}
+function appendListItems(existing, generated) {
+  var _a;
+  const head = (_a = existing[0]) != null ? _a : generated[0];
+  const seen = new Set(existing.slice(1).map((l4) => l4.trim()));
+  const out = [...existing.slice(1)];
+  for (const item of generated.slice(1)) {
+    if (seen.has(item.trim()))
+      continue;
+    seen.add(item.trim());
+    out.push(item);
+  }
+  return [head, ...out];
+}
+function reconcile(merge2, existing, generated) {
+  const has = !!existing && existing.length > 0;
+  switch (merge2) {
+    case "keep":
+      return has ? existing : generated;
+    case "append":
+      if (!has)
+        return generated;
+      if (isListBlock(existing) && isListBlock(generated)) {
+        return appendListItems(existing, generated);
+      }
+      return generated;
+    case "replace":
+    default:
+      return generated;
+  }
+}
+function mergeFrontmatter(existingFrontmatter, specs) {
+  const existing = parseFrontmatter(existingFrontmatter != null ? existingFrontmatter : "");
+  const byKey = new Map(specs.map((s3) => [s3.key, s3]));
+  const emitted = new Set();
+  const out = [];
+  for (const prop of existing) {
+    const spec = byKey.get(prop.key);
+    if (!spec) {
+      out.push(...prop.lines);
+      continue;
+    }
+    emitted.add(spec.key);
+    out.push(...reconcile(spec.merge, prop.lines, spec.lines));
+  }
+  for (const spec of specs) {
+    if (emitted.has(spec.key))
+      continue;
+    out.push(...reconcile(spec.merge, void 0, spec.lines));
+  }
+  return out.join("\n");
+}
+function findManagedRegion(body) {
+  const start = body.indexOf(MANAGED_OPEN);
+  if (start === -1)
+    return null;
+  const close2 = body.indexOf(MANAGED_CLOSE, start + MANAGED_OPEN.length);
+  if (close2 === -1)
+    return null;
+  return { start, end: close2 + MANAGED_CLOSE.length };
+}
+function mergeManagedRegion(existingBody, renderedBody, opts = {}) {
+  const rendered = findManagedRegion(renderedBody);
+  const existing = findManagedRegion(existingBody);
+  if (rendered && existing) {
+    return existingBody.slice(0, existing.start) + renderedBody.slice(rendered.start, rendered.end) + existingBody.slice(existing.end);
+  }
+  if (rendered && !existing) {
+    const region = renderedBody.slice(rendered.start, rendered.end);
+    const before = existingBody.replace(/\s+$/, "");
+    return before ? `${before}
+
+${region}
+` : `${region}
+`;
+  }
+  if (!rendered && existing && opts.managesRegion) {
+    const before = existingBody.slice(0, existing.start).replace(/\n+$/, "");
+    const after = existingBody.slice(existing.end).replace(/^\n+/, "");
+    if (!before)
+      return after;
+    if (!after)
+      return `${before}
+`;
+    return `${before}
+
+${after}`;
+  }
+  return existingBody;
+}
+function mergeNote(existing, rendered, specs, opts = {}) {
+  const prior = splitNote(existing);
+  const fresh = splitNote(rendered);
+  const frontmatter = mergeFrontmatter(prior.frontmatter, specs);
+  const body = prior.frontmatter === null ? prior.body : mergeManagedRegion(prior.body, fresh.body, opts);
+  return joinNote(frontmatter, body);
+}
+
+// src/template/yaml.ts
+var INDENT = "  ";
+var INDICATOR_RE = /^[\s\-?:,[\]{}#&*!|>'"%@`]/;
+var NUMBER_LIKE_RE = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
+var BOOL_NULL_LIKE_RE = /^(?:true|false|null|~|yes|no|on|off)$/i;
+var KEY_SAFE_RE = /^[A-Za-z0-9_.-]+$/;
+function needsQuotes(value, quote = "auto") {
+  if (quote === "always")
+    return true;
+  if (quote === "never")
+    return false;
+  if (value === "")
+    return true;
+  if (value !== value.trim())
+    return true;
+  if (INDICATOR_RE.test(value))
+    return true;
+  if (/:\s/.test(value) || /\s#/.test(value))
+    return true;
+  if (/["\\\t]/.test(value))
+    return true;
+  if (BOOL_NULL_LIKE_RE.test(value))
+    return true;
+  if (NUMBER_LIKE_RE.test(value))
+    return true;
+  return false;
+}
+function quoteString(value) {
+  return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+}
+function serializeScalar(value, quote) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : "null";
+  }
+  if (typeof value === "boolean")
+    return value ? "true" : "false";
+  return needsQuotes(value, quote) ? quoteString(value) : value;
+}
+function serializeBlockScalar(value) {
+  const lines = value.replace(/\r\n?/g, "\n").split("\n");
+  if (lines.length > 1 && lines[lines.length - 1] === "")
+    lines.pop();
+  const body = lines.map((line) => line === "" ? "" : INDENT + line).join("\n");
+  return `|-
+${body}`;
+}
+function serializeKey(key) {
+  return KEY_SAFE_RE.test(key) ? key : quoteString(key);
+}
+function serializeProperty(key, value, opts = {}) {
+  var _a;
+  const quote = (_a = opts.quote) != null ? _a : "auto";
+  const k4 = serializeKey(key);
+  if (value === null || value === void 0)
+    return [];
+  if (Array.isArray(value)) {
+    if (value.length === 0)
+      return opts.force ? [`${k4}: []`] : [];
+    return [
+      `${k4}:`,
+      ...value.map((item) => `${INDENT}- ${serializeScalar(item, quote)}`)
+    ];
+  }
+  if (typeof value === "string") {
+    if (value === "")
+      return opts.force ? [`${k4}: ""`] : [];
+    if (/[\n\r]/.test(value)) {
+      return `${k4}: ${serializeBlockScalar(value)}`.split("\n");
+    }
+    return [`${k4}: ${serializeScalar(value, quote)}`];
+  }
+  return [`${k4}: ${serializeScalar(value, quote)}`];
+}
+var YamlBuilder = class {
+  constructor() {
+    this.lines = [];
+    this.specs = [];
+    this.open = false;
+    this.finished = false;
+  }
+  get isOpen() {
+    return this.open;
+  }
+  start() {
+    if (this.open)
+      throw new Error("[sw yaml] start_YAML() called twice");
+    if (this.finished) {
+      throw new Error("[sw yaml] start_YAML() called after end_YAML()");
+    }
+    this.open = true;
+  }
+  add(key, value, opts) {
+    var _a;
+    this.assertOpen("add_property");
+    if (typeof key !== "string" || !key.trim()) {
+      throw new Error("[sw yaml] add_property() needs a non-empty key");
+    }
+    const lines = serializeProperty(key, value, opts);
+    this.lines.push(...lines);
+    this.specs.push({ key, merge: (_a = opts == null ? void 0 : opts.merge) != null ? _a : "replace", lines });
+  }
+  fieldSpecs() {
+    return this.specs.map((s3) => ({ ...s3, lines: [...s3.lines] }));
+  }
+  addRaw(text) {
+    this.assertOpen("add_raw_yaml");
+    if (typeof text !== "string")
+      return;
+    const body = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+    if (body)
+      this.lines.push(...body.split("\n"));
+  }
+  end() {
+    if (!this.open)
+      throw new Error("[sw yaml] end_YAML() without start_YAML()");
+    this.open = false;
+    this.finished = true;
+    return ["---", ...this.lines, "---", ""].join("\n");
+  }
+  assertOpen(fn2) {
+    if (!this.open)
+      throw new Error(`[sw yaml] ${fn2}() outside start_YAML()`);
+  }
+};
+
+// src/template/note-helpers.ts
+var STATE_KEY = "__sw";
+function todayIso(now = new Date()) {
+  const y3 = now.getFullYear();
+  const m3 = String(now.getMonth() + 1).padStart(2, "0");
+  const d3 = String(now.getDate()).padStart(2, "0");
+  return `${y3}-${m3}-${d3}`;
+}
+function prepareTemplateData(ctx, extras = {}) {
+  var _a, _b;
+  const state = {
+    yaml: new YamlBuilder(),
+    options: (_a = extras.options) != null ? _a : {},
+    importDate: (_b = extras.importDate) != null ? _b : todayIso(),
+    isFirstImport: extras.isFirstImport !== false,
+    fileName: null,
+    notesRendered: false
+  };
+  ctx[STATE_KEY] = state;
+  return ctx;
+}
+function defaultFileName(ctx) {
+  var _a, _b;
+  const key = (_b = (_a = ctx.citekey) != null ? _a : ctx.citationKey) != null ? _b : ctx.key;
+  return key ? `@${key}` : "";
+}
+var NoteHelpers = class {
+  stateOf(ctx) {
+    const existing = ctx[STATE_KEY];
+    if (existing)
+      return existing;
+    prepareTemplateData(ctx);
+    return ctx[STATE_KEY];
+  }
+  startYAML(ctx) {
+    this.stateOf(ctx).yaml.start();
+  }
+  addProperty(ctx, key, value, opts) {
+    this.stateOf(ctx).yaml.add(key, value, opts);
+  }
+  addRawYAML(ctx, text) {
+    this.stateOf(ctx).yaml.addRaw(text);
+  }
+  endYAML(ctx) {
+    return this.stateOf(ctx).yaml.end();
+  }
+  fieldSpecs(ctx) {
+    return this.stateOf(ctx).yaml.fieldSpecs();
+  }
+  mergeInto(ctx, existing, rendered, opts = {}) {
+    if (!existing)
+      return rendered;
+    return mergeNote(existing, rendered, this.fieldSpecs(ctx), opts);
+  }
+  setFileName(ctx, name) {
+    this.stateOf(ctx).fileName = (name == null ? void 0 : name.trim()) ? name.trim() : null;
+  }
+  fileName(ctx) {
+    var _a;
+    return (_a = this.stateOf(ctx).fileName) != null ? _a : defaultFileName(ctx);
+  }
+  creatorsByType(ctx, format2, opts) {
+    const state = this.stateOf(ctx);
+    return groupCreatorsByType(ctx.creators, format2 != null ? format2 : state.options.creatorFormat, opts);
+  }
+  creatorValues(ctx, role, format2, opts) {
+    var _a;
+    const state = this.stateOf(ctx);
+    const group = groupCreatorsByType(ctx.creators, format2 != null ? format2 : state.options.creatorFormat, {
+      ...opts,
+      roles: [role]
+    }).find((g4) => {
+      var _a2;
+      return g4.key === `${role}${(_a2 = opts == null ? void 0 : opts.suffix) != null ? _a2 : "s"}`;
+    });
+    return (_a = group == null ? void 0 : group.values) != null ? _a : [];
+  }
+  creatorNames(ctx, role, format2, opts) {
+    var _a;
+    const state = this.stateOf(ctx);
+    const roles = role != null ? role : opts == null ? void 0 : opts.roles;
+    return creatorNames(ctx.creators, {
+      ...opts,
+      roles,
+      format: (_a = format2 != null ? format2 : opts == null ? void 0 : opts.format) != null ? _a : state.options.creatorFormat
+    });
+  }
+  primaryCreators(ctx) {
+    return ctx.authors.length ? ctx.authors : ctx.creators;
+  }
+  zoteroNotes(ctx, opts = {}) {
+    var _a, _b, _c, _d;
+    const state = this.stateOf(ctx);
+    state.notesRendered = true;
+    if (!ctx.notes.length)
+      return "";
+    const mode = (_b = (_a = opts.mode) != null ? _a : state.options.notesMode) != null ? _b : "inline";
+    const level = (_d = (_c = opts.level) != null ? _c : state.options.notesHeadingLevel) != null ? _d : 3;
+    const render2 = (note) => {
+      var _a2;
+      if (mode === "link" && note.noteLink) {
+        const link2 = note.noteLink();
+        if (link2)
+          return link2;
+      }
+      if (note.html)
+        return noteHtmlToMarkdown(note.html, { topLevel: level });
+      if (note.text)
+        return note.text;
+      const link = (_a2 = note.noteLink) == null ? void 0 : _a2.call(note);
+      return link != null ? link : "";
+    };
+    return ctx.notes.map(render2).filter((chunk) => chunk && chunk.trim()).join("\n\n");
+  }
+  annotationCallout(ctx, annotation, opts) {
+    const state = this.stateOf(ctx);
+    return renderAnnotationCallout(annotation, { ...state.options.annotation, ...opts });
+  }
+  callout(ctx, opts) {
+    this.stateOf(ctx);
+    return renderCallout(opts);
+  }
+  wikilink(_ctx, target, alias) {
+    if (!target)
+      return "";
+    return alias ? `[[${target}|${alias}]]` : `[[${target}]]`;
+  }
+  linkNote(ctx, alias, subpath) {
+    var _a;
+    return (_a = ctx.noteLink(alias, subpath)) != null ? _a : "";
+  }
+  mdHtml(_ctx, html) {
+    return htmlFieldToMarkdown(html);
+  }
+  heading(_ctx, level, text) {
+    const l4 = Math.min(6, Math.max(1, Math.floor(level) || 1));
+    return `${"#".repeat(l4)} ${text != null ? text : ""}`.trimEnd();
+  }
+  escapeMd(_ctx, text) {
+    return escapeMarkdown(text != null ? text : "");
+  }
+  importDate(ctx) {
+    return this.stateOf(ctx).importDate;
+  }
+  isFirstImport(ctx) {
+    return this.stateOf(ctx).isFirstImport;
+  }
+  shortTitle(ctx) {
+    var _a;
+    if (ctx.shortTitle)
+      return ctx.shortTitle;
+    const title = (_a = ctx.title) != null ? _a : "";
+    const at = title.indexOf(":");
+    if (at === -1)
+      return null;
+    return title.slice(0, at).trim() || null;
+  }
+  aliases(ctx) {
+    var _a;
+    const title = (_a = ctx.title) != null ? _a : "";
+    const short = this.shortTitle(ctx);
+    const useTitle = short != null ? short : title;
+    const out = [];
+    const creators = this.primaryCreators(ctx);
+    const year = ctx.date ? String(ctx.date.year) : "";
+    if (creators.length) {
+      const first = creators[0].family || creators[0].literal || creators[0].fullName;
+      const authlist = creators.length > 2 ? `${first} et al.` : creators.length === 2 ? `${first} and ${creators[1].family || creators[1].literal || creators[1].fullName}` : first;
+      if (authlist && useTitle) {
+        out.push(`${authlist}${year ? ` - ${year}` : ""} - ${useTitle}`);
+      }
+    }
+    if (title)
+      out.push(title);
+    if (short && short !== title)
+      out.push(short);
+    return [...new Set(out)];
+  }
+  relatedLinks(ctx) {
+    const out = [];
+    for (const item of ctx.relatedItems) {
+      if (item.citationKey)
+        out.push(`[[@${item.citationKey}]]`);
+    }
+    for (const tag of ctx.tags) {
+      if (tag.name)
+        out.push(`[[${tag.name}]]`);
+    }
+    return out;
+  }
+  attachmentLinks(ctx) {
+    return ctx.attachments.filter((a3) => a3.key).map((a3) => {
+      var _a;
+      const label = ((_a = a3.filename) != null ? _a : a3.key).replace(/"/g, '\\"');
+      return `[${label}](${a3.backlink})`;
+    });
+  }
+  attachmentsWithAnnotations(ctx) {
+    const keys = new Set(ctx.annotations.map((a3) => {
+      var _a;
+      return (_a = a3.parentAttachment) == null ? void 0 : _a.key;
+    }).filter(Boolean));
+    return ctx.attachments.filter((a3) => keys.has(a3.key));
+  }
+};
+
+// src/template/zotlit-helpers.ts
+function basename(path2, ext = ".md") {
+  if (ext !== "" && isOnlySlashes(path2))
+    return path2 === ext ? "" : path2;
+  const name = finalSegment(path2);
+  if (ext === "" || name === "")
+    return name;
+  if (path2 === ext)
+    return "";
+  if (name === ext)
+    return name;
+  return name.endsWith(ext) ? name.slice(0, -ext.length) : name;
+}
+function finalSegment(path2) {
+  let end = path2.length;
+  while (end > 0 && path2.charCodeAt(end - 1) === 47)
+    end--;
+  if (end === 0)
+    return "";
+  const start = path2.lastIndexOf("/", end - 1) + 1;
+  return path2.slice(start, end);
+}
+function isOnlySlashes(path2) {
+  if (path2.length === 0)
+    return false;
+  for (let i3 = 0; i3 < path2.length; i3++) {
+    if (path2.charCodeAt(i3) !== 47)
+      return false;
+  }
+  return true;
+}
+function embed2(link, alias, subpath) {
+  if (!link)
+    return "";
+  const rendered = link(alias, subpath);
+  return rendered ? `!${rendered}` : "";
+}
+var MAX_SUFFIX_LENGTH = 64;
+function filenameSuffix(length = 6, prepend = "_", append = "") {
+  if (!Number.isInteger(length) || length < 1 || length > MAX_SUFFIX_LENGTH) {
+    throw new Error(`suffix() length must be an integer in 1..${MAX_SUFFIX_LENGTH}, got ${length}`);
+  }
+  for (const [name, value] of [
+    ["prepend", prepend],
+    ["append", append]
+  ]) {
+    if (/[:%]/.test(value)) {
+      throw new Error(`suffix() ${name} must not contain ':' or '%', got ${JSON.stringify(value)}`);
+    }
+  }
+  return `%zt-suffix:${length}:${prepend}:${append}%`;
+}
+function coerceOutput(value) {
+  if (value === null || value === void 0)
+    return "";
+  if (value instanceof Date)
+    return value.toISOString();
+  const T4 = globalThis.Temporal;
+  if (T4 && value instanceof T4.Instant) {
+    return value.toZonedDateTimeISO(T4.Now.timeZoneId()).toPlainDate().toString();
+  }
+  return String(value);
+}
+
+// src/template/engine.ts
+var TEMPLATE_DATA_ROOT = "item";
+function replaceOnce(source, needle, replacement, label) {
+  const at = source.indexOf(needle);
+  if (at === -1) {
+    throw new Error(`[sw template] eta codegen changed (no ${label} helper); update includeDataPlugin`);
+  }
+  return source.slice(0, at) + replacement + source.slice(at + needle.length);
+}
+var includeDataPlugin = {
+  processFnString(fnString, config) {
+    var _a;
+    const varName = (_a = config == null ? void 0 : config.varName) != null ? _a : "it";
+    const spread = `{...${varName}, ...(__eta_d ?? {})}`;
+    const out = replaceOnce(fnString, `let include = (__eta_t, __eta_d) => this.render(__eta_t, ${spread}, options);`, `let include = (__eta_t, __eta_d) => this.render(__eta_t, __eta_d ?? ${varName}, options);`, "include");
+    return replaceOnce(out, `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, ${spread}, options);`, `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, __eta_d ?? ${varName}, options);`, "includeAsync");
+  }
+};
+var NoteTemplateEngine = class extends Eta {
+  constructor(dataRoot = TEMPLATE_DATA_ROOT) {
+    const d3 = dataRoot;
+    super({
+      cache: true,
+      varName: dataRoot,
+      autoTrim: [true, true],
+      autoEscape: false,
+      autoFilter: true,
+      filterFunction: coerceOutput,
+      functionHeader: `const bq = (fn) => output(this.bqHelper(capture(fn))); const basename = this.basenameHelper; const suffix = this.suffixHelper; const embed = this.embedHelper; const start_YAML = () => this.noteHelpers.startYAML(${d3}); const end_YAML = () => this.noteHelpers.endYAML(${d3}); const add_property = (k, v, o) => this.noteHelpers.addProperty(${d3}, k, v, o); const add_raw_yaml = (t) => this.noteHelpers.addRawYAML(${d3}, t); const merge_into = (existing, rendered) => this.noteHelpers.mergeInto(${d3}, existing, rendered); const set_file_name = (n) => this.noteHelpers.setFileName(${d3}, n); const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d3}, f, o); const creator_values = (r, f, o) => this.noteHelpers.creatorValues(${d3}, r, f, o); const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d3}, r, f, o); const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d3}, o); const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d3}, a, o); const callout = (o) => this.noteHelpers.callout(${d3}, o); const wikilink = (t, a) => this.noteHelpers.wikilink(${d3}, t, a); const link_note = (a, s) => this.noteHelpers.linkNote(${d3}, a, s); const md_html = (h) => this.noteHelpers.mdHtml(${d3}, h); const heading = (l, t) => this.noteHelpers.heading(${d3}, l, t); const escape_md = (t) => this.noteHelpers.escapeMd(${d3}, t); const import_date = () => this.noteHelpers.importDate(${d3}); const is_first_import = () => this.noteHelpers.isFirstImport(${d3}); const short_title = () => this.noteHelpers.shortTitle(${d3}); const aliases = () => this.noteHelpers.aliases(${d3}); const related_links = () => this.noteHelpers.relatedLinks(${d3}); const attachment_links = () => this.noteHelpers.attachmentLinks(${d3}); const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d3}); `,
+      plugins: [includeDataPlugin]
+    });
+    this.bqHelper = formatBlockquote;
+    this.basenameHelper = basename;
+    this.suffixHelper = filenameSuffix;
+    this.embedHelper = embed2;
+    this.noteHelpers = new NoteHelpers();
+  }
+};
+function makeEta(dataRoot = TEMPLATE_DATA_ROOT) {
+  return new NoteTemplateEngine(dataRoot);
+}
+
+// src/template/render.ts
+function renderNote(entry, children, opts) {
+  var _a;
+  const ctx = buildNoteContextWithChildren(entry, children, {
+    groupID: opts.groupID,
+    dataDir: opts.dataDir,
+    baseAttachmentPath: opts.baseAttachmentPath,
+    notePath: opts.notePath,
+    noteHeadingLevel: opts.noteHeadingLevel
+  });
+  prepareTemplateData(ctx, {
+    options: opts.options,
+    importDate: opts.importDate
+  });
+  const engine = makeEta();
+  const rendered = engine.renderString(opts.templateSource, ctx);
+  const content = engine.noteHelpers.mergeInto(ctx, (_a = opts.existingContent) != null ? _a : null, rendered, { managesRegion: opts.templateSource.includes(MANAGED_OPEN) });
+  return { content, fileName: engine.noteHelpers.fileName(ctx) };
+}
+
+// src/noteImport.ts
+var TEMPLATE_ASSET = "sw-note-templates/sw-note.eta.md";
+var EMPTY_CHILDREN = {
+  attachments: [],
+  annotations: [],
+  notes: []
+};
+function expandHome(p4) {
+  if (p4 === "~" || p4 === "~/")
+    return require("os").homedir();
+  if (p4.startsWith("~/"))
+    return require("os").homedir() + p4.slice(1);
+  return p4;
+}
+function resolveZoteroDataDir(configured) {
+  var _a, _b;
+  const custom = (configured != null ? configured : "").trim();
+  if (custom)
+    return expandHome(custom);
+  try {
+    const os = require("os");
+    const fs2 = require("fs");
+    const path2 = require("path");
+    const home = os.homedir();
+    const platform = (_a = window.process) == null ? void 0 : _a.platform;
+    const candidates = platform === "win32" ? [path2.join((_b = process.env.APPDATA) != null ? _b : "", "Zotero", "Zotero")] : platform === "darwin" ? [path2.join(home, "Zotero")] : [path2.join(home, "Zotero"), path2.join(home, ".zotero", "zotero")];
+    for (const c3 of candidates) {
+      if (c3 && fs2.existsSync(c3))
+        return c3;
+    }
+  } catch (e3) {
+  }
+  return null;
+}
+function literatureNoteFolder(plugin) {
+  var _a;
+  const zotlitFolder = getZotlitLiteratureFolder(plugin.app);
+  const settingsFolder = ((_a = plugin.settings.literatureNoteFolder) != null ? _a : "").trim();
+  return plugin.settings.useZotlitLiteratureFolder ? zotlitFolder || settingsFolder || "_2 Bibliographic notes" : settingsFolder || zotlitFolder || "_2 Bibliographic notes";
+}
+async function readTemplate(plugin) {
+  const dir = plugin.manifest.dir;
+  if (!dir)
+    return null;
+  const path2 = (0, import_obsidian20.normalizePath)(`${dir}/${TEMPLATE_ASSET}`);
+  try {
+    return await plugin.app.vault.adapter.read(path2);
+  } catch (e3) {
+    console.warn("[sw:import] note template not found at", path2, e3);
+    return null;
+  }
+}
+async function fetchChildren(plugin, entry) {
+  const key = entry == null ? void 0 : entry._zoteroKey;
+  if (!key)
+    return EMPTY_CHILDREN;
+  const libraryID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
+  try {
+    const children = await fetchItemChildrenNative(plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT, key, libraryID);
+    return children != null ? children : EMPTY_CHILDREN;
+  } catch (e3) {
+    console.warn("[sw:import] child fetch failed; importing metadata only", e3);
+    return EMPTY_CHILDREN;
+  }
+}
+async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = {}) {
+  var _a, _b;
+  const app2 = plugin.app;
+  const templateSource = await readTemplate(plugin);
+  if (!templateSource)
+    return false;
+  const children = await fetchChildren(plugin, entry);
+  const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : null;
+  const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
+  const folder = literatureNoteFolder(plugin);
+  const first = renderNote(entry, children, {
+    templateSource,
+    groupID,
+    dataDir,
+    noteHeadingLevel: (_a = plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3
+  });
+  const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, "");
+  const notePath = folder ? (0, import_obsidian20.normalizePath)(`${folder}/${base}.md`) : `${base}.md`;
+  let existing = null;
+  if (await app2.vault.adapter.exists(notePath)) {
+    try {
+      existing = await app2.vault.adapter.read(notePath);
+    } catch (e3) {
+      existing = null;
+    }
+  }
+  const { content } = renderNote(entry, children, {
+    templateSource,
+    groupID,
+    dataDir,
+    notePath,
+    noteHeadingLevel: (_b = plugin.settings.ownNoteNotesHeadingLevel) != null ? _b : 3,
+    existingContent: existing
+  });
+  if (folder && !await app2.vault.adapter.exists((0, import_obsidian20.normalizePath)(folder))) {
+    await app2.vault.adapter.mkdir((0, import_obsidian20.normalizePath)(folder));
+  }
+  if (existing != null) {
+    const known = app2.vault.getAbstractFileByPath(notePath);
+    if (known instanceof import_obsidian20.TFile) {
+      await app2.vault.modify(known, content);
+    } else {
+      await app2.vault.adapter.write(notePath, content);
+    }
+    return true;
+  }
+  await app2.vault.create(notePath, content);
+  if (opts.open !== false) {
+    await app2.workspace.openLinkText(notePath, sourceFile.path, true);
+  }
+  return true;
+}
+
+// src/template/explorer.ts
+function toExplorerEntry(citekey, entry) {
+  const creators = entryCreators(entry).map((c3) => c3.fullName).filter(Boolean);
+  return {
+    citekey,
+    title: typeof entry.title === "string" && entry.title ? entry.title : citekey,
+    itemType: typeof entry.type === "string" ? entry.type : "",
+    zoteroKey: typeof entry._zoteroKey === "string" ? entry._zoteroKey : null,
+    creatorNames: creators.join("; ")
+  };
+}
+function buildExplorerList(entries) {
+  const out = [];
+  for (const [citekey, entry] of entries) {
+    if (!entry || typeof entry !== "object")
+      continue;
+    out.push(toExplorerEntry(citekey, entry));
+  }
+  out.sort((a3, b3) => a3.title.localeCompare(b3.title));
+  return out;
+}
+function filterExplorerEntries(list, query) {
+  const q4 = query.trim().toLowerCase();
+  if (!q4)
+    return list;
+  return list.filter((e3) => {
+    var _a, _b;
+    return e3.title.toLowerCase().includes(q4) || e3.citekey.toLowerCase().includes(q4) || ((_b = (_a = e3.zoteroKey) == null ? void 0 : _a.toLowerCase().includes(q4)) != null ? _b : false) || e3.creatorNames.toLowerCase().includes(q4);
+  });
+}
+
+// src/dataExplorer.ts
+var dataExplorerViewType = "scholar-weft-data-explorer";
+var DataExplorerView = class extends import_obsidian21.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.entries = [];
+    this.query = "";
+    this.selected = null;
+    this.previewKind = "render";
+    this.tabButtons = {};
+    this.plugin = plugin;
+    this.contentEl.addClass("sw-data-explorer");
+    this.navigation = false;
+  }
+  getViewType() {
+    return dataExplorerViewType;
+  }
+  getDisplayText() {
+    return "Zotero data explorer";
+  }
+  getIcon() {
+    return "library";
+  }
+  async onOpen() {
+    this.render();
+  }
+  reloadEntries() {
+    var _a, _b;
+    this.entries = buildExplorerList((_b = (_a = this.plugin.bibManager) == null ? void 0 : _a.bibCache) != null ? _b : new Map());
+  }
+  render() {
+    this.reloadEntries();
+    const root = this.contentEl;
+    root.empty();
+    const header = root.createDiv({ cls: "sw-data-explorer__header" });
+    header.createDiv({ cls: "sw-data-explorer__title", text: "Zotero explorer" });
+    const reload = header.createDiv({
+      cls: "clickable-icon",
+      attr: { "aria-label": "Reload list from the loaded library" }
+    });
+    (0, import_obsidian21.setIcon)(reload, "lucide-refresh-cw");
+    reload.onClickEvent(() => this.render());
+    const search3 = root.createEl("input", {
+      cls: "sw-data-explorer__search",
+      attr: { type: "search", placeholder: "Filter by title, author, citekey\u2026" }
+    });
+    search3.value = this.query;
+    search3.addEventListener("input", () => {
+      this.query = search3.value;
+      this.renderList();
+    });
+    this.listEl = root.createDiv({ cls: "sw-data-explorer__list" });
+    const panel = root.createDiv({ cls: "sw-data-explorer__panel" });
+    const tabs = panel.createDiv({ cls: "sw-data-explorer__tabs" });
+    for (const [kind, label] of [
+      ["render", "Preview"],
+      ["data", "Data"]
+    ]) {
+      const btn = tabs.createEl("button", {
+        cls: "sw-data-explorer__tab",
+        text: label
+      });
+      this.tabButtons[kind] = btn;
+      btn.onClickEvent(() => {
+        this.previewKind = kind;
+        this.updateTabs();
+        void this.renderPreview();
+      });
+    }
+    this.previewEl = panel.createDiv({ cls: "sw-data-explorer__preview" });
+    this.updateTabs();
+    this.renderList();
+  }
+  updateTabs() {
+    for (const [kind, btn] of Object.entries(this.tabButtons)) {
+      btn.toggleClass("is-active", kind === this.previewKind);
+    }
+  }
+  renderList() {
+    this.listEl.empty();
+    const shown = filterExplorerEntries(this.entries, this.query);
+    if (!shown.length) {
+      this.listEl.createDiv({
+        cls: "sw-data-explorer__empty",
+        text: this.entries.length ? "No items match the filter." : "No Zotero items loaded yet \u2014 is Zotero running?"
+      });
+      return;
+    }
+    for (const entry of shown) {
+      const item = this.listEl.createDiv({
+        cls: "sw-data-explorer__item"
+      });
+      item.toggleClass("is-selected", entry.citekey === this.selected);
+      item.createDiv({ cls: "sw-data-explorer__item-title", text: entry.title });
+      const meta = item.createDiv({ cls: "sw-data-explorer__item-meta" });
+      meta.createSpan({ text: entry.citekey });
+      if (entry.itemType) {
+        meta.createSpan({ cls: "sw-data-explorer__badge", text: entry.itemType });
+      }
+      if (entry.creatorNames) {
+        meta.createSpan({ text: entry.creatorNames });
+      }
+      item.onClickEvent(() => {
+        this.selected = entry.citekey;
+        this.renderList();
+        void this.renderPreview();
+      });
+    }
+  }
+  setPreview(text, isError = false) {
+    this.previewEl.empty();
+    this.previewEl.toggleClass("is-error", isError);
+    this.previewEl.createEl("pre", { text });
+  }
+  async renderPreview() {
+    var _a, _b, _c, _d, _e;
+    const citekey = this.selected;
+    if (!citekey) {
+      this.setPreview("Select an item to preview its note.");
+      return;
+    }
+    this.setPreview("Rendering\u2026");
+    const entry = (_c = (_b = (_a = this.plugin.bibManager) == null ? void 0 : _a.bibCache) == null ? void 0 : _b.get(citekey)) != null ? _c : null;
+    if (!entry) {
+      this.setPreview(`Item \u201C${citekey}\u201D is no longer in the library.`, true);
+      return;
+    }
+    try {
+      const children = await fetchChildren(this.plugin, entry);
+      if (this.selected !== citekey)
+        return;
+      const groupID = entry.groupID && entry.groupID !== 1 ? entry.groupID : null;
+      const dataDir = resolveZoteroDataDir(this.plugin.settings.zoteroDataDir);
+      const noteHeadingLevel = (_d = this.plugin.settings.ownNoteNotesHeadingLevel) != null ? _d : 3;
+      if (this.previewKind === "data") {
+        const ctx = buildNoteContextWithChildren(entry, children, {
+          groupID,
+          dataDir,
+          noteHeadingLevel
+        });
+        prepareTemplateData(ctx, {});
+        this.setPreview(JSON.stringify(ctx, (_k, v3) => typeof v3 === "function" ? void 0 : v3, 2));
+        return;
+      }
+      const templateSource = await readTemplate(this.plugin);
+      if (this.selected !== citekey)
+        return;
+      if (!templateSource) {
+        this.setPreview("Own note template not found in the plugin folder (sw-note-templates/sw-note.eta.md).", true);
+        return;
+      }
+      const { content } = renderNote(entry, children, {
+        templateSource,
+        groupID,
+        dataDir,
+        noteHeadingLevel
+      });
+      if (this.selected !== citekey)
+        return;
+      this.setPreview(content);
+    } catch (e3) {
+      this.setPreview(`Render failed: ${(_e = e3 == null ? void 0 : e3.message) != null ? _e : e3}`, true);
+    }
+  }
+};
+
 // src/bib/bibManager.ts
 var import_citeproc = __toModule(require_citeproc_commonjs());
 
@@ -90058,7 +92390,7 @@ var convertToExplicit = (query) => ({
     [key]: query[key]
   }))
 });
-function parse4(query, options, { auto = true } = {}) {
+function parse5(query, options, { auto = true } = {}) {
   const next = (query2) => {
     let keys = Object.keys(query2);
     const isQueryPath = isPath(query2);
@@ -90246,7 +92578,7 @@ var Fuse = class {
     return results;
   }
   _searchLogical(query) {
-    const expression = parse4(query, this.options);
+    const expression = parse5(query, this.options);
     const evaluate = (node, item, idx) => {
       if (!node.children) {
         const { keyId, searcher } = node;
@@ -90360,7 +92692,7 @@ Fuse.createIndex = createIndex;
 Fuse.parseIndex = parseIndex;
 Fuse.config = Config;
 {
-  Fuse.parseQuery = parse4;
+  Fuse.parseQuery = parse5;
 }
 {
   register(ExtendedSearch);
@@ -90457,7 +92789,7 @@ var SimpleLRU = class {
 };
 
 // src/bib/bibManager.ts
-var import_obsidian22 = __toModule(require("obsidian"));
+var import_obsidian23 = __toModule(require("obsidian"));
 
 // src/parser/citeproc.ts
 function genUid(length) {
@@ -90623,7 +92955,7 @@ function cite(engine, group, uncitedItemIDs) {
 }
 
 // src/zoteroNotes.ts
-var import_obsidian19 = __toModule(require("obsidian"));
+var import_obsidian22 = __toModule(require("obsidian"));
 var DEFAULT_ZOTERO_PORT2 = "23119";
 var SW_ZN_MARK = "<!-- sw-zn -->";
 function zoteroHtmlToMarkdown(html) {
@@ -90641,7 +92973,7 @@ function zoteroHtmlToMarkdown(html) {
   return s3;
 }
 async function getJson(port, path2) {
-  const resp = await (0, import_obsidian19.requestUrl)({
+  const resp = await (0, import_obsidian22.requestUrl)({
     url: `http://127.0.0.1:${port}${path2}`,
     method: "GET",
     headers: {
@@ -90791,7 +93123,7 @@ async function insertZoteroNotesForFiles(app2, files, opts = {}) {
   for (const f3 of files) {
     try {
       const fresh = app2.vault.getAbstractFileByPath(f3.path);
-      const file = fresh instanceof import_obsidian19.TFile ? fresh : f3;
+      const file = fresh instanceof import_obsidian22.TFile ? fresh : f3;
       const key = await zoteroKeyOf(app2, file);
       if (!key) {
         result.noNotes.push(file.path);
@@ -90815,2138 +93147,6 @@ async function insertZoteroNotesForFiles(app2, files, opts = {}) {
     (_a = opts.onProgress) == null ? void 0 : _a.call(opts, ++done, files.length);
   }
   return result;
-}
-
-// src/noteImport.ts
-var import_obsidian21 = __toModule(require("obsidian"));
-
-// src/template/color.ts
-var ANNOTATION_COLOR_NAMES = {
-  "#FFD400": "yellow",
-  "#FF6666": "red",
-  "#5FB236": "green",
-  "#2EA8E5": "blue",
-  "#A28AE5": "purple",
-  "#E56EEE": "magenta",
-  "#F19837": "orange",
-  "#AAAAAA": "gray",
-  "#FF8C19": "yellow",
-  "#A6507B": "purple"
-};
-function annotationColorToName(raw) {
-  var _a;
-  if (!raw)
-    return null;
-  return (_a = ANNOTATION_COLOR_NAMES[raw.toUpperCase()]) != null ? _a : null;
-}
-
-// src/bib/extra.ts
-var EXTRA_PAIR_RE = /^([A-Za-z][\w .-]*?)\s*[:=]\s*(.+)$/;
-var EXTRA_CSL_FIELDS = new Set([
-  "abstract",
-  "accessed",
-  "annote",
-  "archive",
-  "archive-place",
-  "author",
-  "authority",
-  "call-number",
-  "chapter-number",
-  "citation-label",
-  "citation-number",
-  "collection-editor",
-  "collection-number",
-  "collection-title",
-  "composer",
-  "container",
-  "container-author",
-  "container-title",
-  "container-title-short",
-  "dimensions",
-  "director",
-  "edition",
-  "editor",
-  "editorial-director",
-  "event",
-  "event-date",
-  "event-place",
-  "first-reference-note-number",
-  "genre",
-  "illustrator",
-  "interviewer",
-  "issue",
-  "issued",
-  "jurisdiction",
-  "keyword",
-  "language",
-  "locator",
-  "medium",
-  "note",
-  "number",
-  "number-of-pages",
-  "number-of-volumes",
-  "original-author",
-  "original-date",
-  "original-publisher",
-  "original-publisher-place",
-  "original-title",
-  "page",
-  "page-first",
-  "publisher",
-  "publisher-place",
-  "recipient",
-  "references",
-  "reviewed-author",
-  "reviewed-title",
-  "scale",
-  "section",
-  "source",
-  "status",
-  "submitted",
-  "title",
-  "title-short",
-  "translator",
-  "type",
-  "version",
-  "volume",
-  "year-suffix"
-]);
-var UPPERCASE_FIELDS = new Set(["doi", "isbn", "issn", "pmcid", "pmid", "url"]);
-function parseExtra(extra) {
-  if (!extra || !extra.trim())
-    return null;
-  const lines = [];
-  const fields = {};
-  for (const raw of extra.split(/\r?\n/)) {
-    const m3 = EXTRA_PAIR_RE.exec(raw);
-    if (!m3) {
-      lines.push({ raw, key: null });
-      continue;
-    }
-    const key = m3[1].trim();
-    const value = m3[2].trim();
-    if (!key || !value) {
-      lines.push({ raw, key: null });
-      continue;
-    }
-    lines.push({ raw, key, value });
-    if (!(key in fields))
-      fields[key] = value;
-  }
-  return { raw: extra, fields, lines };
-}
-function extraKeyToCslField(key) {
-  const normalized = key.toLowerCase().replace(/\s+/g, "-");
-  if (normalized === "archive-location")
-    return "archive_location";
-  if (UPPERCASE_FIELDS.has(normalized))
-    return normalized.toUpperCase();
-  if (EXTRA_CSL_FIELDS.has(normalized))
-    return normalized;
-  return null;
-}
-function extraKeyToContextProperty(key) {
-  const csl = extraKeyToCslField(key);
-  if (!csl)
-    return null;
-  if (/^[A-Z]+$/.test(csl))
-    return csl;
-  return csl.split(/[-_]/).map((part, i3) => i3 === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)).join("");
-}
-
-// src/template/markdown.ts
-var import_obsidian20 = __toModule(require("obsidian"));
-var HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"];
-var FENCE_RE = /^\s*(?:```|~~~)/;
-var CODE_SPAN_OR_ESCAPABLE_RE = /(`+[^`]*`+)|((?<!\\)[\[<])/g;
-function escapeOutsideCode(line) {
-  return line.replace(CODE_SPAN_OR_ESCAPABLE_RE, (match2, code, char) => code != null ? code : `\\${char}`);
-}
-function escapeMarkdown(text) {
-  let inFence = false;
-  return text.split("\n").map((line) => {
-    if (FENCE_RE.test(line)) {
-      inFence = !inFence;
-      return line;
-    }
-    return inFence ? line : escapeOutsideCode(line);
-  }).join("\n");
-}
-function normalizeHeadingLevels(html, topLevel) {
-  var _a;
-  if (!html.trim())
-    return html;
-  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
-  const headings = [];
-  for (const tag of HEADING_TAGS) {
-    headings.push(...Array.from(doc.body.getElementsByTagName(tag)));
-  }
-  if (headings.length === 0)
-    return html;
-  let min = Number.POSITIVE_INFINITY;
-  const levelOf = new Map();
-  for (const h3 of headings) {
-    const level = Number(h3.tagName.charAt(1));
-    levelOf.set(h3, level);
-    if (level < min)
-      min = level;
-  }
-  const delta = topLevel - min;
-  if (delta === 0)
-    return html;
-  for (const h3 of headings) {
-    const level = Math.min(6, Math.max(1, ((_a = levelOf.get(h3)) != null ? _a : min) + delta));
-    const replacement = doc.createElement(`h${level}`);
-    replacement.innerHTML = h3.innerHTML;
-    h3.replaceWith(replacement);
-  }
-  return doc.body.innerHTML;
-}
-function htmlToMarkdownText(html) {
-  if (!html || !html.trim())
-    return "";
-  return (0, import_obsidian20.htmlToMarkdown)(html).trim();
-}
-function htmlFieldToMarkdown(html) {
-  return escapeMarkdown(htmlToMarkdownText(html));
-}
-function noteHtmlToMarkdown(html, opts = {}) {
-  var _a;
-  if (!html || !html.trim())
-    return "";
-  const topLevel = (_a = opts.topLevel) != null ? _a : 3;
-  return escapeMarkdown((0, import_obsidian20.htmlToMarkdown)(normalizeHeadingLevels(html, topLevel)).trim());
-}
-
-// src/template/context.ts
-var CSL_TO_ZOTERO_ITEM_TYPE = {
-  "graphic": "artwork",
-  "song": "audioRecording",
-  "bill": "bill",
-  "post-weblog": "blogPost",
-  "book": "book",
-  "chapter": "bookSection",
-  "legal_case": "case",
-  "software": "computerProgram",
-  "paper-conference": "conferencePaper",
-  "dataset": "dataset",
-  "entry-dictionary": "dictionaryEntry",
-  "document": "document",
-  "personal_communication": "letter",
-  "entry-encyclopedia": "encyclopediaArticle",
-  "motion_picture": "videoRecording",
-  "post": "forumPost",
-  "hearing": "hearing",
-  "interview": "interview",
-  "article-journal": "journalArticle",
-  "article-magazine": "magazineArticle",
-  "manuscript": "manuscript",
-  "map": "map",
-  "article-newspaper": "newspaperArticle",
-  "patent": "patent",
-  "broadcast": "tvBroadcast",
-  "article": "preprint",
-  "speech": "presentation",
-  "report": "report",
-  "standard": "standard",
-  "legislation": "statute",
-  "thesis": "thesis",
-  "webpage": "webpage"
-};
-function cslTypeToZoteroItemType(cslType) {
-  var _a;
-  const t4 = typeof cslType === "string" && cslType ? cslType : "document";
-  return (_a = CSL_TO_ZOTERO_ITEM_TYPE[t4]) != null ? _a : t4;
-}
-var CSL_ROLE_TO_ZOTERO = {
-  author: "author",
-  editor: "editor",
-  translator: "translator",
-  contributor: "contributor",
-  "container-author": "bookAuthor",
-  "collection-editor": "seriesEditor",
-  director: "director",
-  interviewer: "interviewer",
-  composer: "composer",
-  producer: "producer",
-  "script-writer": "scriptwriter",
-  "reviewed-author": "reviewedAuthor",
-  performer: "performer",
-  lyricist: "wordsBy",
-  recipient: "recipient",
-  witness: "witness",
-  illustrator: "illustrator",
-  "editorial-director": "editorialDirector"
-};
-var CREATOR_ROLE_ORDER = [
-  "author",
-  "editor",
-  "translator",
-  "contributor",
-  "director",
-  "container-author",
-  "collection-editor",
-  "interviewer",
-  "composer",
-  "producer",
-  "script-writer",
-  "reviewed-author",
-  "performer",
-  "lyricist",
-  "illustrator",
-  "editorial-director",
-  "recipient",
-  "witness"
-];
-var PRIMARY_CREATOR_TYPE = {
-  artwork: "artist",
-  audioRecording: "performer",
-  computerProgram: "programmer",
-  film: "director",
-  interview: "interviewer",
-  map: "cartographer",
-  patent: "inventor",
-  podcast: "author",
-  presentation: "presenter",
-  radioBroadcast: "director",
-  tvBroadcast: "director",
-  videoRecording: "director"
-};
-function toCreator(name, role) {
-  const family = typeof name.family === "string" ? name.family : "";
-  const given = typeof name.given === "string" ? name.given : "";
-  const literal = typeof name.literal === "string" && name.literal ? name.literal : null;
-  const fullName = literal != null ? literal : [given, family].filter(Boolean).join(" ");
-  return { family, given, literal, role, fullName };
-}
-function entryCreators(entry) {
-  const native = entry._creators;
-  if (Array.isArray(native) && native.length) {
-    return native.filter((c3) => !!c3 && typeof c3 === "object").map((c3) => toCreator(c3, typeof c3.role === "string" && c3.role ? c3.role : "author"));
-  }
-  const out = [];
-  const seen = new Set();
-  const emit = (roleKey) => {
-    var _a;
-    const list = entry[roleKey];
-    if (!Array.isArray(list))
-      return;
-    const role = (_a = CSL_ROLE_TO_ZOTERO[roleKey]) != null ? _a : roleKey;
-    for (const name of list) {
-      if (!name || typeof name !== "object")
-        continue;
-      out.push(toCreator(name, role));
-    }
-    seen.add(roleKey);
-  };
-  for (const roleKey of CREATOR_ROLE_ORDER)
-    emit(roleKey);
-  for (const key of Object.keys(entry)) {
-    if (seen.has(key))
-      continue;
-    if (Array.isArray(entry[key]) && key !== "author")
-      emit(key);
-  }
-  return out;
-}
-function primaryCreatorTypeFor(itemType) {
-  var _a;
-  return (_a = PRIMARY_CREATOR_TYPE[itemType]) != null ? _a : "author";
-}
-function formatAuthorsShort(creators, primaryRole) {
-  const authors = creators.filter((c3) => !primaryRole || c3.role === primaryRole);
-  const list = authors.length ? authors : creators;
-  const surname = (c3) => c3.literal || c3.family || c3.fullName || "";
-  if (list.length === 0)
-    return "";
-  if (list.length === 1)
-    return surname(list[0]);
-  if (list.length === 2)
-    return `${surname(list[0])} and ${surname(list[1])}`;
-  return `${surname(list[0])} et al.`;
-}
-var pad2 = (n2) => n2 < 10 ? `0${n2}` : String(n2);
-function num(v3) {
-  const n2 = typeof v3 === "number" ? v3 : Number(v3);
-  return Number.isFinite(n2) ? Math.trunc(n2) : null;
-}
-function standaloneYear(text) {
-  const m3 = /(?:^|[^\d])([12]\d{3})(?:[^\d]|$)/.exec(text);
-  return m3 ? Number(m3[1]) : null;
-}
-function withToString(date, text) {
-  Object.defineProperty(date, "toString", {
-    value: () => text,
-    enumerable: false,
-    configurable: true
-  });
-  return date;
-}
-function toContextDate(issued) {
-  if (issued == null)
-    return null;
-  if (typeof issued === "string") {
-    const text = issued.trim();
-    if (!text)
-      return null;
-    const year2 = standaloneYear(text);
-    return year2 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: year2, month: null, day: null, raw: text }, String(year2));
-  }
-  const obj = issued;
-  const raw = typeof obj.raw === "string" ? obj.raw : typeof obj.literal === "string" ? obj.literal : "";
-  const parts = Array.isArray(obj["date-parts"]) ? obj["date-parts"][0] : void 0;
-  const arr = Array.isArray(parts) ? parts : [];
-  const year = num(arr[0]);
-  const month = num(arr[1]);
-  const day = num(arr[2]);
-  if (year == null) {
-    const text = raw.trim();
-    if (!text)
-      return null;
-    const y3 = standaloneYear(text);
-    return y3 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: y3, month: null, day: null, raw: text }, String(y3));
-  }
-  const rawOut = raw || String(year);
-  if (month != null && day != null) {
-    const value = `${year}-${pad2(month)}-${pad2(day)}`;
-    return withToString({ kind: "date", value, year, month, day, raw: rawOut }, value);
-  }
-  if (month != null) {
-    const value = `${year}-${pad2(month)}`;
-    return withToString({ kind: "yearMonth", value, year, month, day: null, raw: rawOut }, value);
-  }
-  return withToString({ kind: "year", value: null, year, month: null, day: null, raw: rawOut }, String(year));
-}
-function str(v3) {
-  if (v3 == null)
-    return null;
-  if (typeof v3 === "string")
-    return v3 ? v3 : null;
-  if (typeof v3 === "number" || typeof v3 === "boolean")
-    return String(v3);
-  return null;
-}
-function mdField(v3) {
-  const s3 = str(v3);
-  if (s3 == null)
-    return null;
-  return htmlToMarkdownText(s3) || null;
-}
-function isPersonal(groupID) {
-  return groupID == null || groupID === 1;
-}
-function indexedKeyFor(key, groupID) {
-  return groupID == null ? key : `${key}g${groupID}`;
-}
-function backlinkFor(key, groupID) {
-  return groupID == null ? `zotero://select/library/items/${key}` : `zotero://select/groups/${groupID}/items/${key}`;
-}
-function weblinkFor(key, groupID) {
-  if (groupID == null || !key)
-    return null;
-  return `https://www.zotero.org/groups/${groupID}/items/${key}`;
-}
-function noteLinkFor(notePath) {
-  var _a;
-  if (!notePath)
-    return () => null;
-  const base = notePath.replace(/\.md$/, "");
-  const defaultAlias = (_a = base.split("/").pop()) != null ? _a : base;
-  return (alias, subpath) => {
-    const target = subpath ? `${base}#${subpath}` : base;
-    return `[[${target}|${alias != null ? alias : defaultAlias}]]`;
-  };
-}
-function buildNoteContext(entry, children = {}) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
-  const e3 = entry != null ? entry : {};
-  const rawGroup = e3.groupID;
-  const groupID = isPersonal(rawGroup) ? null : rawGroup;
-  const libraryID = groupID != null ? groupID : 1;
-  const key = (_b = (_a = str(e3._zoteroKey)) != null ? _a : str(e3.key)) != null ? _b : "";
-  const itemType = cslTypeToZoteroItemType(e3.type);
-  const creators = entryCreators(e3);
-  const primaryCreatorType = primaryCreatorTypeFor(itemType);
-  const authors = creators.filter((c3) => c3.role === primaryCreatorType);
-  const notePath = (_c = children.notePath) != null ? _c : null;
-  const ctx = {
-    key,
-    groupID,
-    libraryID,
-    indexedKey: indexedKeyFor(key, groupID),
-    itemType,
-    dateAdded: (_e = (_d = str(e3._dateAdded)) != null ? _d : str(e3.dateAdded)) != null ? _e : "",
-    dateModified: (_g = (_f = str(e3._dateModified)) != null ? _f : str(e3.dateModified)) != null ? _g : "",
-    backlink: backlinkFor(key, groupID),
-    weblink: weblinkFor(key, groupID),
-    notePath,
-    noteLink: noteLinkFor(notePath),
-    title: mdField(e3.title),
-    shortTitle: mdField(e3["title-short"]),
-    abstract: mdField(e3.abstract),
-    containerTitle: str(e3["container-title"]),
-    citationKey: str(e3.id),
-    citekey: str(e3.id),
-    date: toContextDate(e3.issued),
-    DOI: str(e3.DOI),
-    url: str(e3.URL),
-    ISBN: str(e3.ISBN),
-    ISSN: str(e3.ISSN),
-    volume: str(e3.volume),
-    issue: str(e3.issue),
-    pages: str(e3.page),
-    publisher: str(e3.publisher),
-    place: str(e3["publisher-place"]),
-    edition: str(e3.edition),
-    language: str(e3.language),
-    series: str(e3["collection-title"]),
-    seriesNumber: str(e3["collection-number"]),
-    numberOfVolumes: str(e3["number-of-volumes"]),
-    extra: parseExtra(e3._extra),
-    creators,
-    primaryCreatorType,
-    authors: authors.length ? authors : creators,
-    authorsShort: formatAuthorsShort(creators, primaryCreatorType),
-    tags: (Array.isArray(e3._tags) ? e3._tags : []).filter((t4) => typeof t4 === "string" && !!t4).map((name) => ({ name, type: "unknown" })),
-    collections: [],
-    annotations: (_h = children.annotations) != null ? _h : [],
-    attachments: (_i = children.attachments) != null ? _i : [],
-    notes: (_j = children.notes) != null ? _j : [],
-    relatedItems: []
-  };
-  const extra = ctx.extra;
-  if (extra) {
-    for (const [extraKey, value] of Object.entries(extra.fields)) {
-      const prop = extraKeyToContextProperty(extraKey);
-      if (!prop)
-        continue;
-      const current = ctx[prop];
-      if (current == null || current === "")
-        ctx[prop] = value;
-    }
-  }
-  return ctx;
-}
-
-// src/template/children.ts
-function asRecord(v3) {
-  return v3 && typeof v3 === "object" && !Array.isArray(v3) ? v3 : null;
-}
-function rawData(raw) {
-  var _a, _b, _c;
-  return (_c = (_b = asRecord((_a = asRecord(raw)) == null ? void 0 : _a.data)) != null ? _b : asRecord(raw)) != null ? _c : {};
-}
-function rawKey(raw, data) {
-  var _a, _b, _c;
-  return (_c = (_b = str2(data.key)) != null ? _b : str2((_a = asRecord(raw)) == null ? void 0 : _a.key)) != null ? _c : "";
-}
-function str2(v3) {
-  if (v3 == null)
-    return null;
-  if (typeof v3 === "string")
-    return v3 || null;
-  if (typeof v3 === "number" || typeof v3 === "boolean")
-    return String(v3);
-  return null;
-}
-function openLinkFor(key, groupID) {
-  return groupID == null ? `zotero://open/library/items/${key}` : `zotero://open/groups/${groupID}/items/${key}`;
-}
-function fileUrl(absPath) {
-  let p4 = absPath.replace(/\\/g, "/");
-  if (!p4.startsWith("/"))
-    p4 = `/${p4}`;
-  return `file://${p4.split("/").map(encodeURIComponent).join("/")}`;
-}
-function fileUrlToPath(href) {
-  const raw = href.replace(/^file:\/\//i, "").split(/[?#]/)[0];
-  try {
-    return decodeURIComponent(raw);
-  } catch (e3) {
-    return raw;
-  }
-}
-function fileUrlLink(absPath, defaultAlias, defaultSubpath = "") {
-  const href = fileUrl(absPath);
-  return (alias, subpath) => `[${alias != null ? alias : defaultAlias}](${href}${subpath != null ? subpath : defaultSubpath})`;
-}
-function basenamePath(p4) {
-  const clean = p4.replace(/[\\/]+$/, "");
-  const i3 = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
-  const name = i3 >= 0 ? clean.slice(i3 + 1) : clean;
-  return name || null;
-}
-function joinPath(base, ...rest) {
-  let out = base.replace(/[\\/]+$/, "");
-  for (const segment of rest) {
-    const clean = segment.replace(/^[\\/]+/, "").replace(/[\\/]+$/, "");
-    if (clean)
-      out += `/${clean}`;
-  }
-  return out;
-}
-var LINK_MODES = new Set([
-  "imported_file",
-  "imported_url",
-  "linked_file",
-  "linked_url",
-  "embedded_image"
-]);
-function linkModeOf(v3) {
-  const s3 = str2(v3);
-  return s3 && LINK_MODES.has(s3) ? s3 : "unknown";
-}
-function resolveAttachmentFilePath(raw, data, key, opts) {
-  var _a, _b, _c;
-  const enclosure = str2((_c = asRecord((_b = asRecord((_a = asRecord(raw)) == null ? void 0 : _a.links)) == null ? void 0 : _b.enclosure)) == null ? void 0 : _c.href);
-  if (enclosure)
-    return fileUrlToPath(enclosure);
-  const p4 = str2(data.path);
-  if (p4) {
-    if (/^attachments:/i.test(p4)) {
-      const rel = p4.replace(/^attachments:/i, "");
-      return opts.baseAttachmentPath ? joinPath(opts.baseAttachmentPath, rel) : null;
-    }
-    if (/^storage:/i.test(p4)) {
-      const filename2 = p4.replace(/^storage:/i, "");
-      return opts.dataDir ? joinPath(opts.dataDir, "storage", key, filename2) : null;
-    }
-    if (/^[a-zA-Z]:[\\/]/.test(p4) || p4.startsWith("/") || p4.startsWith("~"))
-      return p4;
-  }
-  const filename = str2(data.filename);
-  const mode = linkModeOf(data.linkMode);
-  if (opts.dataDir && filename && (mode === "imported_file" || mode === "imported_url")) {
-    return joinPath(opts.dataDir, "storage", key, filename);
-  }
-  return null;
-}
-function mapAttachment(raw, opts = {}) {
-  var _a, _b, _c;
-  const data = rawData(raw);
-  const key = rawKey(raw, data);
-  const groupID = (_a = opts.groupID) != null ? _a : null;
-  const filePath = resolveAttachmentFilePath(raw, data, key, opts);
-  const filename = (_b = str2(data.filename)) != null ? _b : filePath ? basenamePath(filePath) : null;
-  const fileLink = filePath ? fileUrlLink(filePath, (_c = filename != null ? filename : basenamePath(filePath)) != null ? _c : "attachment") : () => null;
-  return {
-    key,
-    indexedKey: indexedKeyFor(key, groupID),
-    filename,
-    contentType: str2(data.contentType),
-    linkMode: linkModeOf(data.linkMode),
-    backlink: openLinkFor(key, groupID),
-    filePath,
-    fileLink
-  };
-}
-function placeholderAttachment(key, opts) {
-  var _a;
-  const groupID = (_a = opts.groupID) != null ? _a : null;
-  return {
-    key,
-    indexedKey: indexedKeyFor(key, groupID),
-    filename: null,
-    contentType: null,
-    linkMode: "unknown",
-    backlink: openLinkFor(key, groupID),
-    filePath: null,
-    fileLink: () => null
-  };
-}
-function mapTags(rawTags) {
-  var _a;
-  if (!Array.isArray(rawTags))
-    return [];
-  const out = [];
-  for (const t4 of rawTags) {
-    const rec = asRecord(t4);
-    const name = typeof t4 === "string" ? t4 : (_a = str2(rec == null ? void 0 : rec.name)) != null ? _a : str2(rec == null ? void 0 : rec.tag);
-    if (!name)
-      continue;
-    out.push({ name, type: tagTypeOf(rec == null ? void 0 : rec.type) });
-  }
-  return out;
-}
-function tagTypeOf(v3) {
-  if (v3 === 1 || v3 === "auto" || v3 === "automatic")
-    return "auto";
-  if (v3 === 0 || v3 === "manual" || v3 === void 0 || v3 === null)
-    return "manual";
-  return "unknown";
-}
-function pageOf(position) {
-  const s3 = str2(position);
-  if (!s3)
-    return null;
-  try {
-    const idx = JSON.parse(s3).pageIndex;
-    return typeof idx === "number" && Number.isFinite(idx) ? idx + 1 : null;
-  } catch (e3) {
-    return null;
-  }
-}
-var ANNOTATION_TYPES = new Set([
-  "highlight",
-  "note",
-  "image",
-  "ink",
-  "underline",
-  "text"
-]);
-function annotationImageLink(key, type, opts) {
-  if (type !== "image" && type !== "ink")
-    return null;
-  if (!opts.dataDir)
-    return null;
-  const libraryPath = opts.groupID == null ? "library" : `groups/${opts.groupID}`;
-  const cachePath = joinPath(opts.dataDir, "cache", libraryPath, `${key}.png`);
-  return fileUrlLink(cachePath, `${key}.png`);
-}
-function mapAnnotation(raw, parentItem, parentAttachment, opts = {}) {
-  var _a, _b, _c, _d, _e, _f;
-  const data = rawData(raw);
-  const key = rawKey(raw, data);
-  const groupID = (_a = opts.groupID) != null ? _a : null;
-  const type = (_b = str2(data.annotationType)) != null ? _b : "unknown";
-  const colorHex = str2(data.annotationColor);
-  const page = pageOf(data.annotationPosition);
-  const commentHtml = str2(data.annotationComment);
-  const filePath = parentAttachment.filePath;
-  const fileLink = filePath ? fileUrlLink(filePath, (_d = (_c = parentAttachment.filename) != null ? _c : basenamePath(filePath)) != null ? _d : "attachment", page != null ? `#page=${page}` : "") : () => null;
-  return {
-    imgLink: annotationImageLink(key, type, opts),
-    comment: commentHtml ? htmlToMarkdownText(commentHtml) || null : null,
-    fileLink,
-    backlink: backlinkFor(key, groupID),
-    parentItem,
-    parentAttachment,
-    key,
-    indexedKey: indexedKeyFor(key, groupID),
-    libraryID: groupID != null ? groupID : 1,
-    type: ANNOTATION_TYPES.has(type) ? type : "unknown",
-    text: str2(data.annotationText),
-    commentHtml,
-    colorHex,
-    colorName: annotationColorToName(colorHex),
-    pageLabel: str2(data.annotationPageLabel),
-    page,
-    authorName: str2(data.annotationAuthorName),
-    isExternal: data.annotationIsExternal === true,
-    dateAdded: (_e = str2(data.dateAdded)) != null ? _e : "",
-    dateModified: (_f = str2(data.dateModified)) != null ? _f : "",
-    tags: mapTags(data.tags)
-  };
-}
-function mapNote(raw, opts = {}) {
-  var _a, _b, _c;
-  const data = rawData(raw);
-  const key = rawKey(raw, data);
-  const html = (_a = str2(data.note)) != null ? _a : str2(data.noteHtml);
-  return {
-    key,
-    indexedKey: indexedKeyFor(key, (_b = opts.groupID) != null ? _b : null),
-    title: str2(data.title),
-    noteLink: null,
-    text: html ? noteHtmlToMarkdown(html, { topLevel: (_c = opts.noteHeadingLevel) != null ? _c : 3 }) : null,
-    html
-  };
-}
-function applyChildren(ctx, raw, opts = {}) {
-  var _a, _b, _c;
-  const resolved = {
-    ...opts,
-    groupID: opts.groupID !== void 0 ? opts.groupID : ctx.groupID
-  };
-  const attachments = ((_a = raw.attachments) != null ? _a : []).map((r3) => mapAttachment(r3, resolved));
-  const byKey = new Map(attachments.map((a3) => [a3.key, a3]));
-  const annotations = ((_b = raw.annotations) != null ? _b : []).map((r3) => {
-    var _a2, _b2;
-    const parentKey = (_a2 = str2(rawData(r3).parentItem)) != null ? _a2 : "";
-    const parentAttachment = (_b2 = byKey.get(parentKey)) != null ? _b2 : placeholderAttachment(parentKey, resolved);
-    return mapAnnotation(r3, ctx, parentAttachment, resolved);
-  });
-  const notes = ((_c = raw.notes) != null ? _c : []).map((r3) => mapNote(r3, resolved));
-  ctx.attachments = attachments;
-  ctx.annotations = annotations;
-  ctx.notes = notes;
-  return ctx;
-}
-function buildNoteContextWithChildren(entry, raw, opts = {}) {
-  const ctx = buildNoteContext(entry, { notePath: opts.notePath });
-  return applyChildren(ctx, raw, opts);
-}
-
-// node_modules/eta/dist/index.mjs
-var fs = __toModule(require("node:fs"));
-var path = __toModule(require("node:path"));
-var EtaError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "Eta Error";
-  }
-};
-var EtaParseError = class extends EtaError {
-  constructor(message) {
-    super(message);
-    this.name = "EtaParser Error";
-  }
-};
-var EtaRuntimeError = class extends EtaError {
-  constructor(message) {
-    super(message);
-    this.name = "EtaRuntime Error";
-  }
-};
-var EtaFileResolutionError = class extends EtaError {
-  constructor(message) {
-    super(message);
-    this.name = "EtaFileResolution Error";
-  }
-};
-var EtaNameResolutionError = class extends EtaError {
-  constructor(message) {
-    super(message);
-    this.name = "EtaNameResolution Error";
-  }
-};
-function ParseErr(message, str3, indx) {
-  const whitespace = str3.slice(0, indx).split(/\n/);
-  const lineNo = whitespace.length;
-  const colNo = whitespace[lineNo - 1].length + 1;
-  message += " at line " + lineNo + " col " + colNo + ":\n\n  " + str3.split(/\n/)[lineNo - 1] + "\n  " + Array(colNo).join(" ") + "^";
-  throw new EtaParseError(message);
-}
-function RuntimeErr(originalError, str3, lineNo, path$1) {
-  const lines = str3.split("\n");
-  const start = Math.max(lineNo - 3, 0);
-  const end = Math.min(lines.length, lineNo + 3);
-  const filename = path$1;
-  const context = lines.slice(start, end).map((line, i3) => {
-    const curr = i3 + start + 1;
-    return (curr === lineNo ? " >> " : "    ") + curr + "| " + line;
-  }).join("\n");
-  const err = new EtaRuntimeError((filename ? filename + ":" + lineNo + "\n" : "line " + lineNo + "\n") + context + "\n\n" + originalError.message);
-  err.name = originalError.name;
-  err.cause = originalError;
-  throw err;
-}
-function readFile(path$1) {
-  let res = "";
-  try {
-    res = fs.readFileSync(path$1, "utf8");
-  } catch (err) {
-    if ((err == null ? void 0 : err.code) === "ENOENT")
-      throw new EtaFileResolutionError(`Could not find template: ${path$1}`);
-    else
-      throw err;
-  }
-  return res;
-}
-function resolvePath(templatePath, options) {
-  var _a;
-  let resolvedFilePath = "";
-  const views = this.config.views;
-  if (!views)
-    throw new EtaFileResolutionError("Views directory is not defined");
-  const baseFilePath = options == null ? void 0 : options.filepath;
-  const defaultExtension = this.config.defaultExtension === void 0 ? ".eta" : this.config.defaultExtension;
-  const cacheIndex = JSON.stringify({
-    filename: baseFilePath,
-    path: templatePath,
-    views: this.config.views
-  });
-  templatePath += path.extname(templatePath) ? "" : defaultExtension;
-  if (baseFilePath) {
-    if (this.config.cacheFilepaths && this.filepathCache[cacheIndex])
-      return this.filepathCache[cacheIndex];
-    if ((_a = absolutePathRegExp.exec(templatePath)) == null ? void 0 : _a.length) {
-      const formattedPath = templatePath.replace(/^\/*|^\\*/, "");
-      resolvedFilePath = path.join(views, formattedPath);
-    } else
-      resolvedFilePath = path.join(path.dirname(baseFilePath), templatePath);
-  } else
-    resolvedFilePath = path.join(views, templatePath);
-  if (dirIsChild(views, resolvedFilePath)) {
-    if (baseFilePath && this.config.cacheFilepaths)
-      this.filepathCache[cacheIndex] = resolvedFilePath;
-    return resolvedFilePath;
-  } else
-    throw new EtaFileResolutionError(`Template '${templatePath}' is not in the views directory`);
-}
-function dirIsChild(parent, dir) {
-  const relative2 = path.relative(parent, dir);
-  return relative2 && !relative2.startsWith("..") && !path.isAbsolute(relative2);
-}
-var absolutePathRegExp = /^\\|^\//;
-var AsyncFunction = (async () => {
-}).constructor;
-function compile(str3, options) {
-  const config = this.config;
-  const ctor = (options == null ? void 0 : options.async) ? AsyncFunction : Function;
-  try {
-    return new ctor(config.varName, "options", this.compileToString.call(this, str3, options));
-  } catch (e3) {
-    if (e3 instanceof SyntaxError)
-      throw new EtaParseError("Bad template syntax\n\n" + e3.message + "\n" + Array(e3.message.length + 1).join("=") + "\n" + this.compileToString.call(this, str3, options) + "\n");
-    else
-      throw e3;
-  }
-}
-function compileToString(str3, options) {
-  const config = this.config;
-  const isAsync = options == null ? void 0 : options.async;
-  const compileBody$1 = this.compileBody;
-  const buffer = this.parse.call(this, str3);
-  let res = `${config.functionHeader}
-let include = (__eta_t, __eta_d) => this.render(__eta_t, {...${config.varName}, ...(__eta_d ?? {})}, options);
-let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, {...${config.varName}, ...(__eta_d ?? {})}, options);
-
-let __eta = {res: "", e: this.config.escapeFunction, f: this.config.filterFunction, blocks: {}${config.debug ? ', line: 1, templateStr: "' + str3.replace(/\\|"/g, "\\$&").replace(/\r\n|\n|\r/g, "\\n") + '"' : ""}};
-
-function layout(path, data) {
-  __eta.layout = path;
-  __eta.layoutData = data;
-}${config.debug ? "try {" : ""}${config.useWith ? "with(" + config.varName + "||{}){" : ""}
-
-function ${config.outputFunctionName}(s){__eta.res+=s;}
-function capture(fn){const s=__eta.res;__eta.res='';try{fn();return __eta.res}finally{__eta.res=s;}}
-async function captureAsync(fn){const s=__eta.res;__eta.res='';try{await fn();return __eta.res}finally{__eta.res=s;}}
-function block(name,fn){if(__eta.layout){if(fn){__eta.blocks[name]=capture(fn);}return '';}const b=${config.varName}.__blocks||{};if(name in b){return b[name];}return fn?capture(fn):'';}
-async function blockAsync(name,fn){if(__eta.layout){if(fn){__eta.blocks[name]=await captureAsync(fn);}return '';}const b=${config.varName}.__blocks||{};if(name in b){return b[name];}return fn?await captureAsync(fn):'';}
-
-${compileBody$1.call(this, buffer)}
-if (__eta.layout) {
-  __eta.res = ${isAsync ? "await includeAsync" : "include"} (__eta.layout, {...${config.varName}, body: __eta.res, ...__eta.layoutData, __blocks: __eta.blocks});
-}
-${config.useWith ? "}" : ""}${config.debug ? "} catch (e) { this.RuntimeErr(e, __eta.templateStr, __eta.line, options.filepath) }" : ""}
-return __eta.res;
-`;
-  if (config.plugins)
-    for (let i3 = 0; i3 < config.plugins.length; i3++) {
-      const plugin = config.plugins[i3];
-      if (plugin.processFnString)
-        res = plugin.processFnString(res, config);
-    }
-  return res;
-}
-function compileBody(buff) {
-  const config = this.config;
-  let i3 = 0;
-  const buffLength = buff.length;
-  let returnStr = "";
-  for (; i3 < buffLength; i3++) {
-    const currentBlock = buff[i3];
-    if (typeof currentBlock === "string")
-      returnStr += "__eta.res+='" + currentBlock + "';\n";
-    else {
-      const type = currentBlock.t;
-      let content = currentBlock.val || "";
-      if (config.debug)
-        returnStr += "__eta.line=" + currentBlock.lineNo + "\n";
-      if (type === "r") {
-        if (config.autoFilter)
-          content = "__eta.f(" + content + ")";
-        returnStr += "__eta.res+=" + content + ";\n";
-      } else if (type === "i") {
-        if (config.autoFilter)
-          content = "__eta.f(" + content + ")";
-        if (config.autoEscape)
-          content = "__eta.e(" + content + ")";
-        returnStr += "__eta.res+=" + content + ";\n";
-      } else if (type === "e")
-        returnStr += content + "\n";
-      else if (Object.hasOwn(config.customTags, type))
-        returnStr += `__eta.res+=this.config.customTags[${JSON.stringify(type)}](${JSON.stringify(content)},${config.varName});
-`;
-    }
-  }
-  return returnStr;
-}
-function trimWS(str3, config, wsLeft, wsRight) {
-  let leftTrim;
-  let rightTrim;
-  if (Array.isArray(config.autoTrim)) {
-    leftTrim = config.autoTrim[1];
-    rightTrim = config.autoTrim[0];
-  } else
-    leftTrim = rightTrim = config.autoTrim;
-  if (wsLeft || wsLeft === false)
-    leftTrim = wsLeft;
-  if (wsRight || wsRight === false)
-    rightTrim = wsRight;
-  if (!rightTrim && !leftTrim)
-    return str3;
-  if (leftTrim === "slurp" && rightTrim === "slurp")
-    return str3.trim();
-  if (leftTrim === "_" || leftTrim === "slurp")
-    str3 = str3.trimStart();
-  else if (leftTrim === "-" || leftTrim === "nl")
-    str3 = str3.replace(/^(?:\r\n|\n|\r)/, "");
-  if (rightTrim === "_" || rightTrim === "slurp")
-    str3 = str3.trimEnd();
-  else if (rightTrim === "-" || rightTrim === "nl")
-    str3 = str3.replace(/(?:\r\n|\n|\r)$/, "");
-  return str3;
-}
-var escMap = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;"
-};
-function replaceChar(s3) {
-  return escMap[s3];
-}
-function XMLEscape(str3) {
-  const newStr = String(str3);
-  if (/[&<>"']/.test(newStr))
-    return newStr.replace(/[&<>"']/g, replaceChar);
-  else
-    return newStr;
-}
-var defaultConfig = {
-  autoEscape: true,
-  autoFilter: false,
-  autoTrim: [false, "nl"],
-  cache: false,
-  cacheFilepaths: true,
-  customTags: {},
-  debug: false,
-  escapeFunction: XMLEscape,
-  filterFunction: (val) => String(val),
-  outputFunctionName: "output",
-  functionHeader: "",
-  parse: {
-    exec: "",
-    interpolate: "=",
-    raw: "~"
-  },
-  plugins: [],
-  rmWhitespace: false,
-  tags: ["<%", "%>"],
-  useWith: false,
-  varName: "it",
-  defaultExtension: ".eta"
-};
-var templateLitReg = /`(?:\\[\s\S]|\${(?:[^{}]|{(?:[^{}]|{[^}]*})*})*}|(?!\${)[^\\`])*`/g;
-var singleQuoteReg = /'(?:\\[\s\w"'\\`]|[^\n\r'\\])*?'/g;
-var doubleQuoteReg = /"(?:\\[\s\w"'\\`]|[^\n\r"\\])*?"/g;
-function escapeRegExp(string) {
-  return string.replace(/[.*+\-?^${}()|[\]\\]/g, "\\$&");
-}
-function getLineNo(str3, index) {
-  return str3.slice(0, index).split("\n").length;
-}
-function parse5(str3) {
-  const config = this.config;
-  let buffer = [];
-  let trimLeftOfNextStr = false;
-  let lastIndex = 0;
-  const parseOptions = config.parse;
-  const customTagPrefixes = Object.keys(config.customTags);
-  if (config.plugins)
-    for (let i3 = 0; i3 < config.plugins.length; i3++) {
-      const plugin = config.plugins[i3];
-      if (plugin.processTemplate)
-        str3 = plugin.processTemplate(str3, config);
-    }
-  if (config.rmWhitespace)
-    str3 = str3.replace(/[\r\n]+/g, "\n").replace(/^\s+|\s+$/gm, "");
-  templateLitReg.lastIndex = 0;
-  singleQuoteReg.lastIndex = 0;
-  doubleQuoteReg.lastIndex = 0;
-  function pushString(strng, shouldTrimRightOfString) {
-    if (strng) {
-      strng = trimWS(strng, config, trimLeftOfNextStr, shouldTrimRightOfString);
-      if (strng) {
-        strng = strng.replace(/\\|'/g, "\\$&").replace(/\r\n|\n|\r/g, "\\n");
-        buffer.push(strng);
-      }
-    }
-  }
-  const prefixes = [
-    parseOptions.exec,
-    parseOptions.interpolate,
-    parseOptions.raw,
-    ...customTagPrefixes
-  ].reduce((accumulator, prefix) => {
-    if (accumulator && prefix)
-      return accumulator + "|" + escapeRegExp(prefix);
-    else if (prefix)
-      return escapeRegExp(prefix);
-    else
-      return accumulator;
-  }, "");
-  const parseOpenReg = new RegExp(escapeRegExp(config.tags[0]) + "(-|_)?\\s*(" + prefixes + ")?\\s*", "g");
-  const parseCloseReg = new RegExp("'|\"|`|\\/\\*|(\\s*(-|_)?" + escapeRegExp(config.tags[1]) + ")", "g");
-  let m3;
-  while (m3 = parseOpenReg.exec(str3)) {
-    const precedingString = str3.slice(lastIndex, m3.index);
-    lastIndex = m3[0].length + m3.index;
-    const wsLeft = m3[1];
-    const prefix = m3[2] || "";
-    pushString(precedingString, wsLeft);
-    parseCloseReg.lastIndex = lastIndex;
-    let closeTag;
-    let currentObj = false;
-    while (closeTag = parseCloseReg.exec(str3))
-      if (closeTag[1]) {
-        const content = str3.slice(lastIndex, closeTag.index);
-        parseOpenReg.lastIndex = lastIndex = parseCloseReg.lastIndex;
-        trimLeftOfNextStr = closeTag[2];
-        currentObj = {
-          t: prefix === parseOptions.exec ? "e" : prefix === parseOptions.raw ? "r" : prefix === parseOptions.interpolate ? "i" : customTagPrefixes.includes(prefix) ? prefix : "",
-          val: content
-        };
-        break;
-      } else {
-        const char = closeTag[0];
-        if (char === "/*") {
-          const commentCloseInd = str3.indexOf("*/", parseCloseReg.lastIndex);
-          if (commentCloseInd === -1)
-            ParseErr("unclosed comment", str3, closeTag.index);
-          parseCloseReg.lastIndex = commentCloseInd;
-        } else if (char === "'") {
-          singleQuoteReg.lastIndex = closeTag.index;
-          if (singleQuoteReg.exec(str3))
-            parseCloseReg.lastIndex = singleQuoteReg.lastIndex;
-          else
-            ParseErr("unclosed string", str3, closeTag.index);
-        } else if (char === '"') {
-          doubleQuoteReg.lastIndex = closeTag.index;
-          if (doubleQuoteReg.exec(str3))
-            parseCloseReg.lastIndex = doubleQuoteReg.lastIndex;
-          else
-            ParseErr("unclosed string", str3, closeTag.index);
-        } else if (char === "`") {
-          templateLitReg.lastIndex = closeTag.index;
-          if (templateLitReg.exec(str3))
-            parseCloseReg.lastIndex = templateLitReg.lastIndex;
-          else
-            ParseErr("unclosed string", str3, closeTag.index);
-        }
-      }
-    if (currentObj) {
-      if (config.debug)
-        currentObj.lineNo = getLineNo(str3, m3.index);
-      buffer.push(currentObj);
-    } else
-      ParseErr("unclosed tag", str3, m3.index);
-  }
-  pushString(str3.slice(lastIndex, str3.length), false);
-  if (config.plugins)
-    for (let i3 = 0; i3 < config.plugins.length; i3++) {
-      const plugin = config.plugins[i3];
-      if (plugin.processAST)
-        buffer = plugin.processAST(buffer, config);
-    }
-  return buffer;
-}
-function handleCache(template, options) {
-  const templateStore = (options == null ? void 0 : options.async) ? this.templatesAsync : this.templatesSync;
-  if (this.resolvePath && this.readFile && !template.startsWith("@")) {
-    const templatePath = options.filepath;
-    const cachedTemplate = templateStore.get(templatePath);
-    if (this.config.cache && cachedTemplate)
-      return cachedTemplate;
-    else {
-      const templateString = this.readFile(templatePath);
-      const templateFn = this.compile(templateString, options);
-      if (this.config.cache)
-        templateStore.define(templatePath, templateFn);
-      return templateFn;
-    }
-  } else {
-    const cachedTemplate = templateStore.get(template);
-    if (cachedTemplate)
-      return cachedTemplate;
-    else
-      throw new EtaNameResolutionError(`Failed to get template '${template}'`);
-  }
-}
-function render(template, data, meta) {
-  let templateFn;
-  const options = {
-    ...meta,
-    async: false
-  };
-  if (typeof template === "string") {
-    if (this.resolvePath && this.readFile && !template.startsWith("@"))
-      options.filepath = this.resolvePath(template, options);
-    templateFn = handleCache.call(this, template, options);
-  } else
-    templateFn = template;
-  return templateFn.call(this, data, options);
-}
-function renderAsync(template, data, meta) {
-  let templateFn;
-  const options = {
-    ...meta,
-    async: true
-  };
-  if (typeof template === "string") {
-    if (this.resolvePath && this.readFile && !template.startsWith("@"))
-      options.filepath = this.resolvePath(template, options);
-    templateFn = handleCache.call(this, template, options);
-  } else
-    templateFn = template;
-  const res = templateFn.call(this, data, options);
-  return Promise.resolve(res);
-}
-function renderString(template, data) {
-  const templateFn = this.compile(template, { async: false });
-  return render.call(this, templateFn, data);
-}
-function renderStringAsync(template, data) {
-  const templateFn = this.compile(template, { async: true });
-  return renderAsync.call(this, templateFn, data);
-}
-var Cacher = class {
-  constructor(cache2) {
-    this.cache = cache2;
-  }
-  define(key, val) {
-    this.cache[key] = val;
-  }
-  get(key) {
-    return this.cache[key];
-  }
-  remove(key) {
-    delete this.cache[key];
-  }
-  reset() {
-    this.cache = {};
-  }
-  load(cacheObj) {
-    this.cache = {
-      ...this.cache,
-      ...cacheObj
-    };
-  }
-};
-var Eta$1 = class {
-  constructor(customConfig) {
-    __publicField(this, "config");
-    __publicField(this, "RuntimeErr", RuntimeErr);
-    __publicField(this, "compile", compile);
-    __publicField(this, "compileToString", compileToString);
-    __publicField(this, "compileBody", compileBody);
-    __publicField(this, "parse", parse5);
-    __publicField(this, "render", render);
-    __publicField(this, "renderAsync", renderAsync);
-    __publicField(this, "renderString", renderString);
-    __publicField(this, "renderStringAsync", renderStringAsync);
-    __publicField(this, "filepathCache", {});
-    __publicField(this, "templatesSync", new Cacher({}));
-    __publicField(this, "templatesAsync", new Cacher({}));
-    __publicField(this, "resolvePath", null);
-    __publicField(this, "readFile", null);
-    if (customConfig)
-      this.config = {
-        ...defaultConfig,
-        ...customConfig
-      };
-    else
-      this.config = { ...defaultConfig };
-    const reserved = [
-      this.config.parse.exec,
-      this.config.parse.interpolate,
-      this.config.parse.raw,
-      "-",
-      "_"
-    ];
-    for (const prefix of Object.keys(this.config.customTags))
-      if (reserved.includes(prefix))
-        throw new EtaError(`Custom tag prefix "${prefix}" conflicts with a built-in prefix`);
-  }
-  configure(customConfig) {
-    this.config = {
-      ...this.config,
-      ...customConfig
-    };
-  }
-  withConfig(customConfig) {
-    return {
-      ...this,
-      config: {
-        ...this.config,
-        ...customConfig
-      }
-    };
-  }
-  loadTemplate(name, template, options) {
-    if (typeof template === "string")
-      ((options == null ? void 0 : options.async) ? this.templatesAsync : this.templatesSync).define(name, this.compile(template, options));
-    else {
-      let templates = this.templatesSync;
-      if (template.constructor.name === "AsyncFunction" || (options == null ? void 0 : options.async))
-        templates = this.templatesAsync;
-      templates.define(name, template);
-    }
-  }
-};
-var Eta = class extends Eta$1 {
-  constructor() {
-    super(...arguments);
-    __publicField(this, "readFile", readFile);
-    __publicField(this, "resolvePath", resolvePath);
-  }
-};
-
-// src/template/blockquote.ts
-function formatBlockquote(content) {
-  const lines = content.trim().split("\n").map((line) => line.trim() === "" ? ">" : `> ${line}`);
-  return lines.filter((line, i3) => !(line === ">" && lines[i3 - 1] === ">")).join("\n");
-}
-
-// src/template/format.ts
-function formatCreator(creator, format2, link = false) {
-  const fmt = format2 != null ? format2 : creator.literal ? "{literal}" : "{family}, {given}";
-  let out = fmt.replace(/\{(family|given|literal|role|fullName)\}/g, (_m, token) => {
-    var _a;
-    return String((_a = creator[token]) != null ? _a : "");
-  });
-  out = out.replace(/\s+/g, " ").trim();
-  out = out.replace(/^[,;]+|[,;]+$/g, "").trim();
-  if (link && out)
-    out = `[[${out}]]`;
-  return out;
-}
-function groupCreatorsByType(creators, format2, opts = {}) {
-  var _a;
-  const link = opts.link !== false;
-  const suffix = (_a = opts.suffix) != null ? _a : "s";
-  const groups = new Map();
-  const add = (c3) => {
-    const name = formatCreator(c3, format2, link);
-    if (!name)
-      return;
-    const values = groups.get(c3.role);
-    if (values)
-      values.push(name);
-    else
-      groups.set(c3.role, [name]);
-  };
-  const orderedRoles = opts.roles ? [...opts.roles] : [];
-  for (const role of orderedRoles) {
-    for (const c3 of creators)
-      if (c3.role === role)
-        add(c3);
-  }
-  for (const c3 of creators) {
-    if (!orderedRoles.includes(c3.role))
-      add(c3);
-  }
-  return [...groups].map(([role, values]) => ({ key: `${role}${suffix}`, values }));
-}
-function creatorNames(creators, opts = {}) {
-  var _a;
-  const roles = opts.roles ? Array.isArray(opts.roles) ? opts.roles : [opts.roles] : null;
-  const list = roles ? creators.filter((c3) => roles.includes(c3.role)) : creators;
-  return list.map((c3) => {
-    var _a2;
-    return formatCreator(c3, opts.format, (_a2 = opts.link) != null ? _a2 : false);
-  }).filter(Boolean).join((_a = opts.join) != null ? _a : ", ");
-}
-function cap(s3) {
-  return s3 ? s3.charAt(0).toUpperCase() + s3.slice(1) : "";
-}
-function calloutLines(s3) {
-  return (s3 != null ? s3 : "").split(/\r?\n/).map((l4) => l4.trim() ? `> ${l4}` : ">");
-}
-function embed(link) {
-  return link ? `!${link}` : null;
-}
-function displayDate(value) {
-  if (!value)
-    return "";
-  const m3 = /^(\d{4}-\d{2}-\d{2})T/.exec(value);
-  return m3 ? m3[1] : value;
-}
-function imgUrl(a3) {
-  return typeof a3.imgLink === "function" ? a3.imgLink() : null;
-}
-function imgAlias(a3, alias) {
-  return typeof a3.imgLink === "function" ? a3.imgLink(alias) : null;
-}
-function renderAnnotationCallout(a3, opts = {}) {
-  var _a, _b;
-  const includeTags = opts.tags !== false;
-  const includeFooter = opts.footer !== false;
-  const colorRaw = (_a = a3.colorName) != null ? _a : "yellow";
-  const colorCap = cap(colorRaw);
-  const typeCap = cap(a3.type);
-  const tags = includeTags ? (_b = a3.tags) != null ? _b : [] : [];
-  const inner = [
-    `[!${colorRaw}-${a3.type}-annotation] ${colorCap} ${typeCap}`
-  ];
-  if (a3.comment || tags.length) {
-    inner.push("> [!ann-comment]");
-    if (a3.comment)
-      inner.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
-    for (const tag of tags)
-      inner.push(`> - [[${tag.name}]]`);
-  }
-  inner.push("");
-  if (a3.type === "highlight" && a3.text) {
-    inner.push(`> [!ann-highlight-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
-  } else if (a3.type === "underline" && a3.text) {
-    inner.push(`> [!ann-underline-text-${colorRaw}]`, ...calloutLines(htmlFieldToMarkdown(a3.text)));
-  } else if (a3.type === "image") {
-    inner.push(`> [!ann-image-${colorRaw}]`);
-    const url = imgUrl(a3);
-    if (url)
-      inner.push(`> ${embed(url)}`);
-    const view = imgAlias(a3, "view image");
-    if (view)
-      inner.push(`> - ${view}`);
-    inner.push("> - [[image annotations|images]]");
-  } else if (a3.type === "text" || a3.type === "note") {
-    inner.push(`> [!ann-text-${colorRaw}]Text comment\u2014click to view in context:`);
-    if (a3.comment)
-      inner.push(...calloutLines(htmlFieldToMarkdown(a3.comment)));
-  } else if (a3.type === "ink") {
-    inner.push(`> [!ann-ink-${colorRaw}]`);
-    const url = imgUrl(a3);
-    if (url)
-      inner.push(`> ${embed(url)}`);
-    const view = imgAlias(a3, "view ink image");
-    if (view)
-      inner.push(`> - ${view}`);
-  }
-  if (includeFooter) {
-    inner.push(`- [[${colorCap} annotations|${colorCap}]]`);
-    const page = a3.pageLabel ? `[${a3.pageLabel.includes("\u2013") ? "pp. " : "p. "}${a3.pageLabel}](${a3.backlink})` : `[View](${a3.backlink})`;
-    inner.push(`- (${page}, ${displayDate(a3.dateAdded)})`);
-  }
-  return formatBlockquote(inner.join("\n"));
-}
-function renderCallout(opts) {
-  var _a;
-  const head = `[!${opts.type}]${opts.collapse ? "-" : ""}${opts.title ? ` ${opts.title}` : ""}`;
-  const body = ((_a = opts.body) != null ? _a : "").split(/\r?\n/);
-  return formatBlockquote([head, ...body].join("\n"));
-}
-
-// src/template/merge.ts
-var MANAGED_OPEN = "%%sw-managed%%";
-var MANAGED_CLOSE = "%%/sw-managed%%";
-var FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-function splitNote(content) {
-  const m3 = FRONTMATTER_RE.exec(content);
-  if (!m3)
-    return { frontmatter: null, body: content };
-  return { frontmatter: m3[1], body: content.slice(m3[0].length) };
-}
-function joinNote(frontmatter, body) {
-  const fm = frontmatter.replace(/\r\n?/g, "\n").replace(/^\n+|\n+$/g, "");
-  return `---
-${fm}
----
-${body}`;
-}
-var KEY_RE = /^([A-Za-z0-9_][^:\n]*?)[ \t]*:(?:[ \t]|$)/;
-function unquoteKey(key) {
-  const k4 = key.trim();
-  if (k4.length >= 2 && (k4[0] === '"' && k4.endsWith('"') || k4[0] === "'" && k4.endsWith("'"))) {
-    return k4.slice(1, -1);
-  }
-  return k4;
-}
-function parseFrontmatter(frontmatter) {
-  const props = [];
-  let current = null;
-  for (const line of frontmatter.replace(/\r\n?/g, "\n").split("\n")) {
-    const m3 = !/^[ \t]/.test(line) ? KEY_RE.exec(line) : null;
-    if (m3) {
-      if (current)
-        props.push(current);
-      current = { key: unquoteKey(m3[1]), lines: [line] };
-    } else if (current) {
-      current.lines.push(line);
-    } else if (line.trim()) {
-      props.push({ key: "", lines: [line] });
-    }
-  }
-  if (current)
-    props.push(current);
-  return props;
-}
-function isListBlock(lines) {
-  return lines.length >= 1 && /:[ \t]*$/.test(lines[0]) && lines.slice(1).length > 0 && lines.slice(1).every((l4) => /^[ \t]*-[ \t]/.test(l4));
-}
-function appendListItems(existing, generated) {
-  var _a;
-  const head = (_a = existing[0]) != null ? _a : generated[0];
-  const seen = new Set(existing.slice(1).map((l4) => l4.trim()));
-  const out = [...existing.slice(1)];
-  for (const item of generated.slice(1)) {
-    if (seen.has(item.trim()))
-      continue;
-    seen.add(item.trim());
-    out.push(item);
-  }
-  return [head, ...out];
-}
-function reconcile(merge2, existing, generated) {
-  const has = !!existing && existing.length > 0;
-  switch (merge2) {
-    case "keep":
-      return has ? existing : generated;
-    case "append":
-      if (!has)
-        return generated;
-      if (isListBlock(existing) && isListBlock(generated)) {
-        return appendListItems(existing, generated);
-      }
-      return generated;
-    case "replace":
-    default:
-      return generated;
-  }
-}
-function mergeFrontmatter(existingFrontmatter, specs) {
-  const existing = parseFrontmatter(existingFrontmatter != null ? existingFrontmatter : "");
-  const byKey = new Map(specs.map((s3) => [s3.key, s3]));
-  const emitted = new Set();
-  const out = [];
-  for (const prop of existing) {
-    const spec = byKey.get(prop.key);
-    if (!spec) {
-      out.push(...prop.lines);
-      continue;
-    }
-    emitted.add(spec.key);
-    out.push(...reconcile(spec.merge, prop.lines, spec.lines));
-  }
-  for (const spec of specs) {
-    if (emitted.has(spec.key))
-      continue;
-    out.push(...reconcile(spec.merge, void 0, spec.lines));
-  }
-  return out.join("\n");
-}
-function findManagedRegion(body) {
-  const start = body.indexOf(MANAGED_OPEN);
-  if (start === -1)
-    return null;
-  const close2 = body.indexOf(MANAGED_CLOSE, start + MANAGED_OPEN.length);
-  if (close2 === -1)
-    return null;
-  return { start, end: close2 + MANAGED_CLOSE.length };
-}
-function mergeManagedRegion(existingBody, renderedBody, opts = {}) {
-  const rendered = findManagedRegion(renderedBody);
-  const existing = findManagedRegion(existingBody);
-  if (rendered && existing) {
-    return existingBody.slice(0, existing.start) + renderedBody.slice(rendered.start, rendered.end) + existingBody.slice(existing.end);
-  }
-  if (rendered && !existing) {
-    const region = renderedBody.slice(rendered.start, rendered.end);
-    const before = existingBody.replace(/\s+$/, "");
-    return before ? `${before}
-
-${region}
-` : `${region}
-`;
-  }
-  if (!rendered && existing && opts.managesRegion) {
-    const before = existingBody.slice(0, existing.start).replace(/\n+$/, "");
-    const after = existingBody.slice(existing.end).replace(/^\n+/, "");
-    if (!before)
-      return after;
-    if (!after)
-      return `${before}
-`;
-    return `${before}
-
-${after}`;
-  }
-  return existingBody;
-}
-function mergeNote(existing, rendered, specs, opts = {}) {
-  const prior = splitNote(existing);
-  const fresh = splitNote(rendered);
-  const frontmatter = mergeFrontmatter(prior.frontmatter, specs);
-  const body = prior.frontmatter === null ? prior.body : mergeManagedRegion(prior.body, fresh.body, opts);
-  return joinNote(frontmatter, body);
-}
-
-// src/template/yaml.ts
-var INDENT = "  ";
-var INDICATOR_RE = /^[\s\-?:,[\]{}#&*!|>'"%@`]/;
-var NUMBER_LIKE_RE = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
-var BOOL_NULL_LIKE_RE = /^(?:true|false|null|~|yes|no|on|off)$/i;
-var KEY_SAFE_RE = /^[A-Za-z0-9_.-]+$/;
-function needsQuotes(value, quote = "auto") {
-  if (quote === "always")
-    return true;
-  if (quote === "never")
-    return false;
-  if (value === "")
-    return true;
-  if (value !== value.trim())
-    return true;
-  if (INDICATOR_RE.test(value))
-    return true;
-  if (/:\s/.test(value) || /\s#/.test(value))
-    return true;
-  if (/["\\\t]/.test(value))
-    return true;
-  if (BOOL_NULL_LIKE_RE.test(value))
-    return true;
-  if (NUMBER_LIKE_RE.test(value))
-    return true;
-  return false;
-}
-function quoteString(value) {
-  return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
-}
-function serializeScalar(value, quote) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? String(value) : "null";
-  }
-  if (typeof value === "boolean")
-    return value ? "true" : "false";
-  return needsQuotes(value, quote) ? quoteString(value) : value;
-}
-function serializeBlockScalar(value) {
-  const lines = value.replace(/\r\n?/g, "\n").split("\n");
-  if (lines.length > 1 && lines[lines.length - 1] === "")
-    lines.pop();
-  const body = lines.map((line) => line === "" ? "" : INDENT + line).join("\n");
-  return `|-
-${body}`;
-}
-function serializeKey(key) {
-  return KEY_SAFE_RE.test(key) ? key : quoteString(key);
-}
-function serializeProperty(key, value, opts = {}) {
-  var _a;
-  const quote = (_a = opts.quote) != null ? _a : "auto";
-  const k4 = serializeKey(key);
-  if (value === null || value === void 0)
-    return [];
-  if (Array.isArray(value)) {
-    if (value.length === 0)
-      return opts.force ? [`${k4}: []`] : [];
-    return [
-      `${k4}:`,
-      ...value.map((item) => `${INDENT}- ${serializeScalar(item, quote)}`)
-    ];
-  }
-  if (typeof value === "string") {
-    if (value === "")
-      return opts.force ? [`${k4}: ""`] : [];
-    if (/[\n\r]/.test(value)) {
-      return `${k4}: ${serializeBlockScalar(value)}`.split("\n");
-    }
-    return [`${k4}: ${serializeScalar(value, quote)}`];
-  }
-  return [`${k4}: ${serializeScalar(value, quote)}`];
-}
-var YamlBuilder = class {
-  constructor() {
-    this.lines = [];
-    this.specs = [];
-    this.open = false;
-    this.finished = false;
-  }
-  get isOpen() {
-    return this.open;
-  }
-  start() {
-    if (this.open)
-      throw new Error("[sw yaml] start_YAML() called twice");
-    if (this.finished) {
-      throw new Error("[sw yaml] start_YAML() called after end_YAML()");
-    }
-    this.open = true;
-  }
-  add(key, value, opts) {
-    var _a;
-    this.assertOpen("add_property");
-    if (typeof key !== "string" || !key.trim()) {
-      throw new Error("[sw yaml] add_property() needs a non-empty key");
-    }
-    const lines = serializeProperty(key, value, opts);
-    this.lines.push(...lines);
-    this.specs.push({ key, merge: (_a = opts == null ? void 0 : opts.merge) != null ? _a : "replace", lines });
-  }
-  fieldSpecs() {
-    return this.specs.map((s3) => ({ ...s3, lines: [...s3.lines] }));
-  }
-  addRaw(text) {
-    this.assertOpen("add_raw_yaml");
-    if (typeof text !== "string")
-      return;
-    const body = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
-    if (body)
-      this.lines.push(...body.split("\n"));
-  }
-  end() {
-    if (!this.open)
-      throw new Error("[sw yaml] end_YAML() without start_YAML()");
-    this.open = false;
-    this.finished = true;
-    return ["---", ...this.lines, "---", ""].join("\n");
-  }
-  assertOpen(fn2) {
-    if (!this.open)
-      throw new Error(`[sw yaml] ${fn2}() outside start_YAML()`);
-  }
-};
-
-// src/template/note-helpers.ts
-var STATE_KEY = "__sw";
-function todayIso(now = new Date()) {
-  const y3 = now.getFullYear();
-  const m3 = String(now.getMonth() + 1).padStart(2, "0");
-  const d3 = String(now.getDate()).padStart(2, "0");
-  return `${y3}-${m3}-${d3}`;
-}
-function prepareTemplateData(ctx, extras = {}) {
-  var _a, _b;
-  const state = {
-    yaml: new YamlBuilder(),
-    options: (_a = extras.options) != null ? _a : {},
-    importDate: (_b = extras.importDate) != null ? _b : todayIso(),
-    isFirstImport: extras.isFirstImport !== false,
-    fileName: null,
-    notesRendered: false
-  };
-  ctx[STATE_KEY] = state;
-  return ctx;
-}
-function defaultFileName(ctx) {
-  var _a, _b;
-  const key = (_b = (_a = ctx.citekey) != null ? _a : ctx.citationKey) != null ? _b : ctx.key;
-  return key ? `@${key}` : "";
-}
-var NoteHelpers = class {
-  stateOf(ctx) {
-    const existing = ctx[STATE_KEY];
-    if (existing)
-      return existing;
-    prepareTemplateData(ctx);
-    return ctx[STATE_KEY];
-  }
-  startYAML(ctx) {
-    this.stateOf(ctx).yaml.start();
-  }
-  addProperty(ctx, key, value, opts) {
-    this.stateOf(ctx).yaml.add(key, value, opts);
-  }
-  addRawYAML(ctx, text) {
-    this.stateOf(ctx).yaml.addRaw(text);
-  }
-  endYAML(ctx) {
-    return this.stateOf(ctx).yaml.end();
-  }
-  fieldSpecs(ctx) {
-    return this.stateOf(ctx).yaml.fieldSpecs();
-  }
-  mergeInto(ctx, existing, rendered, opts = {}) {
-    if (!existing)
-      return rendered;
-    return mergeNote(existing, rendered, this.fieldSpecs(ctx), opts);
-  }
-  setFileName(ctx, name) {
-    this.stateOf(ctx).fileName = (name == null ? void 0 : name.trim()) ? name.trim() : null;
-  }
-  fileName(ctx) {
-    var _a;
-    return (_a = this.stateOf(ctx).fileName) != null ? _a : defaultFileName(ctx);
-  }
-  creatorsByType(ctx, format2, opts) {
-    const state = this.stateOf(ctx);
-    return groupCreatorsByType(ctx.creators, format2 != null ? format2 : state.options.creatorFormat, opts);
-  }
-  creatorValues(ctx, role, format2, opts) {
-    var _a;
-    const state = this.stateOf(ctx);
-    const group = groupCreatorsByType(ctx.creators, format2 != null ? format2 : state.options.creatorFormat, {
-      ...opts,
-      roles: [role]
-    }).find((g4) => {
-      var _a2;
-      return g4.key === `${role}${(_a2 = opts == null ? void 0 : opts.suffix) != null ? _a2 : "s"}`;
-    });
-    return (_a = group == null ? void 0 : group.values) != null ? _a : [];
-  }
-  creatorNames(ctx, role, format2, opts) {
-    var _a;
-    const state = this.stateOf(ctx);
-    const roles = role != null ? role : opts == null ? void 0 : opts.roles;
-    return creatorNames(ctx.creators, {
-      ...opts,
-      roles,
-      format: (_a = format2 != null ? format2 : opts == null ? void 0 : opts.format) != null ? _a : state.options.creatorFormat
-    });
-  }
-  primaryCreators(ctx) {
-    return ctx.authors.length ? ctx.authors : ctx.creators;
-  }
-  zoteroNotes(ctx, opts = {}) {
-    var _a, _b, _c, _d;
-    const state = this.stateOf(ctx);
-    state.notesRendered = true;
-    if (!ctx.notes.length)
-      return "";
-    const mode = (_b = (_a = opts.mode) != null ? _a : state.options.notesMode) != null ? _b : "inline";
-    const level = (_d = (_c = opts.level) != null ? _c : state.options.notesHeadingLevel) != null ? _d : 3;
-    const render2 = (note) => {
-      var _a2;
-      if (mode === "link" && note.noteLink) {
-        const link2 = note.noteLink();
-        if (link2)
-          return link2;
-      }
-      if (note.html)
-        return noteHtmlToMarkdown(note.html, { topLevel: level });
-      if (note.text)
-        return note.text;
-      const link = (_a2 = note.noteLink) == null ? void 0 : _a2.call(note);
-      return link != null ? link : "";
-    };
-    return ctx.notes.map(render2).filter((chunk) => chunk && chunk.trim()).join("\n\n");
-  }
-  annotationCallout(ctx, annotation, opts) {
-    const state = this.stateOf(ctx);
-    return renderAnnotationCallout(annotation, { ...state.options.annotation, ...opts });
-  }
-  callout(ctx, opts) {
-    this.stateOf(ctx);
-    return renderCallout(opts);
-  }
-  wikilink(_ctx, target, alias) {
-    if (!target)
-      return "";
-    return alias ? `[[${target}|${alias}]]` : `[[${target}]]`;
-  }
-  linkNote(ctx, alias, subpath) {
-    var _a;
-    return (_a = ctx.noteLink(alias, subpath)) != null ? _a : "";
-  }
-  mdHtml(_ctx, html) {
-    return htmlFieldToMarkdown(html);
-  }
-  heading(_ctx, level, text) {
-    const l4 = Math.min(6, Math.max(1, Math.floor(level) || 1));
-    return `${"#".repeat(l4)} ${text != null ? text : ""}`.trimEnd();
-  }
-  escapeMd(_ctx, text) {
-    return escapeMarkdown(text != null ? text : "");
-  }
-  importDate(ctx) {
-    return this.stateOf(ctx).importDate;
-  }
-  isFirstImport(ctx) {
-    return this.stateOf(ctx).isFirstImport;
-  }
-  shortTitle(ctx) {
-    var _a;
-    if (ctx.shortTitle)
-      return ctx.shortTitle;
-    const title = (_a = ctx.title) != null ? _a : "";
-    const at = title.indexOf(":");
-    if (at === -1)
-      return null;
-    return title.slice(0, at).trim() || null;
-  }
-  aliases(ctx) {
-    var _a;
-    const title = (_a = ctx.title) != null ? _a : "";
-    const short = this.shortTitle(ctx);
-    const useTitle = short != null ? short : title;
-    const out = [];
-    const creators = this.primaryCreators(ctx);
-    const year = ctx.date ? String(ctx.date.year) : "";
-    if (creators.length) {
-      const first = creators[0].family || creators[0].literal || creators[0].fullName;
-      const authlist = creators.length > 2 ? `${first} et al.` : creators.length === 2 ? `${first} and ${creators[1].family || creators[1].literal || creators[1].fullName}` : first;
-      if (authlist && useTitle) {
-        out.push(`${authlist}${year ? ` - ${year}` : ""} - ${useTitle}`);
-      }
-    }
-    if (title)
-      out.push(title);
-    if (short && short !== title)
-      out.push(short);
-    return [...new Set(out)];
-  }
-  relatedLinks(ctx) {
-    const out = [];
-    for (const item of ctx.relatedItems) {
-      if (item.citationKey)
-        out.push(`[[@${item.citationKey}]]`);
-    }
-    for (const tag of ctx.tags) {
-      if (tag.name)
-        out.push(`[[${tag.name}]]`);
-    }
-    return out;
-  }
-  attachmentLinks(ctx) {
-    return ctx.attachments.filter((a3) => a3.key).map((a3) => {
-      var _a;
-      const label = ((_a = a3.filename) != null ? _a : a3.key).replace(/"/g, '\\"');
-      return `[${label}](${a3.backlink})`;
-    });
-  }
-  attachmentsWithAnnotations(ctx) {
-    const keys = new Set(ctx.annotations.map((a3) => {
-      var _a;
-      return (_a = a3.parentAttachment) == null ? void 0 : _a.key;
-    }).filter(Boolean));
-    return ctx.attachments.filter((a3) => keys.has(a3.key));
-  }
-};
-
-// src/template/zotlit-helpers.ts
-function basename(path2, ext = ".md") {
-  if (ext !== "" && isOnlySlashes(path2))
-    return path2 === ext ? "" : path2;
-  const name = finalSegment(path2);
-  if (ext === "" || name === "")
-    return name;
-  if (path2 === ext)
-    return "";
-  if (name === ext)
-    return name;
-  return name.endsWith(ext) ? name.slice(0, -ext.length) : name;
-}
-function finalSegment(path2) {
-  let end = path2.length;
-  while (end > 0 && path2.charCodeAt(end - 1) === 47)
-    end--;
-  if (end === 0)
-    return "";
-  const start = path2.lastIndexOf("/", end - 1) + 1;
-  return path2.slice(start, end);
-}
-function isOnlySlashes(path2) {
-  if (path2.length === 0)
-    return false;
-  for (let i3 = 0; i3 < path2.length; i3++) {
-    if (path2.charCodeAt(i3) !== 47)
-      return false;
-  }
-  return true;
-}
-function embed2(link, alias, subpath) {
-  if (!link)
-    return "";
-  const rendered = link(alias, subpath);
-  return rendered ? `!${rendered}` : "";
-}
-var MAX_SUFFIX_LENGTH = 64;
-function filenameSuffix(length = 6, prepend = "_", append = "") {
-  if (!Number.isInteger(length) || length < 1 || length > MAX_SUFFIX_LENGTH) {
-    throw new Error(`suffix() length must be an integer in 1..${MAX_SUFFIX_LENGTH}, got ${length}`);
-  }
-  for (const [name, value] of [
-    ["prepend", prepend],
-    ["append", append]
-  ]) {
-    if (/[:%]/.test(value)) {
-      throw new Error(`suffix() ${name} must not contain ':' or '%', got ${JSON.stringify(value)}`);
-    }
-  }
-  return `%zt-suffix:${length}:${prepend}:${append}%`;
-}
-function coerceOutput(value) {
-  if (value === null || value === void 0)
-    return "";
-  if (value instanceof Date)
-    return value.toISOString();
-  const T4 = globalThis.Temporal;
-  if (T4 && value instanceof T4.Instant) {
-    return value.toZonedDateTimeISO(T4.Now.timeZoneId()).toPlainDate().toString();
-  }
-  return String(value);
-}
-
-// src/template/engine.ts
-var TEMPLATE_DATA_ROOT = "item";
-function replaceOnce(source, needle, replacement, label) {
-  const at = source.indexOf(needle);
-  if (at === -1) {
-    throw new Error(`[sw template] eta codegen changed (no ${label} helper); update includeDataPlugin`);
-  }
-  return source.slice(0, at) + replacement + source.slice(at + needle.length);
-}
-var includeDataPlugin = {
-  processFnString(fnString, config) {
-    var _a;
-    const varName = (_a = config == null ? void 0 : config.varName) != null ? _a : "it";
-    const spread = `{...${varName}, ...(__eta_d ?? {})}`;
-    const out = replaceOnce(fnString, `let include = (__eta_t, __eta_d) => this.render(__eta_t, ${spread}, options);`, `let include = (__eta_t, __eta_d) => this.render(__eta_t, __eta_d ?? ${varName}, options);`, "include");
-    return replaceOnce(out, `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, ${spread}, options);`, `let includeAsync = (__eta_t, __eta_d) => this.renderAsync(__eta_t, __eta_d ?? ${varName}, options);`, "includeAsync");
-  }
-};
-var NoteTemplateEngine = class extends Eta {
-  constructor(dataRoot = TEMPLATE_DATA_ROOT) {
-    const d3 = dataRoot;
-    super({
-      cache: true,
-      varName: dataRoot,
-      autoTrim: [true, true],
-      autoEscape: false,
-      autoFilter: true,
-      filterFunction: coerceOutput,
-      functionHeader: `const bq = (fn) => output(this.bqHelper(capture(fn))); const basename = this.basenameHelper; const suffix = this.suffixHelper; const embed = this.embedHelper; const start_YAML = () => this.noteHelpers.startYAML(${d3}); const end_YAML = () => this.noteHelpers.endYAML(${d3}); const add_property = (k, v, o) => this.noteHelpers.addProperty(${d3}, k, v, o); const add_raw_yaml = (t) => this.noteHelpers.addRawYAML(${d3}, t); const merge_into = (existing, rendered) => this.noteHelpers.mergeInto(${d3}, existing, rendered); const set_file_name = (n) => this.noteHelpers.setFileName(${d3}, n); const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d3}, f, o); const creator_values = (r, f, o) => this.noteHelpers.creatorValues(${d3}, r, f, o); const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d3}, r, f, o); const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d3}, o); const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d3}, a, o); const callout = (o) => this.noteHelpers.callout(${d3}, o); const wikilink = (t, a) => this.noteHelpers.wikilink(${d3}, t, a); const link_note = (a, s) => this.noteHelpers.linkNote(${d3}, a, s); const md_html = (h) => this.noteHelpers.mdHtml(${d3}, h); const heading = (l, t) => this.noteHelpers.heading(${d3}, l, t); const escape_md = (t) => this.noteHelpers.escapeMd(${d3}, t); const import_date = () => this.noteHelpers.importDate(${d3}); const is_first_import = () => this.noteHelpers.isFirstImport(${d3}); const short_title = () => this.noteHelpers.shortTitle(${d3}); const aliases = () => this.noteHelpers.aliases(${d3}); const related_links = () => this.noteHelpers.relatedLinks(${d3}); const attachment_links = () => this.noteHelpers.attachmentLinks(${d3}); const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d3}); `,
-      plugins: [includeDataPlugin]
-    });
-    this.bqHelper = formatBlockquote;
-    this.basenameHelper = basename;
-    this.suffixHelper = filenameSuffix;
-    this.embedHelper = embed2;
-    this.noteHelpers = new NoteHelpers();
-  }
-};
-function makeEta(dataRoot = TEMPLATE_DATA_ROOT) {
-  return new NoteTemplateEngine(dataRoot);
-}
-
-// src/template/render.ts
-function renderNote(entry, children, opts) {
-  var _a;
-  const ctx = buildNoteContextWithChildren(entry, children, {
-    groupID: opts.groupID,
-    dataDir: opts.dataDir,
-    baseAttachmentPath: opts.baseAttachmentPath,
-    notePath: opts.notePath,
-    noteHeadingLevel: opts.noteHeadingLevel
-  });
-  prepareTemplateData(ctx, {
-    options: opts.options,
-    importDate: opts.importDate
-  });
-  const engine = makeEta();
-  const rendered = engine.renderString(opts.templateSource, ctx);
-  const content = engine.noteHelpers.mergeInto(ctx, (_a = opts.existingContent) != null ? _a : null, rendered, { managesRegion: opts.templateSource.includes(MANAGED_OPEN) });
-  return { content, fileName: engine.noteHelpers.fileName(ctx) };
-}
-
-// src/noteImport.ts
-var TEMPLATE_ASSET = "sw-note-templates/sw-note.eta.md";
-var EMPTY_CHILDREN = {
-  attachments: [],
-  annotations: [],
-  notes: []
-};
-function expandHome(p4) {
-  if (p4 === "~" || p4 === "~/")
-    return require("os").homedir();
-  if (p4.startsWith("~/"))
-    return require("os").homedir() + p4.slice(1);
-  return p4;
-}
-function resolveZoteroDataDir(configured) {
-  var _a, _b;
-  const custom = (configured != null ? configured : "").trim();
-  if (custom)
-    return expandHome(custom);
-  try {
-    const os = require("os");
-    const fs2 = require("fs");
-    const path2 = require("path");
-    const home = os.homedir();
-    const platform = (_a = window.process) == null ? void 0 : _a.platform;
-    const candidates = platform === "win32" ? [path2.join((_b = process.env.APPDATA) != null ? _b : "", "Zotero", "Zotero")] : platform === "darwin" ? [path2.join(home, "Zotero")] : [path2.join(home, "Zotero"), path2.join(home, ".zotero", "zotero")];
-    for (const c3 of candidates) {
-      if (c3 && fs2.existsSync(c3))
-        return c3;
-    }
-  } catch (e3) {
-  }
-  return null;
-}
-function literatureNoteFolder(plugin) {
-  var _a;
-  const zotlitFolder = getZotlitLiteratureFolder(plugin.app);
-  const settingsFolder = ((_a = plugin.settings.literatureNoteFolder) != null ? _a : "").trim();
-  return plugin.settings.useZotlitLiteratureFolder ? zotlitFolder || settingsFolder || "_2 Bibliographic notes" : settingsFolder || zotlitFolder || "_2 Bibliographic notes";
-}
-async function readTemplate(plugin) {
-  const dir = plugin.manifest.dir;
-  if (!dir)
-    return null;
-  const path2 = (0, import_obsidian21.normalizePath)(`${dir}/${TEMPLATE_ASSET}`);
-  try {
-    return await plugin.app.vault.adapter.read(path2);
-  } catch (e3) {
-    console.warn("[sw:import] note template not found at", path2, e3);
-    return null;
-  }
-}
-async function fetchChildren(plugin, entry) {
-  const key = entry == null ? void 0 : entry._zoteroKey;
-  if (!key)
-    return EMPTY_CHILDREN;
-  const libraryID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
-  try {
-    const children = await fetchItemChildrenNative(plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT, key, libraryID);
-    return children != null ? children : EMPTY_CHILDREN;
-  } catch (e3) {
-    console.warn("[sw:import] child fetch failed; importing metadata only", e3);
-    return EMPTY_CHILDREN;
-  }
-}
-async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = {}) {
-  var _a, _b;
-  const app2 = plugin.app;
-  const templateSource = await readTemplate(plugin);
-  if (!templateSource)
-    return false;
-  const children = await fetchChildren(plugin, entry);
-  const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : null;
-  const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
-  const folder = literatureNoteFolder(plugin);
-  const first = renderNote(entry, children, {
-    templateSource,
-    groupID,
-    dataDir,
-    noteHeadingLevel: (_a = plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3
-  });
-  const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, "");
-  const notePath = folder ? (0, import_obsidian21.normalizePath)(`${folder}/${base}.md`) : `${base}.md`;
-  let existing = null;
-  if (await app2.vault.adapter.exists(notePath)) {
-    try {
-      existing = await app2.vault.adapter.read(notePath);
-    } catch (e3) {
-      existing = null;
-    }
-  }
-  const { content } = renderNote(entry, children, {
-    templateSource,
-    groupID,
-    dataDir,
-    notePath,
-    noteHeadingLevel: (_b = plugin.settings.ownNoteNotesHeadingLevel) != null ? _b : 3,
-    existingContent: existing
-  });
-  if (folder && !await app2.vault.adapter.exists((0, import_obsidian21.normalizePath)(folder))) {
-    await app2.vault.adapter.mkdir((0, import_obsidian21.normalizePath)(folder));
-  }
-  if (existing != null) {
-    const known = app2.vault.getAbstractFileByPath(notePath);
-    if (known instanceof import_obsidian21.TFile) {
-      await app2.vault.modify(known, content);
-    } else {
-      await app2.vault.adapter.write(notePath, content);
-    }
-    return true;
-  }
-  await app2.vault.create(notePath, content);
-  if (opts.open !== false) {
-    await app2.workspace.openLinkText(notePath, sourceFile.path, true);
-  }
-  return true;
 }
 
 // src/bib/bibManager.ts
@@ -93010,7 +93210,7 @@ function resolveScopedPath(file, scopedPath) {
   if (isAbsolutePath(scopedPath))
     return scopedPath;
   const noteDir = file.path.split("/").slice(0, -1).join("/");
-  return (0, import_obsidian22.normalizePath)(noteDir ? `${noteDir}/${scopedPath}` : scopedPath);
+  return (0, import_obsidian23.normalizePath)(noteDir ? `${noteDir}/${scopedPath}` : scopedPath);
 }
 function fastHash(input) {
   let h3 = 2166136261;
@@ -93086,7 +93286,7 @@ var ZoteroOfflineAlert = class {
       return;
     const el = createDiv({ cls: "sw-zotero-alert" });
     const icon = el.createSpan({ cls: "sw-zotero-alert-icon" });
-    (0, import_obsidian22.setIcon)(icon, "lucide-plug-zap");
+    (0, import_obsidian23.setIcon)(icon, "lucide-plug-zap");
     el.createSpan({
       cls: "sw-zotero-alert-text",
       text: "ScholarWeft: can\u2019t connect to Zotero. Make sure Zotero is open, and that no other vault is connected to it (only one vault can connect at a time). Citations format automatically once it connects."
@@ -93094,7 +93294,7 @@ var ZoteroOfflineAlert = class {
     const retry = el.createEl("button", { cls: "sw-zotero-alert-retry", text: "Retry now" });
     retry.onClickEvent(() => (onRetryExternal != null ? onRetryExternal : this.onRetry)());
     const dismiss = el.createSpan({ cls: "sw-zotero-alert-dismiss clickable-icon" });
-    (0, import_obsidian22.setIcon)(dismiss, "lucide-x");
+    (0, import_obsidian23.setIcon)(dismiss, "lucide-x");
     dismiss.setAttr("aria-label", "Dismiss");
     dismiss.onClickEvent(() => this.hide());
     anchor.prepend(el);
@@ -93129,7 +93329,7 @@ function promptZotLitFallback(reason) {
       settled = true;
       resolve(v3);
     };
-    class Prompt extends import_obsidian22.Modal {
+    class Prompt extends import_obsidian23.Modal {
       onOpen() {
         this.titleEl.setText("ZotLit could not create this note");
         this.contentEl.createEl("p", {
@@ -93197,14 +93397,14 @@ var BibManager = class {
     this.warming = false;
     this.warmingSkipPDFs = false;
     this.warmingSkipLRU = false;
-    this.scheduleRenderedCacheSave = (0, import_obsidian22.debounce)(() => {
+    this.scheduleRenderedCacheSave = (0, import_obsidian23.debounce)(() => {
       void this.saveRenderedCache();
     }, 2500);
     this.plugin = plugin;
     this.initPromise = new PromiseCapability();
     this.fileCache = new SimpleLRU({ max: 10 });
     plugin.registerEvent(plugin.app.vault.on("modify", (file) => {
-      const p4 = (0, import_obsidian22.normalizePath)(file.path);
+      const p4 = (0, import_obsidian23.normalizePath)(file.path);
       if (!this.watchedBibPaths.has(p4))
         return;
       const { settings } = plugin;
@@ -93461,8 +93661,8 @@ var BibManager = class {
     const paths = (_a = settings.bibliographyPaths) != null ? _a : [];
     if (!paths.length)
       return;
-    const CACHE_DIR2 = (0, import_obsidian22.normalizePath)(SW_CACHE_DIR);
-    const BIB_CACHE_PATH = (0, import_obsidian22.normalizePath)(`${CACHE_DIR2}/bib-parsed.json`);
+    const CACHE_DIR2 = (0, import_obsidian23.normalizePath)(SW_CACHE_DIR);
+    const BIB_CACHE_PATH = (0, import_obsidian23.normalizePath)(`${CACHE_DIR2}/bib-parsed.json`);
     const pandoc = (_b = settings.pathToPandoc) != null ? _b : "";
     const cacheMap = new Map();
     try {
@@ -93496,7 +93696,7 @@ var BibManager = class {
       let bib = null;
       if (!isAbsolutePath(resolved)) {
         try {
-          const stat = await app.vault.adapter.stat((0, import_obsidian22.normalizePath)(resolved));
+          const stat = await app.vault.adapter.stat((0, import_obsidian23.normalizePath)(resolved));
           const cached = cacheMap.get(resolved);
           if (stat && cached && cached.mtime === stat.mtime && cached.size === stat.size && cached.pandoc === pandoc) {
             bib = cached.entries;
@@ -93515,7 +93715,7 @@ var BibManager = class {
         }
         if (!isAbsolutePath(resolved)) {
           try {
-            const stat = await app.vault.adapter.stat((0, import_obsidian22.normalizePath)(resolved));
+            const stat = await app.vault.adapter.stat((0, import_obsidian23.normalizePath)(resolved));
             if (stat) {
               cacheMap.set(resolved, { mtime: stat.mtime, size: stat.size, pandoc, entries: bib });
               cacheModified = true;
@@ -93525,7 +93725,7 @@ var BibManager = class {
         }
       }
       if (!isAbsolutePath(resolved)) {
-        this.globalWatchedBibPaths.add((0, import_obsidian22.normalizePath)(resolved));
+        this.globalWatchedBibPaths.add((0, import_obsidian23.normalizePath)(resolved));
       }
       for (const entry of bib) {
         this.bibCache.set(entry.id, { ...entry, _source: "bib" });
@@ -94176,10 +94376,10 @@ var BibManager = class {
       try {
         let text;
         if (isAbsolutePath(p4)) {
-          const buf = await import_obsidian22.FileSystemAdapter.readLocalFile(p4);
+          const buf = await import_obsidian23.FileSystemAdapter.readLocalFile(p4);
           text = new TextDecoder().decode(buf);
         } else {
-          text = await app.vault.adapter.read((0, import_obsidian22.normalizePath)(p4));
+          text = await app.vault.adapter.read((0, import_obsidian23.normalizePath)(p4));
         }
         for (const m3 of text.matchAll(/@\w+\s*\{\s*([^,\s\n]+)\s*,/gm)) {
           keys.add(m3[1].trim());
@@ -94262,11 +94462,11 @@ var BibManager = class {
   }
   async saveZLinks() {
     try {
-      const dir = (0, import_obsidian22.normalizePath)(SW_CACHE_DIR);
+      const dir = (0, import_obsidian23.normalizePath)(SW_CACHE_DIR);
       if (!await app.vault.adapter.exists(dir)) {
         await app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write((0, import_obsidian22.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`), JSON.stringify({
+      await app.vault.adapter.write((0, import_obsidian23.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`), JSON.stringify({
         links: Object.fromEntries(this.zCitekeyToLinks),
         pdfs: Object.fromEntries(this.zCitekeyToPDFLinks)
       }));
@@ -94276,7 +94476,7 @@ var BibManager = class {
   }
   async loadZLinks() {
     try {
-      const raw = await app.vault.adapter.read((0, import_obsidian22.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`));
+      const raw = await app.vault.adapter.read((0, import_obsidian23.normalizePath)(`${SW_CACHE_DIR}/zlinks.json`));
       const data = JSON.parse(raw);
       if (data == null ? void 0 : data.links) {
         for (const [k4, v3] of Object.entries(data.links)) {
@@ -94317,7 +94517,7 @@ var BibManager = class {
         if (this.renderedCache.has(path2))
           continue;
         const file = app.vault.getAbstractFileByPath(path2);
-        if (file instanceof import_obsidian22.TFile)
+        if (file instanceof import_obsidian23.TFile)
           candidates.push(file);
       }
       candidates.sort((a3, b3) => {
@@ -94368,7 +94568,7 @@ var BibManager = class {
           });
           e3.oncontextmenu = (evt) => {
             evt.preventDefault();
-            new import_obsidian22.Menu().addItem((item) => item.setTitle(t("Copy citekey")).setIcon("lucide-copy").onClick(() => copyTextToClipboard(`@${citekey}`))).addItem((item) => item.setTitle(t("Copy reference")).setIcon("lucide-copy").onClick(() => copyElToClipboard(e3))).showAtMouseEvent(evt);
+            new import_obsidian23.Menu().addItem((item) => item.setTitle(t("Copy citekey")).setIcon("lucide-copy").onClick(() => copyTextToClipboard(`@${citekey}`))).addItem((item) => item.setTitle(t("Copy reference")).setIcon("lucide-copy").onClick(() => copyElToClipboard(e3))).showAtMouseEvent(evt);
           };
         }
         this.ensureZLink(citekey);
@@ -94385,22 +94585,22 @@ var BibManager = class {
         wrapper.createDiv({ cls: "sw-entry-btns" }, (div) => {
           if (hasConflict) {
             div.createDiv("clickable-icon sw-conflict-icon", (div2) => {
-              (0, import_obsidian22.setIcon)(div2, "lucide-alert-triangle");
+              (0, import_obsidian23.setIcon)(div2, "lucide-alert-triangle");
               div2.setAttr("aria-label", t("This entry exists in both your .bib file and Zotero. Zotero data is shown."));
             });
           }
           if (litNote) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian22.setIcon)(div2, "sticky-note");
+              (0, import_obsidian23.setIcon)(div2, "sticky-note");
               div2.setAttr("aria-label", t("Open literature note"));
               div2.onClickEvent((evt) => {
-                const newPane = import_obsidian22.Keymap.isModEvent(evt);
+                const newPane = import_obsidian23.Keymap.isModEvent(evt);
                 app.workspace.openLinkText(litNote.linkText, file.path, newPane);
               });
             });
           } else if (canCreateNote) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian22.setIcon)(div2, "lucide-file-plus");
+              (0, import_obsidian23.setIcon)(div2, "lucide-file-plus");
               div2.setAttr("aria-label", t("Create literature note"));
               div2.onClickEvent(async () => {
                 await this.createLiteratureNote(citekey, file);
@@ -94409,7 +94609,7 @@ var BibManager = class {
           }
           if (zLink) {
             div.createDiv("clickable-icon", (div2) => {
-              (0, import_obsidian22.setIcon)(div2, "lucide-external-link");
+              (0, import_obsidian23.setIcon)(div2, "lucide-external-link");
               div2.setAttr("aria-label", t("Open in Zotero"));
               div2.onClickEvent(() => {
                 activeWindow.open(zLink, "_blank");
@@ -94419,7 +94619,7 @@ var BibManager = class {
           if (zPDFLinks) {
             zPDFLinks.forEach((link) => {
               div.createDiv("clickable-icon", (div2) => {
-                (0, import_obsidian22.setIcon)(div2, "lucide-file-text");
+                (0, import_obsidian23.setIcon)(div2, "lucide-file-text");
                 div2.setAttr("aria-label", pathBasename(link));
                 div2.onClickEvent(() => {
                   activeWindow.open(`file://${encodeURI(link)}`, "_blank");
@@ -94445,7 +94645,7 @@ var BibManager = class {
     });
     if (!targetView) {
       await this.plugin.app.workspace.openLinkText(sourceFile.path, "", false);
-      targetView = (_a = this.plugin.app.workspace.getActiveViewOfType(import_obsidian22.MarkdownView)) != null ? _a : null;
+      targetView = (_a = this.plugin.app.workspace.getActiveViewOfType(import_obsidian23.MarkdownView)) != null ? _a : null;
     }
     if (!(targetView == null ? void 0 : targetView.editor))
       return;
@@ -94497,7 +94697,7 @@ var BibManager = class {
     const settingsFolder = ((_g = this.plugin.settings.literatureNoteFolder) != null ? _g : "").trim();
     const folder = this.plugin.settings.useZotlitLiteratureFolder ? zotlitFolder || settingsFolder || "_2 Bibliographic notes" : settingsFolder || zotlitFolder || "_2 Bibliographic notes";
     const filename = `@${citekey}.md`;
-    const notePath = folder ? (0, import_obsidian22.normalizePath)(`${folder}/${filename}`) : filename;
+    const notePath = folder ? (0, import_obsidian23.normalizePath)(`${folder}/${filename}`) : filename;
     if (await app.vault.adapter.exists(notePath)) {
       await app.workspace.openLinkText(notePath, sourceFile.path, true);
       return;
@@ -94516,8 +94716,8 @@ var BibManager = class {
 # ${title}
 
 `;
-    if (folder && !await app.vault.adapter.exists((0, import_obsidian22.normalizePath)(folder))) {
-      await app.vault.adapter.mkdir((0, import_obsidian22.normalizePath)(folder));
+    if (folder && !await app.vault.adapter.exists((0, import_obsidian23.normalizePath)(folder))) {
+      await app.vault.adapter.mkdir((0, import_obsidian23.normalizePath)(folder));
     }
     await app.vault.create(notePath, content);
     await app.workspace.openLinkText(notePath, sourceFile.path, true);
@@ -94537,7 +94737,7 @@ var BibManager = class {
         failed: res.failed
       });
       if (res.inserted) {
-        new import_obsidian22.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
+        new import_obsidian23.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
       }
     } catch (e3) {
       console.warn("[sw:notes] fill threw for", file.path, e3);
@@ -94548,7 +94748,7 @@ var BibManager = class {
     if (this.plugin.settings.insertZoteroNotesOnCreate === false)
       return;
     debugLog("[sw:notes] fill start", citekey, "expectCreation=", expectCreation);
-    let file = sourceFile && ((_a = this.plugin) == null ? void 0 : _a.app.vault.getAbstractFileByPath(sourceFile.path)) instanceof import_obsidian22.TFile ? sourceFile : null;
+    let file = sourceFile && ((_a = this.plugin) == null ? void 0 : _a.app.vault.getAbstractFileByPath(sourceFile.path)) instanceof import_obsidian23.TFile ? sourceFile : null;
     if (!file) {
       const sourcePath = (_d = (_c = sourceFile == null ? void 0 : sourceFile.path) != null ? _c : (_b = app.workspace.getActiveFile()) == null ? void 0 : _b.path) != null ? _d : "";
       const attempts = Math.max(expectCreation ? 6 : 4, 4);
@@ -94577,7 +94777,7 @@ var BibManager = class {
         failed: res.failed
       });
       if (res.inserted) {
-        new import_obsidian22.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
+        new import_obsidian23.Notice(`ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`, 8e3);
       }
     } catch (e3) {
       console.warn("[sw:notes] fill threw for", citekey, e3);
@@ -94587,9 +94787,9 @@ var BibManager = class {
     var _a;
     const results = [];
     const dir = app.vault.getAbstractFileByPath(folder);
-    if (!(dir instanceof import_obsidian22.TFolder))
+    if (!(dir instanceof import_obsidian23.TFolder))
       return results;
-    const files = dir.children.filter((f3) => f3 instanceof import_obsidian22.TFile && /^@.+\.md$/.test(f3.name));
+    const files = dir.children.filter((f3) => f3 instanceof import_obsidian23.TFile && /^@.+\.md$/.test(f3.name));
     for (const file of files) {
       try {
         const content = await app.vault.read(file);
@@ -94600,7 +94800,7 @@ var BibManager = class {
         const stem = file.basename.startsWith("@") ? file.basename.slice(1) : file.basename;
         if (stem === citekey)
           continue;
-        const newPath = (0, import_obsidian22.normalizePath)(file.path.replace(/[^/]+$/, `@${citekey}.md`));
+        const newPath = (0, import_obsidian23.normalizePath)(file.path.replace(/[^/]+$/, `@${citekey}.md`));
         if (app.vault.getAbstractFileByPath(newPath))
           continue;
         await app.vault.rename(file, newPath);
@@ -94721,7 +94921,7 @@ var BibManager = class {
     this.citedKeysBuiltAt = (data == null ? void 0 : data.version) === CITED_KEYS_INDEX_VERSION ? (_b = data.builtAt) != null ? _b : 0 : 0;
   }
   renderedCachePath() {
-    return (0, import_obsidian22.normalizePath)(`${SW_CACHE_DIR}/rendered-citations.json`);
+    return (0, import_obsidian23.normalizePath)(`${SW_CACHE_DIR}/rendered-citations.json`);
   }
   async loadRenderedCache() {
     if (this.renderedCacheLoaded)
@@ -94747,7 +94947,7 @@ var BibManager = class {
     for (const [p4, v3] of this.renderedCache)
       notes[p4] = v3;
     try {
-      const dir = (0, import_obsidian22.normalizePath)(SW_CACHE_DIR);
+      const dir = (0, import_obsidian23.normalizePath)(SW_CACHE_DIR);
       if (!await app.vault.adapter.exists(dir)) {
         await app.vault.adapter.mkdir(dir);
       }
@@ -94887,7 +95087,7 @@ var BibManager = class {
       for (const k4 of this.getCitedKeys())
         citekeys.add(k4);
     } else {
-      const view = app.workspace.getActiveViewOfType(import_obsidian22.MarkdownView);
+      const view = app.workspace.getActiveViewOfType(import_obsidian23.MarkdownView);
       if (view == null ? void 0 : view.file) {
         await this.indexFileCitekeys(view.file);
         (await this.citekeysInFile(view.file)).forEach((k4) => citekeys.add(k4));
@@ -94998,7 +95198,7 @@ var BibManager = class {
     if ((_a = settings == null ? void 0 : settings.bibliography) == null ? void 0 : _a.length) {
       for (const scopedBibPath of settings.bibliography) {
         if (!isAbsolutePath(scopedBibPath)) {
-          paths.add((0, import_obsidian22.normalizePath)(scopedBibPath));
+          paths.add((0, import_obsidian23.normalizePath)(scopedBibPath));
         }
       }
     }
@@ -95042,11 +95242,11 @@ var BibManager = class {
   }
   getCacheForPath(filePath) {
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian22.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian23.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       return cache2;
     }
-    if (file instanceof import_obsidian22.TFile) {
+    if (file instanceof import_obsidian23.TFile) {
       const entry = this.renderedCache.get(file.path);
       if (entry && this.persistedEntryIsCurrent(file, entry)) {
         const result = this.fileCacheFromPersisted(file, entry);
@@ -95060,7 +95260,7 @@ var BibManager = class {
   }
   getResolution(filePath, key) {
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian22.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian23.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       return {
         isResolved: cache2.resolvedKeys.has(key),
@@ -95075,7 +95275,7 @@ var BibManager = class {
   getCitationsForSection(filePath, lineStart, lineEnd) {
     var _a, _b, _c, _d;
     const file = app.vault.getAbstractFileByPath(filePath);
-    if (file && file instanceof import_obsidian22.TFile && this.fileCache.has(file)) {
+    if (file && file instanceof import_obsidian23.TFile && this.fileCache.has(file)) {
       const cache2 = this.fileCache.get(file);
       const mCache = app.metadataCache.getCache(filePath);
       const exact = (_a = mCache.sections) == null ? void 0 : _a.find((s3) => s3.position.start.line === lineStart && s3.position.end.line === lineEnd);
@@ -95094,7 +95294,7 @@ var BibManager = class {
 };
 
 // src/citeSuggest/citeSuggest.ts
-var import_obsidian23 = __toModule(require("obsidian"));
+var import_obsidian24 = __toModule(require("obsidian"));
 var SUGGEST_DEBUG = false;
 var LOG = SUGGEST_DEBUG ? (...args) => console.log("[sw:suggest]", ...args) : (..._args) => {
 };
@@ -95160,7 +95360,7 @@ function isLoadingSuggestion(s3) {
 var triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 var doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
 var DOUBLE_AT_PREFIX = "\0";
-var CiteSuggest = class extends import_obsidian23.EditorSuggest {
+var CiteSuggest = class extends import_obsidian24.EditorSuggest {
   constructor(app2, plugin) {
     super(app2);
     this.limit = 20;
@@ -95175,7 +95375,7 @@ var CiteSuggest = class extends import_obsidian23.EditorSuggest {
     });
     this.setInstructions([
       {
-        command: import_obsidian23.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
+        command: import_obsidian24.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
         purpose: "Wrap cite key with brackets"
       }
     ]);
@@ -95438,7 +95638,7 @@ var CiteSuggest = class extends import_obsidian23.EditorSuggest {
 };
 
 // src/exportModal.ts
-var import_obsidian24 = __toModule(require("obsidian"));
+var import_obsidian25 = __toModule(require("obsidian"));
 
 // src/convertCitations.ts
 var SPECIAL_RE = new RegExp("\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|\\[\\[@([^|\\]\\s]+)\\]\\]|\u27E6", "g");
@@ -95872,7 +96072,7 @@ var DEFAULT_BIBLIOGRAPHY = true;
 var MAX_LEVEL = 6;
 var FOOTNOTE_RESTART_LABEL = "Restart footnote and figure numbering per chapter";
 var FOOTNOTE_RESTART_ODT_NOTE = " (not available for ODT exports with native word-processor endnotes)";
-var ZoteroWarningModal = class extends import_obsidian24.Modal {
+var ZoteroWarningModal = class extends import_obsidian25.Modal {
   constructor(app2, needCount, liveFields, decide) {
     super(app2);
     this.needCount = needCount;
@@ -95913,7 +96113,7 @@ var ZoteroWarningModal = class extends import_obsidian24.Modal {
 function askZotero(app2, needCount, liveFields) {
   return new Promise((resolve) => new ZoteroWarningModal(app2, needCount, liveFields, resolve).open());
 }
-var ExportModal = class extends import_obsidian24.Modal {
+var ExportModal = class extends import_obsidian25.Modal {
   constructor(app2, plugin, file) {
     super(app2);
     this.cslStyleHasList = false;
@@ -96703,9 +96903,9 @@ var ExportModal = class extends import_obsidian24.Modal {
     }
     if (applied > 0) {
       void this.plugin.saveSettings();
-      new import_obsidian24.Notice("Reset to this note's properties.");
+      new import_obsidian25.Notice("Reset to this note's properties.");
     } else {
-      new import_obsidian24.Notice("This note has no export properties to reset to.");
+      new import_obsidian25.Notice("This note has no export properties to reset to.");
     }
     this.syncFormatState(this.formatSelect.value);
   }
@@ -96757,7 +96957,7 @@ var ExportModal = class extends import_obsidian24.Modal {
         this.sameSourceCb.checked = false;
       }
     } catch (e3) {
-      new import_obsidian24.Notice("Directory picker unavailable \u2014 type the path into the box above.");
+      new import_obsidian25.Notice("Directory picker unavailable \u2014 type the path into the box above.");
     }
   }
   effectiveNotesMode() {
@@ -96794,14 +96994,14 @@ var ExportModal = class extends import_obsidian24.Modal {
   }
   async run() {
     var _a, _b, _c;
-    if (!import_obsidian24.Platform.isDesktop) {
-      new import_obsidian24.Notice("Document compile/export is only available on desktop.");
+    if (!import_obsidian25.Platform.isDesktop) {
+      new import_obsidian25.Notice("Document compile/export is only available on desktop.");
       return;
     }
     const opts = this.options();
     const missing = this.formatMissing(opts.format);
     if (missing.length > 0) {
-      new import_obsidian24.Notice(`This export needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
+      new import_obsidian25.Notice(`This export needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
       return;
     }
     let tempBiblio = null;
@@ -96873,7 +97073,7 @@ var ExportModal = class extends import_obsidian24.Modal {
     await this.plugin.saveSettings();
     this.close();
     const label = opts.format === "md" ? "Compiling outline\u2026" : opts.format === "odt" ? "Compiling + exporting to ODT\u2026" : opts.format === "latex" ? "Compiling + exporting to LaTeX\u2026" : opts.format === "pdf" ? "Compiling + exporting to PDF\u2026" : "Compiling + exporting to DOCX\u2026";
-    const progress = new import_obsidian24.Notice(label, 0);
+    const progress = new import_obsidian25.Notice(label, 0);
     const res = await runDocumentCompiler(this.plugin, this.file, opts).finally(() => {
       if (tempBiblio) {
         try {
@@ -96884,14 +97084,14 @@ var ExportModal = class extends import_obsidian24.Modal {
     });
     progress.hide();
     if (!res.ok) {
-      new import_obsidian24.Notice(`Document compiler failed:
+      new import_obsidian25.Notice(`Document compiler failed:
 ${res.stderr}`, 8e3);
       console.error("[scholar-weft] DocumentCompiler failed:", res.stderr);
       return;
     }
     const outPath = (_c = (_b = res.outputPath) != null ? _b : res.stdout.trim().split("\n").pop()) != null ? _c : "";
     const doneLabel = opts.format === "md" ? `Compiled: ${outPath}` : `Exported: ${outPath}`;
-    new import_obsidian24.Notice(doneLabel, 6e3);
+    new import_obsidian25.Notice(doneLabel, 6e3);
   }
   async writeStaticBibliography(keys) {
     const entries = [];
@@ -96931,7 +97131,7 @@ ${res.stderr}`, 8e3);
 };
 
 // src/importModal.ts
-var import_obsidian26 = __toModule(require("obsidian"));
+var import_obsidian27 = __toModule(require("obsidian"));
 
 // src/importCompiler.ts
 function execFileAsync2(file, args, options) {
@@ -96985,7 +97185,7 @@ async function runImportScript(plugin, inputPath, outputPath) {
 }
 
 // src/pandocToLinked.ts
-var import_obsidian25 = __toModule(require("obsidian"));
+var import_obsidian26 = __toModule(require("obsidian"));
 function aliasFor(a3) {
   let alias = (a3.prefix || "") + "@" + (a3.suffix || "");
   alias = alias.trim();
@@ -97134,11 +97334,11 @@ function rewritePandocToLinked(body, resolvable, allowUnresolved = false) {
 async function convertVault(plugin) {
   const resolvable = new Set(plugin.bibManager.bibCache.keys());
   if (!resolvable.size) {
-    new import_obsidian25.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
+    new import_obsidian26.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
     return;
   }
   const files = plugin.app.vault.getMarkdownFiles().filter((f3) => !f3.path.endsWith(".bk") && !f3.path.endsWith(".bk.md"));
-  const progress = new import_obsidian25.Notice(`Converting citations across ${files.length} files\u2026`, 0);
+  const progress = new import_obsidian26.Notice(`Converting citations across ${files.length} files\u2026`, 0);
   let convertedFiles = 0;
   let totalSkipped = 0;
   try {
@@ -97170,13 +97370,13 @@ async function convertVault(plugin) {
   }
   const skippedNote = totalSkipped > 0 ? `
 Skipped ${totalSkipped} citations (unresolved/unparseable \u2014 see console)` : "";
-  new import_obsidian25.Notice(convertedFiles > 0 ? `Converted citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.${skippedNote}` : `No pandoc citations found in vault.`, 6e3);
+  new import_obsidian26.Notice(convertedFiles > 0 ? `Converted citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.${skippedNote}` : `No pandoc citations found in vault.`, 6e3);
 }
 async function convertActiveNote(plugin, file, { allowUnresolved = false } = {}) {
   const content = await plugin.app.vault.read(file);
   const resolvable = new Set(plugin.bibManager.bibCache.keys());
   if (!allowUnresolved && !resolvable.size) {
-    new import_obsidian25.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
+    new import_obsidian26.Notice("No bibliography loaded \u2014 cannot resolve citekeys.", 6e3);
     return { converted: 0, skipped: [] };
   }
   let body = content;
@@ -97188,7 +97388,7 @@ async function convertActiveNote(plugin, file, { allowUnresolved = false } = {})
   }
   const { out, report } = rewritePandocToLinked(body, resolvable, allowUnresolved);
   if (out === body) {
-    new import_obsidian25.Notice(`No pandoc citations found in ${file.basename}.`, 4e3);
+    new import_obsidian26.Notice(`No pandoc citations found in ${file.basename}.`, 4e3);
     return report;
   }
   const bkPath = `${file.path}.bk`;
@@ -97198,7 +97398,7 @@ async function convertActiveNote(plugin, file, { allowUnresolved = false } = {})
   await plugin.app.vault.modify(file, frontmatter + out);
   const skippedNote = report.skipped.length > 0 ? `
 Skipped ${report.skipped.length} (unresolved/unparseable \u2014 see console)` : "";
-  new import_obsidian25.Notice(`Converted citations in ${file.basename}.${skippedNote}`, 6e3);
+  new import_obsidian26.Notice(`Converted citations in ${file.basename}.${skippedNote}`, 6e3);
   if (report.skipped.length) {
     console.warn("[scholar-weft] skipped pandoc citations:", report.skipped.map((s3) => `${s3.text} (${s3.reason})`));
   }
@@ -97236,7 +97436,7 @@ function pathForDroppedFile(file) {
   }
   return file.path;
 }
-var ImportModal = class extends import_obsidian26.Modal {
+var ImportModal = class extends import_obsidian27.Modal {
   constructor(app2, plugin) {
     super(app2);
     this.inputPath = "";
@@ -97359,12 +97559,12 @@ var ImportModal = class extends import_obsidian26.Modal {
         return;
       const filePath = pathForDroppedFile(file);
       if (!filePath) {
-        new import_obsidian26.Notice("[ScholarWeft] Could not read the file path from the dropped file.");
+        new import_obsidian27.Notice("[ScholarWeft] Could not read the file path from the dropped file.");
         return;
       }
       const lower = filePath.toLowerCase();
       if (!lower.endsWith(".docx") && !lower.endsWith(".odt")) {
-        new import_obsidian26.Notice("[ScholarWeft] Please drop a .docx or .odt file.");
+        new import_obsidian27.Notice("[ScholarWeft] Please drop a .docx or .odt file.");
         return;
       }
       this.selectFile(filePath, file.name);
@@ -97467,13 +97667,13 @@ var ImportModal = class extends import_obsidian26.Modal {
   async run() {
     if (!this.inputPath)
       return;
-    if (!import_obsidian26.Platform.isDesktop) {
-      new import_obsidian26.Notice("Document import is only available on desktop.");
+    if (!import_obsidian27.Platform.isDesktop) {
+      new import_obsidian27.Notice("Document import is only available on desktop.");
       return;
     }
     const missing = this.importMissing();
     if (missing.length > 0) {
-      new import_obsidian26.Notice(`Document import needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
+      new import_obsidian27.Notice(`Document import needs ${missing.map((k4) => DEPENDENCIES[k4].label).join(", ")}. Install it, then reopen this dialogue.`, 8e3);
       return;
     }
     const doConvert = this.convertCb.checked;
@@ -97488,11 +97688,11 @@ var ImportModal = class extends import_obsidian26.Modal {
     const os = require("os");
     const basename2 = nodePath.basename(this.inputPath).replace(/\.(docx|odt)$/i, "");
     const tmpOutput = nodePath.join(os.tmpdir(), `${basename2}.sw-import.md`);
-    const progress = new import_obsidian26.Notice("Importing document\u2026 Zotero must be running.", 0);
+    const progress = new import_obsidian27.Notice("Importing document\u2026 Zotero must be running.", 0);
     const result = await runImportScript(this.plugin, this.inputPath, tmpOutput);
     if (!result.ok) {
       progress.hide();
-      new import_obsidian26.Notice(`[ScholarWeft] Import failed:
+      new import_obsidian27.Notice(`[ScholarWeft] Import failed:
 ${result.stderr}`, 1e4);
       console.error("[scholar-weft] Import failed:", result.stderr);
       return;
@@ -97506,7 +97706,7 @@ ${result.stderr}`, 1e4);
       }
     } catch (e3) {
       progress.hide();
-      new import_obsidian26.Notice(`[ScholarWeft] Import failed: could not read converted file.
+      new import_obsidian27.Notice(`[ScholarWeft] Import failed: could not read converted file.
 ${e3}`, 8e3);
       return;
     }
@@ -97534,7 +97734,7 @@ ${e3}`, 8e3);
     let newFile;
     try {
       const existing = this.app.vault.getAbstractFileByPath(vaultRelPath);
-      if (existing instanceof import_obsidian26.TFile && overwrite) {
+      if (existing instanceof import_obsidian27.TFile && overwrite) {
         await this.app.vault.modify(existing, mdContent);
         newFile = existing;
       } else if (existing) {
@@ -97551,15 +97751,15 @@ ${e3}`, 8e3);
       }
     } catch (e3) {
       progress.hide();
-      new import_obsidian26.Notice(`[ScholarWeft] Import failed: could not create note in vault.
+      new import_obsidian27.Notice(`[ScholarWeft] Import failed: could not create note in vault.
 ${e3}`, 8e3);
       return;
     }
     await this.app.workspace.getLeaf(false).openFile(newFile);
     progress.hide();
-    new import_obsidian26.Notice(`Imported: ${newFile.basename}`, 5e3);
+    new import_obsidian27.Notice(`Imported: ${newFile.basename}`, 5e3);
     if (doLitNotes) {
-      const litProgress = new import_obsidian26.Notice("Creating missing literature notes\u2026", 0);
+      const litProgress = new import_obsidian27.Notice("Creating missing literature notes\u2026", 0);
       try {
         const { created, missingKeys } = await this.plugin.bibManager.createMissingLitNotes({ file: newFile }, (done, total) => {
           var _a;
@@ -97567,11 +97767,11 @@ ${e3}`, 8e3);
         });
         litProgress.hide();
         if (missingKeys.length) {
-          new import_obsidian26.Notice(`Created ${created} of ${missingKeys.length} missing literature note(s).`, 5e3);
+          new import_obsidian27.Notice(`Created ${created} of ${missingKeys.length} missing literature note(s).`, 5e3);
         }
       } catch (e3) {
         litProgress.hide();
-        new import_obsidian26.Notice(`[ScholarWeft] Literature note creation failed: ${e3}`, 6e3);
+        new import_obsidian27.Notice(`[ScholarWeft] Literature note creation failed: ${e3}`, 6e3);
         console.error("[scholar-weft] lit note creation error:", e3);
       }
     }
@@ -97583,8 +97783,8 @@ ${e3}`, 8e3);
 };
 
 // src/modals/citekeyRenameModal.ts
-var import_obsidian27 = __toModule(require("obsidian"));
-var CitekeyRenameModal = class extends import_obsidian27.Modal {
+var import_obsidian28 = __toModule(require("obsidian"));
+var CitekeyRenameModal = class extends import_obsidian28.Modal {
   constructor(app2, plan, onConfirm, showLitNotesOption = true, alsoUnresolved = []) {
     super(app2);
     this.plan = plan;
@@ -97712,8 +97912,8 @@ var CitekeyRenameModal = class extends import_obsidian27.Modal {
 };
 
 // src/modals/conflictModal.ts
-var import_obsidian28 = __toModule(require("obsidian"));
-var ConflictModal = class extends import_obsidian28.Modal {
+var import_obsidian29 = __toModule(require("obsidian"));
+var ConflictModal = class extends import_obsidian29.Modal {
   constructor(app2, conflicts, onResolve) {
     super(app2);
     this.conflicts = conflicts;
@@ -97728,7 +97928,7 @@ var ConflictModal = class extends import_obsidian28.Modal {
       text: `${names} also ${this.conflicts.length > 1 ? "provide" : "provides"} a reference list. ScholarWeft has its own, so with ${this.conflicts.length > 1 ? "them" : "it"} enabled you'll see more than one. Disable ${this.conflicts.length > 1 ? "them" : "it"}, or keep both and stop this prompt.`
     });
     const disableLabel = this.conflicts.length === 1 ? `Disable \u201C${this.conflicts[0].name}\u201D` : "Disable these plugins";
-    new import_obsidian28.Setting(contentEl).addButton((b3) => b3.setButtonText(disableLabel).setCta().onClick(() => {
+    new import_obsidian29.Setting(contentEl).addButton((b3) => b3.setButtonText(disableLabel).setCta().onClick(() => {
       this.onResolve(this.conflicts.map((c3) => c3.id), false);
       this.close();
     })).addButton((b3) => b3.setButtonText("Keep both and don't ask again").onClick(() => {
@@ -97742,7 +97942,7 @@ var ConflictModal = class extends import_obsidian28.Modal {
 };
 
 // src/linkedToPandoc.ts
-var import_obsidian29 = __toModule(require("obsidian"));
+var import_obsidian30 = __toModule(require("obsidian"));
 function singleToPandoc(key, alias) {
   const a3 = (alias != null ? alias : "").trim();
   if (!a3 || a3 === "@")
@@ -97814,7 +98014,7 @@ async function convertNoteToPandoc(plugin, file) {
   }
   const { out, changed } = rewriteLinkedToPandoc(body);
   if (!changed) {
-    new import_obsidian29.Notice(`No linked citations found in ${file.basename}.`, 4e3);
+    new import_obsidian30.Notice(`No linked citations found in ${file.basename}.`, 4e3);
     return;
   }
   const bkPath = `${file.path}.bk`;
@@ -97822,11 +98022,11 @@ async function convertNoteToPandoc(plugin, file) {
     await plugin.app.vault.adapter.write(bkPath, content);
   }
   await plugin.app.vault.modify(file, frontmatter + out);
-  new import_obsidian29.Notice(`Reverted linked citations to pandoc-style in ${file.basename}.`, 5e3);
+  new import_obsidian30.Notice(`Reverted linked citations to pandoc-style in ${file.basename}.`, 5e3);
 }
 async function convertVaultToPandoc(plugin) {
   const files = plugin.app.vault.getMarkdownFiles().filter((f3) => !f3.path.endsWith(".bk") && !f3.path.endsWith(".bk.md"));
-  const progress = new import_obsidian29.Notice(`Reverting citations across ${files.length} files\u2026`, 0);
+  const progress = new import_obsidian30.Notice(`Reverting citations across ${files.length} files\u2026`, 0);
   let convertedFiles = 0;
   try {
     for (const file of files) {
@@ -97851,7 +98051,7 @@ async function convertVaultToPandoc(plugin) {
   } finally {
     progress.hide();
   }
-  new import_obsidian29.Notice(convertedFiles > 0 ? `Reverted linked citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.` : `No linked citations found in vault.`, 6e3);
+  new import_obsidian30.Notice(convertedFiles > 0 ? `Reverted linked citations in ${convertedFiles} file${convertedFiles !== 1 ? "s" : ""}.` : `No linked citations found in vault.`, 6e3);
 }
 
 // src/main.ts
@@ -97861,7 +98061,7 @@ function looksLikeReferenceListPlugin(id, name) {
 }
 var bibliographyExtensions = new Set(["bib", "json", "yaml", "yml"]);
 function isBibliographyFile(file) {
-  return file instanceof import_obsidian30.TFile && bibliographyExtensions.has(file.extension);
+  return file instanceof import_obsidian31.TFile && bibliographyExtensions.has(file.extension);
 }
 function posixDirname(p4) {
   const idx = p4.lastIndexOf("/");
@@ -97887,9 +98087,9 @@ function getFileRelativePath(sourceFile, targetPath) {
 function bibliographyMatchesPath(sourceFile, bibliography, targetPath) {
   var _a, _b, _c;
   const sourceDir = posixDirname(sourceFile.path);
-  const normalizedBibliography = (0, import_obsidian30.normalizePath)(bibliography);
-  const noteRelativePath = (0, import_obsidian30.normalizePath)(`${sourceDir}/${normalizedBibliography}`);
-  const vaultRelativePath = (0, import_obsidian30.normalizePath)(normalizedBibliography);
+  const normalizedBibliography = (0, import_obsidian31.normalizePath)(bibliography);
+  const noteRelativePath = (0, import_obsidian31.normalizePath)(`${sourceDir}/${normalizedBibliography}`);
+  const vaultRelativePath = (0, import_obsidian31.normalizePath)(normalizedBibliography);
   if (noteRelativePath === targetPath || vaultRelativePath === targetPath) {
     return true;
   }
@@ -97918,7 +98118,7 @@ function updateBibliographyPath(sourceFile, bibliography, oldPath, newPath) {
   }
   return getUpdatedPath(bibliography);
 }
-var ReferenceList = class extends import_obsidian30.Plugin {
+var ReferenceList = class extends import_obsidian31.Plugin {
   constructor() {
     super(...arguments);
     this.cacheDir = SW_CACHE_DIR;
@@ -97926,15 +98126,15 @@ var ReferenceList = class extends import_obsidian30.Plugin {
     this._fillingLitNotes = new Set();
     this.statusBarText = null;
     this.suggestPosition = null;
-    this.persistCitedKeysIndex = (0, import_obsidian30.debounce)(async () => {
+    this.persistCitedKeysIndex = (0, import_obsidian31.debounce)(async () => {
       if (!this.bibManager.citedKeysIndexDirty)
         return;
       if (this.bibManager.indexMdCount <= 0)
         return;
       try {
-        const path2 = (0, import_obsidian30.normalizePath)(`${this.cacheDir}/cited-keys.json`);
-        if (!await this.app.vault.adapter.exists((0, import_obsidian30.normalizePath)(this.cacheDir))) {
-          await this.app.vault.adapter.mkdir((0, import_obsidian30.normalizePath)(this.cacheDir));
+        const path2 = (0, import_obsidian31.normalizePath)(`${this.cacheDir}/cited-keys.json`);
+        if (!await this.app.vault.adapter.exists((0, import_obsidian31.normalizePath)(this.cacheDir))) {
+          await this.app.vault.adapter.mkdir((0, import_obsidian31.normalizePath)(this.cacheDir));
         }
         await this.app.vault.adapter.write(path2, JSON.stringify(this.bibManager.serializeCitedKeysIndex()));
         this.bibManager.citedKeysIndexDirty = false;
@@ -97942,13 +98142,13 @@ var ReferenceList = class extends import_obsidian30.Plugin {
         console.warn("[lc] persistCitedKeysIndex: error", e3);
       }
     }, 2e3);
-    this.persistRenderedCache = (0, import_obsidian30.debounce)(async () => {
+    this.persistRenderedCache = (0, import_obsidian31.debounce)(async () => {
       await this.bibManager.saveRenderedCache();
     }, 3e3);
-    this.persistZLinks = (0, import_obsidian30.debounce)(async () => {
+    this.persistZLinks = (0, import_obsidian31.debounce)(async () => {
       await this.bibManager.saveZLinks();
     }, 5e3);
-    this.emitSettingsUpdate = (0, import_obsidian30.debounce)((cb) => {
+    this.emitSettingsUpdate = (0, import_obsidian31.debounce)((cb) => {
       var _a;
       if (this.initPromise.settled) {
         (_a = this.view) == null ? void 0 : _a.contentEl.toggleClass("collapsed-links", !!this.settings.hideLinks);
@@ -97961,7 +98161,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       const run = ++this.processReferencesRun;
       const isCurrent = () => run === this.processReferencesRun;
       const { settings, view } = this;
-      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
       const scopedSettings = activeView ? getScopedSettings(activeView.file) : null;
       if (!((_a = settings.bibliographyPaths) == null ? void 0 : _a.length) && !settings.pullFromZotero && !((_b = scopedSettings == null ? void 0 : scopedSettings.bibliography) == null ? void 0 : _b.length)) {
         return view == null ? void 0 : view.setMessage(t("Please provide the path to your bibliography file in the ScholarWeft plugin settings."));
@@ -97997,8 +98197,8 @@ var ReferenceList = class extends import_obsidian30.Plugin {
   }
   async migrateCacheDir() {
     const adapter = this.app.vault.adapter;
-    const next = (0, import_obsidian30.normalizePath)(SW_CACHE_DIR);
-    const prev = (0, import_obsidian30.normalizePath)(SW_CACHE_DIR_LEGACY);
+    const next = (0, import_obsidian31.normalizePath)(SW_CACHE_DIR);
+    const prev = (0, import_obsidian31.normalizePath)(SW_CACHE_DIR_LEGACY);
     try {
       if (await adapter.exists(next))
         return;
@@ -98022,7 +98222,12 @@ var ReferenceList = class extends import_obsidian30.Plugin {
     } else {
       this.registerView(viewType, (leaf) => new ReferenceListView(leaf, this));
     }
-    this.emitter = new import_obsidian30.Events();
+    if ((viewRegistry == null ? void 0 : viewRegistry.viewByType) && dataExplorerViewType in viewRegistry.viewByType) {
+      console.warn(`ScholarWeft: view type "${dataExplorerViewType}" is already registered \u2014 another ScholarWeft copy is enabled.`);
+    } else {
+      this.registerView(dataExplorerViewType, (leaf) => new DataExplorerView(leaf, this));
+    }
+    this.emitter = new import_obsidian31.Events();
     this.bibManager = new BibManager(this);
     if (this._pendingCitedKeysIndex) {
       this.bibManager.deserializeCitedKeysIndex(this._pendingCitedKeysIndex);
@@ -98048,7 +98253,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       const { settings, bibManager } = this;
       debugLog("[sw:main] initPromise.then fired \u2014 starting bib load");
       const hasSources = ((_b = (_a2 = settings.bibliographyPaths) == null ? void 0 : _a2.length) != null ? _b : 0) > 0 || settings.pullFromZotero;
-      const loadNotice = hasSources ? new import_obsidian30.Notice("ScholarWeft: preparing your references\u2026", 0) : null;
+      const loadNotice = hasSources ? new import_obsidian31.Notice("ScholarWeft: preparing your references\u2026", 0) : null;
       const setNotice = (msg) => {
         try {
           loadNotice == null ? void 0 : loadNotice.setMessage(`ScholarWeft: ${msg}`);
@@ -98120,6 +98325,13 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       }
     });
     this.addCommand({
+      id: "open-data-explorer",
+      name: t("Open Zotero data explorer"),
+      callback: async () => {
+        this.initDataExplorerLeaf();
+      }
+    });
+    this.addCommand({
       id: "insert-bibliography",
       name: t("Insert bibliography at cursor"),
       editorCallback: (editor, view) => {
@@ -98131,7 +98343,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
         const entries = cache2.bib.findAll(".csl-entry");
         if (!entries.length)
           return;
-        const text = entries.map((e3) => (0, import_obsidian30.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
+        const text = entries.map((e3) => (0, import_obsidian31.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
         editor.replaceSelection(text);
       }
     });
@@ -98139,7 +98351,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       id: "snapshot-bibliography",
       name: t("Save bibliography snapshot for this note"),
       checkCallback: (checking) => {
-        const view = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+        const view = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
         if (!(view == null ? void 0 : view.file))
           return false;
         const entries = this.bibManager.snapshotEntries(view.file);
@@ -98155,10 +98367,10 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       name: t("Create literature notes for citations lacking notes (current note)"),
       callback: async () => {
         var _a2;
-        const view = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+        const view = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
         if (!(view == null ? void 0 : view.file))
           return;
-        const progress = new import_obsidian30.Notice("Creating literature notes\u2026", 0);
+        const progress = new import_obsidian31.Notice("Creating literature notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes({ file: view.file }, (done, total) => {
           var _a3;
@@ -98167,7 +98379,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
         progress.hide();
         await this.fillZoteroNotesForCitekeys(missingKeys, view.file);
         this.processReferences();
-        new import_obsidian30.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations.` : "All citations in this note already have literature notes.", 6e3);
+        new import_obsidian31.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations.` : "All citations in this note already have literature notes.", 6e3);
       }
     });
     this.addCommand({
@@ -98175,7 +98387,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       name: t("Create literature notes for citations lacking notes (vault)"),
       callback: async () => {
         var _a2;
-        const progress = new import_obsidian30.Notice("Creating literature notes\u2026", 0);
+        const progress = new import_obsidian31.Notice("Creating literature notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes({ allVault: true }, (done, total) => {
           var _a3;
@@ -98184,7 +98396,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
         progress.hide();
         await this.fillZoteroNotesForCitekeys(missingKeys, null);
         this.processReferences();
-        new import_obsidian30.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations vault-wide.` : "All cited works in the vault already have literature notes.", 6e3);
+        new import_obsidian31.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations vault-wide.` : "All cited works in the vault already have literature notes.", 6e3);
       }
     });
     this.addCommand({
@@ -98192,7 +98404,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       name: t("Insert Zotero notes into literature notes (vault)"),
       callback: async () => {
         var _a2;
-        const progress = new import_obsidian30.Notice("Inserting Zotero notes\u2026", 0);
+        const progress = new import_obsidian31.Notice("Inserting Zotero notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const r3 = await insertZoteroNotesVaultWide(this.app, {
           zoteroPort: this.settings.zoteroPort,
@@ -98212,28 +98424,28 @@ var ReferenceList = class extends import_obsidian30.Plugin {
         if (r3.failed.length) {
           lines.push(`${r3.failed.length} could not be read from Zotero \u2014 is Zotero running? (see the developer console)`);
         }
-        new import_obsidian30.Notice(`ScholarWeft: ${lines.join("\n")}`, 1e4);
+        new import_obsidian31.Notice(`ScholarWeft: ${lines.join("\n")}`, 1e4);
         if (r3.skipped.length) {
           debugLog('ScholarWeft: notes skipped because "## Notes" already had content:\n' + r3.skipped.join("\n"));
         }
       }
     });
-    if (import_obsidian30.Platform.isDesktop) {
+    if (import_obsidian31.Platform.isDesktop) {
       this.addCommand({
         id: "compile-export-book",
         name: t("Compile and export the current document (DOCX, ODT, PDF, LaTeX)"),
         callback: () => {
           var _a2;
-          const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a2.file;
+          const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian31.MarkdownView)) == null ? void 0 : _a2.file;
           if (!file) {
-            new import_obsidian30.Notice(t("Open the note you want to export, then run this command again."), 6e3);
+            new import_obsidian31.Notice(t("Open the note you want to export, then run this command again."), 6e3);
             return;
           }
           new ExportModal(app2, this, file).open();
         }
       });
     }
-    if (import_obsidian30.Platform.isDesktop) {
+    if (import_obsidian31.Platform.isDesktop) {
       this.addCommand({
         id: "import-document",
         name: t("Import a Word or ODT document with Zotero citations"),
@@ -98247,7 +98459,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       name: t("Convert pandoc citations to linked citations (current note)"),
       checkCallback: (checking) => {
         var _a2;
-        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a2.file;
+        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian31.MarkdownView)) == null ? void 0 : _a2.file;
         if (!file)
           return false;
         if (!checking) {
@@ -98268,7 +98480,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       name: t("Revert linked citations to pandoc-style citations (current note)"),
       checkCallback: (checking) => {
         var _a2;
-        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a2.file;
+        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian31.MarkdownView)) == null ? void 0 : _a2.file;
         if (!file)
           return false;
         if (!checking)
@@ -98297,32 +98509,32 @@ var ReferenceList = class extends import_obsidian30.Plugin {
         var _a2;
         const count = Object.keys((_a2 = this.settings.citekeyRenameHistory) != null ? _a2 : {}).length;
         if (!count) {
-          new import_obsidian30.Notice("Citekey rename history is already empty.");
+          new import_obsidian31.Notice("Citekey rename history is already empty.");
           return;
         }
         this.settings.citekeyRenameHistory = {};
         this.saveSettings();
-        new import_obsidian30.Notice(`Cleared ${count} citekey rename record${count !== 1 ? "s" : ""}.`);
+        new import_obsidian31.Notice(`Cleared ${count} citekey rename record${count !== 1 ? "s" : ""}.`);
       }
     });
     document.body.toggleClass("sw-tooltips", this.settings.showCitekeyTooltips !== false);
     document.body.toggleClass("sw-decorations", (_a = this.settings.showCitationDecorations) != null ? _a : true);
     this.applyCitationColors();
-    this.registerEvent(app2.metadataCache.on("changed", (0, import_obsidian30.debounce)(async (file) => {
+    this.registerEvent(app2.metadataCache.on("changed", (0, import_obsidian31.debounce)(async (file) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
-      const activeView = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+      const activeView = app2.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
       if (activeView && file === activeView.file) {
         this.processReferences();
       }
     }, 100, true)));
-    this.registerEvent(app2.workspace.on("active-leaf-change", (0, import_obsidian30.debounce)(async (leaf) => {
+    this.registerEvent(app2.workspace.on("active-leaf-change", (0, import_obsidian31.debounce)(async (leaf) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       app2.workspace.iterateRootLeaves((rootLeaf) => {
         var _a2;
         if (rootLeaf === leaf) {
-          if (leaf.view instanceof import_obsidian30.MarkdownView) {
+          if (leaf.view instanceof import_obsidian31.MarkdownView) {
             this.processReferences();
           } else {
             (_a2 = this.view) == null ? void 0 : _a2.setNoContentMessage();
@@ -98330,27 +98542,27 @@ var ReferenceList = class extends import_obsidian30.Plugin {
         }
       });
     }, 100, true)));
-    this.registerEvent(app2.vault.on("rename", (0, import_obsidian30.debounce)(async (file, oldPath) => {
+    this.registerEvent(app2.vault.on("rename", (0, import_obsidian31.debounce)(async (file, oldPath) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       if (isBibliographyFile(file)) {
         await this.updateBibliographyFrontmatter(oldPath, file.path);
       }
       this.bibManager.removeFromCitedKeysIndex(oldPath);
-      if (file instanceof import_obsidian30.TFile) {
+      if (file instanceof import_obsidian31.TFile) {
         await this.bibManager.updateCitedKeysIndex(file);
         this.persistCitedKeysIndex();
       }
       this.persistRenderedCache();
-      const activeView = app2.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
-      if ((activeView == null ? void 0 : activeView.file) instanceof import_obsidian30.TFile) {
+      const activeView = app2.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
+      if ((activeView == null ? void 0 : activeView.file) instanceof import_obsidian31.TFile) {
         this.bibManager.fileCache.delete(activeView.file);
         this.processReferences();
       }
     }, 100, true)));
-    this.registerEvent(app2.vault.on("modify", (0, import_obsidian30.debounce)(async (file) => {
+    this.registerEvent(app2.vault.on("modify", (0, import_obsidian31.debounce)(async (file) => {
       var _a2;
-      if (!(file instanceof import_obsidian30.TFile))
+      if (!(file instanceof import_obsidian31.TFile))
         return;
       await this.bibManager.updateCitedKeysIndex(file);
       this.persistCitedKeysIndex();
@@ -98361,8 +98573,8 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       }
       void this.maybeFillNewLiteratureNote(file);
     }, 150, true)));
-    this.registerEvent(app2.vault.on("create", (0, import_obsidian30.debounce)(async (file) => {
-      if (!(file instanceof import_obsidian30.TFile))
+    this.registerEvent(app2.vault.on("create", (0, import_obsidian31.debounce)(async (file) => {
+      if (!(file instanceof import_obsidian31.TFile))
         return;
       await this.bibManager.updateCitedKeysIndex(file);
       this.persistCitedKeysIndex();
@@ -98374,11 +98586,11 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       this.persistCitedKeysIndex();
     }));
     this.registerEvent(app2.vault.on("create", (file) => {
-      if (file instanceof import_obsidian30.TFile)
+      if (file instanceof import_obsidian31.TFile)
         this.maybeFillIfInLitNoteFolder(file);
     }));
     this.registerEvent(app2.vault.on("modify", (file) => {
-      if (file instanceof import_obsidian30.TFile)
+      if (file instanceof import_obsidian31.TFile)
         this.maybeFillIfInLitNoteFolder(file);
     }));
     (async () => {
@@ -98387,7 +98599,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       this.setStatusBarIdle();
-      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
       if (activeView == null ? void 0 : activeView.file) {
         this.bibManager.invalidateFile(activeView.file);
       }
@@ -98616,7 +98828,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       return;
     const res = await installZotlitTemplates(this);
     if (res.folderConfigured) {
-      new import_obsidian30.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER2}/`);
+      new import_obsidian31.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER2}/`);
     }
   }
   onunload() {
@@ -98629,8 +98841,8 @@ var ReferenceList = class extends import_obsidian30.Plugin {
   }
   async updateBibliographyFrontmatter(oldPath, newPath) {
     var _a;
-    oldPath = (0, import_obsidian30.normalizePath)(oldPath);
-    newPath = (0, import_obsidian30.normalizePath)(newPath);
+    oldPath = (0, import_obsidian31.normalizePath)(oldPath);
+    newPath = (0, import_obsidian31.normalizePath)(newPath);
     for (const file of this.app.vault.getMarkdownFiles()) {
       const metadata = this.app.metadataCache.getFileCache(file);
       if (!((_a = metadata == null ? void 0 : metadata.frontmatter) == null ? void 0 : _a.bibliography))
@@ -98665,14 +98877,14 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       if (isOpen)
         return;
       const { settings } = this;
-      const menu = new import_obsidian30.Menu().addSections(["settings", "actions"]).addItem((item) => item.setSection("settings").setIcon("lucide-message-square").setTitle(t("Show citekey tooltips")).setChecked(!!settings.showCitekeyTooltips).onClick(() => {
+      const menu = new import_obsidian31.Menu().addSections(["settings", "actions"]).addItem((item) => item.setSection("settings").setIcon("lucide-message-square").setTitle(t("Show citekey tooltips")).setChecked(!!settings.showCitekeyTooltips).onClick(() => {
         this.settings.showCitekeyTooltips = !settings.showCitekeyTooltips;
         this.saveSettings();
       })).addItem((item) => item.setSection("settings").setIcon("lucide-at-sign").setTitle(t("Show citekey suggestions")).setChecked(!!settings.enableCiteKeyCompletion).onClick(() => {
         this.settings.enableCiteKeyCompletion = !settings.enableCiteKeyCompletion;
         this.saveSettings();
       })).addItem((item) => item.setSection("actions").setIcon("lucide-rotate-cw").setTitle(t("Refresh bibliography")).onClick(async () => {
-        const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+        const activeView = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
         if (activeView) {
           const file = activeView.file;
           if (this.bibManager.fileCache.has(file)) {
@@ -98704,7 +98916,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
   }
   setStatusBarLoading() {
     this.statusBarIcon.addClass("is-loading");
-    (0, import_obsidian30.setIcon)(this.statusBarIcon, "lucide-loader");
+    (0, import_obsidian31.setIcon)(this.statusBarIcon, "lucide-loader");
   }
   setStatusBarMessage(msg) {
     this.setStatusBarLoading();
@@ -98717,7 +98929,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
   }
   setStatusBarIdle() {
     this.statusBarIcon.removeClass("is-loading");
-    (0, import_obsidian30.setIcon)(this.statusBarIcon, "lucide-at-sign");
+    (0, import_obsidian31.setIcon)(this.statusBarIcon, "lucide-at-sign");
     this.statusBarIcon.setAttr("aria-label", t("ScholarWeft settings"));
     const el = this.statusBarText;
     if (el) {
@@ -98748,7 +98960,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;
     void this.ensureCitedKeysIndex();
-    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
     if (activeView) {
       this.processReferences();
     }
@@ -98761,6 +98973,18 @@ var ReferenceList = class extends import_obsidian30.Plugin {
     if (!(leaves == null ? void 0 : leaves.length))
       return;
     this.app.workspace.revealLeaf(leaves[0]);
+  }
+  async initDataExplorerLeaf() {
+    const existing = this.app.workspace.getLeavesOfType(dataExplorerViewType);
+    if (existing.length) {
+      this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    const leaf = this.app.workspace.getRightLeaf(false);
+    if (!leaf)
+      return;
+    await leaf.setViewState({ type: dataExplorerViewType });
+    this.app.workspace.revealLeaf(leaf);
   }
   async getCitekeysForFile(file) {
     var _a, _b;
@@ -98783,7 +99007,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
     var _a, _b, _c, _d;
     const saved = (_a = await this.loadData()) != null ? _a : {};
     try {
-      const indexPath = (0, import_obsidian30.normalizePath)(`${this.cacheDir}/cited-keys.json`);
+      const indexPath = (0, import_obsidian31.normalizePath)(`${this.cacheDir}/cited-keys.json`);
       const cached = await this.app.vault.adapter.read(indexPath);
       const parsed = JSON.parse(cached);
       if (parsed && typeof parsed === "object" && !parsed.builtAt) {
@@ -98831,7 +99055,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       suggests.push(this.citeSuggest);
   }
   suggestWantsFront() {
-    const view = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView);
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView);
     const editor = view == null ? void 0 : view.editor;
     if (!editor)
       return false;
@@ -98874,23 +99098,23 @@ var ReferenceList = class extends import_obsidian30.Plugin {
   }
   async autoUpdateCurrentNote(renameMap) {
     var _a;
-    const file = (_a = this.app.workspace.getActiveViewOfType(import_obsidian30.MarkdownView)) == null ? void 0 : _a.file;
+    const file = (_a = this.app.workspace.getActiveViewOfType(import_obsidian31.MarkdownView)) == null ? void 0 : _a.file;
     if (!file || !renameMap.size)
       return;
     const changed = await this.bibManager.applyRenamesInFile(file, renameMap);
     if (changed.length) {
       const summary = changed.map((c3) => `@${c3.oldKey} \u2192 @${c3.newKey}`).join(", ");
-      new import_obsidian30.Notice(`Auto-updated citekeys in current note: ${summary}`);
+      new import_obsidian31.Notice(`Auto-updated citekeys in current note: ${summary}`);
     }
   }
   async showCitekeyRenameDialog(overrideMap) {
     var _a;
     const renameMap = (_a = overrideMap != null ? overrideMap : this.settings.citekeyRenameHistory) != null ? _a : {};
     if (!Object.keys(renameMap).length) {
-      new import_obsidian30.Notice("No citekey rename history found.");
+      new import_obsidian31.Notice("No citekey rename history found.");
       return;
     }
-    const progress = new import_obsidian30.Notice("Scanning vault for stale citekeys\u2026", 0);
+    const progress = new import_obsidian31.Notice("Scanning vault for stale citekeys\u2026", 0);
     let plan;
     try {
       plan = await this.bibManager.findCitekeyUsagesInVault(renameMap);
@@ -98898,7 +99122,7 @@ var ReferenceList = class extends import_obsidian30.Plugin {
       progress.hide();
     }
     if (!plan.size) {
-      new import_obsidian30.Notice("No stale citekeys found in vault notes.");
+      new import_obsidian31.Notice("No stale citekeys found in vault notes.");
       return;
     }
     new CitekeyRenameModal(this.app, plan, async (includeLitNotes) => {
@@ -98912,14 +99136,14 @@ var ReferenceList = class extends import_obsidian30.Plugin {
 Renamed ${renamed.length} literature note${renamed.length !== 1 ? "s" : ""}: ` + renamed.map((r3) => `${r3.from.split("/").pop()} \u2192 ${r3.to.split("/").pop()}`).join(", ");
         }
       }
-      new import_obsidian30.Notice(msg, 6e3);
+      new import_obsidian31.Notice(msg, 6e3);
     }).open();
   }
   async showUnresolvedCitekeyDialog(file) {
     var _a;
     const fileCache = this.bibManager.fileCache.get(file);
     if (!fileCache || !fileCache.unresolvedKeys.size) {
-      new import_obsidian30.Notice("No unresolved citations in the current note.");
+      new import_obsidian31.Notice("No unresolved citations in the current note.");
       return;
     }
     const history = (_a = this.settings.citekeyRenameHistory) != null ? _a : {};
@@ -98940,11 +99164,11 @@ Renamed ${renamed.length} literature note${renamed.length !== 1 ? "s" : ""}: ` +
     }
     new CitekeyRenameModal(this.app, plan, async (_includeLitNotes) => {
       await this.bibManager.applyRenames(plan);
-      new import_obsidian30.Notice(`Updated stale citekeys in current note.`);
+      new import_obsidian31.Notice(`Updated stale citekeys in current note.`);
     }, false, trulyUnresolved).open();
   }
 };
-var BibSnapshotModal = class extends import_obsidian30.Modal {
+var BibSnapshotModal = class extends import_obsidian31.Modal {
   constructor(app2, plugin, file, entries) {
     super(app2);
     this.plugin = plugin;
@@ -98960,7 +99184,7 @@ var BibSnapshotModal = class extends import_obsidian30.Modal {
     });
     const folder = (_b = (_a = this.file.parent) == null ? void 0 : _a.path) != null ? _b : "";
     const stem = this.file.basename;
-    const defaultPath = (0, import_obsidian30.normalizePath)((folder ? folder + "/" : "") + stem + "-bibliography.bib");
+    const defaultPath = (0, import_obsidian31.normalizePath)((folder ? folder + "/" : "") + stem + "-bibliography.bib");
     const inputWrap = contentEl.createDiv({ cls: "sw-snapshot-input-wrap" });
     inputWrap.createEl("label", { text: t("Save as") });
     const input = inputWrap.createEl("input", {
@@ -98995,7 +99219,7 @@ var BibSnapshotModal = class extends import_obsidian30.Modal {
     var _a, _b;
     if (!rawPath)
       return;
-    const savePath = (0, import_obsidian30.normalizePath)(rawPath);
+    const savePath = (0, import_obsidian31.normalizePath)(rawPath);
     try {
       const dir = savePath.includes("/") ? savePath.substring(0, savePath.lastIndexOf("/")) : "";
       if (dir && !await this.app.vault.adapter.exists(dir)) {
@@ -99003,7 +99227,7 @@ var BibSnapshotModal = class extends import_obsidian30.Modal {
       }
       await this.app.vault.adapter.write(savePath, cslToBibTeX(this.entries));
       const noteDir = (_b = (_a = this.file.parent) == null ? void 0 : _a.path) != null ? _b : "";
-      const relPath = noteDir ? (0, import_obsidian30.normalizePath)(savePath).replace((0, import_obsidian30.normalizePath)(noteDir) + "/", "") : savePath;
+      const relPath = noteDir ? (0, import_obsidian31.normalizePath)(savePath).replace((0, import_obsidian31.normalizePath)(noteDir) + "/", "") : savePath;
       await this.app.fileManager.processFrontMatter(this.file, (fm) => {
         const existing = Array.isArray(fm.bibliography) ? fm.bibliography : fm.bibliography ? [fm.bibliography] : [];
         if (!existing.includes(relPath) && !existing.includes(savePath)) {
@@ -99011,11 +99235,11 @@ var BibSnapshotModal = class extends import_obsidian30.Modal {
         }
         fm.bibliography = existing.length === 1 ? existing[0] : existing;
       });
-      new import_obsidian30.Notice(`Bibliography saved to ${savePath}`);
+      new import_obsidian31.Notice(`Bibliography saved to ${savePath}`);
       this.plugin.bibManager.reinit(true);
       this.close();
     } catch (e3) {
-      new import_obsidian30.Notice(`Failed to save bibliography: ${e3.message}`);
+      new import_obsidian31.Notice(`Failed to save bibliography: ${e3.message}`);
     }
   }
   onClose() {

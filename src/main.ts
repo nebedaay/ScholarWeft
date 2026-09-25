@@ -35,6 +35,7 @@ import {
 } from './settings';
 import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
+import { DataExplorerView, dataExplorerViewType } from './dataExplorer';
 import { PromiseCapability, debugLog, SW_CACHE_DIR, SW_CACHE_DIR_LEGACY } from './helpers';
 import { isAbsolutePath } from './bib/helpers';
 import { findPandoc } from './bib/pandoc';
@@ -236,6 +237,20 @@ export default class ReferenceList extends Plugin {
       );
     }
 
+    // The data explorer is new to ScholarWeft (no ancestral plugin uses the
+    // type), but guard anyway so a second copy of ScholarWeft loaded alongside
+    // this one can't make registerView throw and disable the whole plugin.
+    if (viewRegistry?.viewByType && dataExplorerViewType in viewRegistry.viewByType) {
+      console.warn(
+        `ScholarWeft: view type "${dataExplorerViewType}" is already registered — another ScholarWeft copy is enabled.`
+      );
+    } else {
+      this.registerView(
+        dataExplorerViewType,
+        (leaf: WorkspaceLeaf) => new DataExplorerView(leaf, this)
+      );
+    }
+
     this.emitter = new Events();
     this.bibManager = new BibManager(this);
     // Restore the persisted citation index now that bibManager exists.
@@ -398,6 +413,14 @@ export default class ReferenceList extends Plugin {
       name: t('Show reference list'),
       callback: async () => {
         this.initLeaf();
+      },
+    });
+
+    this.addCommand({
+      id: 'open-data-explorer',
+      name: t('Open Zotero data explorer'),
+      callback: async () => {
+        this.initDataExplorerLeaf();
       },
     });
 
@@ -1349,6 +1372,20 @@ export default class ReferenceList extends Plugin {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (!leaves?.length) return;
     this.app.workspace.revealLeaf(leaves[0]);
+  }
+
+  /** Open (or reveal) the Zotero data explorer in the right sidebar. */
+  async initDataExplorerLeaf() {
+    const existing = this.app.workspace.getLeavesOfType(dataExplorerViewType);
+    if (existing.length) {
+      this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    // getRightLeaf(false) can be null on mobile / before the workspace is ready.
+    const leaf = this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    await leaf.setViewState({ type: dataExplorerViewType });
+    this.app.workspace.revealLeaf(leaf);
   }
 
   async getCitekeysForFile(file?: TFile) {

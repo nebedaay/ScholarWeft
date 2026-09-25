@@ -72,7 +72,8 @@ export function literatureNoteFolder(plugin: ReferenceList): string {
     : settingsFolder || zotlitFolder || '_2 Bibliographic notes';
 }
 
-async function readTemplate(plugin: ReferenceList): Promise<string | null> {
+/** Read the bundled own note template; also used by the data explorer preview. */
+export async function readTemplate(plugin: ReferenceList): Promise<string | null> {
   const dir = plugin.manifest.dir;
   if (!dir) return null;
   const path = normalizePath(`${dir}/${TEMPLATE_ASSET}`);
@@ -84,7 +85,8 @@ async function readTemplate(plugin: ReferenceList): Promise<string | null> {
   }
 }
 
-async function fetchChildren(
+/** Fetch an item's children live; shared with the data explorer preview. */
+export async function fetchChildren(
   plugin: ReferenceList,
   entry: CachedEntry | undefined
 ): Promise<RawZoteroChildren> {
