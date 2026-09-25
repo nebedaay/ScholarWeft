@@ -136,9 +136,40 @@ describe('managed region', () => {
     expect(merged).not.toContain('old notes');
   });
 
-  it('leaves a body with no region untouched', () => {
-    const existingBody = '\n# T\n\nonly the user\u2019s writing\n';
-    expect(mergeManagedRegion(existingBody, renderedBody)).toBe(existingBody);
+  it('appends the region when the note has none (annotations added later)', () => {
+    const existingBody = '\n## Notes\n\nonly the user\u2019s writing\n';
+    const merged = mergeManagedRegion(existingBody, renderedBody);
+    expect(merged).toContain('only the user\u2019s writing');
+    expect(merged).toContain(MANAGED_OPEN);
+    expect(merged).toContain('new notes');
+    // The user text stays above the appended region.
+    expect(merged.indexOf('only the user')).toBeLessThan(merged.indexOf(MANAGED_OPEN));
+  });
+
+  it('removes an existing region when the render has none and the template manages regions', () => {
+    const existingBody = [
+      '',
+      '## Notes',
+      '',
+      'user',
+      '',
+      MANAGED_OPEN,
+      '## Annotations',
+      '',
+      'old',
+      MANAGED_CLOSE,
+      '',
+    ].join('\n');
+    const merged = mergeManagedRegion(existingBody, '\n## Notes\n\nuser\n', {
+      managesRegion: true,
+    });
+    expect(merged).not.toContain(MANAGED_OPEN);
+    expect(merged).toContain('user');
+  });
+
+  it('leaves the region alone when the template does not manage regions', () => {
+    const existingBody = `\n${MANAGED_OPEN}\nx\n${MANAGED_CLOSE}\n`;
+    expect(mergeManagedRegion(existingBody, 'no region here')).toBe(existingBody);
   });
 });
 

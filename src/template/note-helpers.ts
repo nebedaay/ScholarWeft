@@ -167,12 +167,17 @@ export class NoteHelpers {
 
   /**
    * Merge a fresh render into an existing note: refresh the managed frontmatter
-   * fields and replace the managed region, keeping everything else. Returns the
-   * rendered text unchanged when there is no existing note yet.
+   * fields and reconcile the managed region, keeping everything else. Returns
+   * the rendered text unchanged when there is no existing note yet.
    */
-  mergeInto(ctx: NoteContext, existing: string | null, rendered: string): string {
+  mergeInto(
+    ctx: NoteContext,
+    existing: string | null,
+    rendered: string,
+    opts: { managesRegion?: boolean } = {}
+  ): string {
     if (!existing) return rendered;
-    return mergeNote(existing, rendered, this.fieldSpecs(ctx));
+    return mergeNote(existing, rendered, this.fieldSpecs(ctx), opts);
   }
 
   // ── Filename ──

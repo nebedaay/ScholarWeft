@@ -178,32 +178,68 @@ export function findManagedRegion(body: string): ManagedRegion | null {
   return { start, end: close + MANAGED_CLOSE.length };
 }
 
+export interface ManagedRegionMergeOptions {
+  /**
+   * The template declares a managed region, so its ABSENCE in the render means
+   * the region is empty (e.g. no annotations) and an existing one should be
+   * removed. Without this, an absent region is treated as "not managed here".
+   */
+  managesRegion?: boolean;
+}
+
 /**
- * Replace the existing managed region with the freshly rendered one. Content
- * before and after the region is untouched. When either side lacks a region the
- * existing body is returned unchanged (respecting a user who removed it).
+ * Reconcile the managed region:
+ *  - both sides have one → replace the existing span;
+ *  - the render has one, the note doesn't → APPEND it (e.g. annotations added
+ *    after creation), separated by a blank line;
+ *  - the render has none but the template manages regions → REMOVE the existing
+ *    one (annotations were deleted);
+ *  - otherwise → leave the body unchanged.
+ * Content before and after the region is never touched.
  */
-export function mergeManagedRegion(existingBody: string, renderedBody: string): string {
+export function mergeManagedRegion(
+  existingBody: string,
+  renderedBody: string,
+  opts: ManagedRegionMergeOptions = {}
+): string {
   const rendered = findManagedRegion(renderedBody);
-  if (!rendered) return existingBody;
   const existing = findManagedRegion(existingBody);
-  if (!existing) return existingBody;
-  return (
-    existingBody.slice(0, existing.start) +
-    renderedBody.slice(rendered.start, rendered.end) +
-    existingBody.slice(existing.end)
-  );
+
+  if (rendered && existing) {
+    return (
+      existingBody.slice(0, existing.start) +
+      renderedBody.slice(rendered.start, rendered.end) +
+      existingBody.slice(existing.end)
+    );
+  }
+
+  if (rendered && !existing) {
+    const region = renderedBody.slice(rendered.start, rendered.end);
+    const before = existingBody.replace(/\s+$/, '');
+    return before ? `${before}\n\n${region}\n` : `${region}\n`;
+  }
+
+  if (!rendered && existing && opts.managesRegion) {
+    const before = existingBody.slice(0, existing.start).replace(/\n+$/, '');
+    const after = existingBody.slice(existing.end).replace(/^\n+/, '');
+    if (!before) return after;
+    if (!after) return `${before}\n`;
+    return `${before}\n\n${after}`;
+  }
+
+  return existingBody;
 }
 
 /**
  * Re-import an existing note: merge the template's frontmatter fields and
- * replace its managed region, preserving all user content and out-of-scope
+ * reconcile its managed region, preserving all user content and out-of-scope
  * properties. `rendered` is the full output of a fresh template render.
  */
 export function mergeNote(
   existing: string,
   rendered: string,
-  specs: readonly YamlFieldSpec[]
+  specs: readonly YamlFieldSpec[],
+  opts: ManagedRegionMergeOptions = {}
 ): string {
   const prior = splitNote(existing);
   const fresh = splitNote(rendered);
@@ -211,6 +247,6 @@ export function mergeNote(
   const body =
     prior.frontmatter === null
       ? prior.body
-      : mergeManagedRegion(prior.body, fresh.body);
+      : mergeManagedRegion(prior.body, fresh.body, opts);
   return joinNote(frontmatter, body);
 }

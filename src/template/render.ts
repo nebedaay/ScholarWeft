@@ -8,6 +8,7 @@
 import { buildNoteContextWithChildren, type RawZoteroChildren } from './children';
 import type { CachedEntry } from './context';
 import { makeEta } from './engine';
+import { MANAGED_OPEN } from './merge';
 import {
   prepareTemplateData,
   type NoteImportOptions,
@@ -69,7 +70,10 @@ export function renderNote(
   const content = engine.noteHelpers.mergeInto(
     ctx,
     opts.existingContent ?? null,
-    rendered
+    rendered,
+    // The template declares a region, so its absence in the render means the
+    // region is empty and an existing one should be removed.
+    { managesRegion: opts.templateSource.includes(MANAGED_OPEN) }
   );
   return { content, fileName: engine.noteHelpers.fileName(ctx) };
 }

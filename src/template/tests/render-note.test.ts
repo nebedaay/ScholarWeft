@@ -80,8 +80,8 @@ const raw: RawZoteroChildren = {
   ],
 };
 
-function render(): string {
-  const ctx = buildNoteContextWithChildren(entry, raw, {
+function render(rawChildren: RawZoteroChildren = raw, entryOverride: CachedEntry = entry): string {
+  const ctx = buildNoteContextWithChildren(entryOverride, rawChildren, {
     dataDir: '/zot',
     notePath: '_2 Bibliographic notes/@alsaihBughyatAlmustafid2005.md',
     noteHeadingLevel: 3,
@@ -130,10 +130,13 @@ describe('sw-note.eta.md — end-to-end render', () => {
     );
   });
 
-  it('emits the title and the notes body', () => {
-    expect(out).toContain('# Bughyat al-mustafīd li-sharḥ munyat al-murīd');
-    expect(out).toContain('## Notes');
-    expect(out).toContain('### Wird\n\nBody text');
+  it('emits no body title or abstract — those live only in the frontmatter', () => {
+    expect(out).not.toContain('# Bughyat al-mustafīd');
+    expect(out).not.toContain('[!ABSTRACT]');
+  });
+
+  it('always emits the Notes heading, with the note text under it', () => {
+    expect(out).toContain('## Notes\n\n### Wird\n\nBody text');
   });
 
   it('renders the annotation callout under its attachment heading', () => {
@@ -148,16 +151,31 @@ describe('sw-note.eta.md — end-to-end render', () => {
     );
   });
 
-  it('wraps the generated body in the sw managed region', () => {
+  it('keeps ## Notes OUTSIDE the managed region and Annotations inside it', () => {
     const open = out.indexOf('%%sw-managed%%');
     const close = out.indexOf('%%/sw-managed%%');
     expect(open).toBeGreaterThan(0);
     expect(close).toBeGreaterThan(open);
+    expect(out.indexOf('## Notes')).toBeLessThan(open);
     const region = out.slice(open, close);
-    expect(region).toContain('## Notes');
     expect(region).toContain('## Annotations');
-    // Title heading and abstract sit ABOVE the region (user-touchable).
-    expect(out.indexOf('# Bughyat')).toBeLessThan(open);
+    expect(region).not.toContain('## Notes');
+    // A blank line separates the notes text from the region.
+    expect(out).toContain('\n\n%%sw-managed%%');
+  });
+
+  it('omits the managed region entirely when there are no annotations', () => {
+    const bare = render({ attachments: raw.attachments, notes: raw.notes });
+    expect(bare).not.toContain('%%sw-managed%%');
+    expect(bare).not.toContain('## Annotations');
+    expect(bare).toContain('## Notes');
+  });
+
+  it('emits only ## Notes when there are no notes or annotations either', () => {
+    const empty = render({});
+    expect(empty).not.toContain('%%sw-managed%%');
+    expect(empty).toContain('## Notes');
+    expect(empty.includes('### ')).toBe(false);
   });
 
   it('leaves no trailing whitespace on any line', () => {

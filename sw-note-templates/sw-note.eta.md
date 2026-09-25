@@ -1,11 +1,17 @@
 <%/*
   sw-note.eta.md — OUR single-file literature-note template.
 
-  One copy-pasteable file: it emits BOTH the frontmatter and the body (the
-  Zotero-Integration shape), unlike the ZotLit-compatible multi-file set whose
-  frontmatter lives in ZotLit's settings. Everything whitespace-sensitive is in
-  the helpers (`add_property` serialises YAML, `annotation_callout` builds the
-  callout, `zotero_notes` the note text) so this file states INTENT only.
+  One copy-pasteable file: it emits BOTH the frontmatter and the body. It follows
+  the layout of the user's ZotLit templates (`sw-zotlit-templates/`), NOT the
+  older Zotero-Integration shape: there is NO title heading or abstract in the
+  body (those live only in the frontmatter), `## Notes` is always present and
+  OUTSIDE the managed region, and the managed region holds only `## Annotations`
+  — emitted only when there ARE annotations, so an empty region is never left
+  behind (it is appended later if annotations appear).
+
+  Everything whitespace-sensitive is in the helpers (`add_property` serialises
+  YAML, `annotation_callout` builds the callout, `zotero_notes` the note text) so
+  this file states INTENT only.
 
   Data root: `item` (see src/template/context.ts). Settled helper API is
   documented in src/template/note-helpers.ts.
@@ -34,13 +40,6 @@
 <% add_property('attachments', attachment_links()); -%>
 <% add_property('aliases', aliases()); -%>
 <%~ end_YAML() -%>
-# <%= escape_md(item.title ?? '') %>
-<% if (item.abstract) { -%>
-
-<%~ callout({ type: 'ABSTRACT', body: escape_md(item.abstract) }) %>
-<% } -%>
-
-%%sw-managed%%
 ## Notes
 
 <% const notes = zotero_notes(); -%>
@@ -48,8 +47,8 @@
 <%~ notes %>
 <% } -%>
 <% const annotated = attachments_with_annotations(); -%>
-<% if (annotated.length) { -%>
-
+<% if (annotated.length) { %>
+%%sw-managed%%
 ## Annotations
 
 <% for (const attachment of annotated) { -%>
@@ -60,5 +59,5 @@
 
 <% } -%>
 <% } -%>
-<% } -%>
 %%/sw-managed%%
+<% } -%>
