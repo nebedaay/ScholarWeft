@@ -148,6 +148,18 @@ describe('sw-note.eta.md — end-to-end render', () => {
     );
   });
 
+  it('wraps the generated body in the sw managed region', () => {
+    const open = out.indexOf('%%sw-managed%%');
+    const close = out.indexOf('%%/sw-managed%%');
+    expect(open).toBeGreaterThan(0);
+    expect(close).toBeGreaterThan(open);
+    const region = out.slice(open, close);
+    expect(region).toContain('## Notes');
+    expect(region).toContain('## Annotations');
+    // Title heading and abstract sit ABOVE the region (user-touchable).
+    expect(out.indexOf('# Bughyat')).toBeLessThan(open);
+  });
+
   it('leaves no trailing whitespace on any line', () => {
     const bad = out
       .split('\n')

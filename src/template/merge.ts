@@ -1,0 +1,216 @@
+// Re-import merge: refresh what the template owns, leave everything else.
+//
+// The model is ZotLit's, renamed to our namespace. Two independent mechanisms:
+//
+//   1. FRONTMATTER — only the properties the template declares are touched, each
+//      with its merge strategy (`replace`/`append`/`keep`). Every other property
+//      is preserved verbatim, including the user's own fields and ordering.
+//   2. MANAGED REGION — the template wraps its generated body in
+//      `%%sw-managed%%` … `%%/sw-managed%%`. An update replaces exactly that
+//      span; text above AND BELOW it is the user's and is never touched. (ZotLit
+//      only documents writing above; allowing content after the region is our
+//      deliberate difference.)
+//
+// A note with no managed region is NOT given one: absence means the user removed
+// it (or the note predates markers), and re-adding it would fight the user.
+//
+// This module is pure and line-based: it preserves the raw text of untouched
+// properties, and never re-serialises the whole file through a YAML dump (which
+// would reorder keys and drop comments).
+
+import type { YamlFieldSpec, FrontmatterMerge } from './yaml';
+
+/** Region markers. OUR namespace — ZotLit's `zt-` region is separate. */
+export const MANAGED_OPEN = '%%sw-managed%%';
+export const MANAGED_CLOSE = '%%/sw-managed%%';
+
+export interface SplitNote {
+  /** The frontmatter body (between the `---` fences), or `null` if none. */
+  frontmatter: string | null;
+  /** Everything after the closing fence (or the whole text if no frontmatter). */
+  body: string;
+}
+
+const FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/** Split a note into its frontmatter body and everything after it. */
+export function splitNote(content: string): SplitNote {
+  const m = FRONTMATTER_RE.exec(content);
+  if (!m) return { frontmatter: null, body: content };
+  return { frontmatter: m[1], body: content.slice(m[0].length) };
+}
+
+/** Reassemble a note from a frontmatter body (without fences) and a body. */
+export function joinNote(frontmatter: string, body: string): string {
+  const fm = frontmatter.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '');
+  return `---\n${fm}\n---\n${body}`;
+}
+
+/** One parsed frontmatter property: its key and raw lines (kept verbatim). */
+export interface FrontmatterProperty {
+  key: string;
+  lines: string[];
+}
+
+/** A top-level `key:` line (not indented, not a comment). */
+const KEY_RE = /^([A-Za-z0-9_][^:\n]*?)[ \t]*:(?:[ \t]|$)/;
+
+function unquoteKey(key: string): string {
+  const k = key.trim();
+  if (k.length >= 2 && ((k[0] === '"' && k.endsWith('"')) || (k[0] === "'" && k.endsWith("'")))) {
+    return k.slice(1, -1);
+  }
+  return k;
+}
+
+/**
+ * Parse frontmatter into ordered properties. Indented lines (list items, block
+ * scalars) attach to the preceding key; a leading comment/blank is preserved as
+ * a key-less block so it round-trips.
+ */
+export function parseFrontmatter(frontmatter: string): FrontmatterProperty[] {
+  const props: FrontmatterProperty[] = [];
+  let current: FrontmatterProperty | null = null;
+  for (const line of frontmatter.replace(/\r\n?/g, '\n').split('\n')) {
+    const m = !/^[ \t]/.test(line) ? KEY_RE.exec(line) : null;
+    if (m) {
+      if (current) props.push(current);
+      current = { key: unquoteKey(m[1]), lines: [line] };
+    } else if (current) {
+      current.lines.push(line);
+    } else if (line.trim()) {
+      props.push({ key: '', lines: [line] });
+    }
+  }
+  if (current) props.push(current);
+  return props;
+}
+
+function isListBlock(lines: string[]): boolean {
+  return (
+    lines.length >= 1 &&
+    /:[ \t]*$/.test(lines[0]) &&
+    lines.slice(1).length > 0 &&
+    lines.slice(1).every((l) => /^[ \t]*-[ \t]/.test(l))
+  );
+}
+
+function appendListItems(existing: string[], generated: string[]): string[] {
+  const head = existing[0] ?? generated[0];
+  const seen = new Set(existing.slice(1).map((l) => l.trim()));
+  const out = [...existing.slice(1)];
+  for (const item of generated.slice(1)) {
+    if (seen.has(item.trim())) continue;
+    seen.add(item.trim());
+    out.push(item);
+  }
+  return [head, ...out];
+}
+
+function reconcile(
+  merge: FrontmatterMerge,
+  existing: string[] | undefined,
+  generated: string[]
+): string[] {
+  const has = !!existing && existing.length > 0;
+  switch (merge) {
+    case 'keep':
+      return has ? existing! : generated;
+    case 'append':
+      if (!has) return generated;
+      if (isListBlock(existing!) && isListBlock(generated)) {
+        return appendListItems(existing!, generated);
+      }
+      // Shape mismatch (e.g. a scalar where a list is rendered): fall back to
+      // letting the template win rather than corrupting the existing value.
+      return generated;
+    case 'replace':
+    default:
+      return generated;
+  }
+}
+
+/**
+ * Merge the template's managed fields into existing frontmatter. Properties out
+ * of scope are preserved verbatim and in place; in-scope properties are
+ * reconciled; brand-new managed properties are appended in template order.
+ */
+export function mergeFrontmatter(
+  existingFrontmatter: string | null,
+  specs: readonly YamlFieldSpec[]
+): string {
+  const existing = parseFrontmatter(existingFrontmatter ?? '');
+  const byKey = new Map(specs.map((s) => [s.key, s]));
+  const emitted = new Set<string>();
+  const out: string[] = [];
+
+  for (const prop of existing) {
+    const spec = byKey.get(prop.key);
+    if (!spec) {
+      out.push(...prop.lines);
+      continue;
+    }
+    emitted.add(spec.key);
+    out.push(...reconcile(spec.merge, prop.lines, spec.lines));
+  }
+
+  for (const spec of specs) {
+    if (emitted.has(spec.key)) continue;
+    // Not present on disk. `keep` still writes the generated value (there is
+    // nothing to keep); `replace`/`append` write it too, unless it is empty.
+    out.push(...reconcile(spec.merge, undefined, spec.lines));
+  }
+
+  return out.join('\n');
+}
+
+export interface ManagedRegion {
+  start: number;
+  end: number;
+}
+
+/** Locate the `%%sw-managed%%` region in a body, or `null`. */
+export function findManagedRegion(body: string): ManagedRegion | null {
+  const start = body.indexOf(MANAGED_OPEN);
+  if (start === -1) return null;
+  const close = body.indexOf(MANAGED_CLOSE, start + MANAGED_OPEN.length);
+  if (close === -1) return null;
+  return { start, end: close + MANAGED_CLOSE.length };
+}
+
+/**
+ * Replace the existing managed region with the freshly rendered one. Content
+ * before and after the region is untouched. When either side lacks a region the
+ * existing body is returned unchanged (respecting a user who removed it).
+ */
+export function mergeManagedRegion(existingBody: string, renderedBody: string): string {
+  const rendered = findManagedRegion(renderedBody);
+  if (!rendered) return existingBody;
+  const existing = findManagedRegion(existingBody);
+  if (!existing) return existingBody;
+  return (
+    existingBody.slice(0, existing.start) +
+    renderedBody.slice(rendered.start, rendered.end) +
+    existingBody.slice(existing.end)
+  );
+}
+
+/**
+ * Re-import an existing note: merge the template's frontmatter fields and
+ * replace its managed region, preserving all user content and out-of-scope
+ * properties. `rendered` is the full output of a fresh template render.
+ */
+export function mergeNote(
+  existing: string,
+  rendered: string,
+  specs: readonly YamlFieldSpec[]
+): string {
+  const prior = splitNote(existing);
+  const fresh = splitNote(rendered);
+  const frontmatter = mergeFrontmatter(prior.frontmatter, specs);
+  const body =
+    prior.frontmatter === null
+      ? prior.body
+      : mergeManagedRegion(prior.body, fresh.body);
+  return joinNote(frontmatter, body);
+}

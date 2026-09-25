@@ -12,7 +12,7 @@
 //
 // Settled API (see the ScholarWeft skill):
 //   YAML      start_YAML / add_property(key, value, opts?) / add_raw_yaml(text) /
-//             end_YAML / persist(key, fn)
+//             end_YAML
 //   filename  set_file_name(name)            (default `@<citekey>`)
 //   creators  creators_by_type(format?, opts?)  → [{ key, values }] for the
 //             template's `for … add_property(g.key, g.values)` loop
@@ -21,6 +21,12 @@
 //   callouts  annotation_callout(annotation, opts?) / callout(opts)
 //   values    wikilink / link_note / md_html / heading / escape_md
 //   state     import_date() / is_first_import()
+//   re-import merge_into(existing, rendered)  (frontmatter specs + managed region)
+//
+// Re-import safety is NOT a template concern: the template wraps its generated
+// body in `%%sw-managed%%` … `%%/sw-managed%%`, and `merge_into` (backed by
+// `merge.ts`) refreshes the managed frontmatter fields and that region while
+// leaving every other property and all user text alone.
 
 import {
   creatorNames,
@@ -33,8 +39,10 @@ import {
   type CreatorNamesOptions,
 } from './format';
 import { escapeMarkdown, htmlFieldToMarkdown, noteHtmlToMarkdown } from './markdown';
+import { mergeNote } from './merge';
 import {
   YamlBuilder,
+  type YamlFieldSpec,
   type YamlPropertyOptions,
   type YamlValue,
 } from './yaml';
@@ -150,6 +158,21 @@ export class NoteHelpers {
 
   endYAML(ctx: NoteContext): string {
     return this.stateOf(ctx).yaml.end();
+  }
+
+  /** The managed frontmatter fields, for the re-import merge. */
+  fieldSpecs(ctx: NoteContext): YamlFieldSpec[] {
+    return this.stateOf(ctx).yaml.fieldSpecs();
+  }
+
+  /**
+   * Merge a fresh render into an existing note: refresh the managed frontmatter
+   * fields and replace the managed region, keeping everything else. Returns the
+   * rendered text unchanged when there is no existing note yet.
+   */
+  mergeInto(ctx: NoteContext, existing: string | null, rendered: string): string {
+    if (!existing) return rendered;
+    return mergeNote(existing, rendered, this.fieldSpecs(ctx));
   }
 
   // ── Filename ──

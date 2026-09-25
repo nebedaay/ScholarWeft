@@ -23,6 +23,17 @@ export type YamlScalar = string | number | boolean;
 /** A property value: a scalar, a list of scalars, or nothing. */
 export type YamlValue = YamlScalar | YamlScalar[] | null | undefined;
 
+/**
+ * How a re-import reconciles a managed property with the value already on
+ * disk. Mirrors ZotLit's frontmatter merge strategies.
+ *   - `replace` (default): the freshly rendered value wins (an empty value
+ *     removes the property);
+ *   - `append`: list items already present are kept verbatim and the new ones
+ *     are added, so hand-added tags/links survive;
+ *   - `keep`: the existing value wins unless it is empty (write-once).
+ */
+export type FrontmatterMerge = 'replace' | 'append' | 'keep';
+
 export interface YamlPropertyOptions {
   /**
    * Emit the property even when the value is empty (`""` or `[]`). Off by
@@ -35,6 +46,16 @@ export interface YamlPropertyOptions {
    * never quoted regardless.
    */
   quote?: 'auto' | 'always' | 'never';
+  /** Re-import reconciliation strategy. Default `replace`. */
+  merge?: FrontmatterMerge;
+}
+
+/** One managed property: its key, merge strategy, and rendered lines. */
+export interface YamlFieldSpec {
+  key: string;
+  merge: FrontmatterMerge;
+  /** Serialised lines (empty when the value was omitted). */
+  lines: string[];
 }
 
 const INDENT = '  ';
@@ -148,6 +169,7 @@ export function buildYaml(
  */
 export class YamlBuilder {
   private lines: string[] = [];
+  private specs: YamlFieldSpec[] = [];
   private open = false;
   private finished = false;
 
@@ -168,7 +190,16 @@ export class YamlBuilder {
     if (typeof key !== 'string' || !key.trim()) {
       throw new Error('[sw yaml] add_property() needs a non-empty key');
     }
-    this.lines.push(...serializeProperty(key, value, opts));
+    const lines = serializeProperty(key, value, opts);
+    this.lines.push(...lines);
+    // Record EVERY managed key, even one omitted for being empty, so a
+    // re-import knows it is in scope (an empty `replace` removes it).
+    this.specs.push({ key, merge: opts?.merge ?? 'replace', lines });
+  }
+
+  /** The managed fields, in template order, for the re-import merge. */
+  fieldSpecs(): YamlFieldSpec[] {
+    return this.specs.map((s) => ({ ...s, lines: [...s.lines] }));
   }
 
   /** Escape hatch: insert verbatim YAML lines (a user spelling it out). */

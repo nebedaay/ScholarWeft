@@ -34,13 +34,13 @@
 <% add_property('attachments', attachment_links()); -%>
 <% add_property('aliases', aliases()); -%>
 <%~ end_YAML() -%>
-<% if (!is_first_import()) { /* a re-import keeps the user's title line */ } -%>
 # <%= escape_md(item.title ?? '') %>
 <% if (item.abstract) { -%>
 
 <%~ callout({ type: 'ABSTRACT', body: escape_md(item.abstract) }) %>
 <% } -%>
 
+%%sw-managed%%
 ## Notes
 
 <% const notes = zotero_notes(); -%>
@@ -61,3 +61,4 @@
 <% } -%>
 <% } -%>
 <% } -%>
+%%/sw-managed%%

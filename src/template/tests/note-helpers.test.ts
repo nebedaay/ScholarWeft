@@ -167,6 +167,53 @@ describe('filename', () => {
   });
 });
 
+describe('re-import merge', () => {
+  it('exposes the managed field specs in template order', () => {
+    const ctx = buildNoteContext(entry);
+    prepareTemplateData(ctx);
+    helpers.startYAML(ctx);
+    helpers.addProperty(ctx, 'title', ctx.title);
+    helpers.addProperty(ctx, 'citekey', ctx.citekey, { merge: 'keep' });
+    helpers.addProperty(ctx, 'edition', null);
+    helpers.endYAML(ctx);
+
+    const specs = helpers.fieldSpecs(ctx);
+    expect(specs.map((s) => [s.key, s.merge])).toEqual([
+      ['title', 'replace'],
+      ['citekey', 'keep'],
+      ['edition', 'replace'],
+    ]);
+    // An omitted (empty) field is still in scope, so replace can remove it.
+    expect(specs[2].lines).toEqual([]);
+  });
+
+  it('merges a fresh render into an existing note, keeping user data', () => {
+    const ctx = buildNoteContext(entry);
+    prepareTemplateData(ctx);
+    helpers.startYAML(ctx);
+    helpers.addProperty(ctx, 'title', 'New title');
+    helpers.addProperty(ctx, 'citekey', ctx.citekey);
+    helpers.endYAML(ctx);
+
+    const existing = '---\ntitle: Old\ncustom: keep\n---\n\nuser text\n';
+    const rendered =
+      '---\ntitle: New title\ncitekey: alsaihBughyatAlmustafid2005\n---\n\n# H\n';
+    const out = helpers.mergeInto(ctx, existing, rendered);
+
+    expect(out).toContain('title: New title');
+    expect(out).toContain('custom: keep');
+    expect(out).toContain('user text');
+  });
+
+  it('returns the render untouched for a first import', () => {
+    const ctx = buildNoteContext(entry);
+    prepareTemplateData(ctx);
+    helpers.startYAML(ctx);
+    helpers.endYAML(ctx);
+    expect(helpers.mergeInto(ctx, null, 'rendered')).toBe('rendered');
+  });
+});
+
 describe('todayIso', () => {
   it('formats a local date', () => {
     expect(todayIso(new Date(2026, 8, 25))).toBe('2026-09-25');

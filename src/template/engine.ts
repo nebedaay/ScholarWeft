@@ -128,7 +128,7 @@ export class NoteTemplateEngine extends Eta {
         `const end_YAML = () => this.noteHelpers.endYAML(${d}); ` +
         `const add_property = (k, v, o) => this.noteHelpers.addProperty(${d}, k, v, o); ` +
         `const add_raw_yaml = (t) => this.noteHelpers.addRawYAML(${d}, t); ` +
-        `const persist = (k, fn) => fn(); ` +
+        `const merge_into = (existing, rendered) => this.noteHelpers.mergeInto(${d}, existing, rendered); ` +
         `const set_file_name = (n) => this.noteHelpers.setFileName(${d}, n); ` +
         `const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d}, f, o); ` +
         `const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d}, r, f, o); ` +
