@@ -16,6 +16,38 @@ import { htmlToMarkdown } from 'obsidian';
 /** Heading tag name → its level, e.g. `H3` → 3. */
 const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
+const FENCE_RE = /^\s*(?:```|~~~)/;
+const CODE_SPAN_OR_ESCAPABLE_RE = /(`+[^`]*`+)|((?<!\\)[\[<])/g;
+
+function escapeOutsideCode(line: string): string {
+  return line.replace(
+    CODE_SPAN_OR_ESCAPABLE_RE,
+    (match, code: string | undefined, char: string | undefined) =>
+      code ?? `\\${char}`
+  );
+}
+
+/**
+ * Escape the characters that would otherwise change meaning in Markdown:
+ * `[` (could open a link or, doubled, a wikilink) and `<` (could open an HTML
+ * tag). Already-escaped occurrences are left alone, and `&` is untouched — it
+ * only matters as part of an HTML entity, which the parser has already
+ * resolved. Fenced and inline code are skipped so their contents stay literal.
+ */
+export function escapeMarkdown(text: string): string {
+  let inFence = false;
+  return text
+    .split('\n')
+    .map((line) => {
+      if (FENCE_RE.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      return inFence ? line : escapeOutsideCode(line);
+    })
+    .join('\n');
+}
+
 /**
  * Shift every heading in an HTML fragment so the shallowest heading ends up at
  * `topLevel` (the others keep their relative depth; levels clamp to 1–6).
@@ -56,6 +88,17 @@ export function normalizeHeadingLevels(html: string, topLevel: number): string {
   return doc.body.innerHTML;
 }
 
+/**
+ * Convert one of Zotero's HTML-capable text fields (title, abstract, `extra`,
+ * a note body…) to Markdown and neutralise stray Markdown characters. Headings
+ * are left as-is; use {@link noteHtmlToMarkdown} for a child note, which also
+ * nests its headings under the note's own section.
+ */
+export function htmlFieldToMarkdown(html: string | null | undefined): string {
+  if (!html || !html.trim()) return '';
+  return escapeMarkdown(htmlToMarkdown(html).trim());
+}
+
 export interface NoteMarkdownOptions {
   /** Level the note's shallowest heading should end up at. Default 3 (`###`). */
   topLevel?: number;
@@ -63,7 +106,8 @@ export interface NoteMarkdownOptions {
 
 /**
  * Convert a Zotero note's HTML to Markdown with its headings normalised under
- * the note's own section (default `topLevel` 3, i.e. one below `## Notes`).
+ * the note's own section (default `topLevel` 3, i.e. one below `## Notes`) and
+ * stray Markdown characters escaped.
  */
 export function noteHtmlToMarkdown(
   html: string,
@@ -71,5 +115,5 @@ export function noteHtmlToMarkdown(
 ): string {
   if (!html || !html.trim()) return '';
   const topLevel = opts.topLevel ?? 3;
-  return htmlToMarkdown(normalizeHeadingLevels(html, topLevel)).trim();
+  return escapeMarkdown(htmlToMarkdown(normalizeHeadingLevels(html, topLevel)).trim());
 }

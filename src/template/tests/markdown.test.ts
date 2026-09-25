@@ -7,7 +7,12 @@ jest.mock(
 );
 
 import { htmlToMarkdown } from 'obsidian';
-import { normalizeHeadingLevels, noteHtmlToMarkdown } from '../markdown';
+import {
+  escapeMarkdown,
+  htmlFieldToMarkdown,
+  normalizeHeadingLevels,
+  noteHtmlToMarkdown,
+} from '../markdown';
 
 const mockConvert = htmlToMarkdown as unknown as jest.Mock;
 
@@ -76,5 +81,41 @@ describe('noteHtmlToMarkdown()', () => {
   it('trims the converter output', () => {
     mockConvert.mockReturnValueOnce('  body  \n');
     expect(noteHtmlToMarkdown('<p>x</p>')).toBe('body');
+  });
+
+  it('escapes stray [ and < in the converted note, leaving & alone', () => {
+    mockConvert.mockReturnValueOnce('See [[another note]] and a<b>tag\n');
+    expect(noteHtmlToMarkdown('<p>x</p>')).toBe(
+      'See \\[\\[another note]] and a\\<b>tag'
+    );
+  });
+});
+
+describe('escapeMarkdown()', () => {
+  it('escapes [ and < but not &', () => {
+    expect(escapeMarkdown('[[x]] and <b> and a & b')).toBe(
+      '\\[\\[x]] and \\<b> and a & b'
+    );
+  });
+
+  it('leaves already-escaped characters alone', () => {
+    expect(escapeMarkdown('\\[x\\] and \\<b>')).toBe('\\[x\\] and \\<b>');
+  });
+
+  it('skips inline code spans and fenced blocks', () => {
+    expect(escapeMarkdown('a `[x] <y>` b')).toBe('a `[x] <y>` b');
+    const fenced = '```\n[a] <b>\n```\n[a]';
+    expect(escapeMarkdown(fenced)).toBe('```\n[a] <b>\n```\n\\[a]');
+  });
+});
+
+describe('htmlFieldToMarkdown()', () => {
+  beforeEach(() => mockConvert.mockClear());
+
+  it('converts and escapes a field, and returns empty for nothing', () => {
+    mockConvert.mockReturnValueOnce('A [title]');
+    expect(htmlFieldToMarkdown('<i>A [title]</i>')).toBe('A \\[title]');
+    expect(htmlFieldToMarkdown('')).toBe('');
+    expect(htmlFieldToMarkdown(null)).toBe('');
   });
 });
