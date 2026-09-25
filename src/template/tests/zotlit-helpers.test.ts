@@ -1,3 +1,9 @@
+jest.mock(
+  'obsidian',
+  () => ({ htmlToMarkdown: (html: string) => html }),
+  { virtual: true }
+);
+
 import {
   basename,
   coerceOutput,

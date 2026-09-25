@@ -136,6 +136,11 @@ export interface NoteContextNote {
   noteLink: LinkHelper | null;
   /** The note's Markdown body. `null` when only the link was fetched. */
   text: string | null;
+  /**
+   * The note's raw HTML, kept so a render can re-run {@link noteHtmlToMarkdown}
+   * at a requested heading level. Not part of ZotLit's contract.
+   */
+  html?: string | null;
 }
 
 /** Optional child data and vault context the entry alone cannot supply. */

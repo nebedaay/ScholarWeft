@@ -362,6 +362,7 @@ export function mapNote(
     text: html
       ? noteHtmlToMarkdown(html, { topLevel: opts.noteHeadingLevel ?? 3 })
       : null,
+    html,
   };
 }
 

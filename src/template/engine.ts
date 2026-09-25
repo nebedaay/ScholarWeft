@@ -21,6 +21,7 @@ import type { EtaConfig } from 'eta';
 import { Liquid } from 'liquidjs';
 
 import { formatBlockquote } from './blockquote';
+import { NoteHelpers } from './note-helpers';
 import {
   basename,
   coerceOutput,
@@ -104,8 +105,11 @@ export class NoteTemplateEngine extends Eta {
   readonly basenameHelper = basename;
   readonly suffixHelper = filenameSuffix;
   readonly embedHelper = embed;
+  /** Our single-file template's helpers; state lives on the data, not here. */
+  readonly noteHelpers = new NoteHelpers();
 
   constructor(dataRoot: string = TEMPLATE_DATA_ROOT) {
+    const d = dataRoot;
     super({
       cache: true,
       varName: dataRoot,
@@ -117,7 +121,32 @@ export class NoteTemplateEngine extends Eta {
         'const bq = (fn) => output(this.bqHelper(capture(fn))); ' +
         'const basename = this.basenameHelper; ' +
         'const suffix = this.suffixHelper; ' +
-        'const embed = this.embedHelper;',
+        'const embed = this.embedHelper; ' +
+        // Our own single-file template's bare-global helper API. Harmless for
+        // the ZotLit-compatible set, which simply never calls them.
+        `const start_YAML = () => this.noteHelpers.startYAML(${d}); ` +
+        `const end_YAML = () => this.noteHelpers.endYAML(${d}); ` +
+        `const add_property = (k, v, o) => this.noteHelpers.addProperty(${d}, k, v, o); ` +
+        `const add_raw_yaml = (t) => this.noteHelpers.addRawYAML(${d}, t); ` +
+        `const persist = (k, fn) => fn(); ` +
+        `const set_file_name = (n) => this.noteHelpers.setFileName(${d}, n); ` +
+        `const creators_by_type = (f, o) => this.noteHelpers.creatorsByType(${d}, f, o); ` +
+        `const creator_names = (r, f, o) => this.noteHelpers.creatorNames(${d}, r, f, o); ` +
+        `const zotero_notes = (o) => this.noteHelpers.zoteroNotes(${d}, o); ` +
+        `const annotation_callout = (a, o) => this.noteHelpers.annotationCallout(${d}, a, o); ` +
+        `const callout = (o) => this.noteHelpers.callout(${d}, o); ` +
+        `const wikilink = (t, a) => this.noteHelpers.wikilink(${d}, t, a); ` +
+        `const link_note = (a, s) => this.noteHelpers.linkNote(${d}, a, s); ` +
+        `const md_html = (h) => this.noteHelpers.mdHtml(${d}, h); ` +
+        `const heading = (l, t) => this.noteHelpers.heading(${d}, l, t); ` +
+        `const escape_md = (t) => this.noteHelpers.escapeMd(${d}, t); ` +
+        `const import_date = () => this.noteHelpers.importDate(${d}); ` +
+        `const is_first_import = () => this.noteHelpers.isFirstImport(${d}); ` +
+        `const short_title = () => this.noteHelpers.shortTitle(${d}); ` +
+        `const aliases = () => this.noteHelpers.aliases(${d}); ` +
+        `const related_links = () => this.noteHelpers.relatedLinks(${d}); ` +
+        `const attachment_links = () => this.noteHelpers.attachmentLinks(${d}); ` +
+        `const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d}); `,
       plugins: [includeDataPlugin],
     } as unknown as EtaConfig);
   }
