@@ -87771,6 +87771,7 @@ var DEFAULT_SETTINGS = {
   createNotesWithZotLit: true,
   useOwnNoteTemplate: false,
   ownNoteNotesHeadingLevel: 3,
+  ownNoteImageFolder: "Attachments",
   insertZoteroNotesOnCreate: true,
   useZotlitLiteratureFolder: true,
   showPdfLinks: false,
@@ -88226,6 +88227,13 @@ var ReferenceListSettingsTab = class extends import_obsidian16.PluginSettingTab 
       this.display();
     }));
     if (useOwn) {
+      new import_obsidian16.Setting(containerEl).setName(t("Excerpt-image folder")).setDesc(t("Vault folder that annotation excerpt images are copied into (relative to the vault root; default Attachments). Obsidian cannot display Zotero's file:// cache paths, so images are copied in and linked as ![[\u2026]].")).addText((text) => {
+        var _a;
+        return text.setPlaceholder("Attachments").setValue((_a = this.plugin.settings.ownNoteImageFolder) != null ? _a : "").onChange((value) => {
+          this.plugin.settings.ownNoteImageFolder = value.trim();
+          this.plugin.saveSettings();
+        });
+      });
       new import_obsidian16.Setting(containerEl).setName(t("Child-note heading level")).setDesc(t(`Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`)).addSlider((slider) => {
         var _a;
         return slider.setLimits(1, 6, 1).setValue((_a = this.plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3).setDynamicTooltip().onChange((value) => {
@@ -89879,9 +89887,16 @@ var ANNOTATION_TYPES = new Set([
   "underline",
   "text"
 ]);
+function wikiLinkHelper(vaultPath) {
+  return (alias) => alias ? `[[${vaultPath}|${alias}]]` : `[[${vaultPath}]]`;
+}
 function annotationImageLink(key, type, opts) {
+  var _a;
   if (type !== "image" && type !== "ink")
     return null;
+  const vaultPath = (_a = opts.imageVaultPath) == null ? void 0 : _a.call(opts, key);
+  if (vaultPath)
+    return wikiLinkHelper(vaultPath);
   if (!opts.dataDir)
     return null;
   const libraryPath = opts.groupID == null ? "library" : `groups/${opts.groupID}`;
@@ -91224,7 +91239,8 @@ function renderNote(entry, children, opts) {
     dataDir: opts.dataDir,
     baseAttachmentPath: opts.baseAttachmentPath,
     notePath: opts.notePath,
-    noteHeadingLevel: opts.noteHeadingLevel
+    noteHeadingLevel: opts.noteHeadingLevel,
+    imageVaultPath: opts.imageVaultPath
   });
   prepareTemplateData(ctx, {
     options: opts.options,
@@ -91316,6 +91332,80 @@ function findNoteByZoteroKey(app2, folder, zoteroKey) {
 function vaultPaths(app2) {
   return new Set(app2.vault.getFiles().map((f3) => f3.path));
 }
+function annotationPage(position) {
+  if (typeof position !== "string" || !position)
+    return null;
+  try {
+    const idx = JSON.parse(position).pageIndex;
+    return typeof idx === "number" && Number.isFinite(idx) ? idx + 1 : null;
+  } catch (e3) {
+    return null;
+  }
+}
+function excerptImageFolder(plugin) {
+  var _a;
+  return ((_a = plugin.settings.ownNoteImageFolder) != null ? _a : "").trim() || "Attachments";
+}
+async function copyExcerptImages(plugin, citekey, children, groupID, dataDir) {
+  var _a, _b;
+  const copied = new Map();
+  const raws = (_a = children.annotations) != null ? _a : [];
+  if (!raws.length || !dataDir)
+    return copied;
+  const fs2 = require("fs");
+  const path2 = require("path");
+  const adapter = plugin.app.vault.adapter;
+  const folder = (0, import_obsidian21.normalizePath)(excerptImageFolder(plugin));
+  try {
+    if (!await adapter.exists(folder))
+      await adapter.mkdir(folder);
+  } catch (e3) {
+    console.warn("[sw:import] could not create excerpt-image folder", folder, e3);
+    return copied;
+  }
+  let files = [];
+  try {
+    files = (await adapter.list(folder)).files;
+  } catch (e3) {
+    files = [];
+  }
+  const libraryPath = groupID == null ? "library" : `groups/${groupID}`;
+  for (const raw of raws) {
+    const data = (_b = raw == null ? void 0 : raw.data) != null ? _b : raw;
+    const type = data == null ? void 0 : data.annotationType;
+    const key = data == null ? void 0 : data.key;
+    if (type !== "image" && type !== "ink" || typeof key !== "string" || !key) {
+      continue;
+    }
+    const source = path2.join(dataDir, "cache", libraryPath, `${key}.png`);
+    if (!fs2.existsSync(source))
+      continue;
+    const page = annotationPage(data.annotationPosition);
+    const name = `@${citekey}${page != null ? `_p${page}` : ""}_${key}.png`;
+    const desired = (0, import_obsidian21.normalizePath)(`${folder}/${name}`);
+    try {
+      if (await adapter.exists(desired)) {
+        copied.set(key, desired);
+        continue;
+      }
+      const previous = files.find((f3) => f3.endsWith(`_${key}.png`));
+      if (previous) {
+        await adapter.rename(previous, desired);
+        const i3 = files.indexOf(previous);
+        if (i3 >= 0)
+          files[i3] = desired;
+      } else {
+        const buffer = fs2.readFileSync(source);
+        await adapter.writeBinary(desired, buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+        files.push(desired);
+      }
+      copied.set(key, desired);
+    } catch (e3) {
+      console.warn("[sw:import] could not copy excerpt image", source, "\u2192", desired, e3);
+    }
+  }
+  return copied;
+}
 async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = {}) {
   var _a, _b;
   const app2 = plugin.app;
@@ -91326,10 +91416,16 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
   const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : null;
   const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
   const folder = literatureNoteFolder(plugin);
+  const images = await copyExcerptImages(plugin, citekey, children, groupID, dataDir);
+  const imageVaultPath = (key) => {
+    var _a2;
+    return (_a2 = images.get(key)) != null ? _a2 : null;
+  };
   const first = renderNote(entry, children, {
     templateSource,
     groupID,
     dataDir,
+    imageVaultPath,
     noteHeadingLevel: (_a = plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3
   });
   const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, "");
@@ -91362,6 +91458,7 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
     templateSource,
     groupID,
     dataDir,
+    imageVaultPath,
     notePath,
     noteHeadingLevel: (_b = plugin.settings.ownNoteNotesHeadingLevel) != null ? _b : 3,
     existingContent: existing

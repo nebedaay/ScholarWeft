@@ -52,6 +52,13 @@ export interface ZoteroChildrenOptions {
   noteHeadingLevel?: number;
   /** Vault-relative path of the literature note, once known. */
   notePath?: string | null;
+  /**
+   * Vault path of an annotation's copied excerpt image, by annotation key. When
+   * it returns a path, the image is linked as an Obsidian wikilink (so it
+   * renders and "view image" opens it in Obsidian); otherwise we fall back to
+   * Zotero's `file://` cache path, which Obsidian cannot display.
+   */
+  imageVaultPath?: (key: string) => string | null;
 }
 
 // ─── Raw access ─────────────────────────────────────────────────────────────
@@ -278,11 +285,16 @@ const ANNOTATION_TYPES = new Set([
   'text',
 ]);
 
+/** An Obsidian `[[vault/path]]` link (alias → `[[vault/path|alias]]`). */
+function wikiLinkHelper(vaultPath: string): LinkHelper {
+  return (alias) => (alias ? `[[${vaultPath}|${alias}]]` : `[[${vaultPath}]]`);
+}
+
 /**
- * A link to the annotation's cached excerpt PNG, or `null` for annotation
- * kinds Zotero caches no image for (everything but `image` and `ink`), and
- * when the data directory is unknown. Mirrors Zotero's own cache layout:
- * `<dataDir>/cache/{library|groups/<groupID>}/<annotationKey>.png`.
+ * A link to the annotation's excerpt image. Prefers the vault copy the importer
+ * made (`imageVaultPath`), which renders in Obsidian; without one it falls back
+ * to Zotero's cache file, which Obsidian will not display. `null` for annotation
+ * kinds Zotero caches no image for (everything but `image` and `ink`).
  */
 function annotationImageLink(
   key: string,
@@ -290,6 +302,8 @@ function annotationImageLink(
   opts: ZoteroChildrenOptions
 ): LinkHelper | null {
   if (type !== 'image' && type !== 'ink') return null;
+  const vaultPath = opts.imageVaultPath?.(key);
+  if (vaultPath) return wikiLinkHelper(vaultPath);
   if (!opts.dataDir) return null;
   const libraryPath = opts.groupID == null ? 'library' : `groups/${opts.groupID}`;
   const cachePath = joinPath(opts.dataDir, 'cache', libraryPath, `${key}.png`);

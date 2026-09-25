@@ -29,6 +29,11 @@ export interface RenderNoteOptions {
   baseAttachmentPath?: string | null;
   /** Vault-relative note path; enables `note_link`. */
   notePath?: string | null;
+  /**
+   * Vault path of an annotation's copied excerpt image, by annotation key. When
+   * set, excerpt images link as Obsidian wikilinks instead of `file://` paths.
+   */
+  imageVaultPath?: (key: string) => string | null;
   /** Level a child note's shallowest heading lands at (default 3). */
   noteHeadingLevel?: number;
   /**
@@ -58,6 +63,7 @@ export function renderNote(
     baseAttachmentPath: opts.baseAttachmentPath,
     notePath: opts.notePath,
     noteHeadingLevel: opts.noteHeadingLevel,
+    imageVaultPath: opts.imageVaultPath,
   });
 
   prepareTemplateData(ctx, {

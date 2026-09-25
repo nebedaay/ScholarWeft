@@ -65,6 +65,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   useOwnNoteTemplate: false,
   /** Heading level a child note's top heading is shifted to when inlined (default 3). */
   ownNoteNotesHeadingLevel: 3,
+  /** Vault folder excerpt images are copied into (vault-root relative). */
+  ownNoteImageFolder: 'Attachments',
   /** Auto-insert an item's Zotero child notes into a literature note when it is
    *  created (by ScholarWeft or by ZotLit). See the settings interface. */
   insertZoteroNotesOnCreate: true,
@@ -201,6 +203,12 @@ export interface ReferenceListSettings {
   useOwnNoteTemplate?: boolean;
   /** Heading level a child note's top heading is shifted to when inlined (default 3). */
   ownNoteNotesHeadingLevel?: number;
+  /**
+   * Vault folder that annotation excerpt images are copied into (vault-root
+   * relative). Default `Attachments`. They are linked as `![[…]]` because
+   * Obsidian cannot render Zotero's `file://` cache paths.
+   */
+  ownNoteImageFolder?: string;
   /**
    * When true, a newly created literature note gets the item's Zotero child
    * notes inserted automatically (into its managed "## Notes" section), so it
@@ -1007,6 +1015,23 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
 
     if (useOwn) {
+      new Setting(containerEl)
+        .setName(t('Excerpt-image folder'))
+        .setDesc(
+          t(
+            'Vault folder that annotation excerpt images are copied into (relative to the vault root; default Attachments). Obsidian cannot display Zotero\'s file:// cache paths, so images are copied in and linked as ![[…]].'
+          )
+        )
+        .addText((text) =>
+          text
+            .setPlaceholder('Attachments')
+            .setValue(this.plugin.settings.ownNoteImageFolder ?? '')
+            .onChange((value) => {
+              this.plugin.settings.ownNoteImageFolder = value.trim();
+              this.plugin.saveSettings();
+            })
+        );
+
       new Setting(containerEl)
         .setName(t('Child-note heading level'))
         .setDesc(

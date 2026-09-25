@@ -135,6 +135,120 @@ function vaultPaths(app: App): Set<string> {
   return new Set(app.vault.getFiles().map((f) => f.path));
 }
 
+/** 1-based page of an annotation, from its `annotationPosition`. */
+function annotationPage(position: unknown): number | null {
+  if (typeof position !== 'string' || !position) return null;
+  try {
+    const idx = (JSON.parse(position) as { pageIndex?: unknown }).pageIndex;
+    return typeof idx === 'number' && Number.isFinite(idx) ? idx + 1 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The vault folder excerpt images are copied into (default `Attachments`). */
+export function excerptImageFolder(plugin: ReferenceList): string {
+  return (plugin.settings.ownNoteImageFolder ?? '').trim() || 'Attachments';
+}
+
+/**
+ * Copy each image/ink annotation's excerpt PNG from Zotero's cache into the
+ * vault, so it can be embedded as `![[…]]` — Obsidian never renders a `file://`
+ * path, and such a link asks the system viewer instead of opening in Obsidian.
+ *
+ * Names are `@<citekey>_p<page>_<annotationKey>.png`. The annotation key is
+ * immutable and globally unique, so the name is stable under re-import and can
+ * never collide; the citekey and page are the readable part (which reference,
+ * and where to find the quote), and keep one reference's images together. This
+ * improves on ZotLit's bare `<annotationKey>.png` (stable but cryptic) and on a
+ * page-sequence number (readable but not stable — inserting an annotation
+ * earlier on a page would renumber the rest).
+ *
+ * An existing `*_<key>.png` is reused and renamed rather than duplicated, so a
+ * citekey rename updates the readable part without orphaning the file. Returns
+ * annotation key → vault path for everything that is available.
+ */
+async function copyExcerptImages(
+  plugin: ReferenceList,
+  citekey: string,
+  children: RawZoteroChildren,
+  groupID: number | null,
+  dataDir: string | null
+): Promise<Map<string, string>> {
+  const copied = new Map<string, string>();
+  const raws = children.annotations ?? [];
+  if (!raws.length || !dataDir) return copied;
+
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const adapter = plugin.app.vault.adapter;
+  const folder = normalizePath(excerptImageFolder(plugin));
+
+  try {
+    if (!(await adapter.exists(folder))) await adapter.mkdir(folder);
+  } catch (e) {
+    console.warn('[sw:import] could not create excerpt-image folder', folder, e);
+    return copied;
+  }
+
+  // Existing files, so a previous copy for the same annotation can be reused.
+  let files: string[] = [];
+  try {
+    files = (await adapter.list(folder)).files;
+  } catch {
+    files = [];
+  }
+
+  const libraryPath = groupID == null ? 'library' : `groups/${groupID}`;
+
+  for (const raw of raws) {
+    const data = ((raw as { data?: unknown })?.data ?? raw) as Record<
+      string,
+      unknown
+    >;
+    const type = data?.annotationType;
+    const key = data?.key;
+    if ((type !== 'image' && type !== 'ink') || typeof key !== 'string' || !key) {
+      continue;
+    }
+
+    const source = path.join(dataDir, 'cache', libraryPath, `${key}.png`);
+    if (!fs.existsSync(source)) continue;
+
+    const page = annotationPage(data.annotationPosition);
+    const name = `@${citekey}${page != null ? `_p${page}` : ''}_${key}.png`;
+    const desired = normalizePath(`${folder}/${name}`);
+
+    try {
+      if (await adapter.exists(desired)) {
+        copied.set(key, desired);
+        continue;
+      }
+      // An older copy of THIS annotation under a different citekey/page.
+      const previous = files.find((f) => f.endsWith(`_${key}.png`));
+      if (previous) {
+        await adapter.rename(previous, desired);
+        const i = files.indexOf(previous);
+        if (i >= 0) files[i] = desired;
+      } else {
+        const buffer = fs.readFileSync(source) as Buffer;
+        await adapter.writeBinary(
+          desired,
+          buffer.buffer.slice(
+            buffer.byteOffset,
+            buffer.byteOffset + buffer.byteLength
+          ) as ArrayBuffer
+        );
+        files.push(desired);
+      }
+      copied.set(key, desired);
+    } catch (e) {
+      console.warn('[sw:import] could not copy excerpt image', source, '→', desired, e);
+    }
+  }
+  return copied;
+}
+
 /**
  * Create or update a literature note from our own template. Returns `false`
  * (and no file change) when the template asset is missing, so the caller can
@@ -156,11 +270,17 @@ export async function createOrUpdateOwnNote(
   const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
   const folder = literatureNoteFolder(plugin);
 
+  // Copy excerpt images into the vault first, so the render links them as
+  // `![[…]]` (renderable, opens in Obsidian) and not `file://` cache paths.
+  const images = await copyExcerptImages(plugin, citekey, children, groupID, dataDir);
+  const imageVaultPath = (key: string) => images.get(key) ?? null;
+
   // First pass: no existing note, just to resolve the filename.
   const first = renderNote(entry, children, {
     templateSource,
     groupID,
     dataDir,
+    imageVaultPath,
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
   });
   const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, '');
@@ -215,6 +335,7 @@ export async function createOrUpdateOwnNote(
     templateSource,
     groupID,
     dataDir,
+    imageVaultPath,
     notePath,
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
     existingContent: existing,

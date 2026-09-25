@@ -223,6 +223,22 @@ describe('mapAnnotation()', () => {
     expect(a.imgLink?.()).toBe('[A1.png](file:///zot/cache/groups/7/A1.png)');
   });
 
+  it('links a copied excerpt as an Obsidian wikilink when a vault path exists', () => {
+    const a = mapAnnotation(
+      annotationItem({ annotationType: 'image' }),
+      parentItem,
+      parentAttachment,
+      {
+        dataDir: '/zot',
+        imageVaultPath: (key) => `Attachments/@k_p6_${key}.png`,
+      }
+    );
+    expect(a.imgLink?.()).toBe('[[Attachments/@k_p6_A1.png]]');
+    expect(a.imgLink?.('view image')).toBe(
+      '[[Attachments/@k_p6_A1.png|view image]]'
+    );
+  });
+
   it('degrades imgLink to null without a data directory', () => {
     const a = mapAnnotation(
       annotationItem({ annotationType: 'ink' }),
