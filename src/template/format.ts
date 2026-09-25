@@ -8,7 +8,6 @@
 // same conversion + `escapeMarkdown` pipeline as every other piece of body
 // content — one escaping rule, no per-callout variants.
 
-import { CONTINUATION_MEDIA_SEPARATOR } from './annotations';
 import { formatBlockquote } from './blockquote';
 import { htmlFieldToMarkdown } from './markdown';
 import type {
@@ -237,8 +236,9 @@ export function renderAnnotationCallout(
   const header = annotationHeader(a, colorRaw);
   if (header) {
     const body = annotationBodyLines(a);
+    // Image/ink continuations are already distinct blocks, so they follow one
+    // another with no separator line.
     for (const m of a.continuationMedia ?? []) {
-      body.push(CONTINUATION_MEDIA_SEPARATOR);
       body.push(...annotationBodyLines(m));
     }
     if (a.type === 'image' || a.continuationMedia?.some((m) => m.type === 'image')) {

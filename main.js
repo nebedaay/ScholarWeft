@@ -89629,7 +89629,6 @@ function shouldUpdateOwnNote(existing) {
 // src/template/annotations.ts
 var CONTINUATION = /^\+\s*/;
 var CONTINUATION_SEPARATOR = " ... ";
-var CONTINUATION_MEDIA_SEPARATOR = "...";
 function sortAnnotations(annotations) {
   return [...annotations].sort((a3, b3) => {
     if (a3.sortIndex && b3.sortIndex && a3.sortIndex !== b3.sortIndex) {
@@ -90611,7 +90610,6 @@ function renderAnnotationCallout(a3, opts = {}) {
   if (header) {
     const body = annotationBodyLines(a3);
     for (const m3 of (_c = a3.continuationMedia) != null ? _c : []) {
-      body.push(CONTINUATION_MEDIA_SEPARATOR);
       body.push(...annotationBodyLines(m3));
     }
     if (a3.type === "image" || ((_d = a3.continuationMedia) == null ? void 0 : _d.some((m3) => m3.type === "image"))) {

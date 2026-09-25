@@ -14,8 +14,10 @@
 //       - it is on the SAME attachment (PDF/document).
 //     Its content is appended after " ... " (chaining across several "+"
 //     annotations): excerpt text joins the previous text, image/ink content is
-//     carried as extra blocks in the same callout, page labels become a range,
-//     tags union, and the marker itself is stripped. A "+" that cannot join is
+//     carried as extra blocks in the same callout (no separator line — the
+//     blocks themselves show the break), page labels become a range, tags
+//     union, and the marker itself is stripped. Any comment text after the "+"
+//     joins the previous comment with " ... ". A "+" that cannot join is
 //     still emitted, just without the marker.
 
 import type { NoteContextAnnotation, NoteContextTag } from './context';
@@ -25,9 +27,6 @@ const CONTINUATION = /^\+\s*/;
 
 /** Joins excerpt text / comments of merged annotations. */
 export const CONTINUATION_SEPARATOR = ' ... ';
-
-/** A standalone line placed between merged media blocks in the callout. */
-export const CONTINUATION_MEDIA_SEPARATOR = '...';
 
 /**
  * Zotero's own reading order: `annotationSortIndex`, then date added, then key.

@@ -139,6 +139,21 @@ describe('mergeContinuationAnnotations', () => {
     expect(merged[1].comment).toBeNull();
   });
 
+  it('appends comment text after the "+" to the previous comment', () => {
+    const img = () => 'file:///x.png';
+    const merged = mergeContinuationAnnotations([
+      ann({ key: 'a', type: 'image', imgLink: img, comment: 'first note' }),
+      ann({
+        key: 'b',
+        type: 'image',
+        imgLink: img,
+        comment: '+ second note',
+      }),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].comment).toBe('first note ... second note');
+  });
+
   it('unions tags without duplicating names', () => {
     const merged = mergeContinuationAnnotations([
       ann({ key: 'a', text: 'x', tags: [{ name: 'tawāḍuʿ' } as any] }),
