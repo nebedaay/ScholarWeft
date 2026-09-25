@@ -85,6 +85,7 @@ describe('renderNote()', () => {
     expect(fileName).toBe('@alsaihBughyatAlmustafid2005');
     expect(content.startsWith('---\n')).toBe(true);
     expect(content).toContain('citekey: alsaihBughyatAlmustafid2005');
+    expect(content).toContain('zotero-key: EKUBHHNW');
     // No body title/abstract; Notes outside the region; Annotations inside.
     expect(content).not.toContain('# Bughyat');
     expect(content).toContain('## Notes');

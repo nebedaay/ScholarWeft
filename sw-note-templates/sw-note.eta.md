@@ -45,6 +45,7 @@
 <% add_property('doi', item.DOI); -%>
 <% add_property('citekey', item.citekey); -%>
 <% add_property('zotero-link', item.backlink); -%>
+<% add_property('zotero-key', item.indexedKey); -%>
 <% add_property('attachments', attachment_links()); -%>
 <% add_property('aliases', aliases()); -%>
 <%~ end_YAML() -%>

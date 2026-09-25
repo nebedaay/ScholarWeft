@@ -212,6 +212,14 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(at('attachments')).toBeLessThan(at('aliases'));
   });
 
+  it('writes the stable zotero-key from the item key', () => {
+    expect(out).toContain('zotero-key: EKUBHHNW');
+    // It sits with the other Zotero identifiers (after zotero-link).
+    const at = (key: string) => out.indexOf(`\n${key}:`);
+    expect(at('zotero-link')).toBeLessThan(at('zotero-key'));
+    expect(at('zotero-key')).toBeLessThan(at('attachments'));
+  });
+
   it('leaves no trailing whitespace on any line', () => {
     const bad = out
       .split('\n')

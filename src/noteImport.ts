@@ -8,11 +8,12 @@
 // and the `%%sw-managed%%` region are refreshed; the user's own properties and
 // writing are preserved.
 
-import { TFile, normalizePath } from 'obsidian';
+import { App, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { DEFAULT_ZOTERO_PORT, fetchItemChildrenNative } from './bib/helpers';
 import type { RawZoteroChildren } from './template/children';
-import type { CachedEntry } from './template/context';
+import { indexedKeyFor, type CachedEntry } from './template/context';
+import { matchNoteByZoteroKey } from './template/note-lookup';
 import { renderNote } from './template/render';
 import { getZotlitLiteratureFolder } from './zotlit';
 
@@ -107,6 +108,25 @@ export async function fetchChildren(
 }
 
 /**
+ * Pure: the first note path under `folder` whose frontmatter `zotero-key`
+ * matches. Lets a note be found by its stable Zotero id even after a citekey
+ * rename changed the filename, so re-imports update in place instead of
+ * creating a duplicate.
+ */
+function findNoteByZoteroKey(
+  app: App,
+  folder: string,
+  zoteroKey: string
+): string | null {
+  if (!zoteroKey) return null;
+  const candidates = app.vault.getMarkdownFiles().map((f) => ({
+    path: f.path,
+    zoteroKey: app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'],
+  }));
+  return matchNoteByZoteroKey(candidates, folder, zoteroKey);
+}
+
+/**
  * Create or update a literature note from our own template. Returns `false`
  * (and no file change) when the template asset is missing, so the caller can
  * fall back rather than write an empty note.
@@ -135,7 +155,18 @@ export async function createOrUpdateOwnNote(
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
   });
   const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, '');
-  const notePath = folder ? normalizePath(`${folder}/${base}.md`) : `${base}.md`;
+  let notePath = folder ? normalizePath(`${folder}/${base}.md`) : `${base}.md`;
+
+  // Prefer an existing note found by its stable Zotero key when the filename
+  // no longer matches (a citekey rename would otherwise create a duplicate).
+  const stableKey = indexedKeyFor(
+    typeof entry?._zoteroKey === 'string' ? entry._zoteroKey : '',
+    groupID
+  );
+  if (stableKey && !(await app.vault.adapter.exists(notePath))) {
+    const byKey = findNoteByZoteroKey(app, folder, stableKey);
+    if (byKey) notePath = byKey;
+  }
 
   let existing: string | null = null;
   if (await app.vault.adapter.exists(notePath)) {
