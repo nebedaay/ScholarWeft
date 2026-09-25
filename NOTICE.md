@@ -1,3 +1,6 @@
+---
+created: 2026-08-25 20:38
+---
 # Third-Party Notices
 
 ScholarWeft incorporates code from the following open-source projects.
@@ -128,6 +131,10 @@ adapted from its source:
   (Zotero annotation colour → palette name). The two legacy/importer-written
   colours are mapped to the nearest current colour rather than given their own
   names; that mapping is ScholarWeft's choice, not ZotLit's.
+- `src/template/zotlit-helpers.ts` — adapted from
+  `packages/templates/src/{basename,embed,filename-suffix,coerce}.ts` (the
+  `basename`, `embed`, filename-collision `suffix` helpers, and the
+  `coerceOutput` filter) so a template written for ZotLit renders the same here.
 
 `src/template/engine.ts` reproduces ZotLit's Eta configuration (data-root name,
 auto-trim, `bq`/`basename`/`suffix`/`embed` helpers, and `include` semantics) so
