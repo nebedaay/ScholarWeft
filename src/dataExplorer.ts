@@ -54,6 +54,14 @@ export class DataExplorerView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.render();
+    // `bibCache` is empty until the library finishes loading, so re-render once
+    // it does (unless the view was closed meanwhile).
+    try {
+      await this.plugin.bibManager?.initPromise?.promise;
+      if (this.containerEl.isConnected) this.render();
+    } catch {
+      /* library load failed — keep the empty-state message */
+    }
   }
 
   private reloadEntries(): void {

@@ -91281,7 +91281,14 @@ var DataExplorerView = class extends import_obsidian21.ItemView {
     return "library";
   }
   async onOpen() {
+    var _a, _b;
     this.render();
+    try {
+      await ((_b = (_a = this.plugin.bibManager) == null ? void 0 : _a.initPromise) == null ? void 0 : _b.promise);
+      if (this.containerEl.isConnected)
+        this.render();
+    } catch (e3) {
+    }
   }
   reloadEntries() {
     var _a, _b;
