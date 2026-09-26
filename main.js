@@ -90634,7 +90634,7 @@ function renderAnnotationCallout(a3, opts = {}) {
   if (header) {
     const body = annotationBodyLines(a3);
     for (const m3 of (_c = a3.continuationMedia) != null ? _c : []) {
-      body.push("", ...annotationBodyLines(m3));
+      body.push(">", ...annotationBodyLines(m3));
     }
     if (a3.type === "image" || ((_d = a3.continuationMedia) == null ? void 0 : _d.some((m3) => m3.type === "image"))) {
       body.push("> - [[image annotations|images]]");

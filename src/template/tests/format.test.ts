@@ -142,10 +142,11 @@ describe('renderAnnotationCallout() — image/ink', () => {
         continuationMedia: [continuation],
       })
     );
-    // Both images sit in one callout, with a blank `>` line between blocks.
+    // Both images sit in one callout, with a blank `> >` line INSIDE it (a
+    // lone `>` would close the nested callout).
     expect(out).toContain('> > ![[img.png]]');
     expect(out).toContain('> > ![[b.png]]');
-    expect(out).toContain('>\n> > ![[b.png]]');
+    expect(out).toContain('> >\n> > ![[b.png]]');
     expect(out).not.toContain('> ...');
     // The sub-callout id appears once, not per image.
     expect(out.match(/\[!ann-image-blue\]/g)).toHaveLength(1);

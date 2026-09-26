@@ -237,9 +237,11 @@ export function renderAnnotationCallout(
   if (header) {
     const body = annotationBodyLines(a);
     // Each image/ink continuation is its own block; a blank line between blocks
-    // keeps them visually separate (an empty string renders as a lone `>`).
+    // keeps them visually separate. Push `'>'`, not `''`: formatBlockquote turns
+    // an empty line into a lone `>` (which would CLOSE the nested callout), but
+    // `'>'` into `> >`, a blank line that stays inside it.
     for (const m of a.continuationMedia ?? []) {
-      body.push('', ...annotationBodyLines(m));
+      body.push('>', ...annotationBodyLines(m));
     }
     if (a.type === 'image' || a.continuationMedia?.some((m) => m.type === 'image')) {
       body.push('> - [[image annotations|images]]');
