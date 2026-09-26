@@ -34,6 +34,7 @@ import { openDocs } from './docs';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
 import { debugLog } from './helpers';
 import { zotlitIsNoteImportPath } from './template/import-path';
+import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
   pathToPandoc: '',
@@ -72,10 +73,10 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   ownNoteImageFolder: 'Attachments',
   /** How to treat an existing ZotLit note when our template renders it. */
   ownNoteZotLitHandling: 'ask',
-  /** Use ZotLit's configured literature-note folder for the plugin's own
-   *  notes too, read live from ZotLit (so it follows a change there). When on,
-   *  `literatureNoteFolder` below is ignored. */
-  useZotlitLiteratureFolder: true,
+  /** Where ScholarWeft creates its own literature notes (vault-relative). Used
+   *  by the own-template import path, whose settings show this field; when
+   *  ZotLit is the chosen path, ZotLit's own folder applies instead. */
+  literatureNoteFolder: DEFAULT_LITERATURE_NOTE_FOLDER,
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default: opening in Zotero already reveals all
    *  attachments, and the lookup costs per-citekey network time. */
@@ -168,8 +169,12 @@ export interface ReferenceListSettings {
    */
   formatLinkAliases?: boolean;
 
+  /** Where ScholarWeft creates its own literature notes (vault-relative; blank
+   *  means the vault root). Shown under "Import literature notes with
+   *  ScholarWeft". When ZotLit is the chosen path, ZotLit's folder applies. */
   literatureNoteFolder?: string;
-  /** Use ZotLit's literature-note folder (read live) instead of the one above. */
+  /** @deprecated Kept only to read settings written by earlier versions; the
+   *  folder now follows the selected import path. No longer surfaced. */
   useZotlitLiteratureFolder?: boolean;
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default (opening in Zotero shows all attachments; the
@@ -1021,7 +1026,28 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         })
       );
 
+    // Folder where ScholarWeft's own notes go: shown with the own import (the
+    // default), because that is the path whose output it controls. It sits
+    // directly under the toggle so the pairing is obvious.
     if (useOwn) {
+      new Setting(containerEl)
+        .setName(t('Literature notes folder'))
+        .setDesc(
+          t(
+            'Vault folder where literature notes are created (relative to the vault root). Leave blank to create them at the vault root.'
+          )
+        )
+        .addText((text) => {
+          text
+            .setPlaceholder(DEFAULT_LITERATURE_NOTE_FOLDER)
+            .setValue(this.plugin.settings.literatureNoteFolder ?? '')
+            .onChange((value) => {
+              this.plugin.settings.literatureNoteFolder = value;
+              this.plugin.saveSettings();
+            });
+          new FolderSuggest(this.app, text.inputEl);
+        });
+
       new Setting(containerEl)
         .setName(t('Excerpt-image folder'))
         .setDesc(
@@ -1081,8 +1107,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       return;
     }
 
-    const useZotlitFolder = !!this.plugin.settings.useZotlitLiteratureFolder;
-    const zotlitFolder = getZotlitLiteratureFolder(this.app);
+    const zotlitFolder = getZotlitLiteratureFolder(this.app) || '(not set)';
     const useZotlitForNotes = this.plugin.settings.createNotesWithZotLit !== false;
 
     new Setting(containerEl)
@@ -1093,7 +1118,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Create literature notes with ZotLit'))
       .setDesc(
         t(
-          'Create and refresh notes with ZotLit\'s templates instead of ScholarWeft\'s own. Falls back to ScholarWeft when ZotLit is absent or this is off.'
+          `Create and refresh notes with ZotLit's templates instead of ScholarWeft's own. Notes are created in ZotLit's own literature-note folder, currently "${zotlitFolder}", so all literature notes stay in one place. To change that folder, use ZotLit's settings. Falls back to ScholarWeft when ZotLit is absent or this is off.`
         )
       )
       .addToggle((toggle) =>
@@ -1101,53 +1126,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(useZotlitForNotes)
           .onChange((value) => {
             this.plugin.settings.createNotesWithZotLit = value;
-            // Creating notes with ZotLit but storing them elsewhere makes little
-            // sense, so keep the two in step by default.
-            if (value) this.plugin.settings.useZotlitLiteratureFolder = true;
             this.plugin.saveSettings();
-            this.display();
           })
       );
-
-    if (useZotlitForNotes) {
-      new Setting(containerEl)
-        .setName(t("Use ZotLit's literature note folder"))
-        .setDesc(
-          t(
-            "Use ZotLit's configured literature note folder for the plugin's own notes too, so both create notes in the same place. It is read live from ZotLit, so it follows the folder if ZotLit's setting changes." +
-              (useZotlitFolder
-                ? ` ZotLit's folder is currently: ${zotlitFolder || '(not set)'}.`
-                : '')
-          )
-        )
-        .addToggle((toggle) =>
-          toggle.setValue(useZotlitFolder).onChange((value) => {
-            this.plugin.settings.useZotlitLiteratureFolder = value;
-            this.plugin.saveSettings();
-            this.display();
-          })
-        );
-    }
-
-    if (!useZotlitFolder) {
-      new Setting(containerEl)
-        .setName(t('Literature notes folder'))
-        .setDesc(
-          t(
-            'Folder where the plugin\'s own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.'
-          )
-        )
-        .addText((text) => {
-          text
-            .setPlaceholder('_2 Bibliographic notes')
-            .setValue(this.plugin.settings.literatureNoteFolder ?? '')
-            .onChange((value) => {
-              this.plugin.settings.literatureNoteFolder = value;
-              this.plugin.saveSettings();
-            });
-          new FolderSuggest(this.app, text.inputEl);
-        });
-    }
 
     // ZotLit-only actions: needed only by the ZotLit import path, so they live
     // in this section and nowhere else.

@@ -37,6 +37,7 @@ import {
 import { cite } from 'src/parser/citeproc';
 import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
+import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
@@ -2454,15 +2455,14 @@ export class BibManager {
           : zoteroItemKey;
     }
 
-    // ZotLit's configured literature-note folder (read live). With the "Use
-    // ZotLit's literature note folder" setting on it takes priority over the
-    // plugin's own; either way it is the default fallback, so notes land in the
-    // same place whether created by ZotLit or by this fallback.
-    const zotlitFolder = getZotlitLiteratureFolder(app);
-    const settingsFolder = (this.plugin.settings.literatureNoteFolder ?? '').trim();
-    const folder = this.plugin.settings.useZotlitLiteratureFolder
-      ? zotlitFolder || settingsFolder || '_2 Bibliographic notes'
-      : settingsFolder || zotlitFolder || '_2 Bibliographic notes';
+    // Where the note goes: shares one rule with the own import path and the
+    // settings page (see resolveLiteratureNoteFolder) so all three agree —
+    // ZotLit's folder when it is the chosen path, ours otherwise.
+    const folder = resolveLiteratureNoteFolder({
+      useOwnNoteTemplate: this.plugin.settings.useOwnNoteTemplate,
+      literatureNoteFolder: this.plugin.settings.literatureNoteFolder,
+      zotlitFolder: getZotlitLiteratureFolder(app),
+    });
     const filename = `@${citekey}.md`;
     const notePath = folder ? normalizePath(`${folder}/${filename}`) : filename;
 
@@ -2581,16 +2581,27 @@ export class BibManager {
   }
 
   /**
-   * Scan literature notes (default: `_2 Bibliographic notes/`) and rename any
-   * note whose `@filename` stem differs from its frontmatter `citekey:`. The
-   * citekey in frontmatter is authoritative (it tracks citekey migrations);
-   * the filename is what links use, so rename the file to `@<citekey>.md`.
-   * Obsidian propagates `[[@old]]` → `[[@new]]` links on rename automatically.
+   * Scan the literature-note folder and rename any note whose `@filename` stem
+   * differs from its frontmatter `citekey:`. The citekey in frontmatter is
+   * authoritative (it tracks citekey migrations); the filename is what links
+   * use, so rename the file to `@<citekey>.md`. Obsidian propagates
+   * `[[@old]]` → `[[@new]]` links on rename automatically.
+   *
+   * The folder defaults to whichever one the selected import path uses, so the
+   * rename sweep follows the same rule as creation.
    * Returns a list of {from, to} performed.
    */
-  async syncLitNoteFilenames(folder = '_2 Bibliographic notes') {
+  async syncLitNoteFilenames(folder?: string) {
+    const target =
+      folder ??
+      resolveLiteratureNoteFolder({
+        useOwnNoteTemplate: this.plugin.settings.useOwnNoteTemplate,
+        literatureNoteFolder: this.plugin.settings.literatureNoteFolder,
+        zotlitFolder: getZotlitLiteratureFolder(app),
+      });
     const results: { from: string; to: string }[] = [];
-    const dir = app.vault.getAbstractFileByPath(folder);
+    if (!target) return results;
+    const dir = app.vault.getAbstractFileByPath(target);
     if (!(dir instanceof TFolder)) return results;
     const files = dir.children.filter(
       (f): f is TFile => f instanceof TFile && /^@.+\.md$/.test(f.name)

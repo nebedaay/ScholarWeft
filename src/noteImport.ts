@@ -13,6 +13,11 @@ import type ReferenceList from './main';
 import { DEFAULT_ZOTERO_PORT, fetchItemChildrenNative } from './bib/helpers';
 import type { RawZoteroChildren } from './template/children';
 import {
+  DEFAULT_LITERATURE_NOTE_FOLDER,
+  resolveLiteratureNoteFolder,
+} from './template/lit-folder';
+export { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
+import {
   excerptImageName,
   findPreviousImagePath,
 } from './template/excerpt-images';
@@ -74,13 +79,13 @@ export function resolveZoteroDataDir(configured?: string): string | null {
   return null;
 }
 
-/** The literature-note folder, matching the existing creation paths. */
+/** The literature-note folder for ScholarWeft's own notes. */
 export function literatureNoteFolder(plugin: ReferenceList): string {
-  const zotlitFolder = getZotlitLiteratureFolder(plugin.app);
-  const settingsFolder = (plugin.settings.literatureNoteFolder ?? '').trim();
-  return plugin.settings.useZotlitLiteratureFolder
-    ? zotlitFolder || settingsFolder || '_2 Bibliographic notes'
-    : settingsFolder || zotlitFolder || '_2 Bibliographic notes';
+  return resolveLiteratureNoteFolder({
+    useOwnNoteTemplate: plugin.settings.useOwnNoteTemplate,
+    literatureNoteFolder: plugin.settings.literatureNoteFolder,
+    zotlitFolder: getZotlitLiteratureFolder(plugin.app),
+  });
 }
 
 /** Read the bundled own note template; also used by the data explorer preview. */
