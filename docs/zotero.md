@@ -40,7 +40,7 @@ The native API works on mobile when Zotero is running and reachable by IP on the
 
 ## Searching
 
-`@` gives citekey autocomplete; `@@` gives full-text title/author search (via ZotLit's database when ZotLit is installed, otherwise the plugin's own index). See [Citations](./citations.md).
+`@` gives citekey autocomplete; `@@` gives title/author search and `@@@` adds the abstract, both on ScholarWeft's own index (no ZotLit needed). See [Citations](./citations.md).
 
 ## Styles and refreshing
 
