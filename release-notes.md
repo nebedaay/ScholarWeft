@@ -23,7 +23,7 @@ Choosing ZotLit instead puts notes in **ZotLit's own folder** (read live, so it 
 - **Annotations** keep Zotero's PDF reading order, and a `+` comment merges into the previous annotation — including rectangular image selections — with the pages shown as a range.
 - **Excerpt images** are copied into your vault (folder configurable, default `Attachments`) and embedded so they actually display in Obsidian, with a "view image" link that opens inside Obsidian rather than the system viewer.
 - **Re-importing refreshes only the managed region** (between `%%sw-managed%%` markers) and the template's own frontmatter fields. Everything you write, above or below the region, is left alone.
-- Frontmatter mirrors the ZotLit field set, with `abstract` and `title` kept as Markdown and `related` always present.
+- Frontmatter mirrors the ZotLit field set, with `abstract` and `title` kept as Markdown.
 
 ### Two related properties, with clear owners
 
@@ -32,6 +32,10 @@ Choosing ZotLit instead puts notes in **ZotLit's own folder** (read live, so it 
 `sw-related:` is **Zotero's**. It holds the item's Zotero tags and Related items as `[[…]]` links, and is rebuilt on every import — so a tag or related link you remove in Zotero disappears from the note on the next update, with no stale entries to prune by hand.
 
 **Upgrading?** Notes created before `sw-related` existed have Zotero's tags and related links sitting in `related:`. The first time ScholarWeft updates such a note, that tidy-up runs once: entries Zotero still supplies move to `sw-related:` (where they're now maintained), and your own links stay. Entries Zotero no longer has are left alone rather than deleted — they're your only remaining record of them. Because the transition is recorded per Zotero item, it happens **exactly once**; afterwards `related:` is completely yours and is never written to again.
+
+### Updating no longer depends on which import path you chose
+
+The update commands used to refuse if you had switched to ZotLit — even for a note ScholarWeft had written. They now look at the **note's** format instead: an `%%sw-managed%%` region means ScholarWeft's, `%%zt-managed%%` means ZotLit's, and a note with a Zotero key but no region is ScholarWeft's too. A prompt appears **only when the note's format differs** from what your current setting would apply, naming both and offering to proceed or to change the setting first. Same-format refreshes stay silent, so routine updates are unchanged.
 
 ### ZotLit notes are handled carefully
 
