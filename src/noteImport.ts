@@ -12,6 +12,10 @@ import { App, Notice, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { DEFAULT_ZOTERO_PORT, fetchItemChildrenNative } from './bib/helpers';
 import type { RawZoteroChildren } from './template/children';
+import {
+  excerptImageName,
+  findPreviousImagePath,
+} from './template/excerpt-images';
 import { indexedKeyFor, type CachedEntry } from './template/context';
 import {
   findAvailableNotePath,
@@ -216,16 +220,19 @@ async function copyExcerptImages(
     if (!fs.existsSync(source)) continue;
 
     const page = annotationPage(data.annotationPosition);
-    const name = `@${citekey}${page != null ? `_p${page}` : ''}_${key}.png`;
-    const desired = normalizePath(`${folder}/${name}`);
+    const desired = normalizePath(
+      `${folder}/${excerptImageName(citekey, page, key)}`
+    );
 
     try {
       if (await adapter.exists(desired)) {
         copied.set(key, desired);
         continue;
       }
-      // An older copy of THIS annotation under a different citekey/page.
-      const previous = files.find((f) => f.endsWith(`_${key}.png`));
+      // An older copy of THIS annotation — our previous name, or ZotLit's bare
+      // `<key>.png` — renamed in place so the readable part follows the citekey
+      // and no duplicate is left behind.
+      const previous = findPreviousImagePath(files, key);
       if (previous) {
         await adapter.rename(previous, desired);
         const i = files.indexOf(previous);

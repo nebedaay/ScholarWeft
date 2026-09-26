@@ -1885,6 +1885,21 @@ export default class ReferenceList extends Plugin {
           msg += `\nRenamed ${renamed.length} literature note${renamed.length !== 1 ? 's' : ''}: ` +
             renamed.map((r) => `${r.from.split('/').pop()} → ${r.to.split('/').pop()}`).join(', ');
         }
+
+        // A citekey change also moves our excerpt images (`@<citekey>_…`), so
+        // re-render the renamed notes through our own path to rename them.
+        if (this.settings.useOwnNoteTemplate === true && renamed.length) {
+          let refreshed = 0;
+          for (const r of renamed) {
+            const file = this.app.vault.getAbstractFileByPath(r.to);
+            if (file instanceof TFile && (await this.updateLiteratureNote(file))) {
+              refreshed++;
+            }
+          }
+          if (refreshed) {
+            msg += `\nRefreshed ${refreshed} note${refreshed !== 1 ? 's' : ''} (content + excerpt images).`;
+          }
+        }
       }
 
       new Notice(msg, 6000);

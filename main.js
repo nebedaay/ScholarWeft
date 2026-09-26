@@ -89105,6 +89105,15 @@ var import_obsidian22 = __toModule(require("obsidian"));
 // src/noteImport.ts
 var import_obsidian21 = __toModule(require("obsidian"));
 
+// src/template/excerpt-images.ts
+function excerptImageName(citekey, page, key) {
+  return `@${citekey}${page != null ? `_p${page}` : ""}_${key}.png`;
+}
+function findPreviousImagePath(files, key) {
+  var _a;
+  return (_a = files.find((f3) => f3.endsWith(`_${key}.png`))) != null ? _a : files.find((f3) => f3.endsWith(`/${key}.png`));
+}
+
 // src/bib/extra.ts
 var EXTRA_PAIR_RE = /^([A-Za-z][\w .-]*?)\s*[:=]\s*(.+)$/;
 var EXTRA_CSL_FIELDS = new Set([
@@ -91381,14 +91390,13 @@ async function copyExcerptImages(plugin, citekey, children, groupID, dataDir) {
     if (!fs2.existsSync(source))
       continue;
     const page = annotationPage(data.annotationPosition);
-    const name = `@${citekey}${page != null ? `_p${page}` : ""}_${key}.png`;
-    const desired = (0, import_obsidian21.normalizePath)(`${folder}/${name}`);
+    const desired = (0, import_obsidian21.normalizePath)(`${folder}/${excerptImageName(citekey, page, key)}`);
     try {
       if (await adapter.exists(desired)) {
         copied.set(key, desired);
         continue;
       }
-      const previous = files.find((f3) => f3.endsWith(`_${key}.png`));
+      const previous = findPreviousImagePath(files, key);
       if (previous) {
         await adapter.rename(previous, desired);
         const i3 = files.indexOf(previous);
@@ -99610,6 +99618,19 @@ var ReferenceList = class extends import_obsidian33.Plugin {
         if (renamed.length) {
           msg += `
 Renamed ${renamed.length} literature note${renamed.length !== 1 ? "s" : ""}: ` + renamed.map((r3) => `${r3.from.split("/").pop()} \u2192 ${r3.to.split("/").pop()}`).join(", ");
+        }
+        if (this.settings.useOwnNoteTemplate === true && renamed.length) {
+          let refreshed = 0;
+          for (const r3 of renamed) {
+            const file = this.app.vault.getAbstractFileByPath(r3.to);
+            if (file instanceof import_obsidian33.TFile && await this.updateLiteratureNote(file)) {
+              refreshed++;
+            }
+          }
+          if (refreshed) {
+            msg += `
+Refreshed ${refreshed} note${refreshed !== 1 ? "s" : ""} (content + excerpt images).`;
+          }
         }
       }
       new import_obsidian33.Notice(msg, 6e3);
