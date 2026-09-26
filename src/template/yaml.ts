@@ -32,7 +32,7 @@ export type YamlValue = YamlScalar | YamlScalar[] | null | undefined;
  *     are added, so hand-added tags/links survive;
  *   - `keep`: the existing value wins unless it is empty (write-once).
  */
-export type FrontmatterMerge = 'replace' | 'append' | 'keep';
+export type FrontmatterMerge = 'replace' | 'append' | 'keep' | 'subtract';
 
 export interface YamlPropertyOptions {
   /**
@@ -46,8 +46,21 @@ export interface YamlPropertyOptions {
    * never quoted regardless.
    */
   quote?: 'auto' | 'always' | 'never';
-  /** Re-import reconciliation strategy. Default `replace`. */
+  /**
+   * Re-import reconciliation strategy. Default `replace`.
+   *
+   * - `replace` — the template's value wins (Zotero-owned data).
+   * - `append` — union, keeping existing items (the user's own list).
+   * - `keep` — write once, then never touch again.
+   * - `subtract` — migration only: drop existing items that a *different*
+   *   property now owns, and add nothing.
+   */
   merge?: FrontmatterMerge;
+  /**
+   * For `merge: 'subtract'` only — the key of the property that now owns the
+   * list (see `YamlFieldSpec.subtractFrom`).
+   */
+  subtractFrom?: string;
 }
 
 /** One managed property: its key, merge strategy, and rendered lines. */
@@ -56,6 +69,12 @@ export interface YamlFieldSpec {
   merge: FrontmatterMerge;
   /** Serialised lines (empty when the value was omitted). */
   lines: string[];
+  /**
+   * For `merge: 'subtract'` only — the key of the property that now owns this
+   * list. Items shared with that property's freshly-rendered value are removed
+   * from this one, so an upgrade doesn't leave the same link in two places.
+   */
+  subtractFrom?: string;
 }
 
 const INDENT = '  ';
@@ -194,7 +213,12 @@ export class YamlBuilder {
     this.lines.push(...lines);
     // Record EVERY managed key, even one omitted for being empty, so a
     // re-import knows it is in scope (an empty `replace` removes it).
-    this.specs.push({ key, merge: opts?.merge ?? 'replace', lines });
+    this.specs.push({
+      key,
+      merge: opts?.merge ?? 'replace',
+      subtractFrom: opts?.subtractFrom,
+      lines,
+    });
   }
 
   /** The managed fields, in template order, for the re-import merge. */

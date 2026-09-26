@@ -31,6 +31,8 @@ Choosing ZotLit instead puts notes in **ZotLit's own folder** (read live, so it 
 
 `sw-related:` is **Zotero's**. It holds the item's Zotero tags and Related items as `[[…]]` links, and is rebuilt on every import — so a tag or related link you remove in Zotero disappears from the note on the next update, with no stale entries to prune by hand.
 
+**Upgrading?** Notes created before `sw-related` existed have Zotero's tags and related links sitting in `related:`. Updating such a note tidies that up automatically: entries Zotero still supplies are removed from `related:` (they now live in `sw-related:`), and your own links stay. Entries Zotero no longer has are left alone rather than deleted — they're your only remaining record of them.
+
 ### ZotLit notes are handled carefully
 
 If a note was created by ZotLit, ScholarWeft **asks before converting it**: convert it (remembered for the notes you update) or leave ZotLit's area as it is (you will be asked again next time). The preference can also be pinned in the **ZotLit notes** setting. Converting removes an empty ZotLit annotation region; ScholarWeft never writes an empty region of its own.

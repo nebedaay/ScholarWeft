@@ -105,6 +105,10 @@ function isListBlock(lines: string[]): boolean {
   );
 }
 
+/**
+ * Union two list blocks: existing items first (order preserved), then generated
+ * items that aren't already present. Never removes anything.
+ */
 function appendListItems(existing: string[], generated: string[]): string[] {
   const head = existing[0] ?? generated[0];
   const seen = new Set(existing.slice(1).map((l) => l.trim()));
@@ -115,6 +119,22 @@ function appendListItems(existing: string[], generated: string[]): string[] {
     out.push(item);
   }
   return [head, ...out];
+}
+
+/**
+ * Drop existing items that the generated list also contains, WITHOUT adding any
+ * of the generated items. Used to clean up a value that a previous version
+ * wrote into the wrong property: the duplicate is removed from here because it
+ * now lives (and is maintained) in the other property.
+ *
+ * Nothing is added, so a note can only ever lose items it already shared with
+ * the generated list — and only the ones the template explicitly claims.
+ */
+function subtractListItems(existing: string[], generated: string[]): string[] {
+  const head = existing[0] ?? generated[0];
+  const claimed = new Set(generated.slice(1).map((l) => l.trim()));
+  const kept = existing.slice(1).filter((l) => !claimed.has(l.trim()));
+  return [head, ...kept];
 }
 
 function reconcile(
@@ -134,6 +154,17 @@ function reconcile(
       // Shape mismatch (e.g. a scalar where a list is rendered): fall back to
       // letting the template win rather than corrupting the existing value.
       return generated;
+    case 'subtract':
+      // Migration only: remove duplicates of a list that a DIFFERENT property
+      // now owns, and add nothing. `migrateFromKey` names that property, whose
+      // spec is resolved by the caller (it holds the freshly-rendered items).
+      // When the note had nothing, fall back to the existing value: the Zotero
+      // list lives in the owning property, so `related` stays the user's.
+      if (!has) return existing ?? [];
+      if (isListBlock(existing!) && isListBlock(generated)) {
+        return subtractListItems(existing!, generated);
+      }
+      return existing!;
     case 'replace':
     default:
       return generated;
@@ -151,6 +182,18 @@ export function mergeFrontmatter(
 ): string {
   const existing = parseFrontmatter(existingFrontmatter ?? '');
   const byKey = new Map(specs.map((s) => [s.key, s]));
+
+  // A `subtract` property references the property that now OWNS the list (its
+  // lines are the freshly-rendered items). Resolve that here so `reconcile`
+  // stays a pure comparison of two line blocks.
+  const subtractAgainst = new Map<string, string[]>();
+  for (const spec of specs) {
+    if (spec.merge === 'subtract' && spec.subtractFrom) {
+      const owner = byKey.get(spec.subtractFrom);
+      if (owner) subtractAgainst.set(spec.key, owner.lines);
+    }
+  }
+
   const emitted = new Set<string>();
   const out: string[] = [];
 
@@ -161,7 +204,9 @@ export function mergeFrontmatter(
       continue;
     }
     emitted.add(spec.key);
-    out.push(...reconcile(spec.merge, prop.lines, spec.lines));
+    out.push(
+      ...reconcile(spec.merge, prop.lines, subtractAgainst.get(spec.key) ?? spec.lines)
+    );
   }
 
   for (const spec of specs) {

@@ -154,6 +154,57 @@ describe('sw-related: Zotero references and tags', () => {
     expect(merged.content).toContain('"[[my-own-note]]"');
   });
 
+  it('migrates an upgraded note: duplicates leave related:, the rest survives', () => {
+    // A note from the previous release: Zotero's tags/related items were written
+    // into `related:`, mixed in with the user's own links. The user has since
+    // removed one of those tags in Zotero.
+    const existing = [
+      '---',
+      'zotero-key: EKUBHHNW',
+      'related:',
+      '  - "[[my-own-note]]"',
+      '  - "[[@other2020]]"',
+      '  - "[[@another2021]]"',
+      '  - "[[a-tag-i-deleted-in-zotero]]"',
+      '  - "[[a-tag-zotero-still-has]]"',
+      '---',
+      '',
+      '## Notes',
+      '',
+    ].join('\n');
+
+    const merged = renderNote(
+      { ...entry, _tags: ['a-tag-zotero-still-has'] } as CachedEntry,
+      withRelated,
+      {
+        templateSource: template,
+        dataDir: '/zot',
+        importDate: '2026-09-25',
+        existingContent: existing,
+      }
+    );
+
+    const relatedBlock = /(?:^|\n)related:\n((?: {2}- .*\n)+)/.exec(
+      merged.content
+    )?.[1];
+    const swBlock = /(?:^|\n)sw-related:\n((?: {2}- .*\n)+)/.exec(
+      merged.content
+    )?.[1];
+
+    // The user's own link is untouched.
+    expect(relatedBlock).toContain('my-own-note');
+    // Items Zotero still supplies were removed from `related:`...
+    expect(relatedBlock).not.toContain('other2020');
+    expect(relatedBlock).not.toContain('another2021');
+    expect(relatedBlock).not.toContain('a-tag-zotero-still-has');
+    // ...but the tag deleted in Zotero was NOT removed from `related:`.
+    // It is the user's only record of it now, so dropping it would lose data.
+    expect(relatedBlock).toContain('a-tag-i-deleted-in-zotero');
+    // Zotero's current list lives in sw-related.
+    expect(swBlock).toContain('other2020');
+    expect(swBlock).toContain('a-tag-zotero-still-has');
+  });
+
   it('never touches the user’s related: list', () => {
     const existing = [
       '---',
