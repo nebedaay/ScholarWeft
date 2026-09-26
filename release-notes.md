@@ -12,6 +12,12 @@ Notes are found by their stable Zotero item key, so renaming a note (or changing
 
 ZotLit is no longer installed or required by the setup script. If you prefer it, turn **Import literature notes with ScholarWeft** off under **Settings → ScholarWeft → Literature note import** and choose ZotLit; the ZotLit options (including installing ScholarWeft's ZotLit import templates) appear only then.
 
+### Where notes go now follows the import path
+
+The **Literature notes folder** setting sits directly under **Import literature notes with ScholarWeft** and is shown whenever ScholarWeft is importing (the default). The default folder is now the generic **Literature Notes**, and clearing the field still means the vault root.
+
+Choosing ZotLit instead puts notes in **ZotLit's own folder** (read live, so it follows a change made in ZotLit's settings), keeping all literature notes in one place. The old separate "Use ZotLit's literature note folder" toggle is gone — there is now only one answer to where notes go.
+
 ### Annotations, images, and your own writing
 
 - **Annotations** keep Zotero's PDF reading order, and a `+` comment merges into the previous annotation — including rectangular image selections — with the pages shown as a range.

@@ -1,7 +1,7 @@
 {
 	"id": "scholar-weft",
 	"name": "ScholarWeft",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"minAppVersion": "1.4.4",
 	"description": "Weaves your Zotero library into Obsidian's linked-note universe: linked citations that are real wikilinks and formatted citations, a live reference sidebar, citekey autocomplete, literature notes, and a Word/PDF book compiler.",
 	"author": "Joseph Hill",
