@@ -46,7 +46,7 @@ If you'd rather do it by hand: download the latest from <https://obsidian.md/dow
 
 **The script does all of the following steps for you, except those you’ve already done or opt out of**:
 
-- installs/updates the Obsidian and Zotero apps
+- installs/updates Obsidian and Zotero
 - adds the ScholarWeft plugin to Obsidian and the Better BibTeX add-on to Zotero
 - switches on Zotero's local connection
 - and installs the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts)
@@ -83,7 +83,7 @@ powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 
 It is **interactive** (`y` / `n` / `q` as single keypresses before each step), safe to re-run, and finds your Obsidian vault on its own (asking which one if you have several). At the end it prints a **summary** of what **succeeded**, what **failed** (with the reason), and what you **skipped** — so you can fix a failure and run it again, or finish that one step by hand below.
 
-> The citation features need **none** of the document tools — only **Obsidian + Zotero** (and optionally Better BibTeX/ZotLit). You can answer `n` to the Python/Pandoc/LibreOffice/LaTeX questions if you only want to cite and read; the manual steps below work the same way.
+> The citation features need **none** of the document tools — only **Obsidian + Zotero** (although Better BibTeX is recommended to help generate citekeys). You can answer `n` to the Python/Pandoc/LibreOffice/LaTeX questions if you only want to cite and read; the manual steps below work the same way.
 
 ---
 
@@ -137,7 +137,7 @@ Download: <https://www.zotero.org/download/> — install the **Zotero** app (not
 
 ## 3. Better BibTeX (recommended)
 
-Better BibTeX (BBT) is a Zotero add-on that gives every item a stable **citekey** (e.g. `smithTitleYear`) — the short name you type in citations — so you don’t have to add one by hand to every Zotero reference. It is the easiest way to get citekeys, and ZotLit needs it. (ScholarWeft can also use Zotero's built-in API without BBT, but BBT is recommended.)
+Better BibTeX (BBT) is a Zotero add-on that gives every item a stable **citekey** (e.g. `smithTitleYear`) — the short name you type in citations — so you don’t have to add one by hand to every Zotero reference. It is the easiest way to get citekeys. (ScholarWeft can also use Zotero's built-in API without BBT, but BBT is recommended.)
 
 1. Download the BBT `.xpi` file: <https://retorque.re/zotero-better-bibtex/installation/> (click the download link for the latest version; it saves as a `.xpi`).
 2. In **Zotero**: menu **Tools → Plugins** (older: **Tools → Add-ons**).
@@ -150,21 +150,7 @@ BBT generates citekeys automatically. If an item has no citekey yet, right-click
 
 ---
 
-## 4. ZotLit (optional)
-
-**You do not need ZotLit** — ScholarWeft creates and refreshes literature notes itself, and that is the default (see [Literature Notes](./literature-notes.md)). Install ZotLit only if you already use it or prefer its templates. It needs Better BibTeX from Step 3, and it has **two halves**: the Obsidian plugin below, and a small add-on inside Zotero (you'll see `zotlit@aidenlx.site` in Zotero's Add-ons). Follow ZotLit's own instructions (<https://zotlit.aidenlx.top/>).
-
-> **ZotLit won't enable, or errors when you turn it on?** This is almost always an Obsidian **installer below 1.13.4** (not an out-of-date app). Re-run the [setup script](#the-easy-way-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> and try again — see [Step 1](#1-install-obsidian). Your vault and settings are untouched.
-
-1. In **Obsidian**: **Settings** (gear, bottom-left) → **Community plugins**.
-2. If you see **Restricted mode** / **Turn on community plugins**, click **Turn on community plugins** and confirm.
-3. Click **Browse**, type `ZotLit`, click **Install**, then **Enable**.
-4. In **Settings → ScholarWeft → Literature note import**, turn **Import literature notes with ScholarWeft** *off* and **Create literature notes with ZotLit** *on*. ZotLit-only options appear only then. Click **Install and use ScholarWeft's ZotLit import templates**. This copies ScholarWeft's ZotLit templates into a dedicated `sw-zotlit-templates/` folder and points ZotLit's **Template folder** setting at it, leaving your own templates untouched. It also writes ScholarWeft's **frontmatter field mappings** into ZotLit's settings — ZotLit builds each note's frontmatter from its settings, not from the templates, so the mappings are what make the imported properties (title, authors, `up`, `related`, …) come out the same way. It turns on ZotLit's **JavaScript templates** setting too (a *per-device* setting, off by default, without which the templates stay inert). ZotLit's previous settings are backed up as `data.json.scholarweft.bak`.
-5. ZotLit imports a note's Zotero child notes as separate files rather than into the literature note. Back on that settings page, use **Insert Zotero notes into literature notes** (or the matching command) to fold them in.
-
----
-
-## 5. Install the ScholarWeft plugin
+## 4. Install the ScholarWeft plugin
 
 ### Option A — BRAT (recommended; keeps it updated)
 
@@ -189,7 +175,7 @@ BRAT checks for updates automatically; you can force one from BRAT's settings (*
 
 ---
 
-## 6. Optional: document import/export tools
+## 5. Optional: document import/export tools
 
 **Skip this whole step if you only need citations, the sidebar, and literature notes.** These tools are only for **importing Word/ODT documents** and **compiling/exporting** documents to DOCX/ODT/PDF.
 
@@ -297,7 +283,7 @@ luaotfload-tool --update    # every OS, once
 
 ---
 
-## 6b. Optional: Basic note template + Templater
+## 5b. Optional: Basic note template + Templater
 
 **Recommended if you want every new note to start with the same few properties.** ScholarWeft works best when every note carries a `created` date, a larger category (`up`), `related` notes, and alternative names (`aliases`). Based on Nick Milo's *Linking Your Thinking* philosophy, this optional step installs a **Basic note template** with those four properties and sets up the **Templater** plugin to apply it to every note you create in your vault — so you never have to add them by hand.
 
@@ -314,12 +300,12 @@ luaotfload-tool --update    # every OS, once
 
 ---
 
-## 7. Configure ScholarWeft
+## 6. Configure ScholarWeft
 
 Open **Settings → ScholarWeft**.
 
 - **Bibliography** — Zotero is **already switched on** with **My Library** selected. If Zotero isn't running (or the checkbox from Step 2 is off), you'll see **“Cannot connect to Zotero”** with a **Retry** button and instructions. Use a `.bib` file instead of Zotero? Just turn the Zotero toggle off and add your file under *Bibliography files*.
-- **Literature note import** — where literature notes live and how they are created. ScholarWeft imports the notes itself by default; the ZotLit options (including **Install and use ScholarWeft's ZotLit import templates**, Step 4) appear only if you switch to ZotLit. The page also offers **Install the Basic note template and apply it to new notes** (Step 6b), which installs the companion plugin (**Templater**) if it isn't there yet. See [Literature Notes](./literature-notes.md).
+- **Literature note import** — where literature notes live and how they are created. ScholarWeft imports the notes itself by default using its own rich template. The ZotLit options (including **Install and use ScholarWeft's ZotLit import templates**, Step 4) appear only if you switch to ZotLit, an alternative Zotero import plugin. The literature note page also offers the option to **Install the Basic note template and apply it to new notes** (Step 6b), which installs the companion plugin (**Templater**) if it isn't there yet. See [Literature Notes](./literature-notes.md).
 - **Document import/export and compilation** — if you installed the document tools, each option shows a “not found” note until it detects them. ScholarWeft searches for a usable Python automatically (your `python3`/conda, or the setup script's `~/ScholarWeft/venv`), so **you normally don't have to set anything**. If it still reports Python missing:
   - **Path to Python 3** → paste your interpreter (e.g. `~/ScholarWeft/venv/bin/python3`, or your conda `python`)
   - **Path to Pandoc** → usually auto-detected (`/opt/homebrew/bin/pandoc` on Apple-silicon Macs)
@@ -327,7 +313,7 @@ Open **Settings → ScholarWeft**.
 
 ---
 
-## 8. Check that it works
+## 7. Check that it works
 
 1. Make sure **Zotero is running**, and that **no other vault is connected to it** — Zotero allows one local connection at a time, so if you have another vault open that uses Zotero, close it first.
 2. In Obsidian, make a new note and type `[[@` — you should see citekey suggestions from Zotero's **My Library**. Pick one and press Enter.

@@ -52,6 +52,7 @@ import {
   installZotlitTemplatesWithNotice,
 } from './zotlitTemplates';
 import { getLitNoteForCitekey, getZotlitLiteratureFolder } from './zotlit';
+import { zotlitIsNoteImportPath } from './template/import-path';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
 
@@ -580,19 +581,12 @@ export default class ReferenceList extends Plugin {
         );
       }
     };
-    this.addCommand({
-      id: 'insert-zotero-notes',
-      name: t('Insert Zotero notes into literature notes (vault)'),
-      checkCallback: (checking) => {
-        // ZotLit-only: the on-demand insert lives in the ZotLit section of the
-        // literature-note settings. Hidden unless ZotLit is the import path.
-        if (this.settings.useOwnNoteTemplate === true) return false;
-        if (this.settings.createNotesWithZotLit === false) return false;
-        if (!checking) void run();
-        return true;
-      },
-    });
-
+    // ZotLit-only: the on-demand insert lives in the ZotLit section of the
+    // literature-note settings, and the command is registered only while ZotLit
+    // is the import path — a `checkCallback` returning false still lists the
+    // command in the palette, so the command is added/removed instead.
+    this._runInsertZoteroNotes = run;
+    this.registerZoteroNotesCommand();
     // Document Compiler — outline → markdown, and outline/markdown → docx.
     // Desktop only: runs the bundled scripts/DocumentCompiler.py with Python 3.
     // A single command opens a modal with the TOC / footnotes / output-folder
@@ -1022,11 +1016,50 @@ export default class ReferenceList extends Plugin {
     // NOT call detach()/detachLeavesOfType() here (a review-flagged mistake).
     // Guard: onload may have failed before bibManager existed, and unload must
     // not throw on top of that.
+    this.unregisterZoteroNotesCommand();
     if (this.bibManager) {
       void this.bibManager.saveRenderedCache();
       void this.bibManager.saveZLinks();
       this.bibManager.destroy();
     }
+  }
+
+  /** The vault-wide Zotero-notes insert, wired to the palette command. */
+  private _runInsertZoteroNotes: (() => Promise<void>) | null = null;
+  /** Whether the ZotLit-only insert command is currently registered. */
+  private _zoteroNotesCommandAdded = false;
+
+  /**
+   * ZotLit-only command: shown in the command palette only while ZotLit is the
+   * selected import path.
+   *
+   * A `checkCallback` that returns false still LISTS the command (greyed at
+   * best), so the command is registered and removed instead. The settings page
+   * calls this after a save so the palette follows the choice immediately.
+   */
+  registerZoteroNotesCommand(): void {
+    if (!this._runInsertZoteroNotes) return;
+    const wanted = zotlitIsNoteImportPath(this.settings);
+    if (wanted === this._zoteroNotesCommandAdded) return;
+    if (wanted) {
+      this.addCommand({
+        id: 'insert-zotero-notes',
+        name: t('Insert Zotero notes into literature notes (vault)'),
+        callback: () => void this._runInsertZoteroNotes?.(),
+      });
+    } else {
+      this.unregisterZoteroNotesCommand();
+    }
+    this._zoteroNotesCommandAdded = wanted;
+  }
+
+  private unregisterZoteroNotesCommand(): void {
+    if (!this._zoteroNotesCommandAdded) return;
+    // `commands` is internal (not in the public typings), like viewRegistry.
+    (this.app as any).commands?.removeCommand?.(
+      'scholar-weft:insert-zotero-notes'
+    );
+    this._zoteroNotesCommandAdded = false;
   }
 
   async updateBibliographyFrontmatter(oldPath: string, newPath: string) {
@@ -1581,6 +1614,9 @@ export default class ReferenceList extends Plugin {
     this.applyCitationColors();
 
     this.positionSuggest();
+
+    // Show/hide the ZotLit-only insert command to match the import path.
+    this.registerZoteroNotesCommand();
 
     // Refresh the reference list when settings change
     this.emitSettingsUpdate(cb);

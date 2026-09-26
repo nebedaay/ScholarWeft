@@ -33,6 +33,7 @@ import type { DepKey } from './dependencies';
 import { openDocs } from './docs';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
 import { debugLog } from './helpers';
+import { zotlitIsNoteImportPath } from './template/import-path';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
   pathToPandoc: '',
@@ -1150,7 +1151,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
     // ZotLit-only actions: needed only by the ZotLit import path, so they live
     // in this section and nowhere else.
-    if (useZotlitForNotes) {
+    if (zotlitIsNoteImportPath(this.plugin.settings)) {
       new Setting(containerEl)
         .setName(t('Insert Zotero notes into literature notes'))
         .setDesc(

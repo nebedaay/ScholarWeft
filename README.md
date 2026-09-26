@@ -2,13 +2,17 @@
 
 <img src="./images/scholarweft-illustration.png" width="300" alt="ScholarWeft logo">
 
-Weaving your ideas, Obsidian, Zotero, and word processor output into a connected scholarly workflow. 
+Weaving your ideas, Obsidian, Zotero, and word processor output into a connected scholarly workflow. It integrates three processes:
+
+- Importing and updating your Zotero citations and annotations into Obsidian as literature notes using a rich template
+- Connecting your works cited to your universe of thoughts, treating them as Zotero links while formatting them as formatted citations
+- Importing and exporting your scholarly writing while keeping active Zotero citations, using complex templates to produce publication-ready academic articles and books
 
 ScholarWeft's unique **linked citations** format weaves every work you cite into your interconnected Obsidian thought universe. The citation `[[@sanchez2009|see @, p. 25]]` is simultaneously a formatted inline citation — "(see Sanchez 2009, 25)" — *and* an Obsidian wikilink to that source’s literature note. Other citation plugins can either link to a literature note (`[[@sanchez2009]]`) or render pandoc-formatted citations (`[see @sanchez2009, p. 25]`), preventing you from integrating publication-ready citations as nodes in Obsidian's note network visualized in backlinks and graphs.
 
 Beyond linking your scholarly notes and references, ScholarWeft links your writing inside Obsidian to the world beyond Obsidian. Import DOCX and ODT documents as Obsidian notes, converting their Zotero citations to linked citations and importing a literature note for each cited work. Export an Obsidian note or compile a series of notes as a publication-ready DOCX, ODT, or PDF document with functioning citations — so you can do all your academic writing inside manageable, interlinked Obsidian notes, even long book projects.
 
-This plugin started as a fork of [Bripey Citation Suite](https://github.com/112345brian/bripey-citation-suite), which itself descends from [Pandoc Reference List](https://github.com/community-archive/obsidian-pandoc-reference-list). It was renamed to reflect its distinctive and more comprehensive functionality.
+This plugin started as a fork of [Bripey Citation Suite](https://github.com/112345brian/bripey-citation-suite), a descendant of [Pandoc Reference List](https://github.com/community-archive/obsidian-pandoc-reference-list). It was renamed to reflect its more comprehensive and unique combination of functions.
 
 ## Documentation
 
@@ -43,17 +47,17 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 
 ### References and literature notes
 
+- **Import and update from Zotero** — pick one or more references in Zotero's native dialog and create or refresh their notes; update the current note, or every note in the vault, in place. Re-imports update only the managed annotations region and metadata, leaving your own writing untouched.
+- **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette. ScholarWeft's default template provides comprehensive bibliographic data in the note’s frontmatter and rich annotation callouts. See [Literature Notes](./docs/literature-notes.md).
 - **Multiple bibliography sources** — any number of `.bib`/CSL-JSON/CSL-YAML files plus Zotero, merged; Zotero wins on conflicts. See [Bibliography](./docs/bibliography.md).
 - **Native Zotero 7/8 API** — no Better BibTeX needed to resolve and format citations (BBT still required for Zotero 6, and still the easiest way to auto-generate citekeys). See [Zotero](./docs/zotero.md).
-- **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette. Use ScholarWeft's own bundled template, or ZotLit's when you prefer it. See [Literature Notes](./docs/literature-notes.md).
-- **Import and update from Zotero** — pick one or more references in Zotero's native dialog and create or refresh their notes; update the current note, or every note in the vault, in place. Re-imports refresh only the managed annotations region, leaving your own writing untouched.
-- **Citekey sync** — update citations across the vault and rename literature notes when a Zotero citekey changes; notes are re-rendered so their images follow.
+- **Citekey sync** — update citations and literature notes across the vault if your citekeys change; images attached from annotations are also renamed.
 
 ### Document import and export (desktop only)
 
 - **Compile and export** a note or a multi-note outline as markdown, DOCX, ODT, or PDF with one command, with fine-grained options (TOC, footnotes or endnotes, figure captions, custom styles). See [Document Import and Export](./docs/import-export.md).
 - **Import DOCX/ODT** documents as markdown notes, converting their Zotero citation fields to linked citations.
-- **Custom callouts and markdown → DOCX/ODT styles** — Markdown Attributes / Extended Markdown Syntax styles are converted automatically; undefined styles get a highlighted sentinel so you can define them.
+- **Standard Obsidian and custom callouts and markdown → DOCX/ODT/PDF styles** — Markdown Attributes / Extended Markdown Syntax styles are converted automatically; styles undefined in the template get a highlighted sentinel style so you can easily locate and define them.
 
 ### Requirements at a glance
 
@@ -70,9 +74,9 @@ Basic citation work needs nothing installed. Document import/export and live Zot
 
 ## Companion plugins
 
-ScholarWeft creates and refreshes literature notes itself — no companion plugin is required. If you already use [ZotLit](https://github.com/PKM-er/obsidian-zotlit), or prefer its templates, you can switch the import path to ZotLit under **Settings → ScholarWeft → Literature note import**; `@@` autocomplete draws on ZotLit's full-text database whenever it is present. Neither plugin requires the other.
+ScholarWeft creates and refreshes literature notes itself — no companion plugin is required. If you already use [ZotLit](https://github.com/PKM-er/obsidian-zotlit), you can switch the import path to ZotLit under **Settings → ScholarWeft → Literature note import**. ScholarWeft’s `@@` autocomplete draws on ZotLit's full-text database whenever it is present. Neither plugin requires the other.
 
-**One-click ZotLit templates:** after selecting ZotLit, *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies a curated set of templates into `sw-zotlit-templates/` and points ZotLit's *Template folder* setting there (ZotLit reloads automatically), leaving your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** — ZotLit builds each note's frontmatter from its settings, not from the templates — so imported notes get the same properties. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
+**One-click ZotLit templates:** If you select ZotLit, *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies ScholarWeft’s Zotero import templates into `sw-zotlit-templates/` to yield literature notes similar to those generated when using ScholarWeft’s own import path. This leaves your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** to your ZotLit settings, since ZotLit builds note frontmatter from its settings, not from the templates. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
 
 ## Plugin API
 
