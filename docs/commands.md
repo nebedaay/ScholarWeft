@@ -21,9 +21,12 @@ See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 
 | Command | Scope | Notes |
 |---|---|---|
-| Create literature notes for citations lacking notes (current note) | Current note | Uses ZotLit templates when available |
+| Import literature notes from Zotero… | — | Pick one or more items in Zotero's native picker; create or refresh their notes (needs Better BibTeX) |
+| Create literature notes for citations lacking notes (current note) | Current note | Uses ScholarWeft's own template (or ZotLit when you select it) |
 | Create literature notes for citations lacking notes (vault) | Vault | For every note |
-| Insert Zotero notes into literature notes (vault) | Vault | Copy a source's Zotero child notes into its literature note — see [Literature Notes](./literature-notes.md) |
+| Update this literature note | Current note | Re-render the active note from its item (needs a `zotero-key`) |
+| Update all literature notes in the vault | Vault | Re-render every note that has a `zotero-key` |
+| Insert Zotero notes into literature notes (vault) | Vault | Copy a source's Zotero child notes into its literature note. ZotLit-only: listed only while ZotLit is the import path — see [Literature Notes](./literature-notes.md) |
 | Update stale citekeys and literature note filenames (vault) | Vault | Apply accumulated citekey renames |
 
 See [Literature Notes](./literature-notes.md).

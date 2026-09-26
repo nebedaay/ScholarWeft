@@ -25,11 +25,11 @@ Obsidian has **two** version numbers, and the one that matters here isn't the on
 - the **app** version updates automatically, and
 - the **installer** version only changes when Obsidian is **reinstalled**.
 
-**The installer being behind the app version is normal** — it happens every time the app updates, and it is not a problem in itself. What matters is the **threshold**: plugins — **ZotLit especially** — will not load on an installer **below 1.13.4**. (If you don't use ZotLit, an older installer is usually fine.)
+**The installer being behind the app version is normal** — it happens every time the app updates, and it is not a problem in itself. What matters is the **threshold**: newer plugins may not load on an installer **below 1.13.4**. (If you only use older plugins, an older installer is usually fine.)
 
 **Check it:** open Obsidian → **Settings → About** (or run **Show debug info** from the command palette) and read the **Installer version**.
 
-- **Below 1.13.4, or unsure?** You need to reinstall Obsidian for ZotLit to work.
+- **Below 1.13.4, or unsure?** You need to reinstall Obsidian for newer plugins to work.
 - **1.13.4 or higher?** You're fine. It's still worth refreshing occasionally, but nothing is broken.
 
 **Reinstalling Obsidian is easy, and the setup script offers to do it:** it asks *"Refresh Obsidian now?"* and reinstalls the app for you (through Homebrew, Flatpak, or winget, depending on your system). That replaces the app and updates its installer; **your vaults, plugins, and settings are untouched.**
@@ -47,7 +47,7 @@ If you'd rather do it by hand: download the latest from <https://obsidian.md/dow
 **The script does all of the following steps for you, except those you’ve already done or opt out of**:
 
 - installs/updates the Obsidian and Zotero apps
-- adds the ScholarWeft and ZotLit plugins to Obsidian and the Better BibTeX and ZotLit add-ons to Zotero
+- adds the ScholarWeft plugin to Obsidian and the Better BibTeX add-on to Zotero
 - switches on Zotero's local connection
 - and installs the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts)
 
@@ -55,9 +55,9 @@ It asks before each step and skips anything you’ve already done. It offers to 
 
 Run the script first; the numbered steps below are the manual equivalent, and your fallback if a step fails.
 
-The script installs plugin **files**; anything that needs another plugin's **settings** is finished from inside Obsidian the first time you open it (that's the only safe way to change another plugin's settings). So after running the script, open Obsidian once and it will finish setting up ScholarWeft's ZotLit import templates **and their frontmatter field mappings** — no manual step needed. It also offers the optional **Basic note template + Templater** step (see [Step 6b](#6b-optional-basic-note-template--templater)).
+The script installs plugin **files**; anything that needs another plugin's **settings** is finished from inside Obsidian the first time you open it (that's the only safe way to change another plugin's settings). So after running the script, open Obsidian once and it will finish any in-Obsidian setup — no manual step needed. It also offers the optional **Basic note template + Templater** step (see [Step 6b](#6b-optional-basic-note-template--templater)).
 
-If you have more than one Obsidian vault on your machine, you'll have to run the script for each vault you want to use them with, just repeating Obsidian plugin steps (installing and configuring ScholarWeft and ZotLit).
+If you have more than one Obsidian vault on your machine, you'll have to run the script for each vault you want to use them with, just repeating the Obsidian plugin steps (installing and configuring ScholarWeft).
 
 ### Open a terminal
 
@@ -91,7 +91,7 @@ It is **interactive** (`y` / `n` / `q` as single keypresses before each step), s
 
 Download: <https://obsidian.md/download>
 
-> **Already have Obsidian?** Check its **Installer version** (**Settings → About**, or **Show debug info**). The installer being behind the app version is normal and harmless — but plugins (ZotLit in particular) won't load on an installer **below 1.13.4**. If yours is below that, reinstall Obsidian; the [setup script](#the-easy-way-run-the-setup-script) offers a one-step **Refresh Obsidian**, or download the latest from <https://obsidian.md/download> and replace your copy. Your vaults, plugins, and settings are untouched.
+> **Already have Obsidian?** Check its **Installer version** (**Settings → About**, or **Show debug info**). The installer being behind the app version is normal and harmless — but newer plugins won't load on an installer **below 1.13.4**. If yours is below that, reinstall Obsidian; the [setup script](#the-easy-way-run-the-setup-script) offers a one-step **Refresh Obsidian**, or download the latest from <https://obsidian.md/download> and replace your copy. Your vaults, plugins, and settings are untouched.
 
 **macOS**
 1. Open the downloaded `.dmg`, drag **Obsidian** into the **Applications** folder, then open it from Applications.
@@ -150,18 +150,17 @@ BBT generates citekeys automatically. If an item has no citekey yet, right-click
 
 ---
 
-## 4. ZotLit (optional, recommended for literature notes)
+## 4. ZotLit (optional)
 
-ZotLit creates rich literature notes from Zotero items (annotations, metadata) and powers ScholarWeft's `@@` full-text search. It needs Better BibTeX from Step 3, and it has **two halves**: the Obsidian plugin below, and a small add-on inside Zotero (you'll see `zotlit@aidenlx.site` in Zotero's Add-ons). The [setup script](#the-easy-way-run-the-setup-script) can download and install the Zotero half for you when Zotero is closed; otherwise follow ZotLit's own instructions (<https://zotlit.aidenlx.top/>).
+**You do not need ZotLit** — ScholarWeft creates and refreshes literature notes itself, and that is the default (see [Literature Notes](./literature-notes.md)). Install ZotLit only if you already use it or prefer its templates. It needs Better BibTeX from Step 3, and it has **two halves**: the Obsidian plugin below, and a small add-on inside Zotero (you'll see `zotlit@aidenlx.site` in Zotero's Add-ons). Follow ZotLit's own instructions (<https://zotlit.aidenlx.top/>).
 
 > **ZotLit won't enable, or errors when you turn it on?** This is almost always an Obsidian **installer below 1.13.4** (not an out-of-date app). Re-run the [setup script](#the-easy-way-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> and try again — see [Step 1](#1-install-obsidian). Your vault and settings are untouched.
 
 1. In **Obsidian**: **Settings** (gear, bottom-left) → **Community plugins**.
 2. If you see **Restricted mode** / **Turn on community plugins**, click **Turn on community plugins** and confirm.
 3. Click **Browse**, type `ZotLit`, click **Install**, then **Enable**.
-4. In **Settings → ScholarWeft → Literature note import**, click **Install and use ScholarWeft's ZotLit import templates** (or just open Obsidian if you ran the setup script — it does this for you). This copies ScholarWeft's ZotLit templates into a dedicated `sw-zotlit-templates/` folder and points ZotLit's **Template folder** setting at it, leaving your own templates untouched. It also writes ScholarWeft's **frontmatter field mappings** into ZotLit's settings — ZotLit builds each note's frontmatter from its settings, not from the templates, so the mappings are what make the imported properties (title, authors, `up`, `related`, …) come out the same way. It turns on ZotLit's **JavaScript templates** setting too (a *per-device* setting, off by default, without which the templates stay inert). ZotLit's previous settings are backed up as `data.json.scholarweft.bak`.
-
-> If ScholarWeft can't see ZotLit, install and **enable** it first, then click the button again.
+4. In **Settings → ScholarWeft → Literature note import**, turn **Import literature notes with ScholarWeft** *off* and **Create literature notes with ZotLit** *on*. ZotLit-only options appear only then. Click **Install and use ScholarWeft's ZotLit import templates**. This copies ScholarWeft's ZotLit templates into a dedicated `sw-zotlit-templates/` folder and points ZotLit's **Template folder** setting at it, leaving your own templates untouched. It also writes ScholarWeft's **frontmatter field mappings** into ZotLit's settings — ZotLit builds each note's frontmatter from its settings, not from the templates, so the mappings are what make the imported properties (title, authors, `up`, `related`, …) come out the same way. It turns on ZotLit's **JavaScript templates** setting too (a *per-device* setting, off by default, without which the templates stay inert). ZotLit's previous settings are backed up as `data.json.scholarweft.bak`.
+5. ZotLit imports a note's Zotero child notes as separate files rather than into the literature note. Back on that settings page, use **Insert Zotero notes into literature notes** (or the matching command) to fold them in.
 
 ---
 
@@ -320,7 +319,7 @@ luaotfload-tool --update    # every OS, once
 Open **Settings → ScholarWeft**.
 
 - **Bibliography** — Zotero is **already switched on** with **My Library** selected. If Zotero isn't running (or the checkbox from Step 2 is off), you'll see **“Cannot connect to Zotero”** with a **Retry** button and instructions. Use a `.bib` file instead of Zotero? Just turn the Zotero toggle off and add your file under *Bibliography files*.
-- **Literature note import** — where literature notes live and how they are created. This page also has the two setup buttons: **Install and use ScholarWeft's ZotLit import templates** (Step 4) and **Install the Basic note template and apply it to new notes** (Step 6b). Each finishes the job for you, and offers to install the companion plugin (**ZotLit** / **Templater**) if it isn't there yet. See [Literature Notes](./literature-notes.md).
+- **Literature note import** — where literature notes live and how they are created. ScholarWeft imports the notes itself by default; the ZotLit options (including **Install and use ScholarWeft's ZotLit import templates**, Step 4) appear only if you switch to ZotLit. The page also offers **Install the Basic note template and apply it to new notes** (Step 6b), which installs the companion plugin (**Templater**) if it isn't there yet. See [Literature Notes](./literature-notes.md).
 - **Document import/export and compilation** — if you installed the document tools, each option shows a “not found” note until it detects them. ScholarWeft searches for a usable Python automatically (your `python3`/conda, or the setup script's `~/ScholarWeft/venv`), so **you normally don't have to set anything**. If it still reports Python missing:
   - **Path to Python 3** → paste your interpreter (e.g. `~/ScholarWeft/venv/bin/python3`, or your conda `python`)
   - **Path to Pandoc** → usually auto-detected (`/opt/homebrew/bin/pandoc` on Apple-silicon Macs)
@@ -341,7 +340,7 @@ Open **Settings → ScholarWeft**.
 
 ## Troubleshooting
 
-**A plugin (e.g. ZotLit) won't enable, or errors when you enable it.** Your Obsidian **installer** is probably **below 1.13.4**. (An installer older than the app version is normal and harmless — the threshold is what matters.) Check **Settings → About** (or **Show debug info**) for the **Installer version**. Re-run the [setup script](#the-easy-way-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> — your vault and settings are untouched.
+**A plugin won't enable, or errors when you enable it.** Your Obsidian **installer** is probably **below 1.13.4**. (An installer older than the app version is normal and harmless — the threshold is what matters.) Check **Settings → About** (or **Show debug info**) for the **Installer version**. Re-run the [setup script](#the-easy-way-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> — your vault and settings are untouched.
 
 **“Cannot connect to Zotero.”** Three usual causes, in order:
 

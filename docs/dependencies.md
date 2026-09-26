@@ -19,10 +19,10 @@ curl -fsSL https://raw.githubusercontent.com/nebedaay/ScholarWeft/main/install/i
 | **Python 3** (+ `lxml`, `python-docx`, `requests`) | Compiling/exporting documents (every format); importing DOCX/ODT                                                                                                 |
 | **Pandoc**                             | Exporting to DOCX / ODT / LaTeX / PDF; importing DOCX / ODT                                                                                                                                      |
 | **Zotero**                             | Live, refreshable citation fields; citekey lookup; importing citation fields — *unless* you use a bibliography file instead                                                                      |
-| **Better BibTeX** (Zotero add-on)      | Only needed for Zotero 6: The BBT endpoint needed for exporting live Zotero citations. Not required for export using Zotero 7/8, but still needed inside Zotero for automatic citekey generation |
+| **Better BibTeX** (Zotero add-on)      | The **Import literature notes from Zotero…** picker; the BBT endpoint needed for exporting live Zotero citations on Zotero 6. Not required for export using Zotero 7/8, but still the easiest way to auto-generate citekeys inside Zotero        |
 | **LibreOffice**                        | PDF export through an ODT/DOCX template                                                                                                                                                          |
 | **A LaTeX distribution with LuaLaTeX** | PDF export through a `.tex` template                                                                                                                                                             |
-| **ZotLit** (recommended)               | Richer literature-note creation and `@@` full-text search                                                                                                                                        |
+| **ZotLit** (optional)                  | Alternative literature-note creation and `@@` full-text search. Not required — ScholarWeft creates and refreshes notes itself          |
 
 ## Python 3
 
@@ -65,7 +65,7 @@ Download: <https://www.zotero.org/download/>
 
 ## Better BibTeX
 
-A Zotero add-on that generates automatic, stable citekeys (e.g. `smithTitleYear`) and provides the JSON-RPC endpoint the plugin uses on Zotero 6. With Zotero 7/8 the plugin can use Zotero's native API instead, so BBT is optional there — although it remains the easiest way to generate citekeys inside Zotero.
+A Zotero add-on that generates automatic, stable citekeys (e.g. `smithTitleYear`) and provides the JSON-RPC endpoint the plugin uses on Zotero 6. It also powers the **Import literature notes from Zotero…** picker (ScholarWeft opens Zotero's own item dialog through BBT). With Zotero 7/8 the plugin can use Zotero's native API for citations instead, so BBT is optional there — although it remains the easiest way to generate citekeys inside Zotero.
 
 Download: <https://retorque.re/zotero-better-bibtex/installation/>
 
@@ -85,7 +85,7 @@ Required only for **PDF export through a `.tex` template**. The engine used is *
 
 ## ZotLit (optional)
 
-An Obsidian plugin that creates literature notes from Zotero with rich annotation formatting and powers the `@@` full-text title/author search. ScholarWeft works without it.
+An Obsidian plugin that can create literature notes from Zotero with its own templates, and powers the `@@` full-text title/author search. ScholarWeft creates and refreshes literature notes itself, so ZotLit is only needed if you prefer its templates — select ZotLit under **Literature note import** to use it. See [ZotLit Import Templates](./zotlit-import-templates.md).
 
 Download: <https://github.com/PKM-er/obsidian-zotlit>
 

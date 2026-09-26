@@ -1,6 +1,8 @@
 # ZotLit Import Templates
 
-In ScholarWeft's settings you can click **Install and use ScholarWeft's ZotLit import templates**. The templates are packaged in the plugin, so nothing is downloaded; they are written to `sw-zotlit-templates/` in your vault, which is set as your ZotLit template folder so your existing templates are left untouched.
+**Optional.** ScholarWeft imports literature notes itself and needs no other plugin. If you use [ZotLit](https://github.com/PKM-er/obsidian-zotlit) and want ScholarWeft to hand note creation to it, turn **Import literature notes with ScholarWeft** off under **Settings → ScholarWeft → Literature note import**; the ZotLit options (including this one) then appear.
+
+With ZotLit selected, click **Install and use ScholarWeft's ZotLit import templates**. The templates are packaged in the plugin, so nothing is downloaded; they are written to `sw-zotlit-templates/` in your vault, which is set as your ZotLit template folder so your existing templates are left untouched.
 
 The click also writes ScholarWeft's **frontmatter field mappings** into ZotLit's settings. ZotLit builds each note's frontmatter from its *settings*, not from the templates, so a template folder alone would not reproduce the imported properties — the mappings are what turn Zotero fields into the `title`, `authors`, `up`, `related`, and other properties the templates expect. ZotLit's previous settings are backed up as `data.json.scholarweft.bak` first.
 
@@ -15,4 +17,4 @@ The templates follow ScholarWeft's "link everything" philosophy and assume you c
 - Rectangular and ink annotations are imported as attachments and displayed as images.
 - A comment beginning with `+` marks the highlighted text as a continuation of the previous highlight, appended after " … ", so you can combine quotes that span pages or parts of a longer passage.
 
-Requires ZotLit (and Zotero). See [Literature Notes](./literature-notes.md) and [Dependencies](./dependencies.md).
+Requires ZotLit (and Zotero); it is the alternative to ScholarWeft's own default import. See [Literature Notes](./literature-notes.md) and [Dependencies](./dependencies.md).

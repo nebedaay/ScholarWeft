@@ -250,16 +250,8 @@ function Zotero-Running { [bool](Get-Process zotero -ErrorAction SilentlyContinu
 function Install-ZoteroAddon($repo, $id) {
   $url = $null
   try {
-    if ($repo -eq 'zotlit') {
-      Step 'Looking up the latest ZotLit Zotero add-on...'
-      $rels = Invoke-RestMethod 'https://api.github.com/repos/aidenlx/zotlit/releases?per_page=100' -Headers $UA
-      $withXpi = $rels | Where-Object { $_.assets | Where-Object { $_.name -like '*.xpi' } }
-      $rel = ($withXpi | Where-Object { -not $_.prerelease } | Select-Object -First 1); if (-not $rel) { $rel = $withXpi | Select-Object -First 1 }
-      $url = ($rel.assets | Where-Object { $_.name -like '*.xpi' } | Select-Object -First 1).browser_download_url
-    } else {
-      $d = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers $UA
-      $url = ($d.assets | Where-Object { $_.name -like '*.xpi' } | Select-Object -First 1).browser_download_url
-    }
+    $d = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest" -Headers $UA
+    $url = ($d.assets | Where-Object { $_.name -like '*.xpi' } | Select-Object -First 1).browser_download_url
   } catch {}
   if (-not $url) { Fail "Install $id" 'could not resolve the download URL'; return $false }
   New-Item -ItemType Directory -Force -Path (Join-Path $ZDir 'extensions') | Out-Null
@@ -315,15 +307,15 @@ if (-not (Have obsidian) -or -not (Have zotero)) {
 }
 
 # Refresh Obsidian for an existing install: the APP self-updates, but the
-# INSTALLER only changes on a reinstall, and plugins (ZotLit especially) won't
-# load on an installer below 1.13.4. The installer version isn't readable from
-# disk, so we ask, wording it so the answer covers both cases.
+# INSTALLER only changes on a reinstall, and plugins won't load on an installer
+# below 1.13.4. The installer version isn't readable from disk, so we ask,
+# wording it so the answer covers both cases.
 if (Have obsidian) {
   Write-Host ''
   Write-Host '  Obsidian is installed. We recommend periodically REFRESHING it (reinstalling,'
   Write-Host '  not just updating), which keeps its installer compatible with plugins.'
   Write-Host '    - Check Settings -> About -> Installer version.'
-  Write-Host '    - Below 1.13.4, or unsure? You need to reinstall Obsidian to use ZotLit.'
+  Write-Host '    - Below 1.13.4, or unsure? You need to reinstall Obsidian for newer plugins.'
   Write-Host '    - Higher? Still worth refreshing if you have not in a while.'
   Write-Host '  Refreshing replaces the app; your vaults, plugins and settings are untouched.'
   if (Ask '  Refresh Obsidian now?' 'Refresh Obsidian') {
@@ -345,31 +337,21 @@ if (Have obsidian) {
 # Locate the vault up front, so it's clear where plugins would go before we ask.
 Locate-Vaults
 
-if (Ask 'Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settings? (Close Obsidian first.)' 'Set up Obsidian plugins') {
+if (Ask 'Set up the Obsidian plugins (ScholarWeft, BRAT) and their settings? (Close Obsidian first.)' 'Set up Obsidian plugins') {
   if (Get-Process Obsidian -ErrorAction SilentlyContinue) {
     Fail 'Set up Obsidian plugins' 'Obsidian was running — quit Obsidian and re-run (the settings writes need it closed)'
   } elseif (Pick-Vault) {
-    # ZotLit (and sometimes others) refuse to load on an old Obsidian INSTALLER
-    # even when the app is current — and the installer only updates by
-    # reinstalling Obsidian. Flag it now, before the plugins are relied on.
-    Write-Host '  Reminder: if a plugin won''t turn on (ZotLit is the usual one), its'
-    Write-Host '  INSTALLER is probably below 1.13.4. Re-run this script and say yes to'
-    Write-Host '  "Refresh Obsidian" (or reinstall from https://obsidian.md/download).'
+    # Plugins can refuse to load on an old Obsidian INSTALLER even when the app
+    # is current — and the installer only updates by reinstalling Obsidian.
+    # Flag it now, before the plugins are relied on.
+    Write-Host '  Reminder: if a plugin won''t turn on, its INSTALLER is probably below'
+    Write-Host '  1.13.4. Re-run this script and say yes to "Refresh Obsidian" (or'
+    Write-Host '  reinstall from https://obsidian.md/download).'
     Disable-ConflictingPlugins $script:Vault
     Install-ObsidianPlugin 'nebedaay/ScholarWeft' 'scholar-weft' $script:Vault
-    Install-ObsidianPlugin 'PKM-er/obsidian-zotlit' 'zotlit' $script:Vault
     Install-ObsidianPlugin 'TfTHacker/obsidian42-brat' 'obsidian42-brat' $script:Vault
     Register-Brat $script:Vault
-    Queue-PendingSetup $script:Vault @('zotlit')
   }
-}
-
-# Queued work runs inside Obsidian, where the plugins are loaded and their
-# settings can be changed safely.
-if ($script:Vault) {
-  Write-Host '  Note: ScholarWeft will install and set its ZotLit templates the next time'
-  Write-Host '  you open Obsidian (it does this from inside Obsidian, where it is safe to'
-  Write-Host "  change another plugin's settings)."
 }
 
 # Optional and separate from the plugin step, so one can be declined without the other.
@@ -393,14 +375,12 @@ if (Ask 'Install that template and configure Templater to apply it to every new 
   }
 }
 
-if (Ask 'Install the Better BibTeX and ZotLit extensions into Zotero? (Close Zotero first.)' 'Install Zotero extensions') {
+if (Ask 'Install the Better BibTeX extension into Zotero? (Close Zotero first.)' 'Install Zotero extensions') {
   if (Zotero-Running) { Fail 'Install Zotero extensions' 'Zotero was running — quit Zotero and re-run' }
   elseif (-not $ZDir) { Fail 'Install Zotero extensions' 'Zotero profile not found — open Zotero once, then re-run' }
   else {
     if (Test-Path (Join-Path $ZDir 'extensions\better-bibtex@iris-advies.com.xpi')) { Pass 'Better BibTeX already installed' }
     elseif (Install-ZoteroAddon 'retorquere/zotero-better-bibtex' 'better-bibtex@iris-advies.com') { Pass 'Installed Better BibTeX' }
-    if (Test-Path (Join-Path $ZDir 'extensions\zotlit@aidenlx.site.xpi')) { Pass 'ZotLit Zotero add-on already installed' }
-    elseif (Install-ZoteroAddon 'zotlit' 'zotlit@aidenlx.site') { Pass 'Installed the ZotLit Zotero add-on' }
     Enable-ZoteroSideload
     Pass 'Told Zotero to load the add-ons on next start (start Zotero now)'
   }
@@ -466,11 +446,8 @@ Write-Host "  plugins): the plugins are already installed and listed, so they wi
 Write-Host "`n  Then: start Zotero if it was closed; restart Obsidian and enable any plugins"
 Write-Host "  in Settings → Community plugins; click Retry in ScholarWeft's settings if it"
 Write-Host '  says "Cannot connect to Zotero".'
-Write-Host "  If a plugin won't turn on (ZotLit is the usual one), your Obsidian installer"
-Write-Host "  is probably older than the app: the app updates itself, but the installer only"
-Write-Host "  updates when you reinstall from a fresh download. Check Settings -> About ->"
-Write-Host "  Installer version, then reinstall from https://obsidian.md/download - your vault"
-Write-Host "  and settings are untouched."
-Write-Host "  If you installed ZotLit: ScholarWeft installs its import templates and"
-Write-Host "  points ZotLit's 'Template folder' at sw-zotlit-templates/ the next time you"
-Write-Host '  open Obsidian - no manual step needed.'
+Write-Host "  If a plugin won't turn on, your Obsidian installer is probably older than"
+Write-Host "  the app: the app updates itself, but the installer only updates when you"
+Write-Host "  reinstall from a fresh download. Check Settings -> About -> Installer"
+Write-Host "  version, then reinstall from https://obsidian.md/download - your vault and"
+Write-Host "  settings are untouched."

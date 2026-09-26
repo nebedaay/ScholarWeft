@@ -2509,41 +2509,26 @@ export class BibManager {
    *   handler), so allow a few retries for the file to appear.
    */
   /**
-   * Insert a specific literature note's Zotero child notes.
+   * Insert a single literature note's Zotero child notes, once the note exists.
    *
-   * Use when the caller already has the file (e.g. a vault event): it skips the
-   * citekey→note lookup, which depends on ZotLit's note index being rebuilt.
+   * Only the ZotLit import path needs this (ZotLit never hands a template its
+   * child notes), so it is gated on ZotLit being the selected path; the vault
+   * settings button and command remain available at any time. Best-effort.
+   *
+   * @param expectCreation ZotLit creates notes asynchronously (via its protocol
+   *   handler), so allow a few retries for the file to appear.
    */
-  async fillZoteroNotesForFile(citekey: string, file: TFile): Promise<void> {
-    if (this.plugin.settings.insertZoteroNotesOnCreate === false) return;
-    try {
-      const res = await insertZoteroNotesForFiles(app, [file], {
-        zoteroPort: this.plugin.settings.zoteroPort,
-      });
-      debugLog('[sw:notes] fill result for', file.path, {
-        inserted: res.inserted,
-        noNotes: res.noNotes,
-        skipped: res.skipped,
-        failed: res.failed,
-      });
-      if (res.inserted) {
-        new Notice(
-          `ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`,
-          8000
-        );
-      }
-    } catch (e) {
-      console.warn('[sw:notes] fill threw for', file.path, e);
-    }
-  }
-
   async fillZoteroNotesForCitekey(
     citekey: string,
     sourceFile: TFile | null,
     expectCreation = true
   ): Promise<void> {
-    // User opted out of automatic insertion (the vault command still works).
-    if (this.plugin.settings.insertZoteroNotesOnCreate === false) return;
+    if (
+      this.plugin.settings.useOwnNoteTemplate === true ||
+      this.plugin.settings.createNotesWithZotLit === false
+    ) {
+      return;
+    }
     debugLog('[sw:notes] fill start', citekey, 'expectCreation=', expectCreation);
 
     // Prefer the file we were handed. Resolution by citekey goes through

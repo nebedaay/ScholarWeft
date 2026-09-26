@@ -1,33 +1,37 @@
 Install/update via BRAT.
 
-### Imported Zotero notes now arrive automatically
+### ScholarWeft now imports literature notes itself — ZotLit is optional
 
-When a literature note is created — including an export from the Zotero–ZotLit companion — the item's Zotero child notes are inserted into its **Notes** section automatically, instead of waiting for you to run **Insert Zotero notes into literature notes (vault)**.
+Literature notes are created and refreshed from ScholarWeft's own bundled template, and that is now the **default**. Nothing else needs to be installed.
 
-This covers notes ScholarWeft creates *and* notes ZotLit creates on its own. Notes that already contain them are left untouched, so it never duplicates or overwrites.
+- **Import literature notes from Zotero…** opens Zotero's own item picker, so you can select one or more references and create or refresh their notes in one go. (This one command needs Better BibTeX.)
+- **Update this literature note** re-renders the active note from its Zotero item.
+- **Update all literature notes in the vault** re-renders every note that carries a `zotero-key` — the middle ground between updating a single note and importing every reference.
 
-There's a new setting for it on the **Literature note import** page: **"If a Zotero reference contains notes, insert them into all literature notes created."** On by default.
+Notes are found by their stable Zotero item key, so renaming a note (or changing a citekey) updates that same note instead of creating a duplicate, and a filename already taken by a different note is never overwritten.
 
-### Annotation callouts are readable again
+ZotLit is no longer installed or required by the setup script. If you prefer it, turn **Import literature notes with ScholarWeft** off under **Settings → ScholarWeft → Literature note import** and choose ZotLit; the ZotLit options (including installing ScholarWeft's ZotLit import templates) appear only then.
 
-Imported Zotero annotations (`[!ann-highlight-text-blue]` and friends) lost their background under Obsidian's **default theme** — the colours looked washed out, and highlights were nearly impossible to read. Cause: Obsidian composites callout backgrounds with `mix-blend-mode: darken`, which discards the deliberately light annotation colours. (A theme that overrides the blend, such as AnuPpuccin, hid the problem.) Annotation callouts now opt out of blending, so they look as designed in any theme.
+### Annotations, images, and your own writing
 
-### Template setup is now a checkbox with a real undo
+- **Annotations** keep Zotero's PDF reading order, and a `+` comment merges into the previous annotation — including rectangular image selections — with the pages shown as a range.
+- **Excerpt images** are copied into your vault (folder configurable, default `Attachments`) and embedded so they actually display in Obsidian, with a "view image" link that opens inside Obsidian rather than the system viewer.
+- **Re-importing refreshes only the managed region** (between `%%sw-managed%%` markers) and the template's own frontmatter fields. Everything you write, above or below the region, is left alone.
+- Frontmatter mirrors the ZotLit field set, with `abstract` and `title` kept as Markdown and `related` always present.
 
-**Settings → ScholarWeft → Literature note import**:
+### ZotLit notes are handled carefully
 
-- ScholarWeft's ZotLit import templates
-- The Basic note template (Templater)
+If a note was created by ZotLit, ScholarWeft **asks before converting it**: convert it (remembered for the notes you update) or leave ZotLit's area as it is (you will be asked again next time). The preference can also be pinned in the **ZotLit notes** setting. Converting removes an empty ZotLit annotation region; ScholarWeft never writes an empty region of its own.
 
-Both are now checkboxes rather than one-way install buttons:
+### ZotLit users: notes are folded in only when you ask
 
-- **Checked** installs them **and keeps them up to date** with plugin updates.
-- **Unchecked** removes them and **restores the companion plugin's own settings** — ZotLit's template folder returns to what it was, and if the Basic note template had replaced your own `/` template rule, yours is restored.
-- If you never install them, nothing is created. If you delete them, they stay deleted.
+ZotLit imports a reference's Zotero child notes as separate files rather than into the literature note, so the old automatic watcher is gone. When ZotLit is the selected import path, **Settings → Literature note import** shows an **Insert Zotero notes into literature notes** button (and the matching command), which folds each item's Zotero notes into notes whose `## Notes` section is still empty. With ScholarWeft's own template the notes are rendered inline as part of the normal create/update flow, so no separate step is needed.
 
-Also on that page: **"Use ZotLit's literature note folder"** now follows **"Create literature notes with ZotLit"** (and comes on with it), since creating notes with ZotLit but storing them elsewhere rarely makes sense.
+### Everything already in ScholarWeft still works
+
+The reference sidebar, linked citations, ZotLit import templates (when ZotLit is selected), and document import/export are unchanged.
 
 ### Fixes
 
-- A literature note's Zotero notes are also inserted when ZotLit exports a note itself, and on re-exports.
-- Reading a note's Zotero item key now accepts `citekey` as well as `zotero-key`, so notes from other import paths are recognised.
+- Wikilinks (`[[note]]`) and Markdown links (`[text](url)`) written in Zotero notes and annotations are no longer escaped; only a stray `[` is.
+- Ink annotations are styled like rectangular image annotations.

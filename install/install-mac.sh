@@ -453,10 +453,9 @@ brat_register() {
 }
 
 
-# Point ZotLit's "Template folder" at our folder. ZotLit needn't have run yet.
-# The installer can't safely edit another plugin's settings from outside, so
-# record what ScholarWeft should finish (through the same routines its settings
-# buttons use) the next time Obsidian opens.
+# Record work ScholarWeft should finish the next time Obsidian opens (it must
+# run inside Obsidian, where it is safe to change another plugin's settings).
+# Used for the Basic note template / Templater setup.
 queue_pending_setup() { # <vault> <item...>
   local vault="$1"; shift
   local data="$vault/.obsidian/plugins/scholar-weft/data.json" item ok=1
@@ -532,13 +531,7 @@ ensure_zotero_profile() {
 zotero_running() { pgrep -x zotero >/dev/null 2>&1; }
 install_zotero_addon() {
   local repo="$1" id="$2" url=""
-  if [ "$repo" = "zotlit" ]; then
-    step "Looking up the latest ZotLit Zotero add-on…"
-    url="$(curl -fsSL 'https://api.github.com/repos/aidenlx/zotlit/releases?per_page=100' 2>/dev/null \
-           | grep -o 'https://[^"]*zotlit-zotero-[0-9.]*\.xpi' | sort -uV | tail -1)"
-  else
-    url="$(gh_asset_url "$repo" ".xpi")"
-  fi
+  url="$(gh_asset_url "$repo" ".xpi")"
   [ -n "$url" ] || { fail "Install $id" "could not resolve the download URL"; return 1; }
   mkdir -p "$ZPROFILE/extensions"
   download "$url" "$ZPROFILE/extensions/$id.xpi" "$id.xpi"
@@ -616,8 +609,8 @@ fi
 
 # Refresh Obsidian for an existing install. Obsidian has TWO version numbers:
 # the APP self-updates, but the INSTALLER only changes when Obsidian is
-# reinstalled — and plugins (ZotLit especially) refuse to load on an installer
-# below 1.13.4. The installer version isn't readable from disk (only the app's
+# reinstalled — and plugins can refuse to load on an installer below 1.13.4.
+# The installer version isn't readable from disk (only the app's
 # Info.plist version is), so we ask the user, and word it so their answer picks
 # between "you need this" and "you'd still benefit".
 if [ "$OBSIDIAN_APP" = 1 ]; then
@@ -625,7 +618,7 @@ if [ "$OBSIDIAN_APP" = 1 ]; then
   echo "  Obsidian is installed. We recommend periodically REFRESHING it (reinstalling,"
   echo "  not just updating), which keeps its installer compatible with plugins."
   echo "    • Check Settings → About → Installer version."
-  echo "    • Below 1.13.4, or unsure? You need to reinstall Obsidian to use ZotLit."
+  echo "    • Below 1.13.4, or unsure? You need to reinstall Obsidian for newer plugins."
   echo "    • Higher? Still worth refreshing if you haven't in a while."
   echo "  Refreshing replaces the app; your vaults, plugins and settings are untouched."
   if ask "  Refresh Obsidian now?" "Refresh Obsidian"; then
@@ -700,32 +693,22 @@ fi
 # Locate the vault up front, so it's clear where plugins would go before we ask.
 locate_vaults
 
-if ask "Set up the Obsidian plugins (ScholarWeft, ZotLit, BRAT) and their settings? (Close Obsidian first.)" "Set up Obsidian plugins"; then
+if ask "Set up the Obsidian plugins (ScholarWeft, BRAT) and their settings? (Close Obsidian first.)" "Set up Obsidian plugins"; then
   if _retry_while "Obsidian is still running — please quit it (Cmd+Q), then retry." "Set up Obsidian plugins" pgrep -x Obsidian; then
     if pick_vault; then
-      # ZotLit (and sometimes others) refuse to load on an old Obsidian
-      # INSTALLER even when the app is current — and the installer only updates
-      # by reinstalling Obsidian. Flag it now, before the plugins are relied on,
-      # since the symptom otherwise looks like a failed install.
-      echo "  Reminder: if a plugin won't turn on (ZotLit is the usual one), its"
-      echo "  INSTALLER is probably below 1.13.4. Re-run this script and say yes to"
-      echo "  \"Refresh Obsidian\" (or reinstall from https://obsidian.md/download)."
+      # Plugins can refuse to load on an old Obsidian INSTALLER even when the
+      # app is current — and the installer only updates by reinstalling
+      # Obsidian. Flag it now, before the plugins are relied on, since the
+      # symptom otherwise looks like a failed install.
+      echo "  Reminder: if a plugin won't turn on, its INSTALLER is probably below"
+      echo "  1.13.4. Re-run this script and say yes to \"Refresh Obsidian\" (or"
+      echo "  reinstall from https://obsidian.md/download)."
       disable_conflicting_plugins "$VAULT"
       install_obsidian_plugin "nebedaay/ScholarWeft" "scholar-weft" "$VAULT"
-      install_obsidian_plugin "PKM-er/obsidian-zotlit" "zotlit" "$VAULT"
       install_obsidian_plugin "TfTHacker/obsidian42-brat" "obsidian42-brat" "$VAULT"
       brat_register "$VAULT"
-      queue_pending_setup "$VAULT" zotlit
     fi
   fi
-fi
-
-# Queued work runs inside Obsidian, where the plugins are loaded and their
-# settings can be changed safely.
-if [ -n "$VAULT" ]; then
-  echo "  Note: ScholarWeft will install and set its ZotLit templates the next time"
-  echo "  you open Obsidian (it does this from inside Obsidian, where it's safe to"
-  echo "  change another plugin's settings)."
 fi
 
 # Optional and separate from the plugin step, so one can be declined without the other.
@@ -749,13 +732,11 @@ if ask "Install that template and configure Templater to apply it to every new n
   fi
 fi
 
-if ask "Install the Better BibTeX and ZotLit extensions into Zotero? (Close Zotero first.)" "Install Zotero extensions"; then
+if ask "Install the Better BibTeX extension into Zotero? (Close Zotero first.)" "Install Zotero extensions"; then
   if _retry_while "Zotero is still running — please quit it (Cmd+Q), then retry." "Install Zotero extensions" zotero_running; then
     if ensure_zotero_profile; then
       if [ -f "$ZPROFILE/extensions/better-bibtex@iris-advies.com.xpi" ]; then pass "Better BibTeX already installed"
       else install_zotero_addon "retorquere/zotero-better-bibtex" "better-bibtex@iris-advies.com" && pass "Installed Better BibTeX"; fi
-      if [ -f "$ZPROFILE/extensions/zotlit@aidenlx.site.xpi" ]; then pass "ZotLit Zotero add-on already installed"
-      else install_zotero_addon "zotlit" "zotlit@aidenlx.site" && pass "Installed the ZotLit Zotero add-on"; fi
       enable_zotero_sideload "$ZPROFILE/prefs.js" && pass "Told Zotero to load the add-ons on next start (start Zotero now)"
     else
       skip "Install Zotero extensions"
@@ -842,11 +823,8 @@ echo "  plugins): the plugins are already installed and listed, so they'll load 
 echo "  Then: start Zotero if it was closed; restart Obsidian and enable any plugins"
 echo "  in Settings → Community plugins; click Retry in ScholarWeft's settings if it"
 echo "  says \"Cannot connect to Zotero\"."
-echo "  If a plugin won't turn on (ZotLit is the usual one), your Obsidian installer"
-echo "  is probably older than the app: the app updates itself, but the installer only"
-echo "  updates when you reinstall from a fresh download. Check Settings → About →"
-echo "  Installer version, then reinstall from https://obsidian.md/download — your vault"
-echo "  and settings are untouched."
-echo "  If you installed ZotLit: ScholarWeft installs its import templates and"
-echo "  points ZotLit's \"Template folder\" at sw-zotlit-templates/ the next time you"
-echo "  open Obsidian — no manual step needed."
+echo "  If a plugin won't turn on, your Obsidian installer is probably older than"
+echo "  the app: the app updates itself, but the installer only updates when you"
+echo "  reinstall from a fresh download. Check Settings → About → Installer version,"
+echo "  then reinstall from https://obsidian.md/download — your vault and settings"
+echo "  are untouched."

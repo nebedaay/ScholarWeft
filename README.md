@@ -45,8 +45,9 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 
 - **Multiple bibliography sources** — any number of `.bib`/CSL-JSON/CSL-YAML files plus Zotero, merged; Zotero wins on conflicts. See [Bibliography](./docs/bibliography.md).
 - **Native Zotero 7/8 API** — no Better BibTeX needed to resolve and format citations (BBT still required for Zotero 6, and still the easiest way to auto-generate citekeys). See [Zotero](./docs/zotero.md).
-- **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette; uses ZotLit when available. See [Literature Notes](./docs/literature-notes.md).
-- **Citekey sync** — update citations across the vault and rename literature notes when a Zotero citekey changes.
+- **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette. Use ScholarWeft's own bundled template, or ZotLit's when you prefer it. See [Literature Notes](./docs/literature-notes.md).
+- **Import and update from Zotero** — pick one or more references in Zotero's native dialog and create or refresh their notes; update the current note, or every note in the vault, in place. Re-imports refresh only the managed annotations region, leaving your own writing untouched.
+- **Citekey sync** — update citations across the vault and rename literature notes when a Zotero citekey changes; notes are re-rendered so their images follow.
 
 ### Document import and export (desktop only)
 
@@ -64,14 +65,14 @@ Basic citation work needs nothing installed. Document import/export and live Zot
 2. In BRAT's settings, add `nebedaay/ScholarWeft` to the **Beta plugin list**.
 3. Enable **ScholarWeft** in Community Plugins. BRAT keeps it updated.
 
-**New to all of this?** **[Setup](./docs/setup.md)** is a complete, click-by-click walkthrough, and it opens with a **setup script** that can do the whole thing for you — install/update the Obsidian and Zotero apps, add ScholarWeft and ZotLit to Obsidian and Better BibTeX and ZotLit to Zotero, switch on Zotero's local connection, and install the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts). It is interactive (asks before each step), safe to re-run, and prints a summary of what succeeded/failed/was skipped. Copy the one-line command for your OS from the top of [Setup](./docs/setup.md#the-easy-way-run-the-setup-script).
+**New to all of this?** **[Setup](./docs/setup.md)** is a complete, click-by-click walkthrough, and it opens with a **setup script** that can do the whole thing for you — install/update the Obsidian and Zotero apps, add ScholarWeft to Obsidian and Better BibTeX to Zotero, switch on Zotero's local connection, and install the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts). It is interactive (asks before each step), safe to re-run, and prints a summary of what succeeded/failed/was skipped. Copy the one-line command for your OS from the top of [Setup](./docs/setup.md#the-easy-way-run-the-setup-script).
 
 
 ## Companion plugins
 
-ScholarWeft works alongside [ZotLit](https://github.com/PKM-er/obsidian-zotlit): when ZotLit is present, literature note creation uses ZotLit's templates and `@@` autocomplete draws on ZotLit's full-text database. Neither plugin requires the other.
+ScholarWeft creates and refreshes literature notes itself — no companion plugin is required. If you already use [ZotLit](https://github.com/PKM-er/obsidian-zotlit), or prefer its templates, you can switch the import path to ZotLit under **Settings → ScholarWeft → Literature note import**; `@@` autocomplete draws on ZotLit's full-text database whenever it is present. Neither plugin requires the other.
 
-**One-click ZotLit templates:** *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies a curated set of templates into `sw-zotlit-templates/` and points ZotLit's *Template folder* setting there (ZotLit reloads automatically), leaving your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** — ZotLit builds each note's frontmatter from its settings, not from the templates — so imported notes get the same properties. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
+**One-click ZotLit templates:** after selecting ZotLit, *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies a curated set of templates into `sw-zotlit-templates/` and points ZotLit's *Template folder* setting there (ZotLit reloads automatically), leaving your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** — ZotLit builds each note's frontmatter from its settings, not from the templates — so imported notes get the same properties. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
 
 ## Plugin API
 

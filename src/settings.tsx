@@ -31,6 +31,8 @@ import { renderDependencyNote } from './dependencies';
 import { probeTools, invalidateToolProbe } from './tools';
 import type { DepKey } from './dependencies';
 import { openDocs } from './docs';
+import { insertZoteroNotesVaultWide } from './zoteroNotes';
+import { debugLog } from './helpers';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
   pathToPandoc: '',
@@ -55,23 +57,20 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   enableCiteKeyCompletion: true,
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
-  createNotesWithZotLit: true,
+  createNotesWithZotLit: false,
   /**
    * When true, literature notes are rendered with ScholarWeft's own bundled
-   * single-file template (`sw-note-templates/sw-note.eta.md`) instead of
-   * ZotLit's. Re-importing refreshes only the managed frontmatter fields and
-   * the `%%sw-managed%%` region. Off by default while it is being proven.
+   * single-file template (`sw-note-templates/sw-note.eta.md`). Re-importing
+   * refreshes only the managed frontmatter fields and the `%%sw-managed%%`
+   * region. On by default; turning it off switches to ZotLit.
    */
-  useOwnNoteTemplate: false,
+  useOwnNoteTemplate: true,
   /** Heading level a child note's top heading is shifted to when inlined (default 3). */
   ownNoteNotesHeadingLevel: 3,
   /** Vault folder excerpt images are copied into (vault-root relative). */
   ownNoteImageFolder: 'Attachments',
   /** How to treat an existing ZotLit note when our template renders it. */
   ownNoteZotLitHandling: 'ask',
-  /** Auto-insert an item's Zotero child notes into a literature note when it is
-   *  created (by ScholarWeft or by ZotLit). See the settings interface. */
-  insertZoteroNotesOnCreate: true,
   /** Use ZotLit's configured literature-note folder for the plugin's own
    *  notes too, read live from ZotLit (so it follows a change there). When on,
    *  `literatureNoteFolder` below is ignored. */
@@ -227,7 +226,6 @@ export interface ReferenceListSettings {
    * Only affects notes carrying the managed marker, and inserts are idempotent
    * (already-inserted keys are skipped).
    */
-  insertZoteroNotesOnCreate?: boolean;
   /** Action to take when a citation is tapped on mobile (no hover available). */
   mobileClickAction?: 'show' | 'copy' | 'link';
   pullFromZotero?: boolean;
@@ -1001,17 +999,17 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
   private renderLiteratureNotes(containerEl: HTMLElement): void {
     renderDependencyNote(
       containerEl,
-      ['zotero', 'zotlit'],
-      t('Creating literature notes needs Zotero for citekey and metadata lookup; ZotLit is optional and adds richer templates.')
+      ['zotero'],
+      t('Creating literature notes needs Zotero for citekey and metadata lookup. ZotLit is an optional alternative, not a requirement.')
     );
 
     const useOwn = this.plugin.settings.useOwnNoteTemplate === true;
 
     new Setting(containerEl)
-      .setName(t("Use ScholarWeft's own note template"))
+      .setName(t('Import literature notes with ScholarWeft'))
       .setDesc(
         t(
-          "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven."
+          'The default. ScholarWeft creates and refreshes literature notes from your Zotero items — frontmatter, child notes, and a managed annotations region that re-imports update without touching your own writing. Turn this off to use ZotLit instead.'
         )
       )
       .addToggle((toggle) =>
@@ -1087,10 +1085,14 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     const useZotlitForNotes = this.plugin.settings.createNotesWithZotLit !== false;
 
     new Setting(containerEl)
+      .setName(t('Use ZotLit for literature notes'))
+      .setHeading();
+
+    new Setting(containerEl)
       .setName(t('Create literature notes with ZotLit'))
       .setDesc(
         t(
-          'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.'
+          'Create and refresh notes with ZotLit\'s templates instead of ScholarWeft\'s own. Falls back to ScholarWeft when ZotLit is absent or this is off.'
         )
       )
       .addToggle((toggle) =>
@@ -1146,53 +1148,88 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         });
     }
 
-    new Setting(containerEl)
-      .setName(
-        t('If a Zotero reference contains notes, insert them into all literature notes created.')
-      )
-      .setDesc(
-        t(
-          'Whenever a literature note is created — by ScholarWeft or by ZotLit (for example an export from the Zotero–ZotLit companion) — insert the Zotero item\'s child notes into the note\'s "Notes" section automatically, instead of leaving it as a separate step. Notes that already contain them are left alone; you can still re-run "Insert Zotero notes into literature notes (vault)" at any time.'
+    // ZotLit-only actions: needed only by the ZotLit import path, so they live
+    // in this section and nowhere else.
+    if (useZotlitForNotes) {
+      new Setting(containerEl)
+        .setName(t('Insert Zotero notes into literature notes'))
+        .setDesc(
+          t(
+            'ZotLit imports a Zotero item\'s child notes as separate files and never hands their text to a template, so its notes can start with an empty "## Notes" section. This inserts each item\'s Zotero notes into every literature note whose "## Notes" section is still empty. Notes that already contain them are left alone.'
+          )
         )
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.insertZoteroNotesOnCreate !== false)
-          .onChange((value) => {
-            this.plugin.settings.insertZoteroNotesOnCreate = value;
-            this.plugin.saveSettings();
-          })
-      );
+        .addButton((button) =>
+          button
+            .setButtonText(t('Insert now (whole vault)'))
+            .setTooltip(
+              t('Runs on every literature note in the vault; Zotero must be running.')
+            )
+            .onClick(async () => {
+              const progress = new Notice('Inserting Zotero notes…', 0);
+              (progress as any).setProgress?.(0, 0);
+              const r = await insertZoteroNotesVaultWide(this.app, {
+                zoteroPort: this.plugin.settings.zoteroPort,
+                onProgress: (done, total) =>
+                  (progress as any).setProgress?.(done, total),
+              });
+              progress.hide();
+              const lines = [
+                `Inserted Zotero notes into ${r.inserted} literature note(s).`,
+                `${r.noNotes.length} had no Zotero notes.`,
+              ];
+              if (r.skipped.length) {
+                lines.push(
+                  `${r.skipped.length} skipped (the "## Notes" section already had content).`
+                );
+              }
+              if (r.failed.length) {
+                lines.push(
+                  `${r.failed.length} could not be read from Zotero — is Zotero running? (see the developer console)`
+                );
+              }
+              new Notice(`ScholarWeft: ${lines.join('\n')}`, 10000);
+              if (r.skipped.length) {
+                debugLog(
+                  'ScholarWeft: notes skipped because "## Notes" already had content:\n' +
+                    r.skipped.join('\n')
+                );
+              }
+            })
+        );
+
+      if (Platform.isDesktop) {
+        this.renderCompanionSetting(containerEl, {
+          pluginId: 'zotlit',
+          companionKey: 'zotlit',
+          name: "Install and use ScholarWeft's ZotLit import templates",
+          readyDesc:
+            'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
+          actionLabel: 'Install templates',
+          reinstallLabel: 'Reinstall templates',
+          isInstalled: () => this.templatesInstalled(SW_ZOTLIT_FOLDER),
+          hint:
+            "ZotLit won't enable, or errors when you turn it on? Your Obsidian installer is probably older than the app — the app updates itself, but the installer only updates when you reinstall from a fresh download. Check Settings → About → Installer version, then download the latest installer from obsidian.md/download and reinstall Obsidian; your vault and settings are untouched.",
+          run: async () => {
+            await installZotlitTemplatesWithNotice(this.plugin);
+          },
+          uninstall: async () => {
+            const r = await uninstallZotlitTemplates(this.plugin);
+            if (r.error) new Notice(`ScholarWeft: ${r.error}`, 8000);
+            else {
+              new Notice(
+                r.reverted
+                  ? "ScholarWeft: removed the ZotLit templates and restored ZotLit's own settings."
+                  : 'ScholarWeft: removed the ZotLit templates.' +
+                      (r.reverted ? '' : " (ZotLit's settings were left as they are.)"),
+                8000
+              );
+            }
+          },
+        });
+      }
+    }
 
     if (Platform.isDesktop) {
-      this.renderCompanionSetting(containerEl, {
-        pluginId: 'zotlit',
-        companionKey: 'zotlit',
-        name: "Install and use ScholarWeft's ZotLit import templates",
-        readyDesc:
-          'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
-        actionLabel: 'Install templates',
-        reinstallLabel: 'Reinstall templates',
-        isInstalled: () => this.templatesInstalled(SW_ZOTLIT_FOLDER),
-        hint:
-          "ZotLit won't enable, or errors when you turn it on? Your Obsidian installer is probably older than the app — the app updates itself, but the installer only updates when you reinstall from a fresh download. Check Settings → About → Installer version, then download the latest installer from obsidian.md/download and reinstall Obsidian; your vault and settings are untouched.",
-        run: async () => {
-          await installZotlitTemplatesWithNotice(this.plugin);
-        },
-        uninstall: async () => {
-          const r = await uninstallZotlitTemplates(this.plugin);
-          if (r.error) new Notice(`ScholarWeft: ${r.error}`, 8000);
-          else {
-            new Notice(
-              r.reverted
-                ? "ScholarWeft: removed the ZotLit templates and restored ZotLit's own settings."
-                : 'ScholarWeft: removed the ZotLit templates.' +
-                    (r.reverted ? '' : " (ZotLit's settings were left as they are.)"),
-              8000
-            );
-          }
-        },
-      });
       this.renderCompanionSetting(containerEl, {
         pluginId: 'templater-obsidian',
         companionKey: 'templater',
