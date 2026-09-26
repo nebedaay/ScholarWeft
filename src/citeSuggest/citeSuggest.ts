@@ -10,6 +10,7 @@ import {
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
+import { rerankKey } from 'src/template/search-tier';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
@@ -115,11 +116,18 @@ const triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 // A period ends the trigger so normal sentence punctuation closes the popup.
 const doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
 
+// Triple-@ trigger: @@@ adds abstract to the @@ fields. Checked first so it
+// wins over @@ (which would otherwise match the first two @s).
+const tripleAtRE = /(^|[^\p{L}\p{N}@])(@@@)([^.]*)$/u;
+
 // Sentinel prepended to the query when @@ mode is active. Encoding the mode
 // in the query string means it travels with the EditorSuggestContext and is
 // still correct when getSuggestions resolves asynchronously — no class-level
 // flag that a later onTrigger call could clobber mid-flight.
 const DOUBLE_AT_PREFIX = '\x00';
+
+// Same idea for @@@ (title + creators + abstract).
+const TRIPLE_AT_PREFIX = '\x01';
 
 export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>> {
   private plugin: ReferenceList;
@@ -150,12 +158,19 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   async getSuggestions(
     context: EditorSuggestContext
   ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
-    const isDoubleAtMode = context.query.startsWith(DOUBLE_AT_PREFIX);
-    const searchQuery = isDoubleAtMode
-      ? context.query.slice(DOUBLE_AT_PREFIX.length).trim()
-      : context.query.trim();
+    const isTripleAtMode = context.query.startsWith(TRIPLE_AT_PREFIX);
+    const isDoubleAtMode =
+      isTripleAtMode || context.query.startsWith(DOUBLE_AT_PREFIX);
+    const searchQuery = context.query
+      .slice(isTripleAtMode ? 1 : isDoubleAtMode ? 1 : 0)
+      .trim();
 
-    LOG('getSuggestions query=', JSON.stringify(searchQuery), 'doubleAt=', isDoubleAtMode);
+    LOG(
+      'getSuggestions query=',
+      JSON.stringify(searchQuery),
+      'mode=',
+      isTripleAtMode ? '@@@' : isDoubleAtMode ? '@@' : '@'
+    );
 
     if (!isDoubleAtMode && (!searchQuery || searchQuery.includes(' '))) {
       return [];
@@ -169,64 +184,40 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // and, only if that finds nothing either, show a "still loading" line.
     const indexReady = bibManager.fuseReady;
 
-    // ── @@ mode: ZotLit-first full-text search ─────────────────────────────
+    // ── @@ / @@@ mode: OUR search, ZotLit optional ─────────────────────────
     // Always uses the global index — per-file bibliography overrides are
-    // intentionally ignored here since @@ is a full-library search.
+    // intentionally ignored here since this is a full-library search.
+    //
+    // ZotLit is NOT consulted. Its database search offered the same kind of
+    // item lookup our own index does (it never searched PDF full text), and
+    // ours is rankable and works without the plugin. ZotLit remains only as a
+    // last-resort accelerator below, when our index is missing and its own is
+    // present — never as the source of truth for what @@ means.
     if (isDoubleAtMode) {
-      // 1. ZotLit's SQLite database — same engine powering ZotLit's own suggester.
-      const zotlitPlugin = (plugin.app as any).plugins?.plugins?.['zotlit'];
-      if (zotlitPlugin?.database) {
-        try {
-          const raw: any[] = searchQuery
-            ? await zotlitPlugin.database.search(searchQuery)
-            : await zotlitPlugin.database.getItemsOf(this.limit);
-          if (raw?.length) {
-            LOG('@@ ZotLit returned', raw.length, 'items');
-            const results = raw
-              .map((r: any, refIndex: number) => {
-                const titleRaw = r.item?.title;
-                const title: string | undefined = Array.isArray(titleRaw)
-                  ? titleRaw[0]
-                  : typeof titleRaw === 'string' ? titleRaw : undefined;
-                const id: string = r.item?.citekey ?? r.item?.citationKey ?? '';
-                if (!id) return null;
-                const entry: PartialCSLEntry = { id, title };
-                const creators = r.item?.creators;
-                if (Array.isArray(creators) && creators.length > 0) {
-                  entry.author = creators.map((c: any) => ({
-                    family: c.lastName ?? c.name ?? '',
-                    given: c.firstName ?? '',
-                  }));
-                }
-                return { item: entry, refIndex, score: 0.5 };
-              })
-              .filter(Boolean) as Fuse.FuseResult<PartialCSLEntry>[];
-            if (results.length) return results;
-          }
-        } catch (e) {
-          LOG('@@ ZotLit database search failed:', e);
-        }
-      }
+      const tier = isTripleAtMode ? 'abstract' : 'title';
+      const fuse = bibManager.fuseForTier(tier) ?? bibManager.fuse;
 
-      // 2. Fall back to the plugin's title-biased Fuse index — but while that
-      // index is still building, use a live Zotero title/author search instead
-      // of returning nothing, and say so if even that is empty.
-      const fuse = bibManager.fuseTitle ?? bibManager.fuse;
       if (!fuse) {
+        // No local index yet (a fresh install). Prefer Zotero live search, then
+        // ZotLit's index if that is all we have, then say "still loading".
         const items = await this.liveSearch(searchQuery, 'text');
         if (items.length) {
           return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
         }
+        const zotlitResults = await this.zotlitFallback(searchQuery);
+        if (zotlitResults.length) return zotlitResults;
         return indexReady ? [] : loadingSuggestion();
       }
-      LOG('@@ fuse fallback, docs=', (fuse as any)?._docs?.length ?? 0);
+
+      LOG(`@${isTripleAtMode ? '@@' : '@'} fuse tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
       if (!searchQuery) {
         const docs = (fuse as any)?._docs as PartialCSLEntry[] | undefined;
         return docs?.length
           ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 }))
           : [];
       }
-      return fuse.search(normalizeDiacritics(searchQuery), { limit: this.limit }) ?? [];
+      const hits = fuse.search(normalizeDiacritics(searchQuery), { limit: this.limit });
+      return this.rerank(hits, searchQuery);
     }
 
     // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
@@ -255,6 +246,81 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // Nothing from either the index or a live search. If the index is still
     // building, tell the user that rather than leaving the popup blank.
     return indexReady ? [] : loadingSuggestion();
+  }
+
+  /**
+   * Re-rank Fuse's hits with the pure relevance nudge (see `search-tier.ts`).
+   * Fuse's score is length-biased, so this demotes wild fuzzy matches — the
+   * "Slightly" → "The Social Life of Ghosttowns in Libya" case — without
+   * attempting full relevance scoring (that is the roadmap item).
+   */
+  private rerank(
+    hits: Fuse.FuseResult<PartialCSLEntry>[],
+    query: string
+  ): Fuse.FuseResult<PartialCSLEntry>[] {
+    if (hits.length < 2) return hits;
+    return hits
+      .map((hit) => ({
+        hit,
+        key: rerankKey(
+          {
+            title: hit.item?.title ?? null,
+            authorText: (hit.item?.author ?? [])
+              .map((a: any) => a?.family ?? a?.literal ?? '')
+              .filter(Boolean)
+              .join(' '),
+            abstract: (hit.item as any)?.abstract ?? null,
+            fuseScore: typeof hit.score === 'number' ? hit.score : 1,
+          },
+          query,
+          normalizeDiacritics
+        ),
+      }))
+      .sort((a, b) => a.key - b.key)
+      .map((r) => r.hit);
+  }
+
+  /**
+   * ZotLit's own index, used ONLY when ours is unavailable and Zotero's live
+   * search came up empty. It is an accelerator, not a dependency: `@@` works
+   * identically with ZotLit absent.
+   */
+  private async zotlitFallback(
+    searchQuery: string
+  ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
+    const db = (this.plugin.app as any).plugins?.plugins?.['zotlit']?.database;
+    if (!db) return [];
+    try {
+      const raw: any[] = searchQuery
+        ? await db.search(searchQuery)
+        : await db.getItemsOf(this.limit);
+      if (!raw?.length) return [];
+      LOG('@@ ZotLit fallback returned', raw.length, 'items');
+      return raw
+        .map((r: any, refIndex: number) => {
+          const titleRaw = r.item?.title;
+          const title: string | undefined = Array.isArray(titleRaw)
+            ? titleRaw[0]
+            : typeof titleRaw === 'string'
+              ? titleRaw
+              : undefined;
+          const id: string = r.item?.citekey ?? r.item?.citationKey ?? '';
+          if (!id) return null;
+          const entry: PartialCSLEntry = { id, title };
+          const creators = r.item?.creators;
+          if (Array.isArray(creators) && creators.length > 0) {
+            entry.author = creators.map((c: any) => ({
+              family: c.lastName ?? c.name ?? '',
+              given: c.firstName ?? '',
+            }));
+          }
+          return { item: entry, refIndex, score: 0.5 };
+        })
+        .filter(Boolean) as Fuse.FuseResult<PartialCSLEntry>[];
+    } catch (e) {
+      LOG('@@ ZotLit fallback failed:', e);
+      return [];
+    }
   }
 
   renderSuggestion(
@@ -447,17 +513,29 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
     const line = (editor.getLine(cursor.line) || '').substring(0, cursor.ch);
 
-    // Check @@ before single-@ so it wins. Mode is encoded in the query string
-    // (DOUBLE_AT_PREFIX) so it travels with the context and stays correct when
-    // getSuggestions resolves after a subsequent onTrigger has already fired.
+    // Check @@@ then @@ before single-@ so they win. Mode is encoded in the
+    // query string (DOUBLE_AT_PREFIX / TRIPLE_AT_PREFIX) so it travels with the
+    // context and stays correct when getSuggestions resolves after a later
+    // onTrigger has already fired.
+    const tripleMatch = line.match(tripleAtRE);
+    if (tripleMatch) {
+      LOG('onTrigger: @@@ matched, query=', JSON.stringify(tripleMatch[3]));
+      this.lastSelect = null;
+      // @@@ searches OUR index (title/creators/abstract); ZotLit is not
+      // consulted, so its presence no longer suppresses the refresh.
+      if (!this.context && pullFromZotero) this.refreshZBib();
+      return {
+        start: { line: cursor.line, ch: tripleMatch.index + tripleMatch[1].length },
+        end: cursor,
+        query: TRIPLE_AT_PREFIX + tripleMatch[3],
+      };
+    }
+
     const doubleMatch = line.match(doubleAtRE);
     if (doubleMatch) {
       LOG('onTrigger: @@ matched, query=', JSON.stringify(doubleMatch[3]));
       this.lastSelect = null;
-      // Skip the plugin's Zotero refresh in @@ mode when ZotLit is present —
-      // ZotLit maintains its own data sync; refreshing the plugin's bib is redundant.
-      const zotlitDb = (this.plugin.app as any).plugins?.plugins?.['zotlit']?.database;
-      if (!this.context && pullFromZotero && !zotlitDb) this.refreshZBib();
+      if (!this.context && pullFromZotero) this.refreshZBib();
       return {
         start: { line: cursor.line, ch: doubleMatch.index + doubleMatch[1].length },
         end: cursor,

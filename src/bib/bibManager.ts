@@ -16,6 +16,11 @@ import {
 import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
 import { SimpleLRU } from './lru';
 import {
+  MIN_MATCH_CHARS,
+  TIER_THRESHOLD,
+  tierWeights,
+} from 'src/template/search-tier';
+import {
   PromiseCapability,
   copyElToClipboard,
   copyTextToClipboard,
@@ -114,15 +119,38 @@ const fuseSettings = {
 // Title/author-biased: used for @@ full-text autocomplete.
 const fuseTitleSettings = {
   includeMatches: true,
-  threshold: 0.4,
-  minMatchCharLength: 2,
+  threshold: TIER_THRESHOLD.title,
+  minMatchCharLength: MIN_MATCH_CHARS,
   getFn: fuseFn,
-  keys: [
-    { name: 'title', weight: 0.6 },
-    { name: 'author.family', weight: 0.2 },
-    { name: 'author.literal', weight: 0.1 },
-    { name: 'id', weight: 0.1 },
-  ],
+  keys: (() => {
+    const w = tierWeights('title');
+    return [
+      { name: 'title', weight: w.title },
+      { name: 'author.family', weight: w.creators },
+      { name: 'author.literal', weight: w.creators / 2 },
+      { name: 'id', weight: w.citekey },
+    ];
+  })(),
+};
+
+// `@@@`: title + creators + abstract. Abstract is weighted LOWEST so it acts as
+// a tiebreaker: an item whose wording merely appears in its abstract must never
+// outrank one whose title actually matches.
+const fuseAbstractSettings = {
+  includeMatches: true,
+  threshold: TIER_THRESHOLD.abstract,
+  minMatchCharLength: MIN_MATCH_CHARS,
+  getFn: fuseFn,
+  keys: (() => {
+    const w = tierWeights('abstract');
+    return [
+      { name: 'title', weight: w.title },
+      { name: 'author.family', weight: w.creators },
+      { name: 'author.literal', weight: w.creators / 2 },
+      { name: 'abstract', weight: w.abstract },
+      { name: 'id', weight: w.citekey },
+    ];
+  })(),
 };
 
 interface ScopedSettings {
@@ -436,6 +464,8 @@ export class BibManager {
   bibCache: Map<string, PartialCSLEntry> = new Map();
   fuse: Fuse<PartialCSLEntry>;
   fuseTitle: Fuse<PartialCSLEntry>;
+  /** `@@@` tier: adds abstract, ranked below title/author. */
+  fuseAbstract: Fuse<PartialCSLEntry>;
   engine: any;
 
   /** True as soon as the Fuse index is built — gates autocomplete independently
@@ -797,6 +827,20 @@ export class BibManager {
     } else {
       this.fuseTitle.setCollection(data);
     }
+    if (!this.fuseAbstract) {
+      this.fuseAbstract = new Fuse(data, fuseAbstractSettings);
+    } else {
+      this.fuseAbstract.setCollection(data);
+    }
+  }
+
+  /**
+   * The Fuse index for a given tier: `@@` searches title + creators, `@@@`
+   * additionally searches the abstract (weighted lowest). `@` uses `fuse`
+   * above, which is citekey-biased.
+   */
+  fuseForTier(tier: 'title' | 'abstract'): Fuse<PartialCSLEntry> | null {
+    return (tier === 'abstract' ? this.fuseAbstract : this.fuseTitle) ?? null;
   }
 
   updateFuse(_data?: Map<string, PartialCSLEntry>) {

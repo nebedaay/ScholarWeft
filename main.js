@@ -93623,6 +93623,51 @@ var SimpleLRU = class {
   }
 };
 
+// src/template/search-tier.ts
+function tierWeights(tier) {
+  switch (tier) {
+    case "citekey":
+      return { citekey: 0.6, title: 0.25, creators: 0.1, abstract: 0 };
+    case "title":
+      return { citekey: 0.1, title: 0.6, creators: 0.25, abstract: 0 };
+    case "abstract":
+      return { citekey: 0.05, title: 0.55, creators: 0.25, abstract: 0.15 };
+  }
+}
+var TIER_THRESHOLD = {
+  citekey: 0.35,
+  title: 0.3,
+  abstract: 0.3
+};
+var MIN_MATCH_CHARS = 2;
+function containsPhrase(haystack, needle) {
+  if (!haystack)
+    return false;
+  return haystack.toLowerCase().includes(needle.toLowerCase());
+}
+function rerankKey(input, query, normalize2 = (s3) => s3) {
+  var _a, _b, _c;
+  const q4 = normalize2(query.trim());
+  const title = normalize2((_a = input.title) != null ? _a : "");
+  const author = normalize2((_b = input.authorText) != null ? _b : "");
+  const abstract = normalize2((_c = input.abstract) != null ? _c : "");
+  let adjustment = 0;
+  if (q4) {
+    const inTitle = containsPhrase(title, q4);
+    const inAuthor = containsPhrase(author, q4);
+    const inAbstract = containsPhrase(abstract, q4);
+    if (inTitle)
+      adjustment -= 1;
+    else if (inAuthor)
+      adjustment -= 0.3;
+    else if (inAbstract)
+      adjustment += 0.5;
+    else
+      adjustment += 1;
+  }
+  return input.fuseScore + adjustment;
+}
+
 // src/bib/bibManager.ts
 var import_obsidian26 = __toModule(require("obsidian"));
 
@@ -93826,15 +93871,34 @@ var fuseSettings = {
 };
 var fuseTitleSettings = {
   includeMatches: true,
-  threshold: 0.4,
-  minMatchCharLength: 2,
+  threshold: TIER_THRESHOLD.title,
+  minMatchCharLength: MIN_MATCH_CHARS,
   getFn: fuseFn,
-  keys: [
-    { name: "title", weight: 0.6 },
-    { name: "author.family", weight: 0.2 },
-    { name: "author.literal", weight: 0.1 },
-    { name: "id", weight: 0.1 }
-  ]
+  keys: (() => {
+    const w4 = tierWeights("title");
+    return [
+      { name: "title", weight: w4.title },
+      { name: "author.family", weight: w4.creators },
+      { name: "author.literal", weight: w4.creators / 2 },
+      { name: "id", weight: w4.citekey }
+    ];
+  })()
+};
+var fuseAbstractSettings = {
+  includeMatches: true,
+  threshold: TIER_THRESHOLD.abstract,
+  minMatchCharLength: MIN_MATCH_CHARS,
+  getFn: fuseFn,
+  keys: (() => {
+    const w4 = tierWeights("abstract");
+    return [
+      { name: "title", weight: w4.title },
+      { name: "author.family", weight: w4.creators },
+      { name: "author.literal", weight: w4.creators / 2 },
+      { name: "abstract", weight: w4.abstract },
+      { name: "id", weight: w4.citekey }
+    ];
+  })()
 };
 function getFrontmatterString(value) {
   if (typeof value !== "string")
@@ -94224,6 +94288,15 @@ var BibManager = class {
     } else {
       this.fuseTitle.setCollection(data);
     }
+    if (!this.fuseAbstract) {
+      this.fuseAbstract = new Fuse(data, fuseAbstractSettings);
+    } else {
+      this.fuseAbstract.setCollection(data);
+    }
+  }
+  fuseForTier(tier) {
+    var _a;
+    return (_a = tier === "abstract" ? this.fuseAbstract : this.fuseTitle) != null ? _a : null;
   }
   updateFuse(_data) {
     if (!this.fuse)
@@ -95989,7 +96062,9 @@ function isLoadingSuggestion(s3) {
 }
 var triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 var doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
+var tripleAtRE = /(^|[^\p{L}\p{N}@])(@@@)([^.]*)$/u;
 var DOUBLE_AT_PREFIX = "\0";
+var TRIPLE_AT_PREFIX = "";
 var CiteSuggest = class extends import_obsidian27.EditorSuggest {
   constructor(app2, plugin) {
     super(app2);
@@ -96011,10 +96086,11 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     ]);
   }
   async getSuggestions(context) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
-    const isDoubleAtMode = context.query.startsWith(DOUBLE_AT_PREFIX);
-    const searchQuery = isDoubleAtMode ? context.query.slice(DOUBLE_AT_PREFIX.length).trim() : context.query.trim();
-    LOG("getSuggestions query=", JSON.stringify(searchQuery), "doubleAt=", isDoubleAtMode);
+    var _a, _b, _c, _d, _e, _f;
+    const isTripleAtMode = context.query.startsWith(TRIPLE_AT_PREFIX);
+    const isDoubleAtMode = isTripleAtMode || context.query.startsWith(DOUBLE_AT_PREFIX);
+    const searchQuery = context.query.slice(isTripleAtMode ? 1 : isDoubleAtMode ? 1 : 0).trim();
+    LOG("getSuggestions query=", JSON.stringify(searchQuery), "mode=", isTripleAtMode ? "@@@" : isDoubleAtMode ? "@@" : "@");
     if (!isDoubleAtMode && (!searchQuery || searchQuery.includes(" "))) {
       return [];
     }
@@ -96022,60 +96098,32 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     const { bibManager } = plugin;
     const indexReady = bibManager.fuseReady;
     if (isDoubleAtMode) {
-      const zotlitPlugin = (_b = (_a = plugin.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["zotlit"];
-      if (zotlitPlugin == null ? void 0 : zotlitPlugin.database) {
-        try {
-          const raw = searchQuery ? await zotlitPlugin.database.search(searchQuery) : await zotlitPlugin.database.getItemsOf(this.limit);
-          if (raw == null ? void 0 : raw.length) {
-            LOG("@@ ZotLit returned", raw.length, "items");
-            const results = raw.map((r3, refIndex) => {
-              var _a2, _b2, _c2, _d2, _e2, _f2;
-              const titleRaw = (_a2 = r3.item) == null ? void 0 : _a2.title;
-              const title = Array.isArray(titleRaw) ? titleRaw[0] : typeof titleRaw === "string" ? titleRaw : void 0;
-              const id = (_e2 = (_d2 = (_b2 = r3.item) == null ? void 0 : _b2.citekey) != null ? _d2 : (_c2 = r3.item) == null ? void 0 : _c2.citationKey) != null ? _e2 : "";
-              if (!id)
-                return null;
-              const entry = { id, title };
-              const creators = (_f2 = r3.item) == null ? void 0 : _f2.creators;
-              if (Array.isArray(creators) && creators.length > 0) {
-                entry.author = creators.map((c3) => {
-                  var _a3, _b3, _c3;
-                  return {
-                    family: (_b3 = (_a3 = c3.lastName) != null ? _a3 : c3.name) != null ? _b3 : "",
-                    given: (_c3 = c3.firstName) != null ? _c3 : ""
-                  };
-                });
-              }
-              return { item: entry, refIndex, score: 0.5 };
-            }).filter(Boolean);
-            if (results.length)
-              return results;
-          }
-        } catch (e3) {
-          LOG("@@ ZotLit database search failed:", e3);
-        }
-      }
-      const fuse2 = (_c = bibManager.fuseTitle) != null ? _c : bibManager.fuse;
+      const tier = isTripleAtMode ? "abstract" : "title";
+      const fuse2 = (_a = bibManager.fuseForTier(tier)) != null ? _a : bibManager.fuse;
       if (!fuse2) {
         const items = await this.liveSearch(searchQuery, "text");
         if (items.length) {
           return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
         }
+        const zotlitResults = await this.zotlitFallback(searchQuery);
+        if (zotlitResults.length)
+          return zotlitResults;
         return indexReady ? [] : loadingSuggestion();
       }
-      LOG("@@ fuse fallback, docs=", (_e = (_d = fuse2 == null ? void 0 : fuse2._docs) == null ? void 0 : _d.length) != null ? _e : 0);
+      LOG(`@${isTripleAtMode ? "@@" : "@"} fuse tier=${tier}, docs=`, (_c = (_b = fuse2 == null ? void 0 : fuse2._docs) == null ? void 0 : _b.length) != null ? _c : 0);
       if (!searchQuery) {
         const docs = fuse2 == null ? void 0 : fuse2._docs;
         return (docs == null ? void 0 : docs.length) ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 })) : [];
       }
-      return (_f = fuse2.search(normalizeDiacritics(searchQuery), { limit: this.limit })) != null ? _f : [];
+      const hits = fuse2.search(normalizeDiacritics(searchQuery), { limit: this.limit });
+      return this.rerank(hits, searchQuery);
     }
     let fuse = bibManager.fuse;
     const fileCacheEntry = bibManager.fileCache.get(context.file);
-    if ((_g = fileCacheEntry == null ? void 0 : fileCacheEntry.source) == null ? void 0 : _g.fuse) {
+    if ((_d = fileCacheEntry == null ? void 0 : fileCacheEntry.source) == null ? void 0 : _d.fuse) {
       fuse = fileCacheEntry.source.fuse;
     }
-    LOG("single-@ fuse docs=", (_i = (_h = fuse == null ? void 0 : fuse._docs) == null ? void 0 : _h.length) != null ? _i : 0);
+    LOG("single-@ fuse docs=", (_f = (_e = fuse == null ? void 0 : fuse._docs) == null ? void 0 : _e.length) != null ? _f : 0);
     const fuseResults = searchCitekeyFirst(fuse, searchQuery, this.limit);
     if (fuseResults == null ? void 0 : fuseResults.length)
       return fuseResults;
@@ -96086,6 +96134,60 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
       return liveItems.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
     }
     return indexReady ? [] : loadingSuggestion();
+  }
+  rerank(hits, query) {
+    if (hits.length < 2)
+      return hits;
+    return hits.map((hit) => {
+      var _a, _b, _c, _d, _e, _f;
+      return {
+        hit,
+        key: rerankKey({
+          title: (_b = (_a = hit.item) == null ? void 0 : _a.title) != null ? _b : null,
+          authorText: ((_d = (_c = hit.item) == null ? void 0 : _c.author) != null ? _d : []).map((a3) => {
+            var _a2, _b2;
+            return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
+          }).filter(Boolean).join(" "),
+          abstract: (_f = (_e = hit.item) == null ? void 0 : _e.abstract) != null ? _f : null,
+          fuseScore: typeof hit.score === "number" ? hit.score : 1
+        }, query, normalizeDiacritics)
+      };
+    }).sort((a3, b3) => a3.key - b3.key).map((r3) => r3.hit);
+  }
+  async zotlitFallback(searchQuery) {
+    var _a, _b, _c;
+    const db = (_c = (_b = (_a = this.plugin.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["zotlit"]) == null ? void 0 : _c.database;
+    if (!db)
+      return [];
+    try {
+      const raw = searchQuery ? await db.search(searchQuery) : await db.getItemsOf(this.limit);
+      if (!(raw == null ? void 0 : raw.length))
+        return [];
+      LOG("@@ ZotLit fallback returned", raw.length, "items");
+      return raw.map((r3, refIndex) => {
+        var _a2, _b2, _c2, _d, _e, _f;
+        const titleRaw = (_a2 = r3.item) == null ? void 0 : _a2.title;
+        const title = Array.isArray(titleRaw) ? titleRaw[0] : typeof titleRaw === "string" ? titleRaw : void 0;
+        const id = (_e = (_d = (_b2 = r3.item) == null ? void 0 : _b2.citekey) != null ? _d : (_c2 = r3.item) == null ? void 0 : _c2.citationKey) != null ? _e : "";
+        if (!id)
+          return null;
+        const entry = { id, title };
+        const creators = (_f = r3.item) == null ? void 0 : _f.creators;
+        if (Array.isArray(creators) && creators.length > 0) {
+          entry.author = creators.map((c3) => {
+            var _a3, _b3, _c3;
+            return {
+              family: (_b3 = (_a3 = c3.lastName) != null ? _a3 : c3.name) != null ? _b3 : "",
+              given: (_c3 = c3.firstName) != null ? _c3 : ""
+            };
+          });
+        }
+        return { item: entry, refIndex, score: 0.5 };
+      }).filter(Boolean);
+    } catch (e3) {
+      LOG("@@ ZotLit fallback failed:", e3);
+      return [];
+    }
   }
   renderSuggestion(suggestion, el) {
     if (isLoadingSuggestion(suggestion)) {
@@ -96213,7 +96315,6 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     return out.slice(0, this.limit);
   }
   onTrigger(cursor, editor) {
-    var _a, _b, _c;
     const { enableCiteKeyCompletion, pullFromZotero } = this.plugin.settings;
     if (enableCiteKeyCompletion === false)
       return null;
@@ -96222,12 +96323,23 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
       return null;
     }
     const line = (editor.getLine(cursor.line) || "").substring(0, cursor.ch);
+    const tripleMatch = line.match(tripleAtRE);
+    if (tripleMatch) {
+      LOG("onTrigger: @@@ matched, query=", JSON.stringify(tripleMatch[3]));
+      this.lastSelect = null;
+      if (!this.context && pullFromZotero)
+        this.refreshZBib();
+      return {
+        start: { line: cursor.line, ch: tripleMatch.index + tripleMatch[1].length },
+        end: cursor,
+        query: TRIPLE_AT_PREFIX + tripleMatch[3]
+      };
+    }
     const doubleMatch = line.match(doubleAtRE);
     if (doubleMatch) {
       LOG("onTrigger: @@ matched, query=", JSON.stringify(doubleMatch[3]));
       this.lastSelect = null;
-      const zotlitDb = (_c = (_b = (_a = this.plugin.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["zotlit"]) == null ? void 0 : _c.database;
-      if (!this.context && pullFromZotero && !zotlitDb)
+      if (!this.context && pullFromZotero)
         this.refreshZBib();
       return {
         start: { line: cursor.line, ch: doubleMatch.index + doubleMatch[1].length },
