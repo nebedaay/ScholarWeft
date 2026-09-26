@@ -61,6 +61,7 @@ import {
   serializeMigrationState,
   type RelatedMigrationState,
 } from './template/related-migration';
+import { shouldRefreshOnRefocus } from './template/refocus';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
 
@@ -366,6 +367,25 @@ export default class ReferenceList extends Plugin {
     this.registerEvent(
       app.workspace.on('editor-change', () => this.positionSuggest())
     );
+
+    // Refresh the Zotero library when Obsidian itself regains focus, so edits
+    // made in Zotero (a new tag, a changed title) reach ScholarWeft without
+    // waiting for a restart or for the `@@` popup to open.
+    //
+    // Deliberately NOT `window`'s 'focus' event: Obsidian's window contains its
+    // own tab and pane system, so that fires when you switch tabs or panes as
+    // well — a Zotero edit cannot have happened in those cases. `document`'s
+    // visibility plus `document.hasFocus()` means "the app window was hidden or
+    // unfocused and is now back", which is the only time Zotero could have
+    // changed underneath us.
+    this.registerDomEvent(document, 'visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.refreshOnAppRefocus();
+      else this._lastAwayAt = Date.now();
+    });
+    this.registerDomEvent(window, 'focus', () => this.refreshOnAppRefocus());
+    this.registerDomEvent(window, 'blur', () => {
+      this._lastAwayAt = Date.now();
+    });
     this.tooltipManager = new TooltipManager(this);
     this.registerMarkdownPostProcessor(processCiteKeys(this));
     this.registerEditorExtension([
@@ -1697,7 +1717,41 @@ export default class ReferenceList extends Plugin {
     await this.bibManager.saveRenderedCache();
   }, 3000);
 
-  /** Which `zotero-key`s have run the one-time `related` → `sw-related` move. */
+  /** Throttle for the app-refocus library refresh (see onload). */
+  private _lastRefocusRefreshAt = 0;
+  /** Timestamp of the last time the app window was seen unfocused/hidden. */
+  private _lastAwayAt = 0;
+
+  /**
+   * Refresh the Zotero library after Obsidian regains focus.
+   *
+   * Guarded so a refocus that could not have changed anything is a no-op:
+   * Zotero only changes while the user is AWAY, so without a recorded absence
+   * (an internal pane/tab switch, say) there is nothing to re-fetch. Also
+   * throttled, so bouncing between the two apps doesn't pull the whole library
+   * on every switch — `refreshGlobalZBib` itself guards against overlap.
+   */
+  private refreshOnAppRefocus(): void {
+    if (this.settings.pullFromZotero === false) return;
+
+    const away = this._lastAwayAt;
+    this._lastAwayAt = 0;
+    const now = Date.now();
+    if (
+      !shouldRefreshOnRefocus({
+        hasFocus: document.hasFocus(),
+        awayAt: away,
+        lastRefreshAt: this._lastRefocusRefreshAt,
+        now,
+      })
+    ) {
+      return;
+    }
+    this._lastRefocusRefreshAt = now;
+    void this.bibManager.refreshGlobalZBib().catch(console.error);
+  }
+
+  /** One-time `related` → `sw-related` bookkeeping (see related-migration.ts). */
   private _relatedMigration: RelatedMigrationState = parseMigrationState(null);
 
   /** Debounced persist of the migration registry (same pattern as cited-keys). */

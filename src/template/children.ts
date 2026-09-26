@@ -40,6 +40,11 @@ export interface RawZoteroChildren {
   annotations?: unknown[];
   notes?: unknown[];
   /**
+   * The item's tags read LIVE from Zotero, overriding the cached `_tags` when
+   * present. `null`/absent means "could not read", and the cached value stands.
+   */
+  liveTags?: string[] | null;
+  /**
    * The item's Zotero "Related" items, resolved to `NoteContextRelatedItem`s by
    * the caller (relations live in the Zotero DB, not the CSL export). Kept here
    * so every consumer of the raw bundle gets them.
@@ -431,6 +436,12 @@ export function applyChildren(
   ctx.attachments = attachments;
   ctx.annotations = processAnnotations(annotations);
   ctx.notes = notes;
+  // Live tags win over the cached entry, so a tag added in Zotero just now is
+  // picked up. An empty live list is meaningful (the user removed them all), so
+  // only a `null`/absent read falls through to the cache.
+  if (raw.liveTags) {
+    ctx.tags = raw.liveTags.map((name) => ({ name, type: 'unknown' as const }));
+  }
   if (resolved.relatedItems) ctx.relatedItems = resolved.relatedItems;
   else if (raw.relatedItems) ctx.relatedItems = raw.relatedItems;
   return ctx;

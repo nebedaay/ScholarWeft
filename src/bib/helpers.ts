@@ -831,6 +831,42 @@ export async function fetchItemChildrenNative(
 }
 
 /**
+ * Fetch an item's Zotero TAGS live.
+ *
+ * Tags live in the cached CSL entry too (`_tags`), but that cache is only
+ * refreshed at startup or when the `@@` popup opens — so a tag added in Zotero
+ * mid-session would be missing from an import. Everything else the import reads
+ * (annotations, related items) is fetched live, so tags are too, and all three
+ * agree on what Zotero currently holds.
+ *
+ * Returns `null` when the item could not be read (Zotero not running, item
+ * missing), so the caller can fall back to the cached value rather than
+ * importing a note with no tags at all.
+ */
+export async function fetchItemTagsNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  itemKey: string,
+  libraryID: number
+): Promise<string[] | null> {
+  if (!itemKey) return null;
+  if (!(await isZoteroRunningNative(port))) return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { data } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`
+    );
+    const tags = data?.data?.tags;
+    if (!Array.isArray(tags)) return null;
+    return tags
+      .map((t: any) => t?.tag)
+      .filter((t: unknown): t is string => typeof t === 'string' && !!t);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A literature note's item, with the raw data needed to resolve its Zotero
  * *related items* (which are item keys, not citekeys).
  */

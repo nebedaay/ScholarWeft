@@ -15,6 +15,7 @@ import {
   citekeysForItemKeys,
   fetchItemChildrenNative,
   fetchItemRelationsNative,
+  fetchItemTagsNative,
 } from './bib/helpers';
 import type { NoteContextRelatedItem } from './template/context';
 import type { RawZoteroChildren } from './template/children';
@@ -124,11 +125,13 @@ export async function fetchChildren(
   const libraryID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : 1;
   const port = plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
   try {
-    const [children, relatedKeys] = await Promise.all([
+    const [children, relatedKeys, liveTags] = await Promise.all([
       fetchItemChildrenNative(port, key, libraryID),
       fetchItemRelationsNative(port, key, libraryID),
+      fetchItemTagsNative(port, key, libraryID),
     ]);
-    const base = children ?? EMPTY_CHILDREN;
+    const base: RawZoteroChildren =
+      liveTags === null ? (children ?? EMPTY_CHILDREN) : { ...(children ?? EMPTY_CHILDREN), liveTags };
     if (!relatedKeys.length) return base;
 
     const citekeys = await citekeysForItemKeys(port, relatedKeys, libraryID);

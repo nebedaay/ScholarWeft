@@ -68513,6 +68513,23 @@ async function fetchItemChildrenNative(port = DEFAULT_ZOTERO_PORT, itemKey, libr
   }
   return { attachments, annotations, notes };
 }
+async function fetchItemTagsNative(port = DEFAULT_ZOTERO_PORT, itemKey, libraryID) {
+  var _a;
+  if (!itemKey)
+    return null;
+  if (!await isZoteroRunningNative(port))
+    return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { data } = await zoteroNativeGet(port, `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`);
+    const tags = (_a = data == null ? void 0 : data.data) == null ? void 0 : _a.tags;
+    if (!Array.isArray(tags))
+      return null;
+    return tags.map((t4) => t4 == null ? void 0 : t4.tag).filter((t4) => typeof t4 === "string" && !!t4);
+  } catch (e3) {
+    return null;
+  }
+}
 async function fetchItemRelationsNative(port = DEFAULT_ZOTERO_PORT, itemKey, libraryID) {
   var _a;
   if (!itemKey)
@@ -90389,6 +90406,9 @@ function applyChildren(ctx, raw, opts = {}) {
   ctx.attachments = attachments;
   ctx.annotations = processAnnotations(annotations);
   ctx.notes = notes;
+  if (raw.liveTags) {
+    ctx.tags = raw.liveTags.map((name) => ({ name, type: "unknown" }));
+  }
   if (resolved.relatedItems)
     ctx.relatedItems = resolved.relatedItems;
   else if (raw.relatedItems)
@@ -91782,11 +91802,12 @@ async function fetchChildren(plugin, entry) {
   const libraryID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
   const port = plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
   try {
-    const [children, relatedKeys] = await Promise.all([
+    const [children, relatedKeys, liveTags] = await Promise.all([
       fetchItemChildrenNative(port, key, libraryID),
-      fetchItemRelationsNative(port, key, libraryID)
+      fetchItemRelationsNative(port, key, libraryID),
+      fetchItemTagsNative(port, key, libraryID)
     ]);
-    const base = children != null ? children : EMPTY_CHILDREN;
+    const base = liveTags === null ? children != null ? children : EMPTY_CHILDREN : { ...children != null ? children : EMPTY_CHILDREN, liveTags };
     if (!relatedKeys.length)
       return base;
     const citekeys = await citekeysForItemKeys(port, relatedKeys, libraryID);
@@ -98583,6 +98604,22 @@ function markRelatedMigrated(state, zoteroKey) {
   return { version: 1, migrated: [...state.migrated, zoteroKey] };
 }
 
+// src/template/refocus.ts
+var REFOCUS_MIN_INTERVAL_MS = 6e4;
+var REFOCUS_MIN_ABSENCE_MS = 5e3;
+function shouldRefreshOnRefocus(input) {
+  const { hasFocus, awayAt, lastRefreshAt, now } = input;
+  if (!hasFocus)
+    return false;
+  if (!awayAt)
+    return false;
+  if (now - awayAt < REFOCUS_MIN_ABSENCE_MS)
+    return false;
+  if (lastRefreshAt && now - lastRefreshAt < REFOCUS_MIN_INTERVAL_MS)
+    return false;
+  return true;
+}
+
 // src/linkedToPandoc.ts
 var import_obsidian33 = __toModule(require("obsidian"));
 function singleToPandoc(key, alias) {
@@ -98788,6 +98825,8 @@ var ReferenceList = class extends import_obsidian35.Plugin {
     this.persistRenderedCache = (0, import_obsidian35.debounce)(async () => {
       await this.bibManager.saveRenderedCache();
     }, 3e3);
+    this._lastRefocusRefreshAt = 0;
+    this._lastAwayAt = 0;
     this._relatedMigration = parseMigrationState(null);
     this.persistRelatedMigration = (0, import_obsidian35.debounce)(async () => {
       try {
@@ -98946,6 +98985,16 @@ var ReferenceList = class extends import_obsidian35.Plugin {
     this.registerEditorSuggest(this.citeSuggest);
     this.positionSuggest();
     this.registerEvent(app2.workspace.on("editor-change", () => this.positionSuggest()));
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible")
+        this.refreshOnAppRefocus();
+      else
+        this._lastAwayAt = Date.now();
+    });
+    this.registerDomEvent(window, "focus", () => this.refreshOnAppRefocus());
+    this.registerDomEvent(window, "blur", () => {
+      this._lastAwayAt = Date.now();
+    });
     this.tooltipManager = new TooltipManager(this);
     this.registerMarkdownPostProcessor(processCiteKeys(this));
     this.registerEditorExtension([
@@ -99834,6 +99883,23 @@ var ReferenceList = class extends import_obsidian35.Plugin {
     this.registerZoteroNotesCommand();
     this.emitSettingsUpdate(cb);
     await this.saveData(this.settings);
+  }
+  refreshOnAppRefocus() {
+    if (this.settings.pullFromZotero === false)
+      return;
+    const away = this._lastAwayAt;
+    this._lastAwayAt = 0;
+    const now = Date.now();
+    if (!shouldRefreshOnRefocus({
+      hasFocus: document.hasFocus(),
+      awayAt: away,
+      lastRefreshAt: this._lastRefocusRefreshAt,
+      now
+    })) {
+      return;
+    }
+    this._lastRefocusRefreshAt = now;
+    void this.bibManager.refreshGlobalZBib().catch(console.error);
   }
   shouldMigrateRelated(zoteroKey) {
     return needsRelatedMigration(this._relatedMigration, zoteroKey);
