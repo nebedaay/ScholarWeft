@@ -69,3 +69,27 @@ export function findAvailableNotePath(
 export function isZotLitManaged(existing: string | null | undefined): boolean {
   return (existing ?? '').includes('%%zt-managed%%');
 }
+
+/** How to treat an existing ZotLit note when our template renders it. */
+export type ZotLitHandling = 'ask' | 'convert' | 'leave';
+
+/**
+ * A choice from the conversion prompt. Converting is REMEMBERED (`convert`
+ * becomes the setting, so the user is never asked again); leaving is NOT — a
+ * "no" only applies to this note, and the next ZotLit note asks again, since a
+ * user who declines while trying the plugin may switch later.
+ */
+export type ZotLitChoice = 'convert' | 'leave';
+
+/**
+ * Map a prompt choice to the immediate action and the setting to remember.
+ * Pure, so the policy is testable.
+ */
+export function zotLitChoice(choice: ZotLitChoice): {
+  action: 'convert' | 'leave';
+  remember: 'convert' | null;
+} {
+  return choice === 'convert'
+    ? { action: 'convert', remember: 'convert' }
+    : { action: 'leave', remember: null };
+}

@@ -67,6 +67,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   ownNoteNotesHeadingLevel: 3,
   /** Vault folder excerpt images are copied into (vault-root relative). */
   ownNoteImageFolder: 'Attachments',
+  /** How to treat an existing ZotLit note when our template renders it. */
+  ownNoteZotLitHandling: 'ask',
   /** Auto-insert an item's Zotero child notes into a literature note when it is
    *  created (by ScholarWeft or by ZotLit). See the settings interface. */
   insertZoteroNotesOnCreate: true,
@@ -209,6 +211,12 @@ export interface ReferenceListSettings {
    * Obsidian cannot render Zotero's `file://` cache paths.
    */
   ownNoteImageFolder?: string;
+  /**
+   * How to treat a note that ZotLit created when our own template renders it:
+   * `ask` (prompt, default), `convert` (replace ZotLit's region with ours), or
+   * `leave` (never touch ZotLit notes).
+   */
+  ownNoteZotLitHandling?: 'ask' | 'convert' | 'leave';
   /**
    * When true, a newly created literature note gets the item's Zotero child
    * notes inserted automatically (into its managed "## Notes" section), so it
@@ -1028,6 +1036,28 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.ownNoteImageFolder ?? '')
             .onChange((value) => {
               this.plugin.settings.ownNoteImageFolder = value.trim();
+              this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName(t('ZotLit notes'))
+        .setDesc(
+          t(
+            'What to do when a note was created by ZotLit. Ask (default) prompts the first time and again for every “leave” answer; the prompt itself offers to convert every note you update.'
+          )
+        )
+        .addDropdown((drop) =>
+          drop
+            .addOption('ask', t('Ask each time'))
+            .addOption('convert', t('Always convert'))
+            .addOption('leave', t('Never touch ZotLit notes'))
+            .setValue(this.plugin.settings.ownNoteZotLitHandling ?? 'ask')
+            .onChange((value) => {
+              this.plugin.settings.ownNoteZotLitHandling = value as
+                | 'ask'
+                | 'convert'
+                | 'leave';
               this.plugin.saveSettings();
             })
         );

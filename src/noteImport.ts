@@ -21,6 +21,8 @@ import {
   findAvailableNotePath,
   isZotLitManaged,
   matchNoteByZoteroKey,
+  zotLitChoice,
+  type ZotLitHandling,
 } from './template/note-lookup';
 import { renderNote } from './template/render';
 import { getZotlitLiteratureFolder } from './zotlit';
@@ -153,6 +155,34 @@ function annotationPage(position: unknown): number | null {
 /** The vault folder excerpt images are copied into (default `Attachments`). */
 export function excerptImageFolder(plugin: ReferenceList): string {
   return (plugin.settings.ownNoteImageFolder ?? '').trim() || 'Attachments';
+}
+
+/**
+ * Decide whether to convert a ZotLit-managed note, honouring the remembered
+ * setting and otherwise asking. The prompt lets the user convert just this
+ * note, convert every note they update, or leave ZotLit's notes alone — so
+ * trying the plugin never silently reworks their existing ZotLit notes.
+ */
+async function resolveZotLitHandling(
+  plugin: ReferenceList,
+  noteName: string
+): Promise<'convert' | 'leave'> {
+  const setting: ZotLitHandling = plugin.settings.ownNoteZotLitHandling ?? 'ask';
+  if (setting === 'convert') return 'convert';
+  if (setting === 'leave') return 'leave';
+
+  // Loaded on demand: this module is imported by tests that mock `obsidian`
+  // minimally, and a top-level modal import would pull `Modal` into them.
+  const { ZotLitConvertModal } = await import('./modals/zotlitConvertModal');
+  const choice = await new Promise<Parameters<typeof zotLitChoice>[0]>(
+    (resolve) => new ZotLitConvertModal(plugin.app, noteName, resolve).open()
+  );
+  const { action, remember } = zotLitChoice(choice);
+  if (remember) {
+    plugin.settings.ownNoteZotLitHandling = remember;
+    await plugin.saveSettings();
+  }
+  return action;
 }
 
 /**
@@ -329,9 +359,14 @@ export async function createOrUpdateOwnNote(
     }
   }
 
-  // A ZotLit-managed note is CONVERTED in place: the merge replaces its
-  // `%%zt-managed%%` region with ours, so the note becomes ScholarWeft-managed.
+  // A ZotLit-managed note is either CONVERTED or left alone, per the user's
+  // remembered choice or an explicit prompt — never silently reworked.
   if (existing != null && isZotLitManaged(existing)) {
+    const name = notePath.split('/').pop() ?? notePath;
+    if ((await resolveZotLitHandling(plugin, name)) === 'leave') {
+      console.log('[sw:import] leaving the ZotLit-managed note alone:', notePath);
+      return true;
+    }
     console.log('[sw:import] converting ZotLit note', notePath);
   }
 

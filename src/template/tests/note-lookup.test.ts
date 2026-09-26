@@ -8,6 +8,7 @@ import {
   findAvailableNotePath,
   matchNoteByZoteroKey,
   isZotLitManaged,
+  zotLitChoice,
   suffixCandidate,
 } from '../note-lookup';
 
@@ -78,5 +79,18 @@ describe('isZotLitManaged', () => {
     expect(isZotLitManaged('%%sw-managed%%\n## Annotations')).toBe(false);
     expect(isZotLitManaged('## Notes\nplain')).toBe(false);
     expect(isZotLitManaged(null)).toBe(false);
+  });
+});
+
+describe('zotLitChoice', () => {
+  it('remembers a "convert" but not a "leave"', () => {
+    expect(zotLitChoice('convert')).toEqual({
+      action: 'convert',
+      remember: 'convert',
+    });
+    expect(zotLitChoice('leave')).toEqual({
+      action: 'leave',
+      remember: null,
+    });
   });
 });
