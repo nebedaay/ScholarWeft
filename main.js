@@ -89282,9 +89282,12 @@ function extraKeyToContextProperty(key) {
 var import_obsidian19 = __toModule(require("obsidian"));
 var HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"];
 var FENCE_RE = /^\s*(?:```|~~~)/;
-var CODE_SPAN_OR_ESCAPABLE_RE = /(`+[^`]*`+)|((?<!\\)[\[<])/g;
+var CODE_LINK_OR_ESCAPABLE_RE = /(`+[^`]*`+)|(!?\[\[[^\]]*\]\])|(!?\[[^\]]*\]\([^)]*\))|((?<!\\)[\[<])/g;
 function escapeOutsideCode(line) {
-  return line.replace(CODE_SPAN_OR_ESCAPABLE_RE, (match2, code, char) => code != null ? code : `\\${char}`);
+  return line.replace(CODE_LINK_OR_ESCAPABLE_RE, (match2, code, wikilink, mdlink, char) => {
+    var _a, _b;
+    return (_b = (_a = code != null ? code : wikilink) != null ? _a : mdlink) != null ? _b : `\\${char}`;
+  });
 }
 function escapeMarkdown(text) {
   let inFence = false;

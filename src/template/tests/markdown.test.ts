@@ -84,18 +84,32 @@ describe('noteHtmlToMarkdown()', () => {
     expect(noteHtmlToMarkdown('<p>x</p>')).toBe('body');
   });
 
-  it('escapes stray [ and < in the converted note, leaving & alone', () => {
-    mockConvert.mockReturnValueOnce('See [[another note]] and a<b>tag\n');
+  it('escapes stray [ and < in the converted note, leaving links and & alone', () => {
+    mockConvert.mockReturnValueOnce(
+      'See [[another note]] and a<b>tag and [a link](https://x.test)\n'
+    );
     expect(noteHtmlToMarkdown('<p>x</p>')).toBe(
-      'See \\[\\[another note]] and a\\<b>tag'
+      'See [[another note]] and a\\<b>tag and [a link](https://x.test)'
     );
   });
 });
 
 describe('escapeMarkdown()', () => {
-  it('escapes [ and < but not &', () => {
+  it('keeps wikilinks and Markdown links, escapes stray [ and <', () => {
     expect(escapeMarkdown('[[x]] and <b> and a & b')).toBe(
-      '\\[\\[x]] and \\<b> and a & b'
+      '[[x]] and \\<b> and a & b'
+    );
+    expect(escapeMarkdown('see [[Note|alias]] and ![[img.png]]')).toBe(
+      'see [[Note|alias]] and ![[img.png]]'
+    );
+    expect(escapeMarkdown('[URL](https://google.com) and ![alt](img.png)')).toBe(
+      '[URL](https://google.com) and ![alt](img.png)'
+    );
+  });
+
+  it('still escapes a bare bracket that opens no link', () => {
+    expect(escapeMarkdown('a [sic] note and [text]')).toBe(
+      'a \\[sic] note and \\[text]'
     );
   });
 

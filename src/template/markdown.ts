@@ -17,22 +17,28 @@ import { htmlToMarkdown } from 'obsidian';
 const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
 const FENCE_RE = /^\s*(?:```|~~~)/;
-const CODE_SPAN_OR_ESCAPABLE_RE = /(`+[^`]*`+)|((?<!\\)[\[<])/g;
+// Order matters: a code span, then a wikilink/embed (`[[…]]` / `![[…]]`), then
+// an inline Markdown link/image (`[label](url)` / `![alt](url)`) — all of which
+// must survive verbatim — else a bare `[`/`<` to escape.
+const CODE_LINK_OR_ESCAPABLE_RE =
+  /(`+[^`]*`+)|(!?\[\[[^\]]*\]\])|(!?\[[^\]]*\]\([^)]*\))|((?<!\\)[\[<])/g;
 
 function escapeOutsideCode(line: string): string {
   return line.replace(
-    CODE_SPAN_OR_ESCAPABLE_RE,
-    (match, code: string | undefined, char: string | undefined) =>
-      code ?? `\\${char}`
+    CODE_LINK_OR_ESCAPABLE_RE,
+    (match, code, wikilink, mdlink, char) =>
+      code ?? wikilink ?? mdlink ?? `\\${char}`
   );
 }
 
 /**
- * Escape the characters that would otherwise change meaning in Markdown:
- * `[` (could open a link or, doubled, a wikilink) and `<` (could open an HTML
- * tag). Already-escaped occurrences are left alone, and `&` is untouched — it
- * only matters as part of an HTML entity, which the parser has already
- * resolved. Fenced and inline code are skipped so their contents stay literal.
+ * Escape the characters that would otherwise change meaning in Markdown: a
+ * STRAND `[` (which could open a link) and `<` (which could open an HTML tag).
+ * Deliberate constructs are left intact — Obsidian wikilinks/embeds (`[[…]]`,
+ * `![[…]]`), inline Markdown links/images (`[label](url)`, `![alt](url)`) — and
+ * so are code spans/fences. Already-escaped occurrences are left alone, and `&`
+ * is untouched: it only matters as part of an HTML entity, which the parser has
+ * already resolved.
  */
 export function escapeMarkdown(text: string): string {
   let inFence = false;

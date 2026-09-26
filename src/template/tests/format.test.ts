@@ -74,11 +74,11 @@ describe('renderAnnotationCallout()', () => {
         tags: [{ name: 'sufism', type: 'unknown' }],
       })
     );
-    // HTML → Markdown for the italic, `[`/`<` escaped, `&` untouched.
-    expect(out).toContain('> > *First* \\[\\[note]]');
+    // HTML → Markdown for the italic; a wikilink is kept, a bare `[` is escaped,
+    // `&` untouched.
+    expect(out).toContain('> > *First* [[note]]');
     expect(out).toContain('> > Quoted \\[text] & more');
     expect(out).toContain('> > - [[sufism]]');
-    expect(out).not.toContain('[[note]]');
   });
 
   it('renders an ISO annotation timestamp as its date', () => {
