@@ -54,6 +54,13 @@ import {
 import { getLitNoteForCitekey, getZotlitLiteratureFolder } from './zotlit';
 import { zotlitIsNoteImportPath } from './template/import-path';
 import { detectNoteFormat } from './template/note-format';
+import {
+  markRelatedMigrated,
+  needsRelatedMigration,
+  parseMigrationState,
+  serializeMigrationState,
+  type RelatedMigrationState,
+} from './template/related-migration';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
 
@@ -1545,6 +1552,18 @@ export default class ReferenceList extends Plugin {
       // no persisted index yet — first build will populate it
     }
 
+    // One-time `related` → `sw-related` bookkeeping (see related-migration.ts).
+    // Kept out of data.json for the same reason as the citation index.
+    try {
+      const migPath = normalizePath(`${this.cacheDir}/related-migrated.json`);
+      this._relatedMigration = parseMigrationState(
+        await this.app.vault.adapter.read(migPath)
+      );
+    } catch {
+      // absent or unreadable: treat every note as unmigrated
+      this._relatedMigration = parseMigrationState(null);
+    }
+
     // Migration: these settings defaulted to false in older builds due to a bug
     // (undefined was treated as false in the UI, so the toggle appeared off and
     // may have been saved as false). Since the feature was never reliably on,
@@ -1677,6 +1696,38 @@ export default class ReferenceList extends Plugin {
   persistRenderedCache = debounce(async () => {
     await this.bibManager.saveRenderedCache();
   }, 3000);
+
+  /** Which `zotero-key`s have run the one-time `related` → `sw-related` move. */
+  private _relatedMigration: RelatedMigrationState = parseMigrationState(null);
+
+  /** Debounced persist of the migration registry (same pattern as cited-keys). */
+  persistRelatedMigration = debounce(async () => {
+    try {
+      const dir = normalizePath(this.cacheDir);
+      if (!(await this.app.vault.adapter.exists(dir))) {
+        await this.app.vault.adapter.mkdir(dir);
+      }
+      await this.app.vault.adapter.write(
+        normalizePath(`${this.cacheDir}/related-migrated.json`),
+        serializeMigrationState(this._relatedMigration)
+      );
+    } catch (e) {
+      console.warn('[sw:import] could not persist related-migration state', e);
+    }
+  }, 2000);
+
+  /** Does this note still need its one-time `related` transfer? */
+  shouldMigrateRelated(zoteroKey: string | null | undefined): boolean {
+    return needsRelatedMigration(this._relatedMigration, zoteroKey);
+  }
+
+  /** Record a note's `related` transfer as done, and persist it. */
+  markRelatedMigrationDone(zoteroKey: string | null | undefined): void {
+    const next = markRelatedMigrated(this._relatedMigration, zoteroKey);
+    if (next === this._relatedMigration) return;
+    this._relatedMigration = next;
+    this.persistRelatedMigration();
+  }
 
   /** Debounced flush of the Zotero select-link / PDF maps. */
   persistZLinks = debounce(async () => {

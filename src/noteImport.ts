@@ -398,6 +398,12 @@ export async function createOrUpdateOwnNote(
     console.log('[sw:import] converting ZotLit note', notePath);
   }
 
+  // One-time `related` → `sw-related` transfer, for an EXISTING note whose key
+  // has not been migrated yet. A brand-new note has no prior `related` to move,
+  // so it is simply recorded as done.
+  const migrateRelated =
+    existing != null && plugin.shouldMigrateRelated(stableKey);
+
   // Second pass: with the real note path (for `note_link`) and existing content
   // (for the re-import merge).
   const { content } = renderNote(entry, children, {
@@ -408,6 +414,7 @@ export async function createOrUpdateOwnNote(
     notePath,
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
     existingContent: existing,
+    migrateRelated,
   });
 
   if (folder && !(await app.vault.adapter.exists(normalizePath(folder)))) {
@@ -424,10 +431,14 @@ export async function createOrUpdateOwnNote(
     } else {
       await app.vault.adapter.write(notePath, content);
     }
+    // Only record the transfer once the note is actually on disk.
+    if (migrateRelated) plugin.markRelatedMigrationDone(stableKey);
     return true;
   }
 
   await app.vault.create(notePath, content);
+  // A new note starts clean (empty `related`), so it never needs the transfer.
+  plugin.markRelatedMigrationDone(stableKey);
   if (opts.open !== false) {
     await app.workspace.openLinkText(notePath, sourceFile.path, true);
   }

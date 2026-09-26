@@ -42,6 +42,12 @@ export interface RenderNoteOptions {
    * else is preserved.
    */
   existingContent?: string | null;
+  /**
+   * Run the ONE-TIME `related` → `sw-related` transfer for this note. Set only
+   * while the note's `zotero-key` has not been migrated yet (see
+   * `related-migration.ts`); once recorded, `related:` is left alone.
+   */
+  migrateRelated?: boolean;
 }
 
 export interface RenderedNote {
@@ -77,9 +83,14 @@ export function renderNote(
     ctx,
     opts.existingContent ?? null,
     rendered,
-    // The template declares a region, so its absence in the render means the
-    // region is empty and an existing one should be removed.
-    { managesRegion: opts.templateSource.includes(MANAGED_OPEN) }
+    {
+      // The template declares a region, so its absence in the render means the
+      // region is empty and an existing one should be removed.
+      managesRegion: opts.templateSource.includes(MANAGED_OPEN),
+      // One-time `related` → `sw-related` transfer, only while the note's key
+      // has not been migrated yet. Afterwards `related:` is never written to.
+      migrateRelated: opts.migrateRelated === true,
+    }
   );
   return { content, fileName: engine.noteHelpers.fileName(ctx) };
 }

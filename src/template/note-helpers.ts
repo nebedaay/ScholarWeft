@@ -164,8 +164,17 @@ export class NoteHelpers {
   }
 
   /** The managed frontmatter fields, for the re-import merge. */
-  fieldSpecs(ctx: NoteContext): YamlFieldSpec[] {
-    return this.stateOf(ctx).yaml.fieldSpecs();
+  fieldSpecs(
+    ctx: NoteContext,
+    opts: { migrateRelated?: boolean } = {}
+  ): YamlFieldSpec[] {
+    const specs = this.stateOf(ctx).yaml.fieldSpecs();
+    if (opts.migrateRelated) return specs;
+    // Outside the one-time transfer, `related:` is the user's alone: swap the
+    // `subtract` strategy for `keep`, so an existing value is never rewritten.
+    return specs.map((s) =>
+      s.merge === 'subtract' ? { ...s, merge: 'keep' as const } : s
+    );
   }
 
   /**
@@ -177,10 +186,10 @@ export class NoteHelpers {
     ctx: NoteContext,
     existing: string | null,
     rendered: string,
-    opts: { managesRegion?: boolean } = {}
+    opts: { managesRegion?: boolean; migrateRelated?: boolean } = {}
   ): string {
     if (!existing) return rendered;
-    return mergeNote(existing, rendered, this.fieldSpecs(ctx), opts);
+    return mergeNote(existing, rendered, this.fieldSpecs(ctx, opts), opts);
   }
 
   // ── Filename ──

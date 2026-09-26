@@ -31,7 +31,7 @@ Choosing ZotLit instead puts notes in **ZotLit's own folder** (read live, so it 
 
 `sw-related:` is **Zotero's**. It holds the item's Zotero tags and Related items as `[[…]]` links, and is rebuilt on every import — so a tag or related link you remove in Zotero disappears from the note on the next update, with no stale entries to prune by hand.
 
-**Upgrading?** Notes created before `sw-related` existed have Zotero's tags and related links sitting in `related:`. Updating such a note tidies that up automatically: entries Zotero still supplies are removed from `related:` (they now live in `sw-related:`), and your own links stay. Entries Zotero no longer has are left alone rather than deleted — they're your only remaining record of them.
+**Upgrading?** Notes created before `sw-related` existed have Zotero's tags and related links sitting in `related:`. The first time ScholarWeft updates such a note, that tidy-up runs once: entries Zotero still supplies move to `sw-related:` (where they're now maintained), and your own links stay. Entries Zotero no longer has are left alone rather than deleted — they're your only remaining record of them. Because the transition is recorded per Zotero item, it happens **exactly once**; afterwards `related:` is completely yours and is never written to again.
 
 ### ZotLit notes are handled carefully
 

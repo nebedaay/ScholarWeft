@@ -181,6 +181,7 @@ describe('sw-related: Zotero references and tags', () => {
         dataDir: '/zot',
         importDate: '2026-09-25',
         existingContent: existing,
+        migrateRelated: true,
       }
     );
 
@@ -203,6 +204,55 @@ describe('sw-related: Zotero references and tags', () => {
     // Zotero's current list lives in sw-related.
     expect(swBlock).toContain('other2020');
     expect(swBlock).toContain('a-tag-zotero-still-has');
+  });
+
+  it('only tidies related: on the MIGRATION update, never again', () => {
+    // A note upgraded from the previous release, with Zotero entries mixed into
+    // `related:` alongside the user's own link.
+    const existing = [
+      '---',
+      'zotero-key: EKUBHHNW',
+      'related:',
+      '  - "[[my-own-note]]"',
+      '  - "[[@other2020]]"',
+      '---',
+      '',
+      '## Notes',
+      '',
+    ].join('\n');
+    const opts = {
+      templateSource: template,
+      dataDir: '/zot',
+      importDate: '2026-09-25',
+      existingContent: existing,
+    };
+
+    // 1. The migration update moves Zotero's entry out.
+    const migrated = renderNote(entry, withRelated, {
+      ...opts,
+      migrateRelated: true,
+    });
+    const migratedRelated =
+      /related:\n((?: {2}- .*\n)+)/.exec(migrated.content)?.[1] ?? '';
+    expect(migratedRelated).toContain('my-own-note');
+    expect(migratedRelated).not.toContain('other2020');
+
+    // 2. Every LATER update leaves related: completely alone — including a link
+    //    the user adds by hand later, which must never be removed even though
+    //    Zotero also supplies it.
+    const later = renderNote(entry, withRelated, {
+      ...opts,
+      existingContent: migrated.content.replace(
+        '  - "[[my-own-note]]"',
+        '  - "[[my-own-note]]"\n  - "[[@other2020]]"'
+      ),
+      migrateRelated: false,
+    });
+    const relatedBlock =
+      /related:\n((?: {2}- .*\n)+)/.exec(later.content)?.[1] ?? '';
+    expect(relatedBlock).toContain('my-own-note');
+    // The user re-added it by hand; it stays even though Zotero has it.
+    expect(relatedBlock).toContain('other2020');
   });
 
   it('never touches the user’s related: list', () => {
