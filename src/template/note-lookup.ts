@@ -62,9 +62,10 @@ export function findAvailableNotePath(
 }
 
 /**
- * A note carrying ZotLit's own managed region must not be rewritten with ours;
- * ZotLit owns it. A note with no region (or ours) is safe to update.
+ * True when the note carries ZotLit's managed region. Such a note is CONVERTED
+ * when our own template renders it: the merge replaces the `%%zt-managed%%`
+ * span with ours, so the note becomes ScholarWeft-managed in place.
  */
-export function shouldUpdateOwnNote(existing: string | null | undefined): boolean {
-  return !(existing ?? '').includes('%%zt-managed%%');
+export function isZotLitManaged(existing: string | null | undefined): boolean {
+  return (existing ?? '').includes('%%zt-managed%%');
 }

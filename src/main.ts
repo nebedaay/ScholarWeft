@@ -52,7 +52,6 @@ import {
   installZotlitTemplatesWithNotice,
 } from './zotlitTemplates';
 import { getLitNoteForCitekey, getZotlitLiteratureFolder } from './zotlit';
-import { shouldUpdateOwnNote } from './template/note-lookup';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import {
   insertZoteroNotesForFiles,
@@ -1527,9 +1526,9 @@ export default class ReferenceList extends Plugin {
 
   /**
    * Re-render ONE literature note from our own template, locating it by its
-   * stable `zotero-key` (so a renamed note updates in place). Returns false when
-   * the note is not ours — a ZotLit-managed note, no `zotero-key`, or an item
-   * that is not in the loaded library.
+   * stable `zotero-key` (so a renamed note updates in place). A ZotLit-managed
+   * note is CONVERTED to our template. Returns false when the note has no
+   * `zotero-key` or its item is not in the loaded library.
    */
   async updateLiteratureNote(file: TFile): Promise<boolean> {
     if (this.settings.useOwnNoteTemplate !== true) return false;
@@ -1538,13 +1537,6 @@ export default class ReferenceList extends Plugin {
     if (typeof stable !== 'string' || !stable) return false;
     const citekey = this.findCitekeyByStableKey(stable);
     if (!citekey) return false;
-    let existing: string;
-    try {
-      existing = await this.app.vault.cachedRead(file);
-    } catch {
-      return false;
-    }
-    if (!shouldUpdateOwnNote(existing)) return false;
     try {
       await this.bibManager.createLiteratureNote(citekey, file, { open: false });
       return true;
@@ -1569,7 +1561,7 @@ export default class ReferenceList extends Plugin {
     new Notice(
       ok
         ? `Updated ${file.basename}.`
-        : `“${file.basename}” was not updated (ZotLit-managed, or its item is not in the loaded library).`,
+        : `“${file.basename}” was not updated (no zotero-key, or its item is not in the loaded library).`,
       8000
     );
   }
@@ -1577,7 +1569,7 @@ export default class ReferenceList extends Plugin {
   /**
    * "Update all literature notes in the vault" — a middle ground between
    * updating one note and importing every Zotero item: re-render every note
-   * that carries a `zotero-key` and is ours to manage.
+   * that carries a `zotero-key`. A ZotLit-managed note is converted.
    */
   private async updateAllLiteratureNotes(): Promise<void> {
     if (this.settings.useOwnNoteTemplate !== true) {

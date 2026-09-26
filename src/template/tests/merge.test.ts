@@ -8,6 +8,8 @@ import {
   mergeNote,
   parseFrontmatter,
   splitNote,
+  ZOTLIT_MANAGED_CLOSE,
+  ZOTLIT_MANAGED_OPEN,
 } from '../merge';
 import { YamlBuilder, type YamlFieldSpec, type YamlValue } from '../yaml';
 
@@ -170,6 +172,48 @@ describe('managed region', () => {
   it('leaves the region alone when the template does not manage regions', () => {
     const existingBody = `\n${MANAGED_OPEN}\nx\n${MANAGED_CLOSE}\n`;
     expect(mergeManagedRegion(existingBody, 'no region here')).toBe(existingBody);
+  });
+
+  it('converts a ZotLit region to ours in place', () => {
+    const existingBody = [
+      '',
+      '## Notes',
+      '',
+      'user note',
+      '',
+      ZOTLIT_MANAGED_OPEN,
+      '## Annotations',
+      '',
+      'zotlit annotations',
+      ZOTLIT_MANAGED_CLOSE,
+      '',
+    ].join('\n');
+    const merged = mergeManagedRegion(existingBody, renderedBody);
+    expect(merged).not.toContain(ZOTLIT_MANAGED_OPEN);
+    expect(merged).toContain(MANAGED_OPEN);
+    expect(merged).toContain('new notes');
+    expect(merged).not.toContain('zotlit annotations');
+    // The user's own text is preserved.
+    expect(merged).toContain('user note');
+  });
+
+  it('removes a ZotLit region when the render has no annotations', () => {
+    const existingBody = [
+      '',
+      '## Notes',
+      '',
+      'user',
+      '',
+      ZOTLIT_MANAGED_OPEN,
+      '',
+      ZOTLIT_MANAGED_CLOSE,
+      '',
+    ].join('\n');
+    const merged = mergeManagedRegion(existingBody, '\n## Notes\n\nuser\n', {
+      managesRegion: true,
+    });
+    expect(merged).not.toContain(ZOTLIT_MANAGED_OPEN);
+    expect(merged).toContain('user');
   });
 });
 

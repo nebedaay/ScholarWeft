@@ -89639,8 +89639,8 @@ function findAvailableNotePath(base, folder, taken) {
   const fallback = `${base}-${Date.now()}`;
   return dir ? `${dir}/${fallback}.md` : `${fallback}.md`;
 }
-function shouldUpdateOwnNote(existing) {
-  return !(existing != null ? existing : "").includes("%%zt-managed%%");
+function isZotLitManaged(existing) {
+  return (existing != null ? existing : "").includes("%%zt-managed%%");
 }
 
 // src/template/annotations.ts
@@ -90658,6 +90658,12 @@ function renderCallout(opts) {
 // src/template/merge.ts
 var MANAGED_OPEN = "%%sw-managed%%";
 var MANAGED_CLOSE = "%%/sw-managed%%";
+var ZOTLIT_MANAGED_OPEN = "%%zt-managed%%";
+var ZOTLIT_MANAGED_CLOSE = "%%/zt-managed%%";
+var REGION_MARKERS = [
+  [MANAGED_OPEN, MANAGED_CLOSE],
+  [ZOTLIT_MANAGED_OPEN, ZOTLIT_MANAGED_CLOSE]
+];
 var FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 function splitNote(content) {
   const m3 = FRONTMATTER_RE.exec(content);
@@ -90753,14 +90759,22 @@ function mergeFrontmatter(existingFrontmatter, specs) {
   }
   return out.join("\n");
 }
-function findManagedRegion(body) {
-  const start = body.indexOf(MANAGED_OPEN);
+function findRegion(body, open2, close2) {
+  const start = body.indexOf(open2);
   if (start === -1)
     return null;
-  const close2 = body.indexOf(MANAGED_CLOSE, start + MANAGED_OPEN.length);
-  if (close2 === -1)
+  const end = body.indexOf(close2, start + open2.length);
+  if (end === -1)
     return null;
-  return { start, end: close2 + MANAGED_CLOSE.length };
+  return { start, end: end + close2.length };
+}
+function findManagedRegion(body) {
+  for (const [open2, close2] of REGION_MARKERS) {
+    const region = findRegion(body, open2, close2);
+    if (region)
+      return region;
+  }
+  return null;
 }
 function mergeManagedRegion(existingBody, renderedBody, opts = {}) {
   const rendered = findManagedRegion(renderedBody);
@@ -91457,10 +91471,8 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
       existing = null;
     }
   }
-  if (existing != null && !shouldUpdateOwnNote(existing)) {
-    console.warn("[sw:import] leaving the ZotLit-managed note alone:", notePath);
-    new import_obsidian21.Notice(`\u201C${notePath.split("/").pop()}\u201D is managed by ZotLit; skipped.`, 8e3);
-    return false;
+  if (existing != null && isZotLitManaged(existing)) {
+    console.log("[sw:import] converting ZotLit note", notePath);
   }
   const { content } = renderNote(entry, children, {
     templateSource,
@@ -99416,14 +99428,6 @@ var ReferenceList = class extends import_obsidian33.Plugin {
     const citekey = this.findCitekeyByStableKey(stable);
     if (!citekey)
       return false;
-    let existing;
-    try {
-      existing = await this.app.vault.cachedRead(file);
-    } catch (e3) {
-      return false;
-    }
-    if (!shouldUpdateOwnNote(existing))
-      return false;
     try {
       await this.bibManager.createLiteratureNote(citekey, file, { open: false });
       return true;
@@ -99441,7 +99445,7 @@ var ReferenceList = class extends import_obsidian33.Plugin {
     if (!file)
       return;
     const ok = await this.updateLiteratureNote(file);
-    new import_obsidian33.Notice(ok ? `Updated ${file.basename}.` : `\u201C${file.basename}\u201D was not updated (ZotLit-managed, or its item is not in the loaded library).`, 8e3);
+    new import_obsidian33.Notice(ok ? `Updated ${file.basename}.` : `\u201C${file.basename}\u201D was not updated (no zotero-key, or its item is not in the loaded library).`, 8e3);
   }
   async updateAllLiteratureNotes() {
     if (this.settings.useOwnNoteTemplate !== true) {

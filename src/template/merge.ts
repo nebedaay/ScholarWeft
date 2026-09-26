@@ -11,8 +11,9 @@
 //      only documents writing above; allowing content after the region is our
 //      deliberate difference.)
 //
-// A note with no managed region is NOT given one: absence means the user removed
-// it (or the note predates markers), and re-adding it would fight the user.
+// A pre-existing ZotLit region (`%%zt-managed%%`) is recognised as the region to
+// CONVERT: it is replaced by ours (or removed), so importing a ZotLit note with
+// our template takes it over in place instead of appending a second region.
 //
 // This module is pure and line-based: it preserves the raw text of untouched
 // properties, and never re-serialises the whole file through a YAML dump (which
@@ -20,9 +21,18 @@
 
 import type { YamlFieldSpec, FrontmatterMerge } from './yaml';
 
-/** Region markers. OUR namespace — ZotLit's `zt-` region is separate. */
+/** Region markers. OUR namespace. */
 export const MANAGED_OPEN = '%%sw-managed%%';
 export const MANAGED_CLOSE = '%%/sw-managed%%';
+
+/** ZotLit's region markers, recognised so a ZotLit note can be CONVERTED. */
+export const ZOTLIT_MANAGED_OPEN = '%%zt-managed%%';
+export const ZOTLIT_MANAGED_CLOSE = '%%/zt-managed%%';
+
+const REGION_MARKERS: ReadonlyArray<readonly [string, string]> = [
+  [MANAGED_OPEN, MANAGED_CLOSE],
+  [ZOTLIT_MANAGED_OPEN, ZOTLIT_MANAGED_CLOSE],
+];
 
 export interface SplitNote {
   /** The frontmatter body (between the `---` fences), or `null` if none. */
@@ -169,13 +179,29 @@ export interface ManagedRegion {
   end: number;
 }
 
-/** Locate the `%%sw-managed%%` region in a body, or `null`. */
-export function findManagedRegion(body: string): ManagedRegion | null {
-  const start = body.indexOf(MANAGED_OPEN);
+function findRegion(
+  body: string,
+  open: string,
+  close: string
+): ManagedRegion | null {
+  const start = body.indexOf(open);
   if (start === -1) return null;
-  const close = body.indexOf(MANAGED_CLOSE, start + MANAGED_OPEN.length);
-  if (close === -1) return null;
-  return { start, end: close + MANAGED_CLOSE.length };
+  const end = body.indexOf(close, start + open.length);
+  if (end === -1) return null;
+  return { start, end: end + close.length };
+}
+
+/**
+ * Locate the managed region in a body: ours first, else ZotLit's. Finding
+ * ZotLit's lets an import replace it (converting the note) instead of appending
+ * a second, competing region.
+ */
+export function findManagedRegion(body: string): ManagedRegion | null {
+  for (const [open, close] of REGION_MARKERS) {
+    const region = findRegion(body, open, close);
+    if (region) return region;
+  }
+  return null;
 }
 
 export interface ManagedRegionMergeOptions {

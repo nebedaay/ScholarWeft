@@ -19,8 +19,8 @@ import {
 import { indexedKeyFor, type CachedEntry } from './template/context';
 import {
   findAvailableNotePath,
+  isZotLitManaged,
   matchNoteByZoteroKey,
-  shouldUpdateOwnNote,
 } from './template/note-lookup';
 import { renderNote } from './template/render';
 import { getZotlitLiteratureFolder } from './zotlit';
@@ -329,11 +329,10 @@ export async function createOrUpdateOwnNote(
     }
   }
 
-  // A ZotLit-managed note belongs to ZotLit; never rewrite it with our region.
-  if (existing != null && !shouldUpdateOwnNote(existing)) {
-    console.warn('[sw:import] leaving the ZotLit-managed note alone:', notePath);
-    new Notice(`“${notePath.split('/').pop()}” is managed by ZotLit; skipped.`, 8000);
-    return false;
+  // A ZotLit-managed note is CONVERTED in place: the merge replaces its
+  // `%%zt-managed%%` region with ours, so the note becomes ScholarWeft-managed.
+  if (existing != null && isZotLitManaged(existing)) {
+    console.log('[sw:import] converting ZotLit note', notePath);
   }
 
   // Second pass: with the real note path (for `note_link`) and existing content

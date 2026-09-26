@@ -7,7 +7,7 @@ jest.mock(
 import {
   findAvailableNotePath,
   matchNoteByZoteroKey,
-  shouldUpdateOwnNote,
+  isZotLitManaged,
   suffixCandidate,
 } from '../note-lookup';
 
@@ -72,11 +72,11 @@ describe('findAvailableNotePath', () => {
   });
 });
 
-describe('shouldUpdateOwnNote', () => {
-  it('leaves ZotLit-managed notes alone', () => {
-    expect(shouldUpdateOwnNote('%%zt-managed%%\n## Annotations')).toBe(false);
-    expect(shouldUpdateOwnNote('%%sw-managed%%\n## Annotations')).toBe(true);
-    expect(shouldUpdateOwnNote('## Notes\nplain')).toBe(true);
-    expect(shouldUpdateOwnNote(null)).toBe(true);
+describe('isZotLitManaged', () => {
+  it('detects ZotLit notes (which are converted) vs ours/plain', () => {
+    expect(isZotLitManaged('%%zt-managed%%\n## Annotations')).toBe(true);
+    expect(isZotLitManaged('%%sw-managed%%\n## Annotations')).toBe(false);
+    expect(isZotLitManaged('## Notes\nplain')).toBe(false);
+    expect(isZotLitManaged(null)).toBe(false);
   });
 });
