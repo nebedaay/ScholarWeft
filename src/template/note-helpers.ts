@@ -382,7 +382,15 @@ export class NoteHelpers {
     return [...new Set(out)];
   }
 
-  /** Tags and related items as `[[…]]` links (Zotero-Integration `related:`). */
+  /**
+   * Zotero's tags and related items as `[[…]]` links.
+   *
+   * These are ZOTERO'S data, not the user's, so they go in the `sw-related`
+   * property, which the template reconciles with `replace`: every import
+   * rebuilds the list from scratch, so removing a tag or related link in Zotero
+   * removes it here. The plain `related:` property is the user's own and is
+   * never written to (see the template's `keep`).
+   */
   relatedLinks(ctx: NoteContext): string[] {
     const out: string[] = [];
     for (const item of ctx.relatedItems) {

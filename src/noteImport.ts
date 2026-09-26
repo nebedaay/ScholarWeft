@@ -10,7 +10,13 @@
 
 import { App, Notice, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
-import { DEFAULT_ZOTERO_PORT, fetchItemChildrenNative } from './bib/helpers';
+import {
+  DEFAULT_ZOTERO_PORT,
+  citekeysForItemKeys,
+  fetchItemChildrenNative,
+  fetchItemRelationsNative,
+} from './bib/helpers';
+import type { NoteContextRelatedItem } from './template/context';
 import type { RawZoteroChildren } from './template/children';
 import {
   DEFAULT_LITERATURE_NOTE_FOLDER,
@@ -101,7 +107,14 @@ export async function readTemplate(plugin: ReferenceList): Promise<string | null
   }
 }
 
-/** Fetch an item's children live; shared with the data explorer preview. */
+/**
+ * Fetch an item's children live; shared with the data explorer preview.
+ *
+ * Zotero "Related" items are fetched too (they are stored as item KEYS in the
+ * Zotero database, so each is resolved to a citekey) — the old import policy
+ * turned them into `[[@citekey]]` entries in `related:`, alongside the item's
+ * tags.
+ */
 export async function fetchChildren(
   plugin: ReferenceList,
   entry: CachedEntry | undefined
@@ -109,13 +122,23 @@ export async function fetchChildren(
   const key = entry?._zoteroKey;
   if (!key) return EMPTY_CHILDREN;
   const libraryID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : 1;
+  const port = plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
   try {
-    const children = await fetchItemChildrenNative(
-      plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT,
-      key,
-      libraryID
-    );
-    return children ?? EMPTY_CHILDREN;
+    const [children, relatedKeys] = await Promise.all([
+      fetchItemChildrenNative(port, key, libraryID),
+      fetchItemRelationsNative(port, key, libraryID),
+    ]);
+    const base = children ?? EMPTY_CHILDREN;
+    if (!relatedKeys.length) return base;
+
+    const citekeys = await citekeysForItemKeys(port, relatedKeys, libraryID);
+    const relatedItems: NoteContextRelatedItem[] = relatedKeys.map((k) => {
+      const citationKey = citekeys.get(k) ?? null;
+      // A related item with no citekey can't be linked; keep it out of the list
+      // rather than emitting a broken `[[@]]`.
+      return { key: k, citationKey, title: null as string | null };
+    });
+    return { ...base, relatedItems: relatedItems.filter((r) => r.citationKey) };
   } catch (e) {
     console.warn('[sw:import] child fetch failed; importing metadata only', e);
     return EMPTY_CHILDREN;

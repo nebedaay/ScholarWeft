@@ -53,6 +53,7 @@ import {
 } from './zotlitTemplates';
 import { getLitNoteForCitekey, getZotlitLiteratureFolder } from './zotlit';
 import { zotlitIsNoteImportPath } from './template/import-path';
+import { detectNoteFormat } from './template/note-format';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
 
@@ -1387,17 +1388,26 @@ export default class ReferenceList extends Plugin {
 
   /**
    * Re-render ONE literature note from our own template, locating it by its
-   * stable `zotero-key` (so a renamed note updates in place). A ZotLit-managed
-   * note is CONVERTED to our template. Returns false when the note has no
-   * `zotero-key` or its item is not in the loaded library.
+   * stable `zotero-key` (so a renamed note updates in place).
+   *
+   * The note's format (not the current setting) decides whether a warning is
+   * shown: an update renders with whichever import path is selected, so a note
+   * in the other format — or one whose region will be added or removed — is
+   * confirmed first. Returns false when the note has no `zotero-key`, its item
+   * is not in the loaded library, or the user declined the confirmation.
    */
-  async updateLiteratureNote(file: TFile): Promise<boolean> {
-    if (this.settings.useOwnNoteTemplate !== true) return false;
+  async updateLiteratureNote(file: TFile, opts?: { confirm?: boolean }): Promise<boolean> {
     const stable =
       this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
     if (typeof stable !== 'string' || !stable) return false;
     const citekey = this.findCitekeyByStableKey(stable);
     if (!citekey) return false;
+
+    if (opts?.confirm !== false) {
+      const proceed = await this.confirmFormatChange(file);
+      if (!proceed) return false;
+    }
+
     try {
       await this.bibManager.createLiteratureNote(citekey, file, { open: false });
       return true;
@@ -1407,15 +1417,39 @@ export default class ReferenceList extends Plugin {
     }
   }
 
+  /**
+   * Ask before an update that changes a note's formatting.
+   *
+   * Only prompted when it is a real risk: the note is in ZotLit's format while
+   * we are importing with ScholarWeft (the conversion case), or the note has no
+   * managed region yet because its item had nothing to annotate.
+   */
+  private async confirmFormatChange(file: TFile): Promise<boolean> {
+    let source: string;
+    try {
+      source = await this.app.vault.cachedRead(file);
+    } catch {
+      return true; // unreadable: let the normal path report the failure
+    }
+    const format = detectNoteFormat(source, true);
+    const importingWithZotLit = this.settings.useOwnNoteTemplate !== true;
+
+    // Same format on both sides means a plain refresh; no prompt needed.
+    if (importingWithZotLit ? format === 'zotlit' : format === 'sw') return true;
+
+    const { FormatChangeModal } = await import('./modals/formatChangeModal');
+    return new Promise<boolean>((resolve) => {
+      new FormatChangeModal(this.app, {
+        noteName: file.basename,
+        noteFormat: format,
+        importingWithZotLit,
+        onChoose: resolve,
+      }).open();
+    });
+  }
+
   /** "Update this literature note" — the active note, located by `zotero-key`. */
   private async updateActiveLiteratureNote(): Promise<void> {
-    if (this.settings.useOwnNoteTemplate !== true) {
-      new Notice(
-        'Enable “Use ScholarWeft’s own note template” to update notes this way.',
-        8000
-      );
-      return;
-    }
     const file = this.app.workspace.getActiveFile();
     if (!file) return;
     const ok = await this.updateLiteratureNote(file);
@@ -1430,16 +1464,9 @@ export default class ReferenceList extends Plugin {
   /**
    * "Update all literature notes in the vault" — a middle ground between
    * updating one note and importing every Zotero item: re-render every note
-   * that carries a `zotero-key`. A ZotLit-managed note is converted.
+   * that carries a `zotero-key`.
    */
   private async updateAllLiteratureNotes(): Promise<void> {
-    if (this.settings.useOwnNoteTemplate !== true) {
-      new Notice(
-        'Enable “Use ScholarWeft’s own note template” to update notes this way.',
-        8000
-      );
-      return;
-    }
     const files = this.app.vault.getMarkdownFiles().filter((f) => {
       const stable =
         this.app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'];

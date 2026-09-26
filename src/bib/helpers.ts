@@ -831,6 +831,78 @@ export async function fetchItemChildrenNative(
 }
 
 /**
+ * A literature note's item, with the raw data needed to resolve its Zotero
+ * *related items* (which are item keys, not citekeys).
+ */
+export async function fetchItemRelationsNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  itemKey: string,
+  libraryID: number
+): Promise<string[]> {
+  if (!itemKey) return [];
+  if (!(await isZoteroRunningNative(port))) return [];
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { data } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`
+    );
+    const relations = data?.data?.relations;
+    if (!relations || typeof relations !== 'object') return [];
+    const keys: string[] = [];
+    for (const [predicate, targets] of Object.entries(relations)) {
+      // `dc:relation` is Zotero's "Related" links; ignore other predicates.
+      if (predicate !== 'dc:relation') continue;
+      for (const target of Array.isArray(targets) ? targets : [targets]) {
+        const key = String(target).replace(/^.*\//, '').trim();
+        if (key) keys.push(key);
+      }
+    }
+    return keys;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Resolve item keys to citekeys in one request per key, using the native API.
+ * Best-effort: an item without a citation key is skipped.
+ */
+export async function citekeysForItemKeys(
+  port: string = DEFAULT_ZOTERO_PORT,
+  itemKeys: string[],
+  libraryID: number
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!itemKeys.length) return out;
+  if (!(await isZoteroRunningNative(port))) return out;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  const queue = [...new Set(itemKeys)];
+  const workers = Array.from(
+    { length: Math.min(6, queue.length) },
+    async () => {
+      while (queue.length) {
+        const key = queue.shift()!;
+        try {
+          const { data } = await zoteroNativeGet(
+            port,
+            `/api/${libraryType}/${libraryId}/items/${key}?format=json`
+          );
+          const citationKey = data?.data?.citationKey;
+          if (typeof citationKey === 'string' && citationKey) {
+            out.set(key, citationKey);
+          }
+        } catch {
+          // skip individual failures
+        }
+      }
+    }
+  );
+  await Promise.all(workers);
+  return out;
+}
+
+/**
  * Fetch CSL entries for specific citekeys from the native Zotero API — used to
  * render a note's citations BEFORE the full library has finished loading.
  * Mirrors `getItemJSONFromCiteKeysNative` but returns the CSL entry itself.

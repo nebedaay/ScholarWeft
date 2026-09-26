@@ -18,6 +18,7 @@
 
 import { processAnnotations } from './annotations';
 import { annotationColorToName } from './color';
+import type { NoteContextRelatedItem } from './context';
 import {
   backlinkFor,
   buildNoteContext,
@@ -38,6 +39,12 @@ export interface RawZoteroChildren {
   attachments?: unknown[];
   annotations?: unknown[];
   notes?: unknown[];
+  /**
+   * The item's Zotero "Related" items, resolved to `NoteContextRelatedItem`s by
+   * the caller (relations live in the Zotero DB, not the CSL export). Kept here
+   * so every consumer of the raw bundle gets them.
+   */
+  relatedItems?: NoteContextRelatedItem[];
 }
 
 /** Context the raw Zotero data alone cannot supply. */
@@ -59,6 +66,13 @@ export interface ZoteroChildrenOptions {
    * Zotero's `file://` cache path, which Obsidian cannot display.
    */
   imageVaultPath?: (key: string) => string | null;
+  /**
+   * The item's Zotero "Related" items, already resolved to citekeys. Related
+   * items live in the Zotero database (not the CSL export), so the caller
+   * fetches and resolves them; an unresolved item keeps `citationKey: null` and
+   * simply contributes no link.
+   */
+  relatedItems?: NoteContextRelatedItem[];
 }
 
 // ─── Raw access ─────────────────────────────────────────────────────────────
@@ -417,6 +431,8 @@ export function applyChildren(
   ctx.attachments = attachments;
   ctx.annotations = processAnnotations(annotations);
   ctx.notes = notes;
+  if (resolved.relatedItems) ctx.relatedItems = resolved.relatedItems;
+  else if (raw.relatedItems) ctx.relatedItems = raw.relatedItems;
   return ctx;
 }
 

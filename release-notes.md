@@ -25,6 +25,12 @@ Choosing ZotLit instead puts notes in **ZotLit's own folder** (read live, so it 
 - **Re-importing refreshes only the managed region** (between `%%sw-managed%%` markers) and the template's own frontmatter fields. Everything you write, above or below the region, is left alone.
 - Frontmatter mirrors the ZotLit field set, with `abstract` and `title` kept as Markdown and `related` always present.
 
+### Two related properties, with clear owners
+
+`related:` is **yours**. ScholarWeft writes `related: []` when it creates a note and never touches it again, so any links you add stay put.
+
+`sw-related:` is **Zotero's**. It holds the item's Zotero tags and Related items as `[[…]]` links, and is rebuilt on every import — so a tag or related link you remove in Zotero disappears from the note on the next update, with no stale entries to prune by hand.
+
 ### ZotLit notes are handled carefully
 
 If a note was created by ZotLit, ScholarWeft **asks before converting it**: convert it (remembered for the notes you update) or leave ZotLit's area as it is (you will be asked again next time). The preference can also be pinned in the **ZotLit notes** setting. Converting removes an empty ZotLit annotation region; ScholarWeft never writes an empty region of its own.

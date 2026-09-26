@@ -38,7 +38,16 @@ Here’s an example of output using the default template:
 
 <img src="../images/scholarweft-annotation-example.png" width="80%" alt="ScholarWeft annotation example">
 
-- **Frontmatter** mirrors the ZotLit field set (document-type, created, added, up, related, item-type, title, shorttitle, authors, editors, abstract, …), keeping `abstract` and `title` as Markdown. `related` is always written (empty as `related: []`).
+A few things to note in this example:
+
+- The highlighted quote spans two pages, and the second comment (not visible here because it's in a different column) starts with `+`, so it’s appended to the previous quote, and the location information below is a page range including both pages.
+- Wikilinks in the Zotero annotation comment — `[[Saussure, Ferdinand de|Saussure]]` — are rendered as links in Obsidian.
+- “Tags” added to the Zotero comment are also rendered as `[[wikilinks]]`, including a `@citekey` reference. (Obsidian doesn’t allow rendering citations inside callouts, so it’s presented as a literal citekey.)
+
+The template structures each literature note as follows:
+
+- **Frontmatter** includes metadata provided by Zotero such as document-type, created, added, up, item-type, title, shorttitle, authors, editors, abstract, …), converting any HTML formatting in `abstract` and `title` to Markdown.
+- **Two related properties, with clear owners.** `related:` is **yours** — ScholarWeft writes `related: []` when creating a note and never touches it again, so links you add stay. `sw-related:` holds what **Zotero** supplies: the item's Zotero tags and its Related items, as `[[…]]` links. Zotero's list is rebuilt on every import, so a tag or related link you remove in Zotero disappears from the note — no stale entries to prune.
 - **Body**: a `## Notes` section (yours) and, when the item has annotations, a managed `## Annotations` region between `%%sw-managed%%` and `%%/sw-managed%%` markers. The region is omitted entirely when the item has no annotations.
 - **Annotations** keep Zotero's PDF reading order. A comment that starts with `+` in the annotated PDF merges that annotation into the previous one of the same type on the same attachment — text or images are joined and the page label becomes a range — so a rectangular selection spanning two pages reads as one quote.
 - **Excerpt images** are copied into your vault and embedded as `![[…]]`, because Obsidian cannot display Zotero's `file://` cache paths. **Excerpt-image folder** sets where they go (default `Attachments`, relative to the vault root); names are `@<citekey>_p<page>_<annotationKey>.png`.

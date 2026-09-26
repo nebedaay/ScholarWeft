@@ -23,7 +23,8 @@
 <% add_property('created', import_date()); -%>
 <% add_property('added', item.dateAdded ? item.dateAdded.slice(0, 10) : null); -%>
 <% add_property('up', ['[[Bibliographic Notes]]']); -%>
-<% add_property('related', related_links(), { force: true }); -%>
+<% add_property('related', [], { force: true, merge: 'keep' }); -%>
+<% add_property('sw-related', related_links(), { force: true, merge: 'replace' }); -%>
 <% add_property('item-type', item.itemType); -%>
 <% add_property('title', item.title); -%>
 <% add_property('shorttitle', short_title()); -%>

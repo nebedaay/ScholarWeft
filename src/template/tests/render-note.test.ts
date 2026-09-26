@@ -21,6 +21,7 @@ import { buildNoteContextWithChildren, type RawZoteroChildren } from '../childre
 import type { CachedEntry } from '../context';
 import { NoteTemplateEngine } from '../engine';
 import { prepareTemplateData } from '../note-helpers';
+import { renderNote } from '../render';
 
 const template = readFileSync(
   join(__dirname, '../../../sw-note-templates/sw-note.eta.md'),
@@ -89,6 +90,96 @@ function render(rawChildren: RawZoteroChildren = raw, entryOverride: CachedEntry
   prepareTemplateData(ctx, { importDate: '2026-09-25' });
   return new NoteTemplateEngine().renderString(template, ctx);
 }
+
+describe('sw-related: Zotero references and tags', () => {
+  const withRelated: RawZoteroChildren = {
+    ...raw,
+    relatedItems: [
+      { key: 'REL1', citationKey: 'other2020', title: null },
+      { key: 'REL2', citationKey: 'another2021', title: null },
+    ],
+  };
+
+  it('links Zotero related items and tags under sw-related', () => {
+    const out = render({
+      ...withRelated,
+      relatedItems: withRelated.relatedItems,
+    });
+    expect(out).toContain('sw-related:');
+    expect(out).toContain('  - "[[@other2020]]"');
+    expect(out).toContain('  - "[[@another2021]]"');
+  });
+
+  it('links Zotero tags as wikilinks in the same property', () => {
+    const tagged = render(withRelated, {
+      ...entry,
+      _tags: ['islamic-law', 'manuscripts'],
+    } as CachedEntry);
+    expect(tagged).toContain('  - "[[islamic-law]]"');
+    expect(tagged).toContain('  - "[[manuscripts]]"');
+  });
+
+  it('leaves an empty related: for the user, alongside sw-related', () => {
+    const out = render(withRelated);
+    expect(out).toContain('related: []');
+  });
+
+  it('rebuilds sw-related on import, so a removed tag disappears', () => {
+    const existing = [
+      '---',
+      'zotero-key: EKUBHHNW',
+      'related:',
+      '  - "[[my-own-note]]"',
+      'sw-related:',
+      '  - "[[a-tag-i-deleted-in-zotero]]"',
+      '  - "[[@other2020]]"',
+      '---',
+      '',
+      '## Notes',
+      '',
+    ].join('\n');
+
+    const merged = renderNote(entry, withRelated, {
+      templateSource: template,
+      dataDir: '/zot',
+      importDate: '2026-09-25',
+      existingContent: existing,
+    });
+
+    // Zotero-owned: the deleted tag is gone, current ones are present.
+    expect(merged.content).not.toContain('a-tag-i-deleted-in-zotero');
+    expect(merged.content).toContain('"[[@other2020]]"');
+    expect(merged.content).toContain('"[[@another2021]]"');
+    // User-owned: their own link is untouched.
+    expect(merged.content).toContain('"[[my-own-note]]"');
+  });
+
+  it('never touches the user’s related: list', () => {
+    const existing = [
+      '---',
+      'zotero-key: EKUBHHNW',
+      'related:',
+      '  - "[[only-mine]]"',
+      '---',
+      '',
+      '## Notes',
+      '',
+    ].join('\n');
+
+    const merged = renderNote(entry, withRelated, {
+      templateSource: template,
+      dataDir: '/zot',
+      importDate: '2026-09-25',
+      existingContent: existing,
+    });
+    expect(merged.content).toContain('"[[only-mine]]"');
+    // The Zotero list did not leak into the user's property: `related:` holds
+    // only their own link, and the Zotero entries live under `sw-related:`.
+    const relatedBlock = /related:\n((?: {2}- .*\n)+)/.exec(merged.content)?.[1] ?? '';
+    expect(relatedBlock).toContain('only-mine');
+    expect(relatedBlock).not.toContain('other2020');
+  });
+});
 
 describe('sw-note.eta.md — end-to-end render', () => {
   const out = render();
