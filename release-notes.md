@@ -37,6 +37,21 @@ Choosing ZotLit instead puts notes in **ZotLit's own folder** (read live, so it 
 
 The update commands used to refuse if you had switched to ZotLit — even for a note ScholarWeft had written. They now look at the **note's** format instead: an `%%sw-managed%%` region means ScholarWeft's, `%%zt-managed%%` means ZotLit's, and a note with a Zotero key but no region is ScholarWeft's too. A prompt appears **only when the note's format differs** from what your current setting would apply, naming both and offering to proceed or to change the setting first. Same-format refreshes stay silent, so routine updates are unchanged.
 
+### Fresh data when you need it
+
+- **Tags are now read live from Zotero when a note is imported**, not from the cached library. Previously a tag you had just added in Zotero could be missing from an import until the library refreshed; annotations and related items were already live, so tags were the odd one out.
+- **The library refreshes when Obsidian regains focus**, so edits made in Zotero reach the plugin without a restart or opening the autocomplete popup. Switching panes or tabs inside Obsidian does not trigger it — only actually leaving and returning to the app.
+
+### Autocomplete no longer needs ZotLit, and gains a third level
+
+`@@` and `@@@` now search ScholarWeft's own index, so they work identically with or without ZotLit. ZotLit's search was an item lookup (it never searched PDF text), so there is no loss in reach — and the ranking is now ours to tune.
+
+- `@` — citekeys.
+- `@@` — adds titles and authors.
+- `@@@` — adds abstracts, weighted below title and author, so wording that only appears in an abstract never outranks a title match.
+
+Fuzzy matching is also tighter, so a search for "Slightly" no longer ranks "The Social Life of Ghosttowns in Libya" above items that actually match, while misspellings still resolve.
+
 ### ZotLit notes are handled carefully
 
 If a note was created by ZotLit, ScholarWeft **asks before converting it**: convert it (remembered for the notes you update) or leave ZotLit's area as it is (you will be asked again next time). The preference can also be pinned in the **ZotLit notes** setting. Converting removes an empty ZotLit annotation region; ScholarWeft never writes an empty region of its own.
