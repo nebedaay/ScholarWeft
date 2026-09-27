@@ -66,11 +66,56 @@ function norm(s: string): string {
 }
 
 /** Case/diacritic-insensitive first offset of `term` in `text`, or -1. */
-function indexOfTerm(text: string, term: string): number {
-  const at = norm(text).indexOf(norm(term));
-  if (at === -1) return -1;
-  // Offsets align because NFD+strip preserves length for these characters.
-  return Math.min(at, text.length);
+/**
+ * Normalise `text`, remembering which ORIGINAL index each normalised character
+ * came from.
+ *
+ * Assuming the two agree in length is wrong: `norm()` strips combining marks,
+ * so an already-decomposed sequence (`u` + U+0304) becomes one character
+ * shorter and every later offset shifts. The match is then FOUND on the
+ * normalised string but the emphasis is applied at the wrong place in the
+ * original — which is why a diacritic match could be located and yet not
+ * visibly bolded.
+ */
+function normaliseWithMap(text: string): { text: string; map: number[] } {
+  let out = '';
+  const map: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const n = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (let k = 0; k < n.length; k++) {
+      out += n[k];
+      map.push(i);
+    }
+  }
+  return { text: out, map };
+}
+
+/**
+ * The ORIGINAL-text span of `term` inside `text`, or null.
+ *
+ * `from` is where searching may begin in the original string, so every
+ * occurrence can be found rather than just the first.
+ */
+function findTermIn(
+  text: string,
+  term: string,
+  from: number
+): { start: number; length: number } | null {
+  const needle = norm(term);
+  if (!needle) return null;
+  const source = text.slice(from);
+  const { text: normalised, map } = normaliseWithMap(source);
+  const at = normalised.indexOf(needle);
+  if (at === -1) return null;
+  const lastIndex = Math.min(at + needle.length - 1, map.length - 1);
+  const start = from + map[at];
+  let end = from + map[lastIndex] + 1; // inclusive → exclusive
+  // Extend over any COMBINING MARKS that follow, so a decomposed character is
+  // emphasised whole rather than bolded up to its accent.
+  while (end < text.length && /[\u0300-\u036f]/.test(text[end])) end++;
+  if (end <= start) return null;
+  return { start, length: end - start };
 }
 
 export interface TermSpan {
@@ -94,14 +139,15 @@ export function findTermSpans(
   const found: TermSpan[] = [];
   for (const term of terms) {
     if (!term) continue;
-    // Find every occurrence, not just the first.
+    // Find every occurrence, not just the first, using the offset-mapped
+    // search so emphasis lands on the right characters when diacritics are
+    // involved.
     let from = 0;
     for (;;) {
-      const at = indexOfTerm(text.slice(from), term);
-      if (at === -1) break;
-      const start = from + at;
-      found.push({ start, length: term.length });
-      from = start + Math.max(term.length, 1);
+      const hit = findTermIn(text, term, from);
+      if (!hit) break;
+      found.push(hit);
+      from = hit.start + Math.max(hit.length, 1);
     }
   }
   const sorted = found
@@ -142,11 +188,11 @@ export function buildExcerpts(
   const spans: Array<{ from: number; to: number }> = [];
   for (const term of terms) {
     if (!term) continue;
-    const at = indexOfTerm(text, term);
-    if (at === -1) continue;
-    const first = words.findIndex((w) => w.start >= at);
+    const hit = findTermIn(text, term, 0);
+    if (!hit) continue;
+    const first = words.findIndex((w) => w.start >= hit.start);
     if (first === -1) continue;
-    const end = at + term.length;
+    const end = hit.start + hit.length;
     let last = first;
     while (last + 1 < words.length && words[last + 1].start < end) last++;
     spans.push({ from: first, to: last });
@@ -269,10 +315,8 @@ export function buildExcerpts(
     // EVERY term's match inside the trimmed line, so a line containing several
     // matched words emphasises all of them rather than just the first.
     const matches = terms
-      .map((t) => ({ length: t.length, start: indexOfTerm(body, t) }))
-      .filter((m) => m.start >= 0)
-      // Longest first, so overlapping terms do not leave a bare fragment
-      // emphasised when a longer match covers the same text.
+      .map((t) => findTermIn(body, t, 0))
+      .filter((m): m is { start: number; length: number } => !!m)
       .sort((a, b) => a.start - b.start || b.length - a.length);
     const deduped: Array<{ start: number; length: number }> = [];
     for (const m of matches) {

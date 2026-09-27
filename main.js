@@ -96393,11 +96393,36 @@ function tokens(text) {
 function norm3(s3) {
   return s3.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
-function indexOfTerm(text, term) {
-  const at = norm3(text).indexOf(norm3(term));
+function normaliseWithMap(text) {
+  let out = "";
+  const map = [];
+  for (let i3 = 0; i3 < text.length; i3++) {
+    const ch = text[i3];
+    const n2 = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    for (let k4 = 0; k4 < n2.length; k4++) {
+      out += n2[k4];
+      map.push(i3);
+    }
+  }
+  return { text: out, map };
+}
+function findTermIn(text, term, from) {
+  const needle = norm3(term);
+  if (!needle)
+    return null;
+  const source = text.slice(from);
+  const { text: normalised, map } = normaliseWithMap(source);
+  const at = normalised.indexOf(needle);
   if (at === -1)
-    return -1;
-  return Math.min(at, text.length);
+    return null;
+  const lastIndex = Math.min(at + needle.length - 1, map.length - 1);
+  const start = from + map[at];
+  let end = from + map[lastIndex] + 1;
+  while (end < text.length && /[\u0300-\u036f]/.test(text[end]))
+    end++;
+  if (end <= start)
+    return null;
+  return { start, length: end - start };
 }
 function findTermSpans(text, terms) {
   if (!text || terms.length === 0)
@@ -96408,12 +96433,11 @@ function findTermSpans(text, terms) {
       continue;
     let from = 0;
     for (; ; ) {
-      const at = indexOfTerm(text.slice(from), term);
-      if (at === -1)
+      const hit = findTermIn(text, term, from);
+      if (!hit)
         break;
-      const start = from + at;
-      found.push({ start, length: term.length });
-      from = start + Math.max(term.length, 1);
+      found.push(hit);
+      from = hit.start + Math.max(hit.length, 1);
     }
   }
   const sorted = found.filter((s3) => s3.length > 0 && s3.start + s3.length <= text.length).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
@@ -96442,13 +96466,13 @@ function buildExcerpts(text, terms, opts = {}) {
   for (const term of terms) {
     if (!term)
       continue;
-    const at = indexOfTerm(text, term);
-    if (at === -1)
+    const hit = findTermIn(text, term, 0);
+    if (!hit)
       continue;
-    const first = words2.findIndex((w4) => w4.start >= at);
+    const first = words2.findIndex((w4) => w4.start >= hit.start);
     if (first === -1)
       continue;
-    const end = at + term.length;
+    const end = hit.start + hit.length;
     let last = first;
     while (last + 1 < words2.length && words2[last + 1].start < end)
       last++;
@@ -96520,7 +96544,7 @@ function buildExcerpts(text, terms, opts = {}) {
     const prefix = from > 0 ? "\u2026 " : "";
     const suffix = to < words2.length - 1 ? " \u2026" : "";
     const body = joined;
-    const matches = terms.map((t4) => ({ length: t4.length, start: indexOfTerm(body, t4) })).filter((m3) => m3.start >= 0).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
+    const matches = terms.map((t4) => findTermIn(body, t4, 0)).filter((m3) => !!m3).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
     const deduped = [];
     for (const m3 of matches) {
       const prev = deduped[deduped.length - 1];

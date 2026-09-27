@@ -276,3 +276,44 @@ describe('highlighting matched CHUNK terms (the reported case)', () => {
     expect(findTermSpans('Al-Khutabi', ['khū'])).toHaveLength(1);
   });
 });
+
+describe('emphasis offsets survive normalisation', () => {
+  // Normalising strips combining marks, which can SHORTEN a decomposed string
+  // and shift every later offset. Searching the normalised text and then
+  // slicing the ORIGINAL at that offset therefore bolds the wrong characters —
+  // the match is found but the emphasis lands elsewhere.
+  const decomposed = 'Al-Kh' + 'u\u0304' + 'ʾī Abū';
+  const precomposed = 'Al-Khūʾī Abū';
+
+  it('finds a match in precomposed text', () => {
+    const spans = findTermSpans(precomposed, ['khu']);
+    expect(spans.map((s) => precomposed.slice(s.start, s.start + s.length))).toEqual([
+      'Khū',
+    ]);
+  });
+
+  it('finds the same match in decomposed text', () => {
+    const spans = findTermSpans(decomposed, ['khu']);
+    expect(spans).toHaveLength(1);
+    // The span covers the base letters AND the combining mark.
+    expect(decomposed.slice(spans[0].start, spans[0].start + spans[0].length)).toBe(
+      'Kh' + 'u\u0304'
+    );
+  });
+
+  it('keeps later offsets correct when a decomposed char precedes the match', () => {
+    // The failure this guards: an earlier accent shortening the string and
+    // pushing the bold off the match entirely.
+    const text = 'Caf' + 'e\u0301' + ' notes on khutab and more';
+    const spans = findTermSpans(text, ['khutab']);
+    expect(spans.map((s) => text.slice(s.start, s.start + s.length))).toEqual([
+      'khutab',
+    ]);
+  });
+
+  it('works in a title with several accented characters', () => {
+    const title = 'Muʿjam rijāl al-ḥadīth wa tafṣīl ṭabaqāt al-ruwāt';
+    const spans = findTermSpans(title, ['tab']);
+    expect(spans.map((s) => title.slice(s.start, s.start + s.length))).toEqual(['ṭab']);
+  });
+});
