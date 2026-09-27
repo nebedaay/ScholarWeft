@@ -352,3 +352,50 @@ describe('matchedTerms reflect what the scorer interpreted', () => {
     }
   });
 });
+
+describe('@ and @@ are the same search; @@ adds fields', () => {
+  // One path, one set of ranking bands. `@`/`@@` pass tier 'title' (so
+  // includeAbstract/includeVenue are false); `@@@` passes 'abstract'. Only the
+  // FIELDS differ — the ranking is shared.
+  const entry = {
+    citekey: 'smithMemory2020',
+    title: 'Memory and Practice',
+    authorText: 'Smith',
+    abstract: 'A study of ancestral authority in Senegal.',
+    venueText: 'Journal of Memory Studies',
+  };
+
+  it('ranks a title match identically whether abstract is searched or not', () => {
+    const withoutAbs = scoreEntry(entry, 'memory', {
+      includeAbstract: false,
+      includeVenue: false,
+    });
+    const withAbs = scoreEntry(entry, 'memory', {
+      includeAbstract: true,
+      includeVenue: true,
+    });
+    expect(withoutAbs.value).toBe(withAbs.value);
+  });
+
+  it('only the extra fields differ: abstract/venue matches need the wider tier', () => {
+    const narrow = scoreEntry(entry, 'senegal', {
+      includeAbstract: false,
+      includeVenue: false,
+    });
+    const wide = scoreEntry(entry, 'senegal', {
+      includeAbstract: true,
+      includeVenue: true,
+    });
+    expect(narrow.covered).toBe(0); // not found without them
+    expect(wide.covered).toBe(1); // found with them
+  });
+
+  it('ranks a citekey the same in both tiers', () => {
+    for (const flags of [
+      { includeAbstract: false, includeVenue: false },
+      { includeAbstract: true, includeVenue: true },
+    ]) {
+      expect(scoreEntry(entry, 'smithMemory2020', flags).value).toBeLessThan(0);
+    }
+  });
+});

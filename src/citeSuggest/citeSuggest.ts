@@ -44,57 +44,6 @@ function getEntryMeta(item: PartialCSLEntry): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-/**
- * Citekey-first single-@ search (PRL-style). Tiered so the suggestion list is
- * predictable instead of Fuse's often-random-looking fuzzy spread:
- *   1. citekeys that START with the query (prefix) — "pickus" → pickus… first
- *   2. citekeys CONTAINING the query (substring)
- *   3. everything else Fuse finds on title/author (fuzzy)
- * Each tier is itself sorted by Fuse score within the tier. Tiers 1–2 pull
- * from the index's docs directly (cheap, exact); tier 3 delegates to Fuse.
- * Returns up to `limit` results, prefix/substring tiering never dropping a
- * prefix match in favour of an unrelated fuzzy hit.
- */
-function searchCitekeyFirst(
-  fuse: Fuse<PartialCSLEntry> | undefined,
-  query: string,
-  limit: number
-): Fuse.FuseResult<PartialCSLEntry>[] {
-  if (!fuse) return [];
-  const q = normalizeDiacritics(query).toLowerCase();
-  if (!q) return [];
-
-  const docs = ((fuse as any)?._docs ?? []) as PartialCSLEntry[];
-
-  const asResult = (item: PartialCSLEntry): Fuse.FuseResult<PartialCSLEntry> => ({
-    item,
-    refIndex: docs.indexOf(item),
-    score: 0,
-  });
-
-  // Tier 1: prefix on the citekey.
-  const prefixes = docs
-    .filter((d) => {
-      const id = d.id ?? '';
-      return id.length >= q.length && normalizeDiacritics(id).toLowerCase().startsWith(q);
-    })
-    .map(asResult);
-
-  if (prefixes.length) return prefixes.slice(0, limit);
-
-  // Tier 2: substring on the citekey.
-  const substr = docs
-    .filter((d) => {
-      const id = normalizeDiacritics(d.id ?? '').toLowerCase();
-      return id.includes(q);
-    })
-    .map(asResult);
-
-  if (substr.length) return substr.slice(0, limit);
-
-  // Tier 3: Fuse fuzzy on id/title/author.
-  return fuse.search(normalizeDiacritics(query), { limit }) ?? [];
-}
 
 // A non-selectable placeholder shown while the library is still loading and the
 // live Zotero search returned nothing, so the user learns the index is warming
@@ -227,9 +176,11 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // still works for anyone who types one. `@@`/`@@@` add the abstract,
     // journal/book title, series and publisher.
     //
-    // A spaced query is only meaningful for the multi-field tiers, where spaces
-    // separate words; a bare `@` with spaces is treated as an ordinary search.
-    const spacedQuery = searchQuery.includes(' ');
+    // ALL `@` queries take this path, spaced or not. Previously an unspaced `@`
+    // went to `searchCitekeyFirst`, which returns early on the first tier that
+    // matches — so a query with any citekey prefix never reached the title and
+    // creator search at all, and `@` behaved as citekey-only.
+    const useMultiField = true;
 
     // Reset per-search state. Every path below records the terms it matched, so
     // highlighting cannot inherit stale terms from the previous search.
@@ -255,7 +206,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // ours is rankable and works without the plugin. ZotLit remains only as a
     // last-resort accelerator below, when our index is missing and its own is
     // present — never as the source of truth for what @@ means.
-    if (isDoubleAtMode || spacedQuery) {
+    if (useMultiField) {
       const tier = isTripleAtMode ? 'abstract' : 'title';
       const fuse = bibManager.fuseForTier(tier) ?? bibManager.fuse;
 
@@ -298,52 +249,29 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       // Show an honest count: "20 of 137" when the list is truncated, so a
       // capped result does not read like "only 20 matched".
       this.renderCount(entries.length, total);
-      return entries.map(({ entry }, refIndex) => ({
-        item: entry,
-        refIndex,
-        score: 0,
-      }));
-    }
+      if (entries.length > 0) {
+        return entries.map(({ entry }, refIndex) => ({
+          item: entry,
+          refIndex,
+          score: 0,
+        }));
+      }
 
-    // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
-    // Use per-file Fuse index when the note has a frontmatter bibliography,
-    // falling back to global if the per-file one is null (race on startup).
-    // The fileCache entry's `.source` can be undefined (e.g. a null-render
-    // placeholder), so guard both levels before reading `.fuse`.
-    let fuse = bibManager.fuse;
-    const fileCacheEntry = bibManager.fileCache.get(context.file);
-    if (fileCacheEntry?.source?.fuse) {
-      fuse = fileCacheEntry.source.fuse;
+      // Nothing in the index — try Zotero live, then ZotLit, then say
+      // "still loading" if the index is still building.
+      const live = await this.liveSearch(searchQuery, 'text');
+      if (live.length) {
+        LOG('live Zotero returned', live.length, 'items');
+        this._matchedTermsByKey = new Map(
+          live.map((item) => [item.id, [searchQuery]])
+        );
+        this.renderCount(live.length);
+        return live.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
+      }
+      const zotlitResults = await this.zotlitFallback(searchQuery);
+      if (zotlitResults.length) return zotlitResults;
+      return indexReady ? [] : loadingSuggestion();
     }
-
-    LOG('single-@ fuse docs=', (fuse as any)?._docs?.length ?? 0);
-    const fuseResults = searchCitekeyFirst(fuse, searchQuery, this.limit);
-    if (fuseResults?.length) {
-      // Record the query as the matched term. The citekey tiers build results
-      // without Fuse `matches`, so without this NOTHING was emphasised for `@`
-      // — the same class of bug as `@@` only recording for `@@@`.
-      this._matchedTermsByKey = new Map(
-        fuseResults.map((r) => [r.item.id, [searchQuery]])
-      );
-      this.renderCount(fuseResults.length);
-      return fuseResults;
-    }
-
-    // Fuse returned nothing — fall back to a live Zotero query.
-    LOG('falling back to live Zotero search');
-    const liveItems = await this.liveSearch(searchQuery, 'citekey');
-    if (liveItems.length) {
-      LOG('live Zotero returned', liveItems.length, 'items');
-      this._matchedTermsByKey = new Map(
-        liveItems.map((item) => [item.id, [searchQuery]])
-      );
-      this.renderCount(liveItems.length);
-      return liveItems.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
-    }
-
-    // Nothing from either the index or a live search. If the index is still
-    // building, tell the user that rather than leaving the popup blank.
-    return indexReady ? [] : loadingSuggestion();
   }
 
   /**

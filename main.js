@@ -96653,35 +96653,6 @@ function getEntryMeta(item) {
     parts.push(String(container));
   return parts.filter(Boolean).join(" \xB7 ");
 }
-function searchCitekeyFirst(fuse, query, limit) {
-  var _a, _b;
-  if (!fuse)
-    return [];
-  const q4 = normalizeDiacritics(query).toLowerCase();
-  if (!q4)
-    return [];
-  const docs = (_a = fuse == null ? void 0 : fuse._docs) != null ? _a : [];
-  const asResult = (item) => ({
-    item,
-    refIndex: docs.indexOf(item),
-    score: 0
-  });
-  const prefixes = docs.filter((d3) => {
-    var _a2;
-    const id = (_a2 = d3.id) != null ? _a2 : "";
-    return id.length >= q4.length && normalizeDiacritics(id).toLowerCase().startsWith(q4);
-  }).map(asResult);
-  if (prefixes.length)
-    return prefixes.slice(0, limit);
-  const substr = docs.filter((d3) => {
-    var _a2;
-    const id = normalizeDiacritics((_a2 = d3.id) != null ? _a2 : "").toLowerCase();
-    return id.includes(q4);
-  }).map(asResult);
-  if (substr.length)
-    return substr.slice(0, limit);
-  return (_b = fuse.search(normalizeDiacritics(query), { limit })) != null ? _b : [];
-}
 var LOADING_ITEM_ID = "__scholarweft_loading__";
 function loadingSuggestion() {
   return [
@@ -96745,12 +96716,12 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     });
   }
   async getSuggestions(context) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c;
     const isTripleAtMode = context.query.startsWith(TRIPLE_AT_PREFIX);
     const isDoubleAtMode = isTripleAtMode || context.query.startsWith(DOUBLE_AT_PREFIX);
     const searchQuery = context.query.slice(isTripleAtMode ? 1 : isDoubleAtMode ? 1 : 0).trim();
     LOG("getSuggestions query=", JSON.stringify(searchQuery), "mode=", isTripleAtMode ? "@@@" : isDoubleAtMode ? "@@" : "@");
-    const spacedQuery = searchQuery.includes(" ");
+    const useMultiField = true;
     this._matchedTermsByKey = new Map();
     this.renderCount(0);
     if (!searchQuery)
@@ -96758,54 +96729,46 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     const { plugin } = this;
     const { bibManager } = plugin;
     const indexReady = bibManager.fuseReady;
-    if (isDoubleAtMode || spacedQuery) {
+    if (useMultiField) {
       const tier = isTripleAtMode ? "abstract" : "title";
-      const fuse2 = (_a = bibManager.fuseForTier(tier)) != null ? _a : bibManager.fuse;
-      if (!fuse2) {
+      const fuse = (_a = bibManager.fuseForTier(tier)) != null ? _a : bibManager.fuse;
+      if (!fuse) {
         const items = await this.liveSearch(searchQuery, "text");
         if (items.length) {
           return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
         }
-        const zotlitResults = await this.zotlitFallback(searchQuery);
-        if (zotlitResults.length)
-          return zotlitResults;
+        const zotlitResults2 = await this.zotlitFallback(searchQuery);
+        if (zotlitResults2.length)
+          return zotlitResults2;
         return indexReady ? [] : loadingSuggestion();
       }
-      LOG(`@${isTripleAtMode ? "@@" : "@"} tier=${tier}, docs=`, (_c = (_b = fuse2 == null ? void 0 : fuse2._docs) == null ? void 0 : _b.length) != null ? _c : 0);
+      LOG(`@${isTripleAtMode ? "@@" : "@"} tier=${tier}, docs=`, (_c = (_b = fuse == null ? void 0 : fuse._docs) == null ? void 0 : _b.length) != null ? _c : 0);
       if (!searchQuery) {
-        const docs = fuse2 == null ? void 0 : fuse2._docs;
+        const docs = fuse == null ? void 0 : fuse._docs;
         return (docs == null ? void 0 : docs.length) ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 })) : [];
       }
       const { entries, total } = bibManager.searchTier(tier, searchQuery, this.limit);
       this._matchedTermsByKey = new Map(entries.map((e3) => [e3.entry.id, e3.terms]));
       this.renderCount(entries.length, total);
-      return entries.map(({ entry }, refIndex) => ({
-        item: entry,
-        refIndex,
-        score: 0
-      }));
+      if (entries.length > 0) {
+        return entries.map(({ entry }, refIndex) => ({
+          item: entry,
+          refIndex,
+          score: 0
+        }));
+      }
+      const live = await this.liveSearch(searchQuery, "text");
+      if (live.length) {
+        LOG("live Zotero returned", live.length, "items");
+        this._matchedTermsByKey = new Map(live.map((item) => [item.id, [searchQuery]]));
+        this.renderCount(live.length);
+        return live.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
+      }
+      const zotlitResults = await this.zotlitFallback(searchQuery);
+      if (zotlitResults.length)
+        return zotlitResults;
+      return indexReady ? [] : loadingSuggestion();
     }
-    let fuse = bibManager.fuse;
-    const fileCacheEntry = bibManager.fileCache.get(context.file);
-    if ((_d = fileCacheEntry == null ? void 0 : fileCacheEntry.source) == null ? void 0 : _d.fuse) {
-      fuse = fileCacheEntry.source.fuse;
-    }
-    LOG("single-@ fuse docs=", (_f = (_e = fuse == null ? void 0 : fuse._docs) == null ? void 0 : _e.length) != null ? _f : 0);
-    const fuseResults = searchCitekeyFirst(fuse, searchQuery, this.limit);
-    if (fuseResults == null ? void 0 : fuseResults.length) {
-      this._matchedTermsByKey = new Map(fuseResults.map((r3) => [r3.item.id, [searchQuery]]));
-      this.renderCount(fuseResults.length);
-      return fuseResults;
-    }
-    LOG("falling back to live Zotero search");
-    const liveItems = await this.liveSearch(searchQuery, "citekey");
-    if (liveItems.length) {
-      LOG("live Zotero returned", liveItems.length, "items");
-      this._matchedTermsByKey = new Map(liveItems.map((item) => [item.id, [searchQuery]]));
-      this.renderCount(liveItems.length);
-      return liveItems.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
-    }
-    return indexReady ? [] : loadingSuggestion();
   }
   async zotlitFallback(searchQuery) {
     var _a, _b, _c;
