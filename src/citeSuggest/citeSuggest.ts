@@ -221,14 +221,22 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       isTripleAtMode ? '@@@' : isDoubleAtMode ? '@@' : '@'
     );
 
-    if (!isDoubleAtMode && (!searchQuery || searchQuery.includes(' '))) {
-      return [];
-    }
+    // `@` searches titles and creators as well as citekeys, because `@` is what
+    // a citation looks like — reaching for it is natural. An exact or leading
+    // citekey match ranks at the very top (see scoreEntry), so citekey lookup
+    // still works for anyone who types one. `@@`/`@@@` add the abstract,
+    // journal/book title, series and publisher.
+    //
+    // A spaced query is only meaningful for the multi-field tiers, where spaces
+    // separate words; a bare `@` with spaces is treated as an ordinary search.
+    const spacedQuery = searchQuery.includes(' ');
 
     // Reset per-search state. Every path below records the terms it matched, so
     // highlighting cannot inherit stale terms from the previous search.
     this._matchedTermsByKey = new Map();
     this.renderCount(0);
+
+    if (!searchQuery) return [];
 
     const { plugin } = this;
     const { bibManager } = plugin;
@@ -238,7 +246,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // and, only if that finds nothing either, show a "still loading" line.
     const indexReady = bibManager.fuseReady;
 
-    // ── @@ / @@@ mode: OUR search, ZotLit optional ─────────────────────────
+    // ── `@` with spaces, `@@`, `@@@`: our multi-field search ───────────────
     // Always uses the global index — per-file bibliography overrides are
     // intentionally ignored here since this is a full-library search.
     //
@@ -247,7 +255,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // ours is rankable and works without the plugin. ZotLit remains only as a
     // last-resort accelerator below, when our index is missing and its own is
     // present — never as the source of truth for what @@ means.
-    if (isDoubleAtMode) {
+    if (isDoubleAtMode || spacedQuery) {
       const tier = isTripleAtMode ? 'abstract' : 'title';
       const fuse = bibManager.fuseForTier(tier) ?? bibManager.fuse;
 
@@ -489,11 +497,16 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       // highlighting wherever it appears, so the emphasis cannot depend on our
       // CSS being applied to the right ancestor — which is what silently failed
       // for `<strong>`.
-      const mark = createEl('mark', {
+      // `<strong>` rather than `<mark>`: only bold is wanted, and `mark` brings
+      // a background and colour that would then have to be overridden. The
+      // class is on the element itself, so nothing depends on the popup's
+      // ancestor structure (an ancestor selector is what silently failed
+      // before).
+      const strong = createEl('strong', {
         cls: 'sw-suggest-match',
         text: text.slice(s.start, s.start + s.length),
       });
-      el.append(mark);
+      el.append(strong);
       at = s.start + s.length;
     }
     if (at < text.length) el.appendText(text.slice(at));
@@ -514,7 +527,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         continue;
       }
       if (m.start > at) line.appendText(excerpt.text.slice(at, m.start));
-      line.append(createEl('mark', { text: excerpt.text.slice(m.start, m.start + m.length) }));
+      line.append(
+        createEl('strong', {
+          cls: 'sw-suggest-match',
+          text: excerpt.text.slice(m.start, m.start + m.length),
+        })
+      );
       at = m.start + m.length;
     }
     if (at < excerpt.text.length) line.appendText(excerpt.text.slice(at));

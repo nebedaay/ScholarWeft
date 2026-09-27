@@ -926,12 +926,11 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
    reads identically in the title, author, citekey and an abstract excerpt.
    Styled on the element we create, with no ancestor selector, because the popup
    structure Obsidian wraps around items is not ours to depend on. */
-/* Matched terms in title / author / citekey: BOLD ONLY, no highlight
-   background. Obsidian's default `mark` gives a yellow background; bold is
-   preferred as it is less visually noisy in a list. */
+/* Matched terms: BOLD ONLY. No colour, background or style is set, so the
+   surrounding text's formatting is untouched — including italics in an excerpt,
+   where resetting `font-style` produced a roman match followed by an italic
+   continuation. */
 .sw-suggest-match {
-  background-color: transparent;
-  color: inherit;
   font-weight: var(--font-semibold);
 }
 
@@ -967,14 +966,7 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   padding-top: var(--size-4-1);
 }
 
-/* Matched terms: BOLD ONLY, no highlight background. `font-style` is NOT reset,
-   so a match inside italic excerpt text stays italic — resetting it produced
-   "Senega" in roman followed by an italic "l", which reads as a seam. */
-.sw-suggest-excerpt mark {
-  background-color: transparent;
-  color: inherit;
-  font-weight: var(--font-semibold);
-}
+
 
 /* Footer row: the insertion hint flush LEFT, the result count flush RIGHT, so
    the two are visually distinct rather than reading as one phrase. Scoped under

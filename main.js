@@ -93727,7 +93727,7 @@ function prefixChunks(phrase, query) {
   return { full: used > 0 && qi === q4.length, words: used, chunks };
 }
 function scoreEntry(target, query, opts = {}) {
-  var _a, _b, _c, _d;
+  var _a, _b, _c, _d, _e;
   const terms = queryTerms(query);
   if (terms.length === 0) {
     return {
@@ -93763,6 +93763,35 @@ function scoreEntry(target, query, opts = {}) {
       if (best.full && best.words > 1) {
         effective = best.chunks;
       }
+    }
+  }
+  const citekey = (_e = target.citekey) != null ? _e : "";
+  if (citekey && query.trim()) {
+    const key = citekey.toLowerCase();
+    const q4 = query.trim().toLowerCase().replace(/^@+/, "");
+    if (q4 && key === q4) {
+      return {
+        exactPhrase: true,
+        covered: 1,
+        total: 1,
+        authorAndTitle: false,
+        prefixChunks: false,
+        interpretedWords: 1,
+        matchedTerms: [citekey],
+        value: -2
+      };
+    }
+    if (q4 && key.startsWith(q4)) {
+      return {
+        exactPhrase: false,
+        covered: 1,
+        total: 1,
+        authorAndTitle: false,
+        prefixChunks: false,
+        interpretedWords: 1,
+        matchedTerms: [citekey],
+        value: -1 + Math.min(citekey.length - q4.length, 99) / 1e3
+      };
     }
   }
   const phrase = terms.join(" ");
@@ -94623,7 +94652,7 @@ var BibManager = class {
     }
   }
   searchTier(tier, query, limit) {
-    var _a, _b;
+    var _a, _b, _c;
     const fuse = this.fuseForTier(tier);
     if (!fuse)
       return { entries: [], total: 0 };
@@ -94636,9 +94665,10 @@ var BibManager = class {
     const matchedTerms = new Map();
     for (const entry of this.bibCache.values()) {
       const target = {
-        title: (_a = entry.title) != null ? _a : null,
+        citekey: (_a = entry.id) != null ? _a : null,
+        title: (_b = entry.title) != null ? _b : null,
         authorText: authorTextOf(entry),
-        abstract: (_b = entry.abstract) != null ? _b : null,
+        abstract: (_c = entry.abstract) != null ? _c : null,
         venueText: venueTextOf(entry)
       };
       let best = Number.POSITIVE_INFINITY;
@@ -96720,15 +96750,15 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     const isDoubleAtMode = isTripleAtMode || context.query.startsWith(DOUBLE_AT_PREFIX);
     const searchQuery = context.query.slice(isTripleAtMode ? 1 : isDoubleAtMode ? 1 : 0).trim();
     LOG("getSuggestions query=", JSON.stringify(searchQuery), "mode=", isTripleAtMode ? "@@@" : isDoubleAtMode ? "@@" : "@");
-    if (!isDoubleAtMode && (!searchQuery || searchQuery.includes(" "))) {
-      return [];
-    }
+    const spacedQuery = searchQuery.includes(" ");
     this._matchedTermsByKey = new Map();
     this.renderCount(0);
+    if (!searchQuery)
+      return [];
     const { plugin } = this;
     const { bibManager } = plugin;
     const indexReady = bibManager.fuseReady;
-    if (isDoubleAtMode) {
+    if (isDoubleAtMode || spacedQuery) {
       const tier = isTripleAtMode ? "abstract" : "title";
       const fuse2 = (_a = bibManager.fuseForTier(tier)) != null ? _a : bibManager.fuse;
       if (!fuse2) {
@@ -96884,11 +96914,11 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     for (const s3 of spans) {
       if (s3.start > at)
         el.appendText(text.slice(at, s3.start));
-      const mark = createEl("mark", {
+      const strong = createEl("strong", {
         cls: "sw-suggest-match",
         text: text.slice(s3.start, s3.start + s3.length)
       });
-      el.append(mark);
+      el.append(strong);
       at = s3.start + s3.length;
     }
     if (at < text.length)
@@ -96905,7 +96935,10 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
       }
       if (m3.start > at)
         line.appendText(excerpt.text.slice(at, m3.start));
-      line.append(createEl("mark", { text: excerpt.text.slice(m3.start, m3.start + m3.length) }));
+      line.append(createEl("strong", {
+        cls: "sw-suggest-match",
+        text: excerpt.text.slice(m3.start, m3.start + m3.length)
+      }));
       at = m3.start + m3.length;
     }
     if (at < excerpt.text.length)

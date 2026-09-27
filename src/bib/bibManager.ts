@@ -964,6 +964,7 @@ export class BibManager {
 
     for (const entry of this.bibCache.values()) {
       const target = {
+        citekey: entry.id ?? null,
         title: entry.title ?? null,
         authorText: authorTextOf(entry),
         abstract: (entry as { abstract?: string }).abstract ?? null,

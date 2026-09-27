@@ -26,6 +26,12 @@
  */
 
 export interface ScoreTarget {
+  /**
+   * The citekey. An exact match, or the query being a leading prefix of it,
+   * ranks at the very top — someone typing `@smithTitleYear` wants that work,
+   * not a fuzzy title match.
+   */
+  citekey?: string | null;
   title?: string | null;
   authorText?: string | null;
   abstract?: string | null;
@@ -371,6 +377,40 @@ export function scoreEntry(
       // replacement: failing to align says nothing about whether the term
       // itself matches. Rejecting here is what made `@@@maghrebian` return
       // nothing — a plain word was treated as an unexplained abbreviation.
+    }
+  }
+
+  // 0. CITEKEY: an exact match, or the query being a LEADING PREFIX of it,
+  //    ranks above everything. Someone typing a citekey wants that work — this
+  //    is why the `@` level stays useful once it also searches titles.
+  const citekey = target.citekey ?? '';
+  if (citekey && query.trim()) {
+    const key = citekey.toLowerCase();
+    const q = query.trim().toLowerCase().replace(/^@+/, '');
+    if (q && key === q) {
+      return {
+        exactPhrase: true,
+        covered: 1,
+        total: 1,
+        authorAndTitle: false,
+        prefixChunks: false,
+        interpretedWords: 1,
+        matchedTerms: [citekey],
+        value: -2,
+      };
+    }
+    if (q && key.startsWith(q)) {
+      return {
+        exactPhrase: false,
+        covered: 1,
+        total: 1,
+        authorAndTitle: false,
+        prefixChunks: false,
+        interpretedWords: 1,
+        matchedTerms: [citekey],
+        // Still ahead of every other band (0.0+), behind an exact match.
+        value: -1 + Math.min(citekey.length - q.length, 99) / 1000,
+      };
     }
   }
 
