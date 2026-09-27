@@ -70,18 +70,11 @@ const triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
 // A period ends the trigger so normal sentence punctuation closes the popup.
 const doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
 
-// Triple-@ trigger: @@@ adds abstract to the @@ fields. Checked first so it
-// wins over @@ (which would otherwise match the first two @s).
-const tripleAtRE = /(^|[^\p{L}\p{N}@])(@@@)([^.]*)$/u;
-
 // Sentinel prepended to the query when @@ mode is active. Encoding the mode
 // in the query string means it travels with the EditorSuggestContext and is
 // still correct when getSuggestions resolves asynchronously — no class-level
 // flag that a later onTrigger call could clobber mid-flight.
 const DOUBLE_AT_PREFIX = '\x00';
-
-// Same idea for @@@ (title + creators + abstract).
-const TRIPLE_AT_PREFIX = '\x01';
 
 export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>> {
   private plugin: ReferenceList;
@@ -156,24 +149,20 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   async getSuggestions(
     context: EditorSuggestContext
   ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
-    const isTripleAtMode = context.query.startsWith(TRIPLE_AT_PREFIX);
-    const isDoubleAtMode =
-      isTripleAtMode || context.query.startsWith(DOUBLE_AT_PREFIX);
-    const searchQuery = context.query
-      .slice(isTripleAtMode ? 1 : isDoubleAtMode ? 1 : 0)
-      .trim();
+    const isDoubleAtMode = context.query.startsWith(DOUBLE_AT_PREFIX);
+    const searchQuery = context.query.slice(isDoubleAtMode ? 1 : 0).trim();
 
     LOG(
       'getSuggestions query=',
       JSON.stringify(searchQuery),
       'mode=',
-      isTripleAtMode ? '@@@' : isDoubleAtMode ? '@@' : '@'
+      isDoubleAtMode ? '@@' : '@'
     );
 
     // `@` searches titles and creators as well as citekeys, because `@` is what
     // a citation looks like — reaching for it is natural. An exact or leading
     // citekey match ranks at the very top (see scoreEntry), so citekey lookup
-    // still works for anyone who types one. `@@`/`@@@` add the abstract,
+    // still works for anyone who types one. `@@` adds the abstract,
     // journal/book title, series and publisher.
     //
     // ALL `@` queries take this path, spaced or not. Previously an unspaced `@`
@@ -197,7 +186,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // and, only if that finds nothing either, show a "still loading" line.
     const indexReady = bibManager.fuseReady;
 
-    // ── `@` with spaces, `@@`, `@@@`: our multi-field search ───────────────
+    // ── `@` and `@@`: our multi-field search ───────────────────────────────
     // Always uses the global index — per-file bibliography overrides are
     // intentionally ignored here since this is a full-library search.
     //
@@ -207,7 +196,11 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // last-resort accelerator below, when our index is missing and its own is
     // present — never as the source of truth for what @@ means.
     if (useMultiField) {
-      const tier = isTripleAtMode ? 'abstract' : 'title';
+      // `@` searches citekey, author (first / last / single name) and title.
+      // `@@` adds abstract, publisher and containing work (journal or book
+      // title). Two levels only: a third was introduced briefly and removed,
+      // since `@@` covers it and nobody had built a habit around it.
+      const tier = isDoubleAtMode ? 'abstract' : 'title';
       const fuse = bibManager.fuseForTier(tier) ?? bibManager.fuse;
 
       if (!fuse) {
@@ -222,7 +215,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         return indexReady ? [] : loadingSuggestion();
       }
 
-      LOG(`@${isTripleAtMode ? '@@' : '@'} tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
+      LOG(`tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
       if (!searchQuery) {
         const docs = (fuse as any)?._docs as PartialCSLEntry[] | undefined;
         return docs?.length
@@ -240,8 +233,8 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       // The terms recorded are those of the interpretation that MATCHED each
       // entry, not the raw query: an unbroken query like `islamwomenauthority`
       // appears in no field, while the words it split into do. Used for BOTH the
-      // excerpt (`@@@`) and for highlighting every field — so this must be
-      // recorded for `@@` as well. Recording it only for `@@@` is why
+      // excerpt (`@@`) and for highlighting every field — so this must be
+      // recorded for BOTH tiers. Recording it for one only is why
       // highlighting appeared to work solely on results with an abstract.
       this._matchedTermsByKey = new Map(
         entries.map((e) => [e.entry.id, e.terms])
@@ -333,7 +326,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
     // Highlight the matched terms in EVERY field, on every render path. Doing
     // it from TERMS rather than Fuse's `matches` matters because searchTier
-    // results carry no `matches` at all — so `@@`/`@@@` titles were never
+    // results carry no `matches` at all — so `@@` titles were never
     // emphasised, and `@` emphasised only what Fuse happened to report.
     const terms = this.termsFor(item, suggestion);
 
@@ -365,7 +358,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   /**
    * The terms to emphasise for this suggestion.
    *
-   * `@@`/`@@@` use the interpretation that MATCHED (recorded per entry), so the
+   * The multi-field tiers use the interpretation that MATCHED (recorded per entry), so the
    * emphasis matches what actually found the record. Single-`@` has no recorded
    * terms, so it falls back to Fuse's own match indices.
    */
@@ -469,14 +462,14 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   /**
    * Per-entry terms of the interpretation that matched, keyed by citekey.
    *
-   * Drives BOTH the `@@@` excerpt and the highlighting of every field, so it is
+   * Drives BOTH the `@@` excerpt and the highlighting of every field, so it is
    * recorded for `@@` too — not only for the tier that shows an excerpt.
    */
   private _matchedTermsByKey = new Map<string, string[]>();
 
-  /** An excerpt for an `@@@` result, or null outside that tier. */
+  /** An excerpt for an abstract match, or null when the terms are not there. */
   /**
-   * An excerpt for an `@@@` result, or null outside that tier.
+   * An excerpt for an abstract match, or null when the terms are not there.
    *
    * Public so the render decision is testable: the excerpt was previously
    * rendered only after the `matches` branch, but `searchTier` results carry no
@@ -622,24 +615,9 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
     const line = (editor.getLine(cursor.line) || '').substring(0, cursor.ch);
 
-    // Check @@@ then @@ before single-@ so they win. Mode is encoded in the
-    // query string (DOUBLE_AT_PREFIX / TRIPLE_AT_PREFIX) so it travels with the
-    // context and stays correct when getSuggestions resolves after a later
-    // onTrigger has already fired.
-    const tripleMatch = line.match(tripleAtRE);
-    if (tripleMatch) {
-      LOG('onTrigger: @@@ matched, query=', JSON.stringify(tripleMatch[3]));
-      this.lastSelect = null;
-      // @@@ searches OUR index (title/creators/abstract); ZotLit is not
-      // consulted, so its presence no longer suppresses the refresh.
-      if (!this.context && pullFromZotero) this.refreshZBib();
-      return {
-        start: { line: cursor.line, ch: tripleMatch.index + tripleMatch[1].length },
-        end: cursor,
-        query: TRIPLE_AT_PREFIX + tripleMatch[3],
-      };
-    }
-
+    // Check @@ before single-@ so it wins. Mode is encoded in the query string
+    // (DOUBLE_AT_PREFIX) so it travels with the context and stays correct when
+    // getSuggestions resolves after a later onTrigger has already fired.
     const doubleMatch = line.match(doubleAtRE);
     if (doubleMatch) {
       LOG('onTrigger: @@ matched, query=', JSON.stringify(doubleMatch[3]));

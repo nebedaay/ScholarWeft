@@ -4,24 +4,24 @@ ScholarWeft's autocomplete is how you find a work to cite. There are three
 levels, each searching more than the last, and knowing what each one covers is
 the quickest way to get good results.
 
-## The three levels
+## The two levels
 
 | Type | Searches | Use it for |
 |---|---|---|
-| `@` | **citekey** | You know the citekey (`@smithTitleYear`) |
-| `@@` | **title** and **creators** | You know the title, or part of it, or the author's name |
-| `@@@` | the above **plus abstract, journal/book title, series and publisher** | You only remember what it was about, or where it was published |
+| `@` | **citekey, author** (first, last, single name) and **title** | You know the work or who wrote it |
+| `@@` | the above **plus abstract, publisher and containing work** (journal or book title) | You only remember what it was about, or where it was published |
+
+**`@@` is the same search as `@` with more fields** — not a different one. The
+extra fields rank *below* the `@` fields, so adding them widens the list without
+burying a title or author match.
 
 Type the level, then your words; a **period closes the popup**, so search terms
 can include spaces.
 
-- `@smith` — citekeys.
-- `@@bauhaus` — titles and authors.
-- `@@@maghrebian` — finds a work whose *abstract* mentions it, even when the
+- `@smith` — works by Smith, plus any citekey beginning `smith`.
+- `@social critique` — a title.
+- `@@maghrebian` — finds a work whose *abstract* mentions it, even when the
   title and author give no clue.
-
-`@@` and `@@@` return the same results when the match is in the title or
-creator; `@@@` returns more, because it searches further.
 
 ## What counts as a match
 
@@ -58,9 +58,9 @@ work is findable by the person who compiled it.
 - **Add an author to narrow fast.** A surname plus one title word is the most
   precise search there is: `@@bourdieu critique` beats `@@critique` by a wide
   margin.
-- **Try `@@@` when `@@` finds nothing.** If you are sure the work should be
+- **Try `@@` when `@` finds nothing.** If you are sure the work should be
   there, the word may be in its abstract, or its journal or publisher.
-- **`@@@` results show an excerpt** of the abstract where your terms were found,
+- **`@@` results show an excerpt** of the abstract where your terms were found,
   so you can see *why* an item matched when the title gives no clue. If your
   terms appear in different parts of the abstract you get a line for each.
 - **The number of results is shown at the bottom** of the popup — useful for
@@ -78,7 +78,7 @@ Results are ordered by how meaningfully they match, not by a single score:
 2. **The exact phrase in the title** — searching `social critique` finds
    "A *Social Critique* of …" ahead of a title containing the words apart.
 3. **The words in the title**, whole words ahead of abbreviations.
-4. **The words in the abstract**, journal, or publisher (the `@@@` extra).
+4. **The words in the abstract**, journal, or publisher (the `@@` extra).
 
 A word appearing earlier in a title ranks above the same word later in it.
 **Nothing is ever dropped for appearing late, or for being in a long field** —
@@ -101,5 +101,5 @@ always win over a fragment reading.
 
 None required. Search uses ScholarWeft's own index. If ZotLit is installed and
 its own suggester is active, `prioritizeCiteKeyCompletion` decides whether `@`
-inside brackets is handled by ScholarWeft or left to ZotLit; `@@` and `@@@` are
+inside brackets is handled by ScholarWeft or left to ZotLit; `@@` is
 always ScholarWeft's.

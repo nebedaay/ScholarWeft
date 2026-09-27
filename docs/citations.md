@@ -41,8 +41,8 @@ The export dialogue can additionally apply a style to a single export without ch
 
 ## Autocomplete and search
 
-- Typing `@` opens citekey autocomplete; `@@` searches titles and creators; `@@@` adds the abstract, journal/book title, series and publisher. All three use ScholarWeft's own index — ZotLit is not required.
-- Every word must be present, words may sit in different fields, word beginnings count, and accents are ignored. The result count is shown at the bottom of the popup, and `@@@` results include an excerpt showing where your terms were found.
+- Typing `@` searches citekey, author and title; `@@` adds the abstract, publisher and containing work. Both use ScholarWeft's own index — ZotLit is not required.
+- Every word must be present, words may sit in different fields, word beginnings count, and accents are ignored. The result count is shown at the bottom of the popup, and `@@` results include an excerpt showing where your terms were found.
 - **See [Searching for References](./searching.md)** for the full rules and tips.
 - `⌘↵` / `Ctrl+↵` wraps the selected key in `[@key]` unless you are already inside brackets.
 

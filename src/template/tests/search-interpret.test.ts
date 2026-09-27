@@ -167,7 +167,7 @@ describe('the abstract tier can resolve an abbreviation', () => {
 
   it('derives a chunk reading from the abstract when the tier allows it', () => {
     // `soccrit` has no coherent split in title/author, but "social critique"
-    // sits in the abstract — so the `@@@` tier must resolve it there.
+    // sits in the abstract — so the wide tier must resolve it there.
     const i = interpretationsFor(abstractOnly, 'soccrit', { includeAbstract: true });
     expect(i.some((x) => x.kind === 'chunks')).toBe(true);
   });

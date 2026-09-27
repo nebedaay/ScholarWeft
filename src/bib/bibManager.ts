@@ -116,9 +116,9 @@ const MIN_MEAN_CHUNK_FOR_GATE = 6;
  * The published-venue text for an entry: the journal title, or the book title
  * for a chapter; the series; and the publisher.
  *
- * Searched by the `@@@` tier only. Venue and publisher are broad — many works
+ * Searched by the `@@` tier only. Venue and publisher are broad — many works
  * share a journal — so including them in `@@` would return long lists that are
- * not about the work itself. In `@@@` they are a useful final reach: "the
+ * not about the work itself. In `@@` they are a useful final reach: "the
  * article in Past & Present" is a real way to look something up.
  */
 function venueTextOf(entry: PartialCSLEntry): string {
@@ -219,7 +219,7 @@ const fuseTitleSettings = {
   })(),
 };
 
-// `@@@`: title + creators + abstract. Abstract is weighted LOWEST so it acts as
+// `@@`: title + creators + abstract + venue. Abstract is weighted LOWEST so it
 // a tiebreaker: an item whose wording merely appears in its abstract must never
 // outrank one whose title actually matches.
 const fuseAbstractSettings = {
@@ -560,7 +560,7 @@ export class BibManager {
   bibCache: Map<string, PartialCSLEntry> = new Map();
   fuse: Fuse<PartialCSLEntry>;
   fuseTitle: Fuse<PartialCSLEntry>;
-  /** `@@@` tier: adds abstract, ranked below title/author. */
+  /** `@@` tier: adds abstract and venue, ranked below title/author/citekey. */
   fuseAbstract: Fuse<PartialCSLEntry>;
   engine: any;
 
@@ -950,7 +950,7 @@ export class BibManager {
     if (!fuse) return { entries: [], total: 0 };
     if (!isSearchableQuery(query)) return { entries: [], total: 0 };
     const includeAbstract = tier === 'abstract';
-    // Publication fields are an `@@@` reach only; see venueTextOf().
+    // Publication fields are an `@@` reach only; see venueTextOf().
     const includeVenue = includeAbstract;
 
     // Fuse is consulted only to SUGGEST spellings for the query's own terms —
@@ -1024,8 +1024,8 @@ export class BibManager {
   }
 
   /**
-   * The Fuse index for a given tier: `@@` searches title + creators, `@@@`
-   * additionally searches the abstract (weighted lowest). `@` uses `fuse`
+   * The Fuse index for a given tier: `@` searches citekey, title + creators; `@@`
+   * additionally searches the abstract and venue (weighted lowest).
    * above, which is citekey-biased.
    */
   fuseForTier(tier: 'title' | 'abstract'): Fuse<PartialCSLEntry> | null {

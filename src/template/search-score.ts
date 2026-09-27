@@ -1,5 +1,5 @@
 /**
- * Relevance scoring for the `@@` / `@@@` tiers.
+ * Relevance scoring for the `@` and `@@` tiers.
  *
  * Fuse is used for RECALL only (which entries contain these terms at all); the
  * ORDER comes from here. Fuse's own score is length-normalised, so a whole-word
@@ -36,7 +36,7 @@ export interface ScoreTarget {
   authorText?: string | null;
   abstract?: string | null;
   /**
-   * Journal or book title, series, and publisher. Searched by the `@@@` tier
+   * Journal or book title, series, and publisher. Searched by the `@@` tier
    * only (see `ScoreOptions.includeVenue`), where it is a useful final reach
    * without making `@@` noisy.
    */
@@ -44,11 +44,11 @@ export interface ScoreTarget {
 }
 
 export interface ScoreOptions {
-  /** Search the abstract too (the `@@@` tier). */
+  /** Search the abstract too (the `@@` tier). */
   includeAbstract?: boolean;
   /**
    * Search publication fields (journal/book title, series, publisher) too.
-   * `@@@` only — see `ScoreTarget.venueText`.
+   * `@@` only — see `ScoreTarget.venueText`.
    */
   includeVenue?: boolean;
 }
@@ -375,7 +375,7 @@ export function scoreEntry(
       // Otherwise KEEP the term as typed and search it normally. An
       // abbreviation reading is an ADDITIONAL interpretation, never a
       // replacement: failing to align says nothing about whether the term
-      // itself matches. Rejecting here is what made `@@@maghrebian` return
+      // itself matches. Rejecting here is what made a plain word return
       // nothing — a plain word was treated as an unexplained abbreviation.
     }
   }

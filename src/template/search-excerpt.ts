@@ -1,5 +1,5 @@
 /**
- * Excerpts showing WHERE search terms were found, for `@@@` results.
+ * Excerpts showing WHERE search terms were found, for `@@` results.
  *
  * A result from the abstract tier can be puzzling without context: the term
  * matched, but nothing in the title or author explains why. So each matched

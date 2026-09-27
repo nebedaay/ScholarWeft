@@ -1,11 +1,11 @@
 /**
- * The `@` / `@@` / `@@@` autocomplete tiers.
+ * The `@` / `@@` autocomplete tiers.
  *
  * Three levels of reach, all served by our OWN index — no ZotLit needed:
  *
  *   `@`    citekey
  *   `@@`   + title and creators
- *   `@@@`  + abstract
+ *
  *
  * Abstract ranks BELOW title and author, so a book whose wording merely appears
  * in its abstract never outranks one whose title actually matches.

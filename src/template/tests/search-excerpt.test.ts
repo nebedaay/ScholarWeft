@@ -93,7 +93,7 @@ describe('excerptForResult() — the render decision', () => {
     expect(e!.text.toLowerCase()).toContain('maghrebian');
   });
 
-  it('returns null when the tier is not `@@@` (no terms recorded)', () => {
+  it('returns null when no terms were recorded (narrow tier)', () => {
     // `@@` collects no terms, so its results show no excerpt.
     expect(excerptForResult(item, [])).toBeNull();
   });
@@ -355,7 +355,7 @@ describe('matchedTerms reflect what the scorer interpreted', () => {
 
 describe('@ and @@ are the same search; @@ adds fields', () => {
   // One path, one set of ranking bands. `@`/`@@` pass tier 'title' (so
-  // includeAbstract/includeVenue are false); `@@@` passes 'abstract'. Only the
+  // includeAbstract/includeVenue are false); the wide tier passes 'abstract'. Only the
   // FIELDS differ — the ranking is shared.
   const entry = {
     citekey: 'smithMemory2020',
@@ -397,5 +397,40 @@ describe('@ and @@ are the same search; @@ adds fields', () => {
     ]) {
       expect(scoreEntry(entry, 'smithMemory2020', flags).value).toBeLessThan(0);
     }
+  });
+});
+
+describe('@@ is @ with MORE FIELDS, and the extra fields rank below', () => {
+  const rank = (q: string, wide: boolean) => {
+    const items = {
+      title: { citekey: 'a', title: 'Memory and Practice', authorText: 'Smith', abstract: 'none', venueText: 'none' },
+      author: { citekey: 'b', title: 'Other', authorText: 'Memory Smith', abstract: 'none', venueText: 'none' },
+      abstract: { citekey: 'c', title: 'Third', authorText: 'Jones', abstract: 'about memory', venueText: 'none' },
+      venue: { citekey: 'd', title: 'Fourth', authorText: 'Brown', abstract: 'none', venueText: 'Memory Studies' },
+    };
+    return Object.entries(items)
+      .map(([n, e]) => ({ n, s: scoreEntry(e, q, { includeAbstract: wide, includeVenue: wide }) }))
+      .sort((a, b) => a.s.value - b.s.value)
+      .map((x) => x.n);
+  };
+
+  it('orders title, then author, then the added fields', () => {
+    expect(rank('memory', true)).toEqual(['title', 'author', 'abstract', 'venue']);
+  });
+
+  it('ranks the @ fields identically whether or not the wider tier is used', () => {
+    const narrow = rank('memory', false);
+    const wide = rank('memory', true);
+    // The `@` fields keep their relative order at the top of the wider list.
+    expect(wide.slice(0, 2)).toEqual(narrow.slice(0, 2));
+    expect(narrow.slice(0, 2)).toEqual(['title', 'author']);
+  });
+
+  it('never ranks an added field above a @ field', () => {
+    const wide = rank('memory', true);
+    expect(wide.indexOf('title')).toBeLessThan(wide.indexOf('abstract'));
+    expect(wide.indexOf('title')).toBeLessThan(wide.indexOf('venue'));
+    expect(wide.indexOf('author')).toBeLessThan(wide.indexOf('abstract'));
+    expect(wide.indexOf('author')).toBeLessThan(wide.indexOf('venue'));
   });
 });

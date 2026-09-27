@@ -30,7 +30,7 @@ describe('tierWeights()', () => {
     );
   });
 
-  it('only the @@@ tier searches the abstract at all', () => {
+  it('only the wide tier searches the abstract at all', () => {
     expect(tierWeights('citekey').abstract).toBe(0);
     expect(tierWeights('title').abstract).toBe(0);
     expect(tierWeights('abstract').abstract).toBeGreaterThan(0);

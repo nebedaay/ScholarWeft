@@ -125,11 +125,11 @@ export function interpretationsFor(
 
   const title = entry.title ?? '';
   const author = entry.authorText ?? '';
-  // The `@@@` tier searches the abstract, so an abbreviation may be resolved
+  // The `@@` tier searches the abstract, so an abbreviation may be resolved
   // against it too — otherwise `soccrit` would never find an item whose only
   // "social critique" is in its abstract.
   const abstract = opts.includeAbstract ? (entry.abstract ?? '') : '';
-  // Publication fields are searched by `@@@` only, matching the scorer.
+  // Publication fields are searched by `@@` only, matching the scorer.
   const venue = opts.includeVenue ? (entry.venueText ?? '') : '';
   const combined = `${author} ${title} ${venue} ${abstract}`.trim();
 
