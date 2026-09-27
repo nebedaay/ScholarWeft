@@ -102,7 +102,12 @@ without displacing a genuine whole-word match.
 
 ## Relation to ZotLit
 
-None required. Search uses ScholarWeft's own index. If ZotLit is installed and
-its own suggester is active, `prioritizeCiteKeyCompletion` decides whether `@`
-inside brackets is handled by ScholarWeft or left to ZotLit; `@@` is
-always ScholarWeft's.
+None required. Search uses ScholarWeft's own index.
+
+ZotLit matters for one thing only: `@` is a **contested trigger**, because
+ZotLit's own suggester also fires on it, and two suggesters cannot both own the
+same popup. If ZotLit is installed and its suggester is active, the
+**Prioritize citation completion** setting decides: on (the default) ScholarWeft
+handles `@`; off, it yields to ZotLit.
+
+`@@` is uncontested — ZotLit does not use it — so it is always ScholarWeft's.
