@@ -127,3 +127,33 @@ describe('isSearchableQuery()', () => {
     expect(isSearchableQuery('so')).toBe(false);
   });
 });
+
+describe('the space rules out combining across the boundary', () => {
+  it('lets an UNSPACED run span two entry words', () => {
+    // `bourdieucritique` may combine "Bour" + "Dieucritique" — a combination
+    // spanning what would have been two separate terms.
+    const t = { title: 'Bour Dieucritique Studies', authorText: '' };
+    const i = interpretationsFor(t, 'bourdieucritique');
+    expect(i.some((x) => x.kind === 'split' && x.terms.join(' ') === 'bour dieucritique')).toBe(
+      true
+    );
+  });
+
+  it('does NOT let a spaced query span the same boundary', () => {
+    // `bour dieucritique` requires those exact two terms to exist.
+    const t = { title: 'Bour Dieucritique Studies', authorText: '' };
+    const i = interpretationsFor(t, 'bour dieucritique');
+    expect(i).toHaveLength(1);
+    expect(i[0].kind).toBe('words');
+    expect(i[0].terms).toEqual(['bour', 'dieucritique']);
+  });
+
+  it('offers chunking when the run splits into MULTIPLE word prefixes', () => {
+    // `soccri` → "Soc" + "Cri": distinct from searching it as one word, so the
+    // chunk reading is added. A single-chunk reading is the same as `words` and
+    // is de-duplicated away.
+    const t = { title: 'Social Critique In Question', authorText: '' };
+    const i = interpretationsFor(t, 'soccri');
+    expect(i.some((x) => x.kind === 'chunks')).toBe(true);
+  });
+});
