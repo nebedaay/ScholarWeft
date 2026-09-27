@@ -1,4 +1,8 @@
-import { EXCERPT_WIDTH, buildExcerpts } from '../search-excerpt';
+import {
+  EXCERPT_WIDTH,
+  buildExcerpts,
+  excerptForResult,
+} from '../search-excerpt';
 
 const ABSTRACT =
   'This essay examines the Maghrebian subject at length and, after a good ' +
@@ -62,5 +66,39 @@ describe('buildExcerpts()', () => {
   it('is diacritic-insensitive', () => {
     expect(buildExcerpts('A study of négritude.', ['negritude'])).toHaveLength(1);
     expect(buildExcerpts('A study of negritude.', ['négritude'])).toHaveLength(1);
+  });
+});
+
+describe('excerptForResult() — the render decision', () => {
+  const item = {
+    abstract: 'A long discussion that eventually turns to the Maghrebian subject.',
+  };
+
+  it('returns an excerpt for a matched term', () => {
+    const e = excerptForResult(item, ['maghrebian']);
+    expect(e).not.toBeNull();
+    expect(e!.text.toLowerCase()).toContain('maghrebian');
+  });
+
+  it('returns null when the tier is not `@@@` (no terms recorded)', () => {
+    // `@@` collects no terms, so its results show no excerpt.
+    expect(excerptForResult(item, [])).toBeNull();
+  });
+
+  it('returns null when the item has no abstract', () => {
+    expect(excerptForResult({ abstract: null }, ['maghrebian'])).toBeNull();
+    expect(excerptForResult({}, ['maghrebian'])).toBeNull();
+  });
+
+  it('returns null when the term is absent from the abstract', () => {
+    expect(excerptForResult(item, ['zebra'])).toBeNull();
+  });
+
+  it('does not depend on a Fuse `matches` array', () => {
+    // The original bug: the excerpt rendered only on the branch that had
+    // `matches`, but searchTier results carry none, so it never appeared.
+    // This function takes only the ITEM and the terms — nothing else.
+    const e = excerptForResult(item, ['maghrebian']);
+    expect(e!.matchLength).toBeGreaterThan(0);
   });
 });

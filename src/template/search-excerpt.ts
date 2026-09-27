@@ -27,6 +27,25 @@ export interface Excerpt {
   matchLength: number;
 }
 
+/**
+ * Should this result show an abstract excerpt, and what should it say?
+ *
+ * Extracted because the excerpt previously rendered only on ONE branch of the
+ * suggestion renderer. `searchTier` results carry no `matches`, so they took an
+ * earlier `return` and never showed one — the excerpt was dead code for exactly
+ * the tier that needs it. A pure decision, applied on every render path, cannot
+ * regress that way.
+ */
+export function excerptForResult(
+  item: { abstract?: string | null },
+  queryTerms: readonly string[]
+): Excerpt | null {
+  if (queryTerms.length === 0) return null;
+  const lines = buildExcerpts(item.abstract, queryTerms);
+  return lines[0] ?? null;
+}
+
+
 /** Split text into word tokens with their offsets. */
 function tokens(text: string): Array<{ word: string; start: number }> {
   const out: Array<{ word: string; start: number }> = [];

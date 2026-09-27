@@ -10,7 +10,7 @@ import {
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
-import { buildExcerpts } from 'src/template/search-excerpt';
+import { excerptForResult } from 'src/template/search-excerpt';
 import {
   afterOpenBracketIn,
   computeInsertion,
@@ -369,6 +369,11 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     }
     const frag = createFragment();
     const item = suggestion.item;
+    // `@@@` results can match only in the abstract, which is invisible from the
+    // title — so the excerpt belongs on EVERY render path. It was previously
+    // added only after the `matches` branch below, but searchTier results carry
+    // no `matches`, so they returned early and never showed one.
+    const excerpt = this.excerptFor(item as { abstract?: string });
 
     if (!suggestion.matches || !suggestion.matches.length) {
       frag.createSpan({ text: `@${item.id}` });
@@ -376,6 +381,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         frag.createSpan({ text: item.title, cls: 'sw-suggest-title' });
       const meta = getEntryMeta(item);
       if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
+      this.appendExcerpt(frag, excerpt);
       return el.setText(frag);
     }
 
@@ -409,41 +415,51 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
 
     // `@@@` results can match only in the abstract, which is invisible from the
-    // title — so show where the terms were found. One line, or two when the
-    // terms sit in different parts of the abstract.
-    const excerpt = this.excerptFor(item as { abstract?: string });
-    if (excerpt) {
-      const line = frag.createDiv({ cls: 'sw-suggest-excerpt' });
-      if (
-        excerpt.matchLength > 0 &&
-        excerpt.matchStart + excerpt.matchLength <= excerpt.text.length
-      ) {
-        line.appendText(excerpt.text.slice(0, excerpt.matchStart));
-        line.append(
-          createEl('mark', {
-            text: excerpt.text.slice(
-              excerpt.matchStart,
-              excerpt.matchStart + excerpt.matchLength
-            ),
-          })
-        );
-        line.appendText(excerpt.text.slice(excerpt.matchStart + excerpt.matchLength));
-      } else {
-        line.setText(excerpt.text);
-      }
-    }
+    this.appendExcerpt(frag, excerpt);
 
     el.setText(frag);
+  }
+
+  /** Append an excerpt line to a suggestion, emphasising the matched term. */
+  private appendExcerpt(
+    frag: DocumentFragment,
+    excerpt: ReturnType<typeof excerptForResult>
+  ): void {
+    if (!excerpt) return;
+    const line = frag.createDiv({ cls: 'sw-suggest-excerpt' });
+    if (
+      excerpt.matchLength > 0 &&
+      excerpt.matchStart + excerpt.matchLength <= excerpt.text.length
+    ) {
+      line.appendText(excerpt.text.slice(0, excerpt.matchStart));
+      line.append(
+        createEl('mark', {
+          text: excerpt.text.slice(
+            excerpt.matchStart,
+            excerpt.matchStart + excerpt.matchLength
+          ),
+        })
+      );
+      line.appendText(excerpt.text.slice(excerpt.matchStart + excerpt.matchLength));
+    } else {
+      line.setText(excerpt.text);
+    }
   }
 
   /** Terms of the most recent `@@@` query, for rendering excerpts. */
   private _abstractQueryTerms: string[] = [];
 
   /** An excerpt for an `@@@` result, or null outside that tier. */
-  private excerptFor(item: { abstract?: string }): ReturnType<typeof buildExcerpts>[number] | null {
-    if (this._abstractQueryTerms.length === 0) return null;
-    const lines = buildExcerpts(item.abstract, this._abstractQueryTerms);
-    return lines[0] ?? null;
+  /**
+   * An excerpt for an `@@@` result, or null outside that tier.
+   *
+   * Public so the render decision is testable: the excerpt was previously
+   * rendered only after the `matches` branch, but `searchTier` results carry no
+   * `matches`, so they returned early and never showed one. A test asserting
+   * this path exists is what stops that regressing.
+   */
+  excerptFor(item: { abstract?: string | null }) {
+    return excerptForResult(item, this._abstractQueryTerms);
   }
 
   private lastSelect: EditorPosition = null;
