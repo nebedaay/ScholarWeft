@@ -933,24 +933,19 @@ export class BibManager {
   /**
    * Search one tier for a query.
    *
-   * The query is turned into an ordered list of INTERPRETATIONS (see
-   * `search-interpret.ts`) and every one is searched; results are merged and
-   * ranked together. There is deliberately no separate path for spaced and
-   * unspaced queries: the unspaced form simply lacks the explicit word split, so
-   * it relies on the entry-dependent readings. Previously the two took different
-   * routes and returned systematically different result SETS.
-   *
-   * Fuse supplies RECALL only — which entries contain a term at all. Ordering
-   * comes from `scoreEntry`.
+   * Returns the ranked page AND the total number of matches, so the caller can
+   * show an honest count: "20 of 137" when the list is truncated, rather than
+   * an ambiguous "20" that reads like "20 found". The total is free — it is the
+   * scored list before the page is sliced.
    */
   searchTier(
     tier: 'title' | 'abstract',
     query: string,
     limit: number
-  ): PartialCSLEntry[] {
+  ): { entries: PartialCSLEntry[]; total: number } {
     const fuse = this.fuseForTier(tier);
-    if (!fuse) return [];
-    if (!isSearchableQuery(query)) return [];
+    if (!fuse) return { entries: [], total: 0 };
+    if (!isSearchableQuery(query)) return { entries: [], total: 0 };
     const includeAbstract = tier === 'abstract';
     // Publication fields are an `@@@` reach only; see venueTextOf().
     const includeVenue = includeAbstract;
@@ -993,11 +988,14 @@ export class BibManager {
       }
     }
 
-    return [...scored.entries()]
-      .sort((a, b) => a[1] - b[1])
-      .slice(0, limit)
-      .map(([id]) => ranked.get(id)!)
-      .filter(Boolean);
+    const ordered = [...scored.entries()].sort((a, b) => a[1] - b[1]);
+    return {
+      entries: ordered
+        .slice(0, limit)
+        .map(([id]) => ranked.get(id)!)
+        .filter(Boolean),
+      total: ordered.length,
+    };
   }
 
   /**

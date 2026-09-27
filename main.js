@@ -94622,9 +94622,9 @@ var BibManager = class {
     var _a, _b;
     const fuse = this.fuseForTier(tier);
     if (!fuse)
-      return [];
+      return { entries: [], total: 0 };
     if (!isSearchableQuery(query))
-      return [];
+      return { entries: [], total: 0 };
     const includeAbstract = tier === "abstract";
     const includeVenue = includeAbstract;
     const scored = new Map();
@@ -94648,7 +94648,11 @@ var BibManager = class {
         ranked.set(entry.id, entry);
       }
     }
-    return [...scored.entries()].sort((a3, b3) => a3[1] - b3[1]).slice(0, limit).map(([id]) => ranked.get(id)).filter(Boolean);
+    const ordered = [...scored.entries()].sort((a3, b3) => a3[1] - b3[1]);
+    return {
+      entries: ordered.slice(0, limit).map(([id]) => ranked.get(id)).filter(Boolean),
+      total: ordered.length
+    };
   }
   fuseForTier(tier) {
     var _a;
@@ -96469,7 +96473,7 @@ function computeInsertion(citekey, ctx, opts) {
     return { text: `@${citekey}` };
   }
   if (insideUnclosedWikilink(ctx.beforeStart)) {
-    return { text: `${citekey}]]` };
+    return { text: `@${citekey}]]` };
   }
   if (ctx.afterOpenBracket) {
     return { text: `@${citekey}]` };
@@ -96551,7 +96555,6 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     this.limit = 20;
     this._insertionHint = "wrap with brackets";
     this._abstractQueryTerms = [];
-    this._lastResultCount = 0;
     this.lastSelect = null;
     this.isRefreshing = false;
     this.lastRefreshAt = 0;
@@ -96568,16 +96571,16 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
       }
     ]);
   }
-  renderCount(count) {
+  renderCount(shown, total = shown) {
+    const truncated = total > shown;
+    const countText = shown === 0 ? "No results" : truncated ? `${shown} of ${total}` : `${total}`;
+    const label = truncated || total !== 1 ? "results" : "result";
     this.setInstructions([
       {
         command: import_obsidian27.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
         purpose: this._insertionHint
       },
-      {
-        command: count === 0 ? "No results" : `${count}`,
-        purpose: count === 1 ? "result" : "results"
-      }
+      { command: countText, purpose: label }
     ]);
   }
   setInsertionHint(context) {
@@ -96619,15 +96622,10 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
         const docs = fuse2 == null ? void 0 : fuse2._docs;
         return (docs == null ? void 0 : docs.length) ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 })) : [];
       }
-      const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
+      const { entries, total } = bibManager.searchTier(tier, searchQuery, this.limit);
       this._abstractQueryTerms = isTripleAtMode ? searchQuery.split(/\s+/).filter((t4) => t4.length > 0) : [];
-      this._lastResultCount = ranked.length;
-      try {
-        console.log(`[sw:search] mode=${isTripleAtMode ? "@@@" : "@@"} query=${JSON.stringify(searchQuery)} hits=${ranked.length}`, ranked.slice(0, 8).map((e3) => e3.id));
-      } catch (e3) {
-      }
-      this.renderCount(ranked.length);
-      return ranked.map((item, refIndex) => ({ item, refIndex, score: 0 }));
+      this.renderCount(entries.length, total);
+      return entries.map((item, refIndex) => ({ item, refIndex, score: 0 }));
     }
     this._abstractQueryTerms = [];
     this.renderCount(0);

@@ -50,13 +50,12 @@ describe('computeInsertion() — plain Enter', () => {
 });
 
 describe('computeInsertion() — ⌘/Ctrl+Enter', () => {
-  it('closes a WIKILINK with ]], not ]', () => {
-    // The reported bug: [[@del + ⌘↵ produced [[@key], a broken wikilink.
+  it('closes a WIKILINK with ]], keeping the @', () => {
+    // The reported bug: [[@del + ⌘↵ produced [[smith1992]], a DEAD wikilink —
+    // the '@' was dropped because only a closing suffix was returned while the
+    // replaced span starts at the '@'.
     expect(computeInsertion('smith1992', ctx('[['), { wrap: true }).text).toBe(
-      'smith1992]]'
-    );
-    expect(computeInsertion('smith1992', ctx('[[del'), { wrap: true }).text).toBe(
-      'smith1992]]'
+      '@smith1992]]'
     );
   });
 
@@ -116,6 +115,50 @@ describe('insertionHint() matches what will actually be inserted', () => {
       if (hint === 'close with ]]') expect(inserted.endsWith(']]')).toBe(true);
       else if (hint === 'close with ]') expect(inserted.endsWith(']') && !inserted.endsWith(']]')).toBe(true);
       else expect(inserted).toBe('[@k]');
+    }
+  });
+});
+
+describe('whole-line results (where the bug actually showed)', () => {
+  /**
+   * The popup's span always starts at the '@'. These tests rebuild the real
+   * line so a wrong CONTRACT (returning only a suffix) is caught, not just a
+   * wrong suffix.
+   */
+  function accept(line: string, atStart: number, citekey: string, wrap: boolean) {
+    // Trigger: everything from the '@' to the cursor is replaced.
+    const beforeStart = line.slice(0, atStart);
+    const afterCursor = line.slice(atStart);
+    const ctx = {
+      beforeStart,
+      afterCursor,
+      charBefore: beforeStart.slice(-1),
+      afterOpenBracket: afterOpenBracketIn(beforeStart),
+    };
+    return line.slice(0, atStart) + computeInsertion(citekey, ctx, { wrap }).text;
+  }
+
+  it('produces a valid wikilink: [[@citekey]]', () => {
+    // '[[@del', '@' at index 2 → '[[@smith1992]]'
+    expect(accept('[[@del', 2, 'smith1992', true)).toBe('[[@smith1992]]');
+  });
+
+  it('produces a valid Pandoc citation: [@citekey]', () => {
+    // '@del', '@' at index 0 → '[@smith1992]'
+    expect(accept('@del', 0, 'smith1992', true)).toBe('[@smith1992]');
+  });
+
+  it('completes an open single bracket: [@del → [@citekey]', () => {
+    expect(accept('[@del', 1, 'smith1992', true)).toBe('[@smith1992]');
+  });
+
+  it('keeps the @ for plain Enter in a wikilink', () => {
+    expect(accept('[[@del', 2, 'smith1992', false)).toBe('[[@smith1992');
+  });
+
+  it('never loses the @ in any context', () => {
+    for (const [line, at] of [['[[@del', 2], ['@del', 0], ['[@del', 1], ['text @del', 5]] as const) {
+      expect(accept(line, at, 'k', true)).toContain('@k');
     }
   });
 });

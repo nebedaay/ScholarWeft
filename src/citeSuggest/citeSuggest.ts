@@ -166,16 +166,24 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
    * Update the footer row: the closing mark on the left, the result count on
    * the right. One row, so the popup does not grow a second line.
    */
-  private renderCount(count: number): void {
+  private renderCount(shown: number, total = shown): void {
+    // "20 of 137" when the list is capped, plain "7 results" when everything
+    // fits — so a truncated list is never mistaken for the whole answer.
+    const truncated = total > shown;
+    const countText =
+      shown === 0
+        ? 'No results'
+        : truncated
+          ? `${shown} of ${total}`
+          : `${total}`;
+    const label =
+      truncated || total !== 1 ? 'results' : 'result';
     this.setInstructions([
       {
         command: Platform.isMacOS ? '⌘ ↵' : 'ctrl ↵',
         purpose: this._insertionHint,
       },
-      {
-        command: count === 0 ? 'No results' : `${count}`,
-        purpose: count === 1 ? 'result' : 'results',
-      },
+      { command: countText, purpose: label },
     ]);
   }
 
@@ -256,25 +264,19 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
       // searchTier ranks by exact phrase, coverage, whole words and position —
       // and does its own AND filtering. Nothing further to re-rank here.
-      const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
-      // Excerpts are an `@@@` affordance: record the terms and the result count.
+      const { entries, total } = bibManager.searchTier(
+        tier,
+        searchQuery,
+        this.limit
+      );
+      // Excerpts are an `@@@` affordance: record the terms for rendering them.
       this._abstractQueryTerms = isTripleAtMode
         ? searchQuery.split(/\s+/).filter((t) => t.length > 0)
         : [];
-      this._lastResultCount = ranked.length;
-      // TEMPORARY DIAGNOSTIC (survives production builds): reports how many
-      // interpretations were tried and how many entries each produced, so a
-      // "wildcard returns fewer than the full term" report can be traced.
-      try {
-        console.log(
-          `[sw:search] mode=${isTripleAtMode ? '@@@' : '@@'} query=${JSON.stringify(searchQuery)} hits=${ranked.length}`,
-          ranked.slice(0, 8).map((e) => e.id)
-        );
-      } catch {
-        /* diagnostic only */
-      }
-      this.renderCount(ranked.length);
-      return ranked.map((item, refIndex) => ({ item, refIndex, score: 0 }));
+      // Show an honest count: "20 of 137" when the list is truncated, so a
+      // capped result does not read like "only 20 matched".
+      this.renderCount(entries.length, total);
+      return entries.map((item, refIndex) => ({ item, refIndex, score: 0 }));
     }
 
     this._abstractQueryTerms = [];
@@ -432,9 +434,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
   /** Terms of the most recent `@@@` query, for rendering excerpts. */
   private _abstractQueryTerms: string[] = [];
-
-  /** How many results the most recent search produced, for the count row. */
-  private _lastResultCount = 0;
 
   /** An excerpt for an `@@@` result, or null outside that tier. */
   private excerptFor(item: { abstract?: string }): ReturnType<typeof buildExcerpts>[number] | null {

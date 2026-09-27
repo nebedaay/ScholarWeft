@@ -70,8 +70,11 @@ function insideExistingBlock(
 /**
  * Compute the insertion.
  *
- * `wrap` is the ⌘/Ctrl+Enter behaviour; plain Enter always inserts the bare
- * `@citekey`.
+ * The popup's replaced span ALWAYS starts at the `@` (see `onTrigger`), so every
+ * result must re-include it. Returning only a closing suffix silently deleted
+ * the `@` — `[[@del` became `[[smith1992]]`, a dead wikilink with no citekey.
+ *
+ * `wrap` is the ⌘/Ctrl+Enter behaviour; plain Enter inserts the bare `@citekey`.
  */
 export function computeInsertion(
   citekey: string,
@@ -84,12 +87,12 @@ export function computeInsertion(
     return { text: `@${citekey}` };
   }
   if (insideUnclosedWikilink(ctx.beforeStart)) {
-    // `[[@del` and `[[del` both close with `]]`, never a single `]`.
-    return { text: `${citekey}]]` };
+    // `[[@del` → `[[@key]]`: the '@' is part of the replaced span, so it must
+    // be re-emitted alongside the closing ']]'.
+    return { text: `@${citekey}]]` };
   }
-  // The citation bracket is already open (`[@del`): only the closer is needed.
-  // `insideUnclosedWikilink` has already claimed the `[[` case.
   if (ctx.afterOpenBracket) {
+    // `[@del` → `[@key]`
     return { text: `@${citekey}]` };
   }
   return { text: `[@${citekey}]` };
