@@ -22,7 +22,7 @@ import {
   queryTerms,
   tierWeights,
 } from 'src/template/search-tier';
-import { passesCoverage, scoreEntry } from 'src/template/search-score';
+import { passesCoverage, prefixChunks, scoreEntry } from 'src/template/search-score';
 import {
   PromiseCapability,
   copyElToClipboard,
@@ -885,9 +885,22 @@ export class BibManager {
     for (const hits of perTerm) {
       if (candidates === null) candidates = new Set(hits);
       else candidates = new Set([...candidates].filter((id) => hits.has(id)));
-      if (candidates.size === 0) return [];
+      if (candidates.size === 0) break;
     }
-    if (!candidates) return [];
+    if (candidates === null) return [];
+
+    // A CONCATENATED PREFIX query (`soccri`, `socthe`) Fuse cannot find at all —
+    // it resembles no single field closely enough — yet it is a legitimate way
+    // to abbreviate. Scan for prefix-chunk matches and ADD them as candidates;
+    // the scorer ranks them below whole-word matches.
+    for (const entry of this.bibCache.values()) {
+      if (candidates.has(entry.id)) continue;
+      const fitsTitle = prefixChunks(entry.title ?? '', terms.join('')).full;
+      const fitsAuthor = (entry.author ?? []).some((a: any) =>
+        prefixChunks(a?.family ?? a?.literal ?? '', terms.join('')).full
+      );
+      if (fitsTitle || fitsAuthor) candidates.add(entry.id);
+    }
 
     // Order by OUR scoring: exact phrase first, then coverage, whole words,
     // and position. Fuse's own score is not used for ordering.
@@ -908,7 +921,7 @@ export class BibManager {
         query,
         { includeAbstract }
       );
-      if (!passesCoverage(score, terms.length)) continue;
+      if (!passesCoverage(score)) continue;
       scored.push({ entry, value: score.value });
     }
 

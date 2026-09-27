@@ -93658,39 +93658,119 @@ function firstWordOffset(text, term) {
     return -1;
   return m3.index + m3[1].length;
 }
+var MIN_CHUNK = 3;
+function looksLikeAbbreviation(query) {
+  const trimmed = query.trim();
+  if (!trimmed)
+    return false;
+  if (/\s/.test(trimmed))
+    return false;
+  return trimmed.length >= MIN_CHUNK;
+}
+function spacingConfidence(query) {
+  return /\s/.test(query.trim()) ? 0 : 0.02;
+}
+function prefixChunks(phrase, query) {
+  const q4 = norm2(query);
+  if (!q4)
+    return { full: false, words: 0, chunks: [] };
+  const ws = words(phrase);
+  let qi = 0;
+  let wi = 0;
+  let used = 0;
+  const chunks = [];
+  while (qi < q4.length && wi < ws.length) {
+    let matched = 0;
+    for (let len = q4.length - qi; len >= MIN_CHUNK; len--) {
+      if (ws[wi].startsWith(q4.slice(qi, qi + len))) {
+        matched = len;
+        break;
+      }
+    }
+    if (matched) {
+      chunks.push(q4.slice(qi, qi + matched));
+      qi += matched;
+      used++;
+    }
+    wi++;
+  }
+  return { full: used > 0 && qi === q4.length, words: used, chunks };
+}
 function scoreEntry(target, query, opts = {}) {
   var _a, _b, _c;
   const terms = queryTerms(query);
   if (terms.length === 0) {
-    return { exactPhrase: false, covered: 0, total: 0, value: 0 };
+    return {
+      exactPhrase: false,
+      covered: 0,
+      total: 0,
+      authorAndTitle: false,
+      prefixChunks: false,
+      interpretedWords: 0,
+      value: 0
+    };
   }
   const title = (_a = target.title) != null ? _a : "";
   const author = (_b = target.authorText) != null ? _b : "";
-  const haystacks = [title, author];
+  const haystacksAll = [title, author];
   if (opts.includeAbstract)
-    haystacks.push((_c = target.abstract) != null ? _c : "");
+    haystacksAll.push((_c = target.abstract) != null ? _c : "");
+  let effective = terms;
+  if (looksLikeAbbreviation(query) && terms.length === 1) {
+    const candidates = [
+      prefixChunks(title, terms[0]),
+      prefixChunks(author, terms[0]),
+      prefixChunks(`${author} ${title}`, terms[0])
+    ];
+    const best = candidates.reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
+    if (best.full && best.words > 1)
+      effective = best.chunks;
+    else if (!best.full || best.words === 0) {
+      return {
+        exactPhrase: false,
+        covered: 0,
+        total: 0,
+        authorAndTitle: false,
+        prefixChunks: false,
+        interpretedWords: 0,
+        value: Number.POSITIVE_INFINITY
+      };
+    }
+  }
   const phrase = terms.join(" ");
   const exactPhrase = !!title && containsFragment(title, phrase);
-  const meaningful = terms.filter((t4) => t4.length >= MIN_MEANINGFUL_TERM);
-  const forCoverage = meaningful.length > 0 ? meaningful : terms;
+  const meaningful = effective.filter((t4) => t4.length >= MIN_MEANINGFUL_TERM);
+  const forCoverage = meaningful.length > 0 ? meaningful : effective;
   let covered = 0;
   for (const term of forCoverage) {
-    if (haystacks.some((h3) => matchesWord(h3, term)))
+    if (haystacksAll.some((h3) => matchesWord(h3, term)))
       covered++;
+  }
+  const inTitle = forCoverage.filter((t4) => matchesWord(title, t4));
+  const inAuthor = forCoverage.filter((t4) => matchesWord(author, t4));
+  const authorAndTitle = forCoverage.length >= 2 && inAuthor.length > 0 && inTitle.length > 0;
+  const spacing = spacingConfidence(query);
+  if (authorAndTitle) {
+    const startsTitle = inTitle.some((t4) => firstWordOffset(title, t4) === 0);
+    return {
+      exactPhrase,
+      covered,
+      total: forCoverage.length,
+      authorAndTitle: true,
+      prefixChunks: false,
+      interpretedWords: forCoverage.length,
+      value: (startsTitle ? 0 : 0.1) + inAuthor.length * 0.01 + spacing
+    };
   }
   let wordHits = 0;
   let fragmentOnly = 0;
-  let earliest = Number.POSITIVE_INFINITY;
   let startBonus = 0;
   for (const term of meaningful) {
     if (matchesWord(title, term)) {
       wordHits++;
       const at = firstWordOffset(title, term);
-      if (at >= 0) {
-        earliest = Math.min(earliest, at);
-        if (at === 0)
-          startBonus++;
-      }
+      if (at === 0)
+        startBonus++;
     } else if (containsFragment(title, term)) {
       fragmentOnly++;
     }
@@ -93698,20 +93778,47 @@ function scoreEntry(target, query, opts = {}) {
   if (exactPhrase) {
     const at = firstWordOffset(title, phrase);
     const pos = at < 0 ? 0.5 : Math.min(at / 100, 0.8);
-    return { exactPhrase, covered, total: forCoverage.length, value: pos };
+    return {
+      exactPhrase,
+      covered,
+      total: forCoverage.length,
+      authorAndTitle: false,
+      prefixChunks: false,
+      interpretedWords: forCoverage.length,
+      value: 0.3 + pos + spacing
+    };
   }
-  const fullCoverage = covered >= forCoverage.length ? 1 : 2;
+  const chunked = looksLikeAbbreviation(query) ? prefixChunks(title, terms.join("")) : { full: false, words: 0 };
+  if (chunked.full && chunked.words >= 1) {
+    return {
+      exactPhrase: false,
+      covered,
+      total: forCoverage.length,
+      authorAndTitle: false,
+      prefixChunks: true,
+      interpretedWords: forCoverage.length,
+      value: 0.9 + (fragmentOnly > 0 ? 0.05 : 0) + spacing
+    };
+  }
+  const fullCoverage = covered >= forCoverage.length ? 1 : 3;
   const penalty = fragmentOnly * 0.15;
-  const quality = 1 - Math.min(wordHits / Math.max(forCoverage.length, 1), 1) * 0.6 - Math.min(startBonus, 2) * 0.1;
+  const quality = 1 - Math.min(wordHits / Math.max(forCoverage.length, 1), 1) * 0.6;
   return {
     exactPhrase,
     covered,
     total: forCoverage.length,
-    value: fullCoverage + Math.max(quality, 0) + penalty
+    authorAndTitle: false,
+    prefixChunks: false,
+    interpretedWords: forCoverage.length,
+    value: fullCoverage + Math.max(quality, 0) + penalty - Math.min(startBonus, 2) * 0.1 + spacing
   };
 }
-function passesCoverage(score, totalTerms) {
-  if (totalTerms <= 1)
+function passesCoverage(score) {
+  if (!Number.isFinite(score.value))
+    return false;
+  if (score.prefixChunks)
+    return true;
+  if (score.interpretedWords <= 1)
     return true;
   return score.total > 0 && score.covered >= score.total;
 }
@@ -94366,7 +94473,7 @@ var BibManager = class {
     }
   }
   searchTier(tier, query, limit) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const fuse = this.fuseForTier(tier);
     if (!fuse)
       return [];
@@ -94384,10 +94491,21 @@ var BibManager = class {
       else
         candidates = new Set([...candidates].filter((id) => hits.has(id)));
       if (candidates.size === 0)
-        return [];
+        break;
     }
-    if (!candidates)
+    if (candidates === null)
       return [];
+    for (const entry of this.bibCache.values()) {
+      if (candidates.has(entry.id))
+        continue;
+      const fitsTitle = prefixChunks((_a = entry.title) != null ? _a : "", terms.join("")).full;
+      const fitsAuthor = ((_b = entry.author) != null ? _b : []).some((a3) => {
+        var _a2, _b2;
+        return prefixChunks((_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "", terms.join("")).full;
+      });
+      if (fitsTitle || fitsAuthor)
+        candidates.add(entry.id);
+    }
     const includeAbstract = tier === "abstract";
     const scored = [];
     for (const id of candidates) {
@@ -94395,14 +94513,14 @@ var BibManager = class {
       if (!entry)
         continue;
       const score = scoreEntry({
-        title: (_a = entry.title) != null ? _a : null,
-        authorText: ((_b = entry.author) != null ? _b : []).map((a3) => {
+        title: (_c = entry.title) != null ? _c : null,
+        authorText: ((_d = entry.author) != null ? _d : []).map((a3) => {
           var _a2, _b2;
           return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
         }).filter(Boolean).join(" "),
-        abstract: (_c = entry.abstract) != null ? _c : null
+        abstract: (_e = entry.abstract) != null ? _e : null
       }, query, { includeAbstract });
-      if (!passesCoverage(score, terms.length))
+      if (!passesCoverage(score))
         continue;
       scored.push({ entry, value: score.value });
     }
