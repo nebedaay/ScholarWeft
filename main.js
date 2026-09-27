@@ -93737,6 +93737,7 @@ function scoreEntry(target, query, opts = {}) {
       authorAndTitle: false,
       prefixChunks: false,
       interpretedWords: 0,
+      matchedTerms: [],
       value: 0
     };
   }
@@ -93786,6 +93787,7 @@ function scoreEntry(target, query, opts = {}) {
       authorAndTitle: true,
       prefixChunks: false,
       interpretedWords: forCoverage.length,
+      matchedTerms: forCoverage,
       value: (startsTitle ? 0 : 0.1) + inAuthor.length * 0.01 + spacing
     };
   }
@@ -93812,6 +93814,7 @@ function scoreEntry(target, query, opts = {}) {
       authorAndTitle: false,
       prefixChunks: false,
       interpretedWords: forCoverage.length,
+      matchedTerms: forCoverage,
       value: 0.3 + pos + spacing
     };
   }
@@ -93824,6 +93827,7 @@ function scoreEntry(target, query, opts = {}) {
       authorAndTitle: false,
       prefixChunks: true,
       interpretedWords: forCoverage.length,
+      matchedTerms: forCoverage,
       value: 0.9 + (fragmentOnly > 0 ? 0.05 : 0) + spacing
     };
   }
@@ -93837,6 +93841,7 @@ function scoreEntry(target, query, opts = {}) {
     authorAndTitle: false,
     prefixChunks: false,
     interpretedWords: forCoverage.length,
+    matchedTerms: forCoverage,
     value: fullCoverage + Math.max(quality, 0) + penalty - Math.min(startBonus, 2) * 0.1 + spacing
   };
 }
@@ -94646,7 +94651,7 @@ var BibManager = class {
         const value = s3.value + interp.penalty;
         if (value < best) {
           best = value;
-          bestTerms = interp.terms;
+          bestTerms = s3.matchedTerms.length > 0 ? s3.matchedTerms : interp.terms;
         }
       }
       if (Number.isFinite(best)) {
@@ -96719,6 +96724,8 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     if (!isDoubleAtMode && (!searchQuery || searchQuery.includes(" "))) {
       return [];
     }
+    this._matchedTermsByKey = new Map();
+    this.renderCount(0);
     const { plugin } = this;
     const { bibManager } = plugin;
     const indexReady = bibManager.fuseReady;
@@ -96749,8 +96756,6 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
         score: 0
       }));
     }
-    this._matchedTermsByKey = new Map();
-    this.renderCount(0);
     let fuse = bibManager.fuse;
     const fileCacheEntry = bibManager.fileCache.get(context.file);
     if ((_d = fileCacheEntry == null ? void 0 : fileCacheEntry.source) == null ? void 0 : _d.fuse) {
@@ -96758,12 +96763,17 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     }
     LOG("single-@ fuse docs=", (_f = (_e = fuse == null ? void 0 : fuse._docs) == null ? void 0 : _e.length) != null ? _f : 0);
     const fuseResults = searchCitekeyFirst(fuse, searchQuery, this.limit);
-    if (fuseResults == null ? void 0 : fuseResults.length)
+    if (fuseResults == null ? void 0 : fuseResults.length) {
+      this._matchedTermsByKey = new Map(fuseResults.map((r3) => [r3.item.id, [searchQuery]]));
+      this.renderCount(fuseResults.length);
       return fuseResults;
+    }
     LOG("falling back to live Zotero search");
     const liveItems = await this.liveSearch(searchQuery, "citekey");
     if (liveItems.length) {
       LOG("live Zotero returned", liveItems.length, "items");
+      this._matchedTermsByKey = new Map(liveItems.map((item) => [item.id, [searchQuery]]));
+      this.renderCount(liveItems.length);
       return liveItems.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
     }
     return indexReady ? [] : loadingSuggestion();
@@ -96837,8 +96847,18 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
       return recorded;
     const out = [];
     for (const m3 of (_a = suggestion.matches) != null ? _a : []) {
-      for (const [a3, b3] of m3.indices)
-        out.push(m3.value.substring(a3, b3 + 1));
+      if (typeof (m3 == null ? void 0 : m3.value) !== "string" || !Array.isArray(m3.indices))
+        continue;
+      for (const range of m3.indices) {
+        if (!Array.isArray(range))
+          continue;
+        const [a3, b3] = range;
+        if (typeof a3 !== "number" || typeof b3 !== "number")
+          continue;
+        const term = m3.value.substring(a3, b3 + 1);
+        if (term)
+          out.push(term);
+      }
     }
     return out;
   }
@@ -96865,7 +96885,11 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     for (const s3 of spans) {
       if (s3.start > at)
         el.appendText(text.slice(at, s3.start));
-      el.append(createEl("strong", { text: text.slice(s3.start, s3.start + s3.length) }));
+      const mark = createEl("mark", {
+        cls: "sw-suggest-match",
+        text: text.slice(s3.start, s3.start + s3.length)
+      });
+      el.append(mark);
       at = s3.start + s3.length;
     }
     if (at < text.length)

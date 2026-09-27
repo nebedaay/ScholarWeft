@@ -140,6 +140,16 @@ export interface RelevanceScore {
    * against THIS, so both forms of the same query demand the same thing.
    */
   interpretedWords: number;
+  /**
+   * The terms the entry was ACTUALLY matched against — `effective`, after any
+   * coherent split or chunk alignment.
+   *
+   * This can differ from the query string that produced it: `womenauthoritysenegal`
+   * is matched as `women` + `authority` + `senegal`. Callers that explain a
+   * match (highlighting, excerpts) must use these, not the raw query, or they
+   * look for text that appears nowhere.
+   */
+  matchedTerms: string[];
   /** Final ordering key — LOWER IS BETTER. */
   value: number;
 }
@@ -318,6 +328,7 @@ export function scoreEntry(
       authorAndTitle: false,
       prefixChunks: false,
       interpretedWords: 0,
+      matchedTerms: [],
       value: 0,
     };
   }
@@ -398,6 +409,7 @@ export function scoreEntry(
       authorAndTitle: true,
       prefixChunks: false,
       interpretedWords: forCoverage.length,
+    matchedTerms: forCoverage,
       value: (startsTitle ? 0.0 : 0.1) + inAuthor.length * 0.01 + spacing,
     };
   }
@@ -428,6 +440,7 @@ export function scoreEntry(
       authorAndTitle: false,
       prefixChunks: false,
       interpretedWords: forCoverage.length,
+    matchedTerms: forCoverage,
       value: 0.3 + pos + spacing,
     };
   }
@@ -448,6 +461,7 @@ export function scoreEntry(
       authorAndTitle: false,
       prefixChunks: true,
       interpretedWords: forCoverage.length,
+    matchedTerms: forCoverage,
       value: 0.9 + (fragmentOnly > 0 ? 0.05 : 0) + spacing,
     };
   }
@@ -462,6 +476,7 @@ export function scoreEntry(
     authorAndTitle: false,
     prefixChunks: false,
     interpretedWords: forCoverage.length,
+    matchedTerms: forCoverage,
     value:
       fullCoverage +
       Math.max(quality, 0) +

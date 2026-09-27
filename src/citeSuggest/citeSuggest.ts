@@ -225,6 +225,11 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       return [];
     }
 
+    // Reset per-search state. Every path below records the terms it matched, so
+    // highlighting cannot inherit stale terms from the previous search.
+    this._matchedTermsByKey = new Map();
+    this.renderCount(0);
+
     const { plugin } = this;
     const { bibManager } = plugin;
     // Do NOT bail out while the local index is still building. Previously this
@@ -292,9 +297,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       }));
     }
 
-    this._matchedTermsByKey = new Map();
-    this.renderCount(0);
-
     // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
     // Use per-file Fuse index when the note has a frontmatter bibliography,
     // falling back to global if the per-file one is null (race on startup).
@@ -308,13 +310,26 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
     LOG('single-@ fuse docs=', (fuse as any)?._docs?.length ?? 0);
     const fuseResults = searchCitekeyFirst(fuse, searchQuery, this.limit);
-    if (fuseResults?.length) return fuseResults;
+    if (fuseResults?.length) {
+      // Record the query as the matched term. The citekey tiers build results
+      // without Fuse `matches`, so without this NOTHING was emphasised for `@`
+      // — the same class of bug as `@@` only recording for `@@@`.
+      this._matchedTermsByKey = new Map(
+        fuseResults.map((r) => [r.item.id, [searchQuery]])
+      );
+      this.renderCount(fuseResults.length);
+      return fuseResults;
+    }
 
     // Fuse returned nothing — fall back to a live Zotero query.
     LOG('falling back to live Zotero search');
     const liveItems = await this.liveSearch(searchQuery, 'citekey');
     if (liveItems.length) {
       LOG('live Zotero returned', liveItems.length, 'items');
+      this._matchedTermsByKey = new Map(
+        liveItems.map((item) => [item.id, [searchQuery]])
+      );
+      this.renderCount(liveItems.length);
       return liveItems.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
     }
 
@@ -401,12 +416,14 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       this.appendHighlighted(authors, authorText, terms);
     }
 
+
     const meta = getEntryMeta(item);
     if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
 
     this.appendExcerpt(frag, excerpt);
 
     el.setText(frag);
+
   }
 
   /**
@@ -422,10 +439,20 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   ): string[] {
     const recorded = item.id ? this._matchedTermsByKey.get(item.id) : undefined;
     if (recorded?.length) return recorded;
-    // Fall back to the literal matched substrings Fuse reported.
+    // Fall back to the literal matched substrings Fuse reported. Guarded: a
+    // `matches` entry without `value` or valid `indices` would throw inside the
+    // renderer, which has no try/catch — aborting the rest of the item rather
+    // than merely losing its emphasis.
     const out: string[] = [];
     for (const m of suggestion.matches ?? []) {
-      for (const [a, b] of m.indices) out.push(m.value.substring(a, b + 1));
+      if (typeof m?.value !== 'string' || !Array.isArray(m.indices)) continue;
+      for (const range of m.indices) {
+        if (!Array.isArray(range)) continue;
+        const [a, b] = range;
+        if (typeof a !== 'number' || typeof b !== 'number') continue;
+        const term = m.value.substring(a, b + 1);
+        if (term) out.push(term);
+      }
     }
     return out;
   }
@@ -457,7 +484,16 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     let at = 0;
     for (const s of spans) {
       if (s.start > at) el.appendText(text.slice(at, s.start));
-      el.append(createEl('strong', { text: text.slice(s.start, s.start + s.length) }));
+      // Use `<mark>`, the same element the working excerpt emphasis uses, rather
+      // than `<strong>`. Obsidian's own stylesheet gives `mark` visible
+      // highlighting wherever it appears, so the emphasis cannot depend on our
+      // CSS being applied to the right ancestor — which is what silently failed
+      // for `<strong>`.
+      const mark = createEl('mark', {
+        cls: 'sw-suggest-match',
+        text: text.slice(s.start, s.start + s.length),
+      });
+      el.append(mark);
       at = s.start + s.length;
     }
     if (at < text.length) el.appendText(text.slice(at));

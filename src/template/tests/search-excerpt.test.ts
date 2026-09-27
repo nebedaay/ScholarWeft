@@ -4,6 +4,7 @@ import {
   excerptForResult,
   findTermSpans,
 } from '../search-excerpt';
+import { scoreEntry } from '../search-score';
 
 const ABSTRACT =
   'This essay examines the Maghrebian subject at length and, after a good ' +
@@ -315,5 +316,39 @@ describe('emphasis offsets survive normalisation', () => {
     const title = 'Muʿjam rijāl al-ḥadīth wa tafṣīl ṭabaqāt al-ruwāt';
     const spans = findTermSpans(title, ['tab']);
     expect(spans.map((s) => title.slice(s.start, s.start + s.length))).toEqual(['ṭab']);
+  });
+});
+
+describe('matchedTerms reflect what the scorer interpreted', () => {
+  // `womenauthoritysenegal` is ONE unbroken run to the tokeniser, but the scorer
+  // splits it into words. Recording the run stored a string that appears in no
+  // field, so nothing could be highlighted — and adding one character changed
+  // whether a split was even found, which is why `…senega` highlighted and
+  // `…senegal` did not.
+  const entry = {
+    title: 'Women and Authority in Senegal',
+    authorText: 'X',
+    abstract: 'This article examines women and authority in Senegal.',
+  };
+
+  it('reports the WORDS the entry was matched against', () => {
+    const s = scoreEntry(entry, 'womenauthoritysenegal', { includeAbstract: false });
+    expect(s.matchedTerms).toEqual(['women', 'authority', 'senegal']);
+  });
+
+  it('does the same for a truncated final word', () => {
+    const s = scoreEntry(entry, 'womenauthoritysenega', { includeAbstract: false });
+    expect(s.matchedTerms).toEqual(['women', 'authority', 'senega']);
+  });
+
+  it('lets every matched term be highlighted in the title', () => {
+    for (const q of ['womenauthoritysenega', 'womenauthoritysenegal']) {
+      const s = scoreEntry(entry, q, { includeAbstract: false });
+      const shown = findTermSpans(entry.title, s.matchedTerms).map((x) =>
+        entry.title.slice(x.start, x.start + x.length)
+      );
+      expect(shown).toEqual(['Women', 'Authority', shown[2]]);
+      expect(shown).toHaveLength(3);
+    }
   });
 });

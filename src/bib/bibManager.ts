@@ -994,7 +994,12 @@ export class BibManager {
         const value = s.value + interp.penalty;
         if (value < best) {
           best = value;
-          bestTerms = interp.terms;
+          // The terms the SCORER actually matched, not `interp.terms`: for a
+          // joined query the scorer may split it further (`womenauthoritysenegal`
+          // → women + authority + senegal), and callers that explain the match
+          // must use those words. Recording `interp.terms` stored the raw string,
+          // which appears in no field, so nothing could be highlighted.
+          bestTerms = s.matchedTerms.length > 0 ? s.matchedTerms : interp.terms;
         }
       }
       if (Number.isFinite(best)) {

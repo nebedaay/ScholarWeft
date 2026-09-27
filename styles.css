@@ -290,7 +290,7 @@ body {
 }
 
 .sw-reference-list__global-only-count {
-  color: var(--text-normal);
+  color: inherit;
   display: flex;
   padding: var(--size-4-1) var(--size-4-2);
   border-radius: var(--tag-radius);
@@ -752,7 +752,7 @@ p.sw-reference-paragraph {
 
 .sw-mapping-modal-row label {
   flex: 1;
-  color: var(--text-normal);
+  color: inherit;
 }
 
 .sw-mapping-modal-note {
@@ -791,7 +791,7 @@ p.sw-reference-paragraph {
 }
 
 .sw-prev-key {
-  color: var(--text-normal);
+  color: inherit;
 }
 
 .sw-prev-arrow {
@@ -801,7 +801,7 @@ p.sw-reference-paragraph {
 }
 
 .sw-prev-rendered {
-  color: var(--text-normal);
+  color: inherit;
   font-family: var(--font-text);
   flex: 1;
 }
@@ -922,16 +922,24 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   padding-top: var(--size-4-1);
 }
 
-/* Matched terms inside a suggestion. The surrounding text is deliberately dim
-   (--text-muted / --text-faint), so a plain <strong> stays the same colour and
-   is easy to miss. Brighten it to normal text and weight it, so the match reads
-   at a glance in the title, author and citekey alike. */
-.sw-suggest strong {
-  color: var(--text-normal);
+/* Matched terms inside a suggestion — the SAME treatment everywhere, so a match
+   reads identically in the title, author, citekey and an abstract excerpt.
+   Styled on the element we create, with no ancestor selector, because the popup
+   structure Obsidian wraps around items is not ours to depend on. */
+.sw-suggest-match {
+  color: inherit;
   font-weight: var(--font-semibold);
 }
 
-/* Author/editor names, so a search by name shows why it matched. */
+/* The excerpt previously suppressed the highlight (transparent background) when
+   matches were bold-only. Now that field matches are highlighted, keep the two
+   consistent: same yellow, same weight. */
+.sw-suggest-excerpt mark {
+  color: inherit;
+  font-style: normal;
+  font-weight: var(--font-semibold);
+}
+
 .sw-suggest-authors {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
@@ -966,7 +974,7 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
 
 .sw-suggest-excerpt mark {
   background-color: transparent;
-  color: var(--text-normal);
+  color: inherit;
   font-style: normal;
   font-weight: var(--font-semibold);
 }
@@ -1148,7 +1156,7 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   flex: 1;
   background: transparent;
   border: none;
-  color: var(--text-normal);
+  color: inherit;
   font-size: var(--font-ui-small);
   padding: 4px 8px;
   outline: none;
@@ -1167,7 +1175,7 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
 }
 
 .sw-search-select__clear:hover {
-  color: var(--text-normal);
+  color: inherit;
 }
 
 .sw-search-select__menu {
@@ -1188,7 +1196,7 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
 .sw-search-select__option {
   padding: 6px 10px;
   cursor: pointer;
-  color: var(--text-normal);
+  color: inherit;
   font-size: var(--font-ui-small);
 }
 
@@ -1210,7 +1218,7 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   background: var(--background-modifier-form-field);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--input-radius);
-  color: var(--text-normal);
+  color: inherit;
   padding: 3px 6px;
   box-sizing: border-box;
 }
