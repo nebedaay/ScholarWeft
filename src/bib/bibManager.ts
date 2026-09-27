@@ -942,7 +942,10 @@ export class BibManager {
     tier: 'title' | 'abstract',
     query: string,
     limit: number
-  ): { entries: PartialCSLEntry[]; total: number } {
+  ): {
+    entries: Array<{ entry: PartialCSLEntry; terms: string[] }>;
+    total: number;
+  } {
     const fuse = this.fuseForTier(tier);
     if (!fuse) return { entries: [], total: 0 };
     if (!isSearchableQuery(query)) return { entries: [], total: 0 };
@@ -956,6 +959,8 @@ export class BibManager {
 
     const scored = new Map<string, number>();
     const ranked = new Map<string, PartialCSLEntry>();
+    /** The interpretation terms that matched each entry (for excerpts). */
+    const matchedTerms = new Map<string, string[]>();
 
     for (const entry of this.bibCache.values()) {
       const target = {
@@ -967,6 +972,12 @@ export class BibManager {
 
       // Every way this query could read against THIS entry.
       let best = Number.POSITIVE_INFINITY;
+      // The terms of the interpretation that WON, so the caller can explain the
+      // match with the words that actually matched. The raw query is often an
+      // unbroken run (`islamwomenauthority`) that appears in no field: the item
+      // matched because the run split into real words, and an excerpt must use
+      // those words, not the run.
+      let bestTerms: string[] = [];
       for (const interp of interpretationsFor(target, query, { includeAbstract, includeVenue })) {
         // NO FUSE GATE HERE. Fuse supplies RECALL only — a way to SUGGEST
         // candidates — and using its hits as a filter silently dropped entries
@@ -980,11 +991,16 @@ export class BibManager {
         // ranked can never disagree.
         const s = scoreEntry(target, interp.terms.join(' '), { includeAbstract, includeVenue });
         if (!passesCoverage(s)) continue;
-        best = Math.min(best, s.value + interp.penalty);
+        const value = s.value + interp.penalty;
+        if (value < best) {
+          best = value;
+          bestTerms = interp.terms;
+        }
       }
       if (Number.isFinite(best)) {
         scored.set(entry.id, best);
         ranked.set(entry.id, entry);
+        matchedTerms.set(entry.id, bestTerms);
       }
     }
 
@@ -992,8 +1008,11 @@ export class BibManager {
     return {
       entries: ordered
         .slice(0, limit)
-        .map(([id]) => ranked.get(id)!)
-        .filter(Boolean),
+        .map(([id]) => ({
+          entry: ranked.get(id)!,
+          terms: matchedTerms.get(id) ?? [],
+        }))
+        .filter((r) => !!r.entry),
       total: ordered.length,
     };
   }

@@ -102,3 +102,22 @@ describe('excerptForResult() — the render decision', () => {
     expect(e!.matchLength).toBeGreaterThan(0);
   });
 });
+
+describe('excerpts use the MATCHED terms, not the raw query', () => {
+  const abs =
+    'This article examines how women negotiate religious authority within Islam.';
+
+  it('explains a match for an unbroken query via the words that matched', () => {
+    // `islamwomenauthority` appears in no abstract; the run SPLITS into words
+    // that do. The excerpt must show those, exactly as the search matched them.
+    expect(excerptForResult({ abstract: abs }, ['islamwomenauthority'])).toBeNull();
+    const e = excerptForResult({ abstract: abs }, ['islam', 'women', 'authority']);
+    expect(e).not.toBeNull();
+    expect(e!.text.toLowerCase()).toMatch(/women|authority|islam/);
+  });
+
+  it('produces a line for each term found apart', () => {
+    const long = `${'filler '.repeat(40)} islam ${'filler '.repeat(40)} authority`;
+    expect(buildExcerpts(long, ['islam', 'authority'])).toHaveLength(2);
+  });
+});

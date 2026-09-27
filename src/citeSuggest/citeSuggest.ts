@@ -273,17 +273,26 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         searchQuery,
         this.limit
       );
-      // Excerpts are an `@@@` affordance: record the terms for rendering them.
-      this._abstractQueryTerms = isTripleAtMode
-        ? searchQuery.split(/\s+/).filter((t) => t.length > 0)
-        : [];
+      // Excerpts are an `@@@` affordance. The terms come from the interpretation
+      // that MATCHED each entry, not the raw query: an unbroken query like
+      // `islamwomenauthority` appears in no abstract, while the words it split
+      // into do — and those are what an excerpt must show.
+      this._excerptTermsByKey = new Map(
+        isTripleAtMode
+          ? entries.map((e) => [e.entry.id, e.terms])
+          : []
+      );
       // Show an honest count: "20 of 137" when the list is truncated, so a
       // capped result does not read like "only 20 matched".
       this.renderCount(entries.length, total);
-      return entries.map((item, refIndex) => ({ item, refIndex, score: 0 }));
+      return entries.map(({ entry }, refIndex) => ({
+        item: entry,
+        refIndex,
+        score: 0,
+      }));
     }
 
-    this._abstractQueryTerms = [];
+    this._excerptTermsByKey = new Map();
     this.renderCount(0);
 
     // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
@@ -373,7 +382,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // title — so the excerpt belongs on EVERY render path. It was previously
     // added only after the `matches` branch below, but searchTier results carry
     // no `matches`, so they returned early and never showed one.
-    const excerpt = this.excerptFor(item as { abstract?: string });
+    const excerpt = this.excerptFor(item as { id?: string; abstract?: string });
 
     if (!suggestion.matches || !suggestion.matches.length) {
       frag.createSpan({ text: `@${item.id}` });
@@ -446,8 +455,11 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     }
   }
 
-  /** Terms of the most recent `@@@` query, for rendering excerpts. */
-  private _abstractQueryTerms: string[] = [];
+  /**
+   * Per-entry terms of the interpretation that matched, for `@@@` excerpts.
+   * Keyed by citekey so the renderer shows the words that actually matched.
+   */
+  private _excerptTermsByKey = new Map<string, string[]>();
 
   /** An excerpt for an `@@@` result, or null outside that tier. */
   /**
@@ -458,8 +470,9 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
    * `matches`, so they returned early and never showed one. A test asserting
    * this path exists is what stops that regressing.
    */
-  excerptFor(item: { abstract?: string | null }) {
-    return excerptForResult(item, this._abstractQueryTerms);
+  excerptFor(item: { id?: string; abstract?: string | null }) {
+    const terms = item.id ? this._excerptTermsByKey.get(item.id) : undefined;
+    return excerptForResult(item, terms ?? []);
   }
 
   private lastSelect: EditorPosition = null;

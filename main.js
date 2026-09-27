@@ -94629,6 +94629,7 @@ var BibManager = class {
     const includeVenue = includeAbstract;
     const scored = new Map();
     const ranked = new Map();
+    const matchedTerms = new Map();
     for (const entry of this.bibCache.values()) {
       const target = {
         title: (_a = entry.title) != null ? _a : null,
@@ -94637,20 +94638,32 @@ var BibManager = class {
         venueText: venueTextOf(entry)
       };
       let best = Number.POSITIVE_INFINITY;
+      let bestTerms = [];
       for (const interp of interpretationsFor(target, query, { includeAbstract, includeVenue })) {
         const s3 = scoreEntry(target, interp.terms.join(" "), { includeAbstract, includeVenue });
         if (!passesCoverage(s3))
           continue;
-        best = Math.min(best, s3.value + interp.penalty);
+        const value = s3.value + interp.penalty;
+        if (value < best) {
+          best = value;
+          bestTerms = interp.terms;
+        }
       }
       if (Number.isFinite(best)) {
         scored.set(entry.id, best);
         ranked.set(entry.id, entry);
+        matchedTerms.set(entry.id, bestTerms);
       }
     }
     const ordered = [...scored.entries()].sort((a3, b3) => a3[1] - b3[1]);
     return {
-      entries: ordered.slice(0, limit).map(([id]) => ranked.get(id)).filter(Boolean),
+      entries: ordered.slice(0, limit).map(([id]) => {
+        var _a2;
+        return {
+          entry: ranked.get(id),
+          terms: (_a2 = matchedTerms.get(id)) != null ? _a2 : []
+        };
+      }).filter((r3) => !!r3.entry),
       total: ordered.length
     };
   }
@@ -96561,7 +96574,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     super(app2);
     this.limit = 20;
     this._insertionHint = "wrap with brackets";
-    this._abstractQueryTerms = [];
+    this._excerptTermsByKey = new Map();
     this.lastSelect = null;
     this.isRefreshing = false;
     this.lastRefreshAt = 0;
@@ -96629,11 +96642,15 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
         return (docs == null ? void 0 : docs.length) ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 })) : [];
       }
       const { entries, total } = bibManager.searchTier(tier, searchQuery, this.limit);
-      this._abstractQueryTerms = isTripleAtMode ? searchQuery.split(/\s+/).filter((t4) => t4.length > 0) : [];
+      this._excerptTermsByKey = new Map(isTripleAtMode ? entries.map((e3) => [e3.entry.id, e3.terms]) : []);
       this.renderCount(entries.length, total);
-      return entries.map((item, refIndex) => ({ item, refIndex, score: 0 }));
+      return entries.map(({ entry }, refIndex) => ({
+        item: entry,
+        refIndex,
+        score: 0
+      }));
     }
-    this._abstractQueryTerms = [];
+    this._excerptTermsByKey = new Map();
     this.renderCount(0);
     let fuse = bibManager.fuse;
     const fileCacheEntry = bibManager.fileCache.get(context.file);
@@ -96749,7 +96766,8 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     }
   }
   excerptFor(item) {
-    return excerptForResult(item, this._abstractQueryTerms);
+    const terms = item.id ? this._excerptTermsByKey.get(item.id) : void 0;
+    return excerptForResult(item, terms != null ? terms : []);
   }
   selectSuggestion(suggestion, event) {
     if (isLoadingSuggestion(suggestion))
