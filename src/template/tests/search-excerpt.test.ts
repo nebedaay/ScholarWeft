@@ -244,3 +244,35 @@ describe('findTermSpans() — highlighting in any field', () => {
     }
   });
 });
+
+describe('highlighting matched CHUNK terms (the reported case)', () => {
+  // `khutab` reaches "alkhuiMujamRijal1983" because the run splits into `khu`
+  // and `tab`, matching "Al-Khūʾī" and "ṭabaqāt". Highlighting the raw word
+  // finds nothing; highlighting the terms that matched explains the result.
+  const title = 'Muʿjam rijāl al-ḥadīth wa tafṣīl ṭabaqāt al-ruwāt';
+  const author = 'Al-Khūʾī Abū';
+
+  it('finds nothing for the raw word', () => {
+    expect(findTermSpans(title, ['khutab'])).toEqual([]);
+    expect(findTermSpans(author, ['khutab'])).toEqual([]);
+  });
+
+  it('finds the chunk terms that actually matched', () => {
+    expect(
+      findTermSpans(author, ['khu', 'tab']).map((s) =>
+        author.slice(s.start, s.start + s.length)
+      )
+    ).toContain('Khū');
+    expect(
+      findTermSpans(title, ['khu', 'tab']).map((s) =>
+        title.slice(s.start, s.start + s.length)
+      )
+    ).toContain('ṭab');
+  });
+
+  it('is diacritic-insensitive in both directions', () => {
+    // Why `khutab` and `khuṭab` behave alike: normalisation strips the marks.
+    expect(findTermSpans(author, ['khu'])).toHaveLength(1);
+    expect(findTermSpans('Al-Khutabi', ['khū'])).toHaveLength(1);
+  });
+});

@@ -96649,7 +96649,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     super(app2);
     this.limit = 20;
     this._insertionHint = "wrap with brackets";
-    this._excerptTermsByKey = new Map();
+    this._matchedTermsByKey = new Map();
     this.lastSelect = null;
     this.isRefreshing = false;
     this.lastRefreshAt = 0;
@@ -96717,7 +96717,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
         return (docs == null ? void 0 : docs.length) ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 })) : [];
       }
       const { entries, total } = bibManager.searchTier(tier, searchQuery, this.limit);
-      this._excerptTermsByKey = new Map(isTripleAtMode ? entries.map((e3) => [e3.entry.id, e3.terms]) : []);
+      this._matchedTermsByKey = new Map(entries.map((e3) => [e3.entry.id, e3.terms]));
       this.renderCount(entries.length, total);
       return entries.map(({ entry }, refIndex) => ({
         item: entry,
@@ -96725,7 +96725,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
         score: 0
       }));
     }
-    this._excerptTermsByKey = new Map();
+    this._matchedTermsByKey = new Map();
     this.renderCount(0);
     let fuse = bibManager.fuse;
     const fileCacheEntry = bibManager.fileCache.get(context.file);
@@ -96808,7 +96808,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
   }
   termsFor(item, suggestion) {
     var _a;
-    const recorded = item.id ? this._excerptTermsByKey.get(item.id) : void 0;
+    const recorded = item.id ? this._matchedTermsByKey.get(item.id) : void 0;
     if (recorded == null ? void 0 : recorded.length)
       return recorded;
     const out = [];
@@ -96865,7 +96865,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
       line.appendText(excerpt.text.slice(at));
   }
   excerptFor(item) {
-    const terms = item.id ? this._excerptTermsByKey.get(item.id) : void 0;
+    const terms = item.id ? this._matchedTermsByKey.get(item.id) : void 0;
     return excerptForResult(item, terms != null ? terms : []);
   }
   selectSuggestion(suggestion, event) {

@@ -273,14 +273,14 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         searchQuery,
         this.limit
       );
-      // Excerpts are an `@@@` affordance. The terms come from the interpretation
-      // that MATCHED each entry, not the raw query: an unbroken query like
-      // `islamwomenauthority` appears in no abstract, while the words it split
-      // into do — and those are what an excerpt must show.
-      this._excerptTermsByKey = new Map(
-        isTripleAtMode
-          ? entries.map((e) => [e.entry.id, e.terms])
-          : []
+      // The terms recorded are those of the interpretation that MATCHED each
+      // entry, not the raw query: an unbroken query like `islamwomenauthority`
+      // appears in no field, while the words it split into do. Used for BOTH the
+      // excerpt (`@@@`) and for highlighting every field — so this must be
+      // recorded for `@@` as well. Recording it only for `@@@` is why
+      // highlighting appeared to work solely on results with an abstract.
+      this._matchedTermsByKey = new Map(
+        entries.map((e) => [e.entry.id, e.terms])
       );
       // Show an honest count: "20 of 137" when the list is truncated, so a
       // capped result does not read like "only 20 matched".
@@ -292,7 +292,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       }));
     }
 
-    this._excerptTermsByKey = new Map();
+    this._matchedTermsByKey = new Map();
     this.renderCount(0);
 
     // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
@@ -420,7 +420,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     item: PartialCSLEntry,
     suggestion: Fuse.FuseResult<PartialCSLEntry>
   ): string[] {
-    const recorded = item.id ? this._excerptTermsByKey.get(item.id) : undefined;
+    const recorded = item.id ? this._matchedTermsByKey.get(item.id) : undefined;
     if (recorded?.length) return recorded;
     // Fall back to the literal matched substrings Fuse reported.
     const out: string[] = [];
@@ -485,10 +485,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   }
 
   /**
-   * Per-entry terms of the interpretation that matched, for `@@@` excerpts.
-   * Keyed by citekey so the renderer shows the words that actually matched.
+   * Per-entry terms of the interpretation that matched, keyed by citekey.
+   *
+   * Drives BOTH the `@@@` excerpt and the highlighting of every field, so it is
+   * recorded for `@@` too — not only for the tier that shows an excerpt.
    */
-  private _excerptTermsByKey = new Map<string, string[]>();
+  private _matchedTermsByKey = new Map<string, string[]>();
 
   /** An excerpt for an `@@@` result, or null outside that tier. */
   /**
@@ -500,7 +502,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
    * this path exists is what stops that regressing.
    */
   excerptFor(item: { id?: string; abstract?: string | null }) {
-    const terms = item.id ? this._excerptTermsByKey.get(item.id) : undefined;
+    const terms = item.id ? this._matchedTermsByKey.get(item.id) : undefined;
     return excerptForResult(item, terms ?? []);
   }
 
