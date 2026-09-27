@@ -93689,14 +93689,6 @@ function hasCoherentSplit(phrase, run) {
   }
   return null;
 }
-function explainsUnbrokenRun(target, run) {
-  var _a, _b, _c;
-  const author = (_a = target.authorText) != null ? _a : "";
-  const combined = `${author} ${(_b = target.title) != null ? _b : ""}`;
-  if (hasCoherentSplit(combined, run))
-    return true;
-  return prefixChunks((_c = target.title) != null ? _c : "", run).full || prefixChunks(author, run).full || prefixChunks(combined, run).full;
-}
 function spacingConfidence(query) {
   return /\s/.test(query.trim()) ? 0 : 0.02;
 }
@@ -93880,6 +93872,60 @@ var TIER_IGNORE_LOCATION = {
   abstract: true
 };
 var MIN_MATCH_CHARS = 2;
+
+// src/template/search-interpret.ts
+function queryShape(query) {
+  const words2 = queryTerms(query);
+  const spaced = /\s/.test(query.trim());
+  return { words: words2, spaced, run: words2.join("") };
+}
+function interpretationsFor(entry, query) {
+  var _a, _b;
+  const shape = queryShape(query);
+  if (shape.words.length === 0)
+    return [];
+  const title = (_a = entry.title) != null ? _a : "";
+  const author = (_b = entry.authorText) != null ? _b : "";
+  const combined = `${author} ${title}`;
+  const out = [];
+  out.push({
+    terms: shape.words,
+    kind: "words",
+    penalty: shape.spaced ? 0 : 0.02
+  });
+  if (!shape.spaced || shape.words.length === 1) {
+    const split = hasCoherentSplit(combined, shape.run);
+    if (split && split.length > 1) {
+      out.push({ terms: split, kind: "split", penalty: 0.05 });
+    }
+    if (!split) {
+      const best = [
+        prefixChunks(title, shape.run),
+        prefixChunks(author, shape.run),
+        prefixChunks(combined, shape.run)
+      ].reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
+      if (best.full && best.words > 0) {
+        out.push({ terms: best.chunks, kind: "chunks", penalty: 0.9 });
+      }
+    }
+  }
+  const seen = new Map();
+  for (const interp of out) {
+    const key = interp.terms.join("\0");
+    const prior = seen.get(key);
+    if (!prior || interp.penalty < prior.penalty)
+      seen.set(key, interp);
+  }
+  return [...seen.values()].sort((a3, b3) => a3.penalty - b3.penalty);
+}
+function isSearchableQuery(query) {
+  const shape = queryShape(query);
+  if (shape.words.length === 0)
+    return false;
+  if (shape.words.length > 1)
+    return true;
+  return shape.run.length >= MIN_CHUNK;
+}
 
 // src/bib/bibManager.ts
 var import_obsidian26 = __toModule(require("obsidian"));
@@ -94508,61 +94554,50 @@ var BibManager = class {
     }
   }
   searchTier(tier, query, limit) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c;
     const fuse = this.fuseForTier(tier);
     if (!fuse)
       return [];
-    const terms = queryTerms(query);
-    if (terms.length === 0)
+    if (!isSearchableQuery(query))
       return [];
-    const perTerm = terms.map((term) => {
-      const hits = fuse.search(normalizeDiacritics(term));
-      return new Set(hits.map((h3) => h3.item.id));
-    });
-    let candidates = null;
-    for (const hits of perTerm) {
-      if (candidates === null)
-        candidates = new Set(hits);
-      else
-        candidates = new Set([...candidates].filter((id) => hits.has(id)));
-      if (candidates.size === 0)
-        break;
-    }
-    if (candidates === null)
-      return [];
-    const run = terms.join("");
+    const includeAbstract = tier === "abstract";
+    const termHits = new Map();
+    const hitsFor = (term) => {
+      const cached = termHits.get(term);
+      if (cached)
+        return cached;
+      const hits = new Set(fuse.search(normalizeDiacritics(term)).map((h3) => h3.item.id));
+      termHits.set(term, hits);
+      return hits;
+    };
+    const scored = new Map();
+    const ranked = new Map();
     for (const entry of this.bibCache.values()) {
-      if (candidates.has(entry.id))
-        continue;
       const target = {
         title: (_a = entry.title) != null ? _a : null,
         authorText: ((_b = entry.author) != null ? _b : []).map((a3) => {
           var _a2, _b2;
           return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
-        }).filter(Boolean).join(" ")
-      };
-      if (explainsUnbrokenRun(target, run))
-        candidates.add(entry.id);
-    }
-    const includeAbstract = tier === "abstract";
-    const scored = [];
-    for (const id of candidates) {
-      const entry = this.bibCache.get(id);
-      if (!entry)
-        continue;
-      const score = scoreEntry({
-        title: (_c = entry.title) != null ? _c : null,
-        authorText: ((_d = entry.author) != null ? _d : []).map((a3) => {
-          var _a2, _b2;
-          return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
         }).filter(Boolean).join(" "),
-        abstract: (_e = entry.abstract) != null ? _e : null
-      }, query, { includeAbstract });
-      if (!passesCoverage(score))
-        continue;
-      scored.push({ entry, value: score.value });
+        abstract: (_c = entry.abstract) != null ? _c : null
+      };
+      let best = Number.POSITIVE_INFINITY;
+      for (const interp of interpretationsFor(target, query)) {
+        const seenByFuse = interp.terms.every((t4) => t4.length >= MIN_MATCH_CHARS ? hitsFor(t4).has(entry.id) : true);
+        const knownHere = seenByFuse || scoreEntry(target, interp.terms.join(" "), { includeAbstract }).covered > 0;
+        if (!knownHere)
+          continue;
+        const s3 = scoreEntry(target, interp.terms.join(" "), { includeAbstract });
+        if (!passesCoverage(s3))
+          continue;
+        best = Math.min(best, s3.value + interp.penalty);
+      }
+      if (Number.isFinite(best)) {
+        scored.set(entry.id, best);
+        ranked.set(entry.id, entry);
+      }
     }
-    return scored.sort((a3, b3) => a3.value - b3.value).slice(0, limit).map((s3) => s3.entry);
+    return [...scored.entries()].sort((a3, b3) => a3[1] - b3[1]).slice(0, limit).map(([id]) => ranked.get(id)).filter(Boolean);
   }
   fuseForTier(tier) {
     var _a;

@@ -22,13 +22,11 @@ import {
   queryTerms,
   tierWeights,
 } from 'src/template/search-tier';
+import { passesCoverage, scoreEntry } from 'src/template/search-score';
 import {
-  explainsUnbrokenRun,
-  hasCoherentSplit,
-  passesCoverage,
-  prefixChunks,
-  scoreEntry,
-} from 'src/template/search-score';
+  interpretationsFor,
+  isSearchableQuery,
+} from 'src/template/search-interpret';
 import {
   PromiseCapability,
   copyElToClipboard,
@@ -853,15 +851,17 @@ export class BibManager {
   }
 
   /**
-   * Search one tier for a multi-word query.
+   * Search one tier for a query.
    *
-   * Terms are searched SEPARATELY and combined as an AND, rather than handing
-   * Fuse the whole phrase. Fuse matches one fuzzy string against one field at a
-   * time, so `bourdieu critique` otherwise fails an item whose surname is in
-   * the author field and the word in the title — the normal case — while a
-   * citekey like `bourdieuCeQue1982` ranks purely for sharing the prefix.
+   * The query is turned into an ordered list of INTERPRETATIONS (see
+   * `search-interpret.ts`) and every one is searched; results are merged and
+   * ranked together. There is deliberately no separate path for spaced and
+   * unspaced queries: the unspaced form simply lacks the explicit word split, so
+   * it relies on the entry-dependent readings. Previously the two took different
+   * routes and returned systematically different result SETS.
    *
-   * Returns entries in ranked order.
+   * Fuse supplies RECALL only — which entries contain a term at all. Ordering
+   * comes from `scoreEntry`.
    */
   searchTier(
     tier: 'title' | 'abstract',
@@ -870,84 +870,63 @@ export class BibManager {
   ): PartialCSLEntry[] {
     const fuse = this.fuseForTier(tier);
     if (!fuse) return [];
-    const terms = queryTerms(query);
-    if (terms.length === 0) return [];
+    if (!isSearchableQuery(query)) return [];
+    const includeAbstract = tier === 'abstract';
 
-    // Fuse gives RECALL only: which entries contain these terms AT ALL. The
-    // per-term limit must stay generous, because a short term like "social"
-    // matches hundreds of titles weakly, and an item whose title contains the
-    // exact phrase can rank last among them (a long title scores worse than a
-    // short one under Fuse's length normalisation). Truncating per term deleted
-    // exactly the items we wanted, before the AND ran — the cause of the
-    // long-standing "spacing loses the exact match" bug.
-    const perTerm = terms.map((term) => {
-      const hits = fuse.search(normalizeDiacritics(term));
-      return new Set(hits.map((h) => h.item.id));
-    });
+    // A cache of "which entries contain this term", since interpretations share
+    // terms heavily (the same word appears in the word-list and a split). Scoped
+    // to this call so it cannot grow unbounded or go stale across refreshes.
+    const termHits = new Map<string, Set<string>>();
+    const hitsFor = (term: string): Set<string> => {
+      const cached = termHits.get(term);
+      if (cached) return cached;
+      const hits = new Set(
+        fuse.search(normalizeDiacritics(term)).map((h) => h.item.id)
+      );
+      termHits.set(term, hits);
+      return hits;
+    };
 
-    // Candidate set = entries matched by EVERY term (AND, so a spaced query is
-    // narrower than either term alone). Computed over the full hit lists.
-    let candidates: Set<string> | null = null;
-    for (const hits of perTerm) {
-      if (candidates === null) candidates = new Set(hits);
-      else candidates = new Set([...candidates].filter((id) => hits.has(id)));
-      if (candidates.size === 0) break;
-    }
-    if (candidates === null) return [];
+    const scored = new Map<string, number>();
+    const ranked = new Map<string, PartialCSLEntry>();
 
-    // An UNBROKEN run (`bourdieucritique`, `soccri`) is something Fuse cannot
-    // find at all — it resembles no single field closely enough — yet it is a
-    // legitimate way to type a phrase quickly. Scan for the two interpretations
-    // the scorer will use, and add the entries as candidates:
-    //
-    //   1. a coherent SPLIT into real words (`bourdieucritique` =
-    //      bourdieu + critique, spanning the author and the title);
-    //   2. CHUNK alignment of word prefixes (`soccri`) when no coherent
-    //      reading exists.
-    //
-    // Without this the scorer's (correct) handling never runs, because the
-    // entry was never a candidate: that is why `@@bourdieucritique` returned
-    // nothing while `@@bourdieu critique` worked.
-    const run = terms.join('');
     for (const entry of this.bibCache.values()) {
-      if (candidates.has(entry.id)) continue;
       const target = {
         title: entry.title ?? null,
         authorText: (entry.author ?? [])
           .map((a: any) => a?.family ?? a?.literal ?? '')
           .filter(Boolean)
           .join(' '),
+        abstract: (entry as { abstract?: string }).abstract ?? null,
       };
-      if (explainsUnbrokenRun(target, run)) candidates.add(entry.id);
+
+      // Every way this query could read against THIS entry.
+      let best = Number.POSITIVE_INFINITY;
+      for (const interp of interpretationsFor(target, query)) {
+        // Candidate test: Fuse must know every term of the interpretation.
+        // Fuse cannot see a split across fields, so accept that too.
+        const seenByFuse = interp.terms.every((t) =>
+          t.length >= MIN_MATCH_CHARS ? hitsFor(t).has(entry.id) : true
+        );
+        const knownHere =
+          seenByFuse || scoreEntry(target, interp.terms.join(' '), { includeAbstract }).covered > 0;
+        if (!knownHere) continue;
+
+        const s = scoreEntry(target, interp.terms.join(' '), { includeAbstract });
+        if (!passesCoverage(s)) continue;
+        best = Math.min(best, s.value + interp.penalty);
+      }
+      if (Number.isFinite(best)) {
+        scored.set(entry.id, best);
+        ranked.set(entry.id, entry);
+      }
     }
 
-    // Order by OUR scoring: exact phrase first, then coverage, whole words,
-    // and position. Fuse's own score is not used for ordering.
-    const includeAbstract = tier === 'abstract';
-    const scored: Array<{ entry: PartialCSLEntry; value: number }> = [];
-    for (const id of candidates) {
-      const entry = this.bibCache.get(id);
-      if (!entry) continue;
-      const score = scoreEntry(
-        {
-          title: entry.title ?? null,
-          authorText: (entry.author ?? [])
-            .map((a: any) => a?.family ?? a?.literal ?? '')
-            .filter(Boolean)
-            .join(' '),
-          abstract: (entry as { abstract?: string }).abstract ?? null,
-        },
-        query,
-        { includeAbstract }
-      );
-      if (!passesCoverage(score)) continue;
-      scored.push({ entry, value: score.value });
-    }
-
-    return scored
-      .sort((a, b) => a.value - b.value)
+    return [...scored.entries()]
+      .sort((a, b) => a[1] - b[1])
       .slice(0, limit)
-      .map((s) => s.entry);
+      .map(([id]) => ranked.get(id)!)
+      .filter(Boolean);
   }
 
   /**
