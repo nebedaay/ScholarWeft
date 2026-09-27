@@ -93626,8 +93626,16 @@ var SimpleLRU = class {
 // src/template/search-score.ts
 var MIN_MEANINGFUL_TERM = 3;
 function words(text) {
-  return norm2(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const cached = WORD_CACHE.get(text);
+  if (cached)
+    return cached;
+  const out = norm2(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (WORD_CACHE.size > 4e3)
+    WORD_CACHE.clear();
+  WORD_CACHE.set(text, out);
+  return out;
 }
+var WORD_CACHE = new Map();
 function queryTerms(query) {
   return query.split(/[\s,;]+/).map((t4) => t4.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")).filter((t4) => t4.length > 0);
 }
@@ -93833,8 +93841,6 @@ function scoreEntry(target, query, opts = {}) {
 function passesCoverage(score) {
   if (!Number.isFinite(score.value))
     return false;
-  if (score.prefixChunks)
-    return true;
   if (score.total === 0)
     return true;
   if (score.interpretedWords <= 1)
@@ -93866,6 +93872,24 @@ var TIER_IGNORE_LOCATION = {
 var MIN_MATCH_CHARS = 2;
 
 // src/template/search-interpret.ts
+function splitIntoWordPrefixes(run, phrase) {
+  const pieces = [];
+  const search3 = (from) => {
+    if (from >= run.length)
+      return true;
+    for (let len = run.length - from; len >= MIN_CHUNK; len--) {
+      const piece = run.slice(from, from + len);
+      if (!matchesWord(phrase, piece))
+        continue;
+      pieces.push(piece);
+      if (search3(from + len))
+        return true;
+      pieces.pop();
+    }
+    return false;
+  };
+  return search3(0) && pieces.length > 1 ? [...pieces] : null;
+}
 function queryShape(query) {
   const words2 = queryTerms(query);
   const spaced = /\s/.test(query.trim());
@@ -93897,8 +93921,12 @@ function interpretationsFor(entry, query, opts = {}) {
         prefixChunks(author, shape.run),
         prefixChunks(combined, shape.run)
       ].reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
-      if (best.full && best.words > 0) {
+      if (best.full && best.words > 1) {
         out.push({ terms: best.chunks, kind: "chunks", penalty: 0.9 });
+      }
+      const unordered = splitIntoWordPrefixes(shape.run, combined);
+      if (unordered && unordered.length > 1) {
+        out.push({ terms: unordered, kind: "prefixes", penalty: 0.9 });
       }
     }
   }
@@ -94554,15 +94582,6 @@ var BibManager = class {
     if (!isSearchableQuery(query))
       return [];
     const includeAbstract = tier === "abstract";
-    const termHits = new Map();
-    const hitsFor = (term) => {
-      const cached = termHits.get(term);
-      if (cached)
-        return cached;
-      const hits = new Set(fuse.search(normalizeDiacritics(term)).map((h3) => h3.item.id));
-      termHits.set(term, hits);
-      return hits;
-    };
     const scored = new Map();
     const ranked = new Map();
     for (const entry of this.bibCache.values()) {
@@ -94576,10 +94595,6 @@ var BibManager = class {
       };
       let best = Number.POSITIVE_INFINITY;
       for (const interp of interpretationsFor(target, query, { includeAbstract })) {
-        const seenByFuse = interp.terms.every((t4) => t4.length >= MIN_MATCH_CHARS ? hitsFor(t4).has(entry.id) : true);
-        const knownHere = seenByFuse || scoreEntry(target, interp.terms.join(" "), { includeAbstract }).covered > 0;
-        if (!knownHere)
-          continue;
         const s3 = scoreEntry(target, interp.terms.join(" "), { includeAbstract });
         if (!passesCoverage(s3))
           continue;
@@ -96414,6 +96429,10 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
         return (docs == null ? void 0 : docs.length) ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 })) : [];
       }
       const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
+      try {
+        console.log(`[sw:search] mode=${isTripleAtMode ? "@@@" : "@@"} query=${JSON.stringify(searchQuery)} hits=${ranked.length}`, ranked.slice(0, 8).map((e3) => e3.id));
+      } catch (e3) {
+      }
       return ranked.map((item, refIndex) => ({ item, refIndex, score: 0 }));
     }
     let fuse = bibManager.fuse;

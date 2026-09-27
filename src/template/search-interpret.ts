@@ -31,6 +31,41 @@ import {
   prefixChunks,
   queryTerms,
 } from './search-score';
+import { matchesWord } from './search-score';
+
+/**
+ * Decompose `run` into pieces that each prefix SOME word of `phrase`, ignoring
+ * order. Returns the pieces, or null when no full decomposition exists.
+ *
+ * Why this is separate from `prefixChunks`: that aligns against SUCCESSIVE
+ * words, so `soccrit` only matches "Social Critique ...", never
+ * "Critique and Social Order". A wildcard search must be at least as broad as
+ * the terms it abbreviates, so order must not disqualify an entry whose words
+ * are simply in a different order.
+ *
+ * Greedy longest-first, which is what a person typing an abbreviation means:
+ * `soccrit` → `socc`+`rit` is rejected because only a full decomposition of the
+ * whole run counts (each piece must prefix a real word).
+ */
+export function splitIntoWordPrefixes(
+  run: string,
+  phrase: string
+): string[] | null {
+  const pieces: string[] = [];
+  const search = (from: number): boolean => {
+    if (from >= run.length) return true;
+    // Longest piece first, so `soccrit` prefers `soc`+`crit` over `socc`+`rit`.
+    for (let len = run.length - from; len >= MIN_CHUNK; len--) {
+      const piece = run.slice(from, from + len);
+      if (!matchesWord(phrase, piece)) continue;
+      pieces.push(piece);
+      if (search(from + len)) return true;
+      pieces.pop();
+    }
+    return false;
+  };
+  return search(0) && pieces.length > 1 ? [...pieces] : null;
+}
 
 /** How a query was written, independent of any entry. */
 export interface QueryShape {
@@ -51,7 +86,8 @@ export function queryShape(query: string): QueryShape {
 export type InterpretationKind =
   | 'words' // the spaced words, or a single word
   | 'split' // the run split into coherent words of this entry
-  | 'chunks'; // the run aligned as prefixes of successive words
+  | 'chunks' // the run aligned as prefixes of SUCCESSIVE words (order-bound)
+  | 'prefixes'; // the run split into pieces each prefixing SOME word, any order
 
 export interface Interpretation {
   /** Terms to match, in order. */
@@ -120,8 +156,19 @@ export function interpretationsFor(
         prefixChunks(author, shape.run),
         prefixChunks(combined, shape.run),
       ].reduce((a, b) => (b.words > a.words ? b : a));
-      if (best.full && best.words > 0) {
+      if (best.full && best.words > 1) {
         out.push({ terms: best.chunks, kind: 'chunks', penalty: 0.9 });
+      }
+
+      // 4. WORD PREFIXES, order-independent. `prefixChunks` above requires the
+      //    words to appear in the same order as the run, so `soccrit` fails
+      //    against "Critique and Social Order" even though both words are there
+      //    — which made a wildcard search NARROWER than the full term. Splitting
+      //    the run into any pieces that each prefix SOME word of the entry lets
+      //    coverage (which is order-independent) do the work.
+      const unordered = splitIntoWordPrefixes(shape.run, combined);
+      if (unordered && unordered.length > 1) {
+        out.push({ terms: unordered, kind: 'prefixes', penalty: 0.9 });
       }
     }
   }

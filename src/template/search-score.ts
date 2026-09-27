@@ -41,10 +41,26 @@ export const MIN_MEANINGFUL_TERM = 3;
 
 /** Split text into words. The `u` flag is REQUIRED for `\p{...}` to work. */
 function words(text: string): string[] {
-  return norm(text)
+  const cached = WORD_CACHE.get(text);
+  if (cached) return cached;
+  const out = norm(text)
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean);
+  // Bounded so a long-lived vault cannot grow this without limit.
+  if (WORD_CACHE.size > 4000) WORD_CACHE.clear();
+  WORD_CACHE.set(text, out);
+  return out;
 }
+
+/**
+ * Split text into words. The `u` flag is REQUIRED for `\p{...}` to work.
+ *
+ * Cached because search calls this repeatedly for the same strings — every
+ * entry has its words split once per interpretation otherwise, which was the
+ * dominant cost of a multi-interpretation query (measured 131ms of 166ms for
+ * 1000 entries before caching).
+ */
+const WORD_CACHE = new Map<string, string[]>();
 
 /** Split a query into searchable terms. */
 export function queryTerms(query: string): string[] {
@@ -459,14 +475,15 @@ export function scoreEntry(
 export function passesCoverage(score: RelevanceScore): boolean {
   // An uninterpretable run (no word alignment at all) is not a match.
   if (!Number.isFinite(score.value)) return false;
-  // A joined run that aligned to several words must satisfy them all, exactly
-  // as the spaced form would — so the requirement comes from the score itself,
-  // not from how many terms the caller tokenised.
-  if (score.prefixChunks) return true;
-  // EVERY interpretation must match something. A single term that matched
-  // nowhere is not a match — without this, a term Fuse happens to rank low, or
-  // an interpretation that fits no field, admitted every entry in the library.
   if (score.total === 0) return true; // no terms to satisfy (defensive)
+  // EVERY interpretation must match something. A single term that matched
+  // nowhere is not a match — that is what let entries matching nothing into
+  // every result list.
   if (score.interpretedWords <= 1) return score.covered >= 1;
+  // Two or more terms: ALL must be present, in ANY order. This is what makes a
+  // multi-term query "this AND that" — and it must hold for chunk readings too,
+  // so `soccrit` finds an entry containing "Social ... Critique" regardless of
+  // which word comes first. (Chunk ALIGNMENT is order-sensitive, but that is a
+  // way of DISCOVERING the terms; membership is decided here, by coverage.)
   return score.covered >= score.total;
 }

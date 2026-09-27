@@ -219,6 +219,17 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       // searchTier ranks by exact phrase, coverage, whole words and position —
       // and does its own AND filtering. Nothing further to re-rank here.
       const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
+      // TEMPORARY DIAGNOSTIC (survives production builds): reports how many
+      // interpretations were tried and how many entries each produced, so a
+      // "wildcard returns fewer than the full term" report can be traced.
+      try {
+        console.log(
+          `[sw:search] mode=${isTripleAtMode ? '@@@' : '@@'} query=${JSON.stringify(searchQuery)} hits=${ranked.length}`,
+          ranked.slice(0, 8).map((e) => e.id)
+        );
+      } catch {
+        /* diagnostic only */
+      }
       return ranked.map((item, refIndex) => ({ item, refIndex, score: 0 }));
     }
 

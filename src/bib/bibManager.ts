@@ -101,6 +101,17 @@ const RENDER_CACHE_VERSION = 3;
  */
 const CITED_KEYS_INDEX_VERSION = 2;
 
+/**
+ * Minimum length for a term to be REQUIRED as an individual Fuse hit when
+ * admitting a candidate. Shorter terms (the `soc`/`crit` of a chunk reading) are
+ * admitted on the scorer's account instead, because a 3-4 character prefix can
+ * sit outside Fuse's threshold even when the entry plainly contains the phrase.
+ * The scorer still enforces coverage, so this only widens what is CONSIDERED —
+ * which is what keeps a wildcard broad search at least as broad as the full
+ * term.
+ */
+const MIN_MEAN_CHUNK_FOR_GATE = 6;
+
 // Fuse getFn wrapper that strips diacritics from indexed string fields.
 const fuseFn = (obj: any, path: string | string[]) => {
   const val = Fuse.config.getFn(obj, path);
@@ -873,19 +884,9 @@ export class BibManager {
     if (!isSearchableQuery(query)) return [];
     const includeAbstract = tier === 'abstract';
 
-    // A cache of "which entries contain this term", since interpretations share
-    // terms heavily (the same word appears in the word-list and a split). Scoped
-    // to this call so it cannot grow unbounded or go stale across refreshes.
-    const termHits = new Map<string, Set<string>>();
-    const hitsFor = (term: string): Set<string> => {
-      const cached = termHits.get(term);
-      if (cached) return cached;
-      const hits = new Set(
-        fuse.search(normalizeDiacritics(term)).map((h) => h.item.id)
-      );
-      termHits.set(term, hits);
-      return hits;
-    };
+    // Fuse is consulted only to SUGGEST spellings for the query's own terms —
+    // never as a filter. The scorer decides membership from the entry's text,
+    // so nothing the entry plainly contains can be dropped for scoring poorly.
 
     const scored = new Map<string, number>();
     const ranked = new Map<string, PartialCSLEntry>();
@@ -903,15 +904,16 @@ export class BibManager {
       // Every way this query could read against THIS entry.
       let best = Number.POSITIVE_INFINITY;
       for (const interp of interpretationsFor(target, query, { includeAbstract })) {
-        // Candidate test: Fuse must know every term of the interpretation.
-        // Fuse cannot see a split across fields, so accept that too.
-        const seenByFuse = interp.terms.every((t) =>
-          t.length >= MIN_MATCH_CHARS ? hitsFor(t).has(entry.id) : true
-        );
-        const knownHere =
-          seenByFuse || scoreEntry(target, interp.terms.join(' '), { includeAbstract }).covered > 0;
-        if (!knownHere) continue;
-
+        // NO FUSE GATE HERE. Fuse supplies RECALL only — a way to SUGGEST
+        // candidates — and using its hits as a filter silently dropped entries
+        // that plainly contain the terms: Fuse's score depends on where a term
+        // sits and how long the field is, so a term late in a long title can
+        // fall outside the threshold. That is how "social critique" missed the
+        // one item whose title contained the exact phrase.
+        //
+        // The scorer alone decides membership, from the entry's own text. It is
+        // the same matching the ranking uses, so what is considered and what is
+        // ranked can never disagree.
         const s = scoreEntry(target, interp.terms.join(' '), { includeAbstract });
         if (!passesCoverage(s)) continue;
         best = Math.min(best, s.value + interp.penalty);

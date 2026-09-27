@@ -187,3 +187,47 @@ describe('the abstract tier can resolve an abbreviation', () => {
     expect(i.some((x) => x.kind === 'split')).toBe(true);
   });
 });
+
+describe('a wildcard is never narrower than the full term', () => {
+  const library = [
+    { id: 'longTitle', title: 'The Social Life of Critique: Essays on Method and Practice in the Human Sciences', authorText: 'Smith' },
+    { id: 'reversedOrder', title: 'Critique and Social Order', authorText: 'Jones' },
+    { id: 'socialOnly', title: 'Social Theory Today', authorText: 'A' },
+    { id: 'lateInAbstract', title: 'Unrelated Heading', authorText: 'B', abstract: 'discussion of social critique' },
+  ];
+
+  function search(q: string, inc: boolean) {
+    const out: string[] = [];
+    for (const e of library) {
+      let best = Number.POSITIVE_INFINITY;
+      for (const i of interpretationsFor(e, q, { includeAbstract: inc })) {
+        const s = scoreEntry(e, i.terms.join(' '), { includeAbstract: inc });
+        if (passesCoverage(s)) best = Math.min(best, s.value + i.penalty);
+      }
+      if (Number.isFinite(best)) out.push(e.id);
+    }
+    return out;
+  }
+
+  it('includes every entry the full term finds, for both tiers', () => {
+    for (const inc of [false, true]) {
+      const full = search('social critique', inc);
+      const abbr = search('soccrit', inc);
+      for (const id of full) expect(abbr).toContain(id);
+    }
+  });
+
+  it('finds a long title even though the term sits late in it', () => {
+    // Length must never disqualify: ranking may prefer early terms, but the
+    // entry must still be included.
+    expect(search('social critique', false)).toContain('longTitle');
+  });
+
+  it('finds the terms in either order (no order-bound alignment required)', () => {
+    expect(search('soccrit', false)).toContain('reversedOrder');
+  });
+
+  it('still requires BOTH terms', () => {
+    expect(search('social critique', false)).not.toContain('socialOnly');
+  });
+});
