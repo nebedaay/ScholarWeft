@@ -1,4 +1,5 @@
 import {
+  TIER_IGNORE_LOCATION,
   MIN_MATCH_CHARS,
   TIER_THRESHOLD,
   rerankKey,
@@ -36,18 +37,30 @@ describe('tierWeights()', () => {
 });
 
 describe('thresholds', () => {
-  it('is tight enough that unrelated long titles do not rank', () => {
+  it('keeps the TITLE tiers tight so unrelated long titles do not rank', () => {
     // Fuse matches anything at threshold 1; these must stay well below the
     // 0.4+ values that surfaced "The Social Life of Ghosttowns in Libya".
-    for (const tier of ['citekey', 'title', 'abstract'] as const) {
-      expect(TIER_THRESHOLD[tier]).toBeLessThan(0.4);
-    }
+    expect(TIER_THRESHOLD.citekey).toBeLessThan(0.4);
+    expect(TIER_THRESHOLD.title).toBeLessThan(0.4);
+  });
+
+  it('gives the ABSTRACT tier a loose threshold', () => {
+    // Fuse length-normalises its score, so a real term buried in a long
+    // abstract scores 0.65-0.9. A tight threshold silently drops every
+    // abstract hit — the bug where "maghrebian" never found a work whose
+    // abstract contains it.
+    expect(TIER_THRESHOLD.abstract).toBeGreaterThan(0.6);
   });
 
   it('still leaves room for a misspelling', () => {
-    // A one-character slip in a short query must remain matchable, so the
-    // threshold cannot be so tight that only exact strings pass.
     expect(TIER_THRESHOLD.title).toBeGreaterThanOrEqual(0.2);
+  });
+
+  it('ignores match location wherever long free text is searched', () => {
+    // Without ignoreLocation, Fuse's default location:0 penalises a match for
+    // sitting late in a field — a length artefact, not a relevance signal.
+    expect(TIER_IGNORE_LOCATION.abstract).toBe(true);
+    expect(TIER_IGNORE_LOCATION.title).toBe(true);
   });
 
   it('does not match single characters', () => {

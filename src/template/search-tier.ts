@@ -51,15 +51,33 @@ export function tierWeights(tier: SearchTier): SearchWeights {
 /**
  * Fuse's `threshold`: 0 is a perfect match, 1 matches anything.
  *
- * Kept deliberately TIGHT. At 0.4+ the fuzzy matcher surfaces unrelated long
- * titles, which is how a search for "Slightly" returns "The Social Life of
- * Ghosttowns in Libya". Misspellings still resolve: a single-character slip in
- * a short query scores well under these values.
+ * The ABSTRACT tier is deliberately far looser than the others. Fuse's score is
+ * length-normalised, so a genuine term buried inside a long abstract scores
+ * much worse than the same term in a short title — an exact abstract match can
+ * score 0.65-0.9 depending only on where it sits and how long the abstract is.
+ * A tight threshold silently discards real abstract hits (this is exactly how
+ * "maghrebian" failed to find a work whose abstract contains it). The abstract
+ * tier compensates with `ignoreLocation` plus a loose threshold, then relies on
+ * the field WEIGHTS and `rerankKey` to keep ordering sensible.
  */
 export const TIER_THRESHOLD: Record<SearchTier, number> = {
   citekey: 0.35,
   title: 0.3,
-  abstract: 0.3,
+  abstract: 0.85,
+};
+
+/**
+ * Whether Fuse should ignore where in the field the match sits.
+ *
+ * MUST be true for the abstract tier: with Fuse's default `location: 0`, a term
+ * appearing late in a long field is penalised as though it were a poor match,
+ * which is a length artefact rather than a relevance signal. Titles are short
+ * enough not to need it.
+ */
+export const TIER_IGNORE_LOCATION: Record<SearchTier, boolean> = {
+  citekey: true,
+  title: true,
+  abstract: true,
 };
 
 /** Nothing shorter than this is worth matching. */

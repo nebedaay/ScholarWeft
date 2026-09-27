@@ -17,6 +17,7 @@ import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
 import { SimpleLRU } from './lru';
 import {
   MIN_MATCH_CHARS,
+  TIER_IGNORE_LOCATION,
   TIER_THRESHOLD,
   tierWeights,
 } from 'src/template/search-tier';
@@ -120,6 +121,7 @@ const fuseSettings = {
 const fuseTitleSettings = {
   includeMatches: true,
   threshold: TIER_THRESHOLD.title,
+  ignoreLocation: TIER_IGNORE_LOCATION.title,
   minMatchCharLength: MIN_MATCH_CHARS,
   getFn: fuseFn,
   keys: (() => {
@@ -139,6 +141,9 @@ const fuseTitleSettings = {
 const fuseAbstractSettings = {
   includeMatches: true,
   threshold: TIER_THRESHOLD.abstract,
+  // Essential: without this, a term late in a long abstract is penalised as a
+  // poor match and dropped entirely (see search-tier.ts).
+  ignoreLocation: TIER_IGNORE_LOCATION.abstract,
   minMatchCharLength: MIN_MATCH_CHARS,
   getFn: fuseFn,
   keys: (() => {
