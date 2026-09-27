@@ -87,7 +87,7 @@ Required only for **PDF export through a `.tex` template**. The engine used is *
 
 An Obsidian plugin that can create literature notes from Zotero with its own templates. ScholarWeft creates and refreshes literature notes itself, and its `@`/`@@` autocomplete searches its own index, so ZotLit is only needed if you prefer its templates — select ZotLit under **Literature note import** to use it.
 
-One shared surface: ZotLit's own suggester also fires on `@`, and two suggesters cannot both own that popup. **Prioritize citation completion** (on by default) settles it — off, ScholarWeft yields bare `@key` to ZotLit. `@@` is uncontested. See [ZotLit Import Templates](./zotlit-import-templates.md).
+The one overlap is `@`: if you have chosen to let ZotLit handle `@` completions, ScholarWeft steps aside for `@`. See [ZotLit Import Templates](./zotlit-import-templates.md).
 
 Download: <https://github.com/PKM-er/obsidian-zotlit>
 

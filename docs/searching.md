@@ -100,14 +100,9 @@ understood as "social critique", never as "**Soc**cer **is** almost
 instead and rank below real words — so an abbreviation adds possibilities
 without displacing a genuine whole-word match.
 
-## Relation to ZotLit
+## If you also use ZotLit
 
-None required. Search uses ScholarWeft's own index.
-
-ZotLit matters for one thing only: `@` is a **contested trigger**, because
-ZotLit's own suggester also fires on it, and two suggesters cannot both own the
-same popup. If ZotLit is installed and its suggester is active, the
-**Prioritize citation completion** setting decides: on (the default) ScholarWeft
-handles `@`; off, it yields to ZotLit.
-
-`@@` is uncontested — ZotLit does not use it — so it is always ScholarWeft's.
+ZotLit is not needed for any of this. The only overlap is `@`: if you have
+chosen to let ZotLit handle `@` completions, ScholarWeft steps aside for `@`.
+ScholarWeft's own `@` search covers more, so if you would rather use it, turn on
+**Settings → ScholarWeft → Prioritize citation completion**.
