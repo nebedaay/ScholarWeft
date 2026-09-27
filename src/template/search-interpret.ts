@@ -154,29 +154,34 @@ export function interpretationsFor(
       out.push({ terms: split, kind: 'split', penalty: 0.05 });
     }
 
-    // 3. Chunk alignment: prefixes of successive words (`soccri`). Only when no
-    //    coherent reading exists — a series of coherent words is unlikely to be
-    //    a search for smaller chunks.
-    if (!split) {
-      const best = [
-        prefixChunks(title, shape.run),
-        prefixChunks(author, shape.run),
-        prefixChunks(combined, shape.run),
-      ].reduce((a, b) => (b.words > a.words ? b : a));
-      if (best.full && best.words > 1) {
-        out.push({ terms: best.chunks, kind: 'chunks', penalty: 0.9 });
-      }
+    // 3. Chunk alignment: prefixes of successive words (`soccri`).
+    //
+    // Always offered, RANKED BELOW a coherent split rather than suppressed by
+    // it. Suppressing was wrong: a coherent split that does not fully match
+    // killed every other reading, so `womenauthoritysenegal` — where the split
+    // is real but the words must all be found — lost the abstract matches that
+    // `womenauthoritysenega` found via chunks. One character changed the
+    // interpretation set, and results vanished for no defensible reason.
+    const best = [
+      prefixChunks(title, shape.run),
+      prefixChunks(author, shape.run),
+      prefixChunks(combined, shape.run),
+    ].reduce((a, b) => (b.words > a.words ? b : a));
+    // A coherent split is preferred (smaller penalty); chunks are the fallback.
+    const chunkPenalty = split ? 1.4 : 0.9;
+    if (best.full && best.words > 1) {
+      out.push({ terms: best.chunks, kind: 'chunks', penalty: chunkPenalty });
+    }
 
-      // 4. WORD PREFIXES, order-independent. `prefixChunks` above requires the
-      //    words to appear in the same order as the run, so `soccrit` fails
-      //    against "Critique and Social Order" even though both words are there
-      //    — which made a wildcard search NARROWER than the full term. Splitting
-      //    the run into any pieces that each prefix SOME word of the entry lets
-      //    coverage (which is order-independent) do the work.
-      const unordered = splitIntoWordPrefixes(shape.run, combined);
-      if (unordered && unordered.length > 1) {
-        out.push({ terms: unordered, kind: 'prefixes', penalty: 0.9 });
-      }
+    // 4. WORD PREFIXES, order-independent. `prefixChunks` above requires the
+    //    words to appear in the same order as the run, so `soccrit` fails
+    //    against "Critique and Social Order" even though both words are there
+    //    — which made a wildcard search NARROWER than the full term. Splitting
+    //    the run into any pieces that each prefix SOME word of the entry lets
+    //    coverage (which is order-independent) do the work.
+    const unordered = splitIntoWordPrefixes(shape.run, combined);
+    if (unordered && unordered.length > 1) {
+      out.push({ terms: unordered, kind: 'prefixes', penalty: chunkPenalty });
     }
   }
 

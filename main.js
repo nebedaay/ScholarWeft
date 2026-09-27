@@ -93923,19 +93923,18 @@ function interpretationsFor(entry, query, opts = {}) {
     if (split && split.length > 1) {
       out.push({ terms: split, kind: "split", penalty: 0.05 });
     }
-    if (!split) {
-      const best = [
-        prefixChunks(title, shape.run),
-        prefixChunks(author, shape.run),
-        prefixChunks(combined, shape.run)
-      ].reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
-      if (best.full && best.words > 1) {
-        out.push({ terms: best.chunks, kind: "chunks", penalty: 0.9 });
-      }
-      const unordered = splitIntoWordPrefixes(shape.run, combined);
-      if (unordered && unordered.length > 1) {
-        out.push({ terms: unordered, kind: "prefixes", penalty: 0.9 });
-      }
+    const best = [
+      prefixChunks(title, shape.run),
+      prefixChunks(author, shape.run),
+      prefixChunks(combined, shape.run)
+    ].reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
+    const chunkPenalty = split ? 1.4 : 0.9;
+    if (best.full && best.words > 1) {
+      out.push({ terms: best.chunks, kind: "chunks", penalty: chunkPenalty });
+    }
+    const unordered = splitIntoWordPrefixes(shape.run, combined);
+    if (unordered && unordered.length > 1) {
+      out.push({ terms: unordered, kind: "prefixes", penalty: chunkPenalty });
     }
   }
   const seen = new Map();
