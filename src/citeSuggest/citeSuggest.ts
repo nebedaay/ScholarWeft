@@ -170,20 +170,24 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // "20 of 137" when the list is capped, plain "7 results" when everything
     // fits — so a truncated list is never mistaken for the whole answer.
     const truncated = total > shown;
-    const countText =
+    // Phrased as a sentence fragment so the row reads clearly on its own:
+    //   ⌘ ↵ close with ]]                     Showing 20 of 137 results
+    const summary =
       shown === 0
         ? 'No results'
         : truncated
-          ? `${shown} of ${total}`
-          : `${total}`;
-    const label =
-      truncated || total !== 1 ? 'results' : 'result';
+          ? `Showing ${shown} of ${total} results`
+          : total === 1
+            ? '1 result'
+            : `${total} results`;
     this.setInstructions([
       {
         command: Platform.isMacOS ? '⌘ ↵' : 'ctrl ↵',
         purpose: this._insertionHint,
       },
-      { command: countText, purpose: label },
+      // `command` renders first, so an empty one keeps the summary as the
+      // whole right-hand phrase rather than splitting it across two spans.
+      { command: '', purpose: summary },
     ]);
   }
 

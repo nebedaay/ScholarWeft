@@ -951,12 +951,24 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   font-weight: var(--font-semibold);
 }
 
-/* Result count, pinned at the bottom of the suggestion popup. */
-.sw-suggest-count {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-faint);
-  padding: var(--size-4-1) var(--size-4-2);
-  border-top: 1px solid var(--background-modifier-border);
+/* Footer row: the insertion hint flush LEFT, the result count flush RIGHT, so
+   the two are visually distinct rather than reading as one phrase. Scoped under
+   `.sw-suggest` because the row is Obsidian's own element. */
+.sw-suggest .prompt-instructions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+}
+
+.sw-suggest .prompt-instruction:last-child {
+  margin-left: auto;
+  text-align: right;
+}
+
+/* The count is the more useful of the two, so give it normal contrast. */
+.sw-suggest .prompt-instruction:last-child .prompt-instruction-command {
+  color: var(--text-muted);
 }
 
 .sw-suggest-loading-wrapper {

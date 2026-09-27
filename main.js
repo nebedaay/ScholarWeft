@@ -96573,14 +96573,13 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
   }
   renderCount(shown, total = shown) {
     const truncated = total > shown;
-    const countText = shown === 0 ? "No results" : truncated ? `${shown} of ${total}` : `${total}`;
-    const label = truncated || total !== 1 ? "results" : "result";
+    const summary = shown === 0 ? "No results" : truncated ? `Showing ${shown} of ${total} results` : total === 1 ? "1 result" : `${total} results`;
     this.setInstructions([
       {
         command: import_obsidian27.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
         purpose: this._insertionHint
       },
-      { command: countText, purpose: label }
+      { command: "", purpose: summary }
     ]);
   }
   setInsertionHint(context) {
