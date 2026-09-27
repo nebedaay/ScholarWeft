@@ -33,14 +33,25 @@ describe('buildExcerpts()', () => {
     expect(lines[1].text.toLowerCase()).toContain('critique');
   });
 
-  it('reports where the match sits, for emphasis', () => {
+  it('reports EVERY match in the line, for emphasis', () => {
     const [line] = buildExcerpts(ABSTRACT, ['social', 'critique']);
-    expect(line.matchLength).toBeGreaterThan(0);
-    const shown = line.text.slice(
-      line.matchStart,
-      line.matchStart + line.matchLength
+    expect(line.matches.length).toBeGreaterThan(0);
+    // Both terms are matched and within one merged line, so BOTH are reported.
+    const shown = line.matches.map((m) =>
+      line.text.slice(m.start, m.start + m.length).toLowerCase()
     );
-    expect(shown.toLowerCase()).toBe('social');
+    expect(shown).toContain('social');
+    expect(shown).toContain('critique');
+  });
+
+  it('reports several matches when many terms share a line', () => {
+    const text = 'A study of women, authority, Senegal and Islam in practice.';
+    const [line] = buildExcerpts(text, ['women', 'authority', 'senegal', 'islam']);
+    expect(line.matches).toHaveLength(4);
+    const shown = line.matches.map((m) =>
+      line.text.slice(m.start, m.start + m.length).toLowerCase()
+    );
+    expect(shown).toEqual(['women', 'authority', 'senegal', 'islam']);
   });
 
   it('keeps a line within a sensible width', () => {
@@ -99,7 +110,7 @@ describe('excerptForResult() — the render decision', () => {
     // `matches`, but searchTier results carry none, so it never appeared.
     // This function takes only the ITEM and the terms — nothing else.
     const e = excerptForResult(item, ['maghrebian']);
-    expect(e!.matchLength).toBeGreaterThan(0);
+    expect(e!.matches.length).toBeGreaterThan(0);
   });
 });
 

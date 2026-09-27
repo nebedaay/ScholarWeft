@@ -96456,11 +96456,22 @@ function buildExcerpts(text, terms, opts = {}) {
     const prefix = from > 0 ? "\u2026 " : "";
     const suffix = to < words2.length - 1 ? " \u2026" : "";
     const body = joined;
-    const hit = terms.map((t4) => ({ t: t4, at: indexOfTerm(body, t4) })).filter((h3) => h3.at >= 0).sort((a3, b3) => a3.at - b3.at)[0];
+    const matches = terms.map((t4) => ({ length: t4.length, start: indexOfTerm(body, t4) })).filter((m3) => m3.start >= 0).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
+    const deduped = [];
+    for (const m3 of matches) {
+      const prev = deduped[deduped.length - 1];
+      if (prev && prev.start === m3.start)
+        continue;
+      if (prev && m3.start < prev.start + prev.length)
+        continue;
+      deduped.push(m3);
+    }
     return {
       text: `${prefix}${body}${suffix}`,
-      matchStart: (hit ? hit.at : 0) + prefix.length,
-      matchLength: hit ? hit.t.length : 0
+      matches: deduped.map((m3) => ({
+        start: m3.start + prefix.length,
+        length: m3.length
+      }))
     };
   });
 }
@@ -96755,15 +96766,18 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     if (!excerpt)
       return;
     const line = frag.createDiv({ cls: "sw-suggest-excerpt" });
-    if (excerpt.matchLength > 0 && excerpt.matchStart + excerpt.matchLength <= excerpt.text.length) {
-      line.appendText(excerpt.text.slice(0, excerpt.matchStart));
-      line.append(createEl("mark", {
-        text: excerpt.text.slice(excerpt.matchStart, excerpt.matchStart + excerpt.matchLength)
-      }));
-      line.appendText(excerpt.text.slice(excerpt.matchStart + excerpt.matchLength));
-    } else {
-      line.setText(excerpt.text);
+    let at = 0;
+    for (const m3 of excerpt.matches) {
+      if (m3.length <= 0 || m3.start < at || m3.start + m3.length > excerpt.text.length) {
+        continue;
+      }
+      if (m3.start > at)
+        line.appendText(excerpt.text.slice(at, m3.start));
+      line.append(createEl("mark", { text: excerpt.text.slice(m3.start, m3.start + m3.length) }));
+      at = m3.start + m3.length;
     }
+    if (at < excerpt.text.length)
+      line.appendText(excerpt.text.slice(at));
   }
   excerptFor(item) {
     const terms = item.id ? this._excerptTermsByKey.get(item.id) : void 0;

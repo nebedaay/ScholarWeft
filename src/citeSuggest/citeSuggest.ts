@@ -436,23 +436,18 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   ): void {
     if (!excerpt) return;
     const line = frag.createDiv({ cls: 'sw-suggest-excerpt' });
-    if (
-      excerpt.matchLength > 0 &&
-      excerpt.matchStart + excerpt.matchLength <= excerpt.text.length
-    ) {
-      line.appendText(excerpt.text.slice(0, excerpt.matchStart));
-      line.append(
-        createEl('mark', {
-          text: excerpt.text.slice(
-            excerpt.matchStart,
-            excerpt.matchStart + excerpt.matchLength
-          ),
-        })
-      );
-      line.appendText(excerpt.text.slice(excerpt.matchStart + excerpt.matchLength));
-    } else {
-      line.setText(excerpt.text);
+    // Emphasise EVERY matched term in the line, not just the first: a line can
+    // hold several matched words, and bolding one made the rest look ordinary.
+    let at = 0;
+    for (const m of excerpt.matches) {
+      if (m.length <= 0 || m.start < at || m.start + m.length > excerpt.text.length) {
+        continue;
+      }
+      if (m.start > at) line.appendText(excerpt.text.slice(at, m.start));
+      line.append(createEl('mark', { text: excerpt.text.slice(m.start, m.start + m.length) }));
+      at = m.start + m.length;
     }
+    if (at < excerpt.text.length) line.appendText(excerpt.text.slice(at));
   }
 
   /**

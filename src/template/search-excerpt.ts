@@ -22,9 +22,12 @@ export const CONTEXT_WORDS = 6;
 export interface Excerpt {
   /** The display text, with the match intact and surrounding context. */
   text: string;
-  /** Character offset of the match within `text`, for emphasis. */
-  matchStart: number;
-  matchLength: number;
+  /**
+   * EVERY match within `text`, in order, for emphasis. Carrying only the first
+   * bolded one word and left the others looking like ordinary text — so a line
+   * containing four matched terms appeared to contain one.
+   */
+  matches: Array<{ start: number; length: number }>;
 }
 
 /**
@@ -139,15 +142,27 @@ export function buildExcerpts(
     const prefix = from > 0 ? '… ' : '';
     const suffix = to < words.length - 1 ? ' …' : '';
     const body = joined;
-    // Locate the first term's match inside the trimmed line.
-    const hit = terms
-      .map((t) => ({ t, at: indexOfTerm(body, t) }))
-      .filter((h) => h.at >= 0)
-      .sort((a, b) => a.at - b.at)[0];
+    // EVERY term's match inside the trimmed line, so a line containing several
+    // matched words emphasises all of them rather than just the first.
+    const matches = terms
+      .map((t) => ({ length: t.length, start: indexOfTerm(body, t) }))
+      .filter((m) => m.start >= 0)
+      // Longest first, so overlapping terms do not leave a bare fragment
+      // emphasised when a longer match covers the same text.
+      .sort((a, b) => a.start - b.start || b.length - a.length);
+    const deduped: Array<{ start: number; length: number }> = [];
+    for (const m of matches) {
+      const prev = deduped[deduped.length - 1];
+      if (prev && prev.start === m.start) continue; // keep the longer one
+      if (prev && m.start < prev.start + prev.length) continue; // overlaps
+      deduped.push(m);
+    }
     return {
       text: `${prefix}${body}${suffix}`,
-      matchStart: (hit ? hit.at : 0) + prefix.length,
-      matchLength: hit ? hit.t.length : 0,
+      matches: deduped.map((m) => ({
+        start: m.start + prefix.length,
+        length: m.length,
+      })),
     };
   });
 }
