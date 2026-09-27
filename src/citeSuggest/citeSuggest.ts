@@ -10,7 +10,7 @@ import {
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
-import { excerptForResult } from 'src/template/search-excerpt';
+import { excerptForResult, findTermSpans } from 'src/template/search-excerpt';
 import {
   afterOpenBracketIn,
   computeInsertion,
@@ -378,55 +378,89 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     }
     const frag = createFragment();
     const item = suggestion.item;
-    // `@@@` results can match only in the abstract, which is invisible from the
-    // title — so the excerpt belongs on EVERY render path. It was previously
-    // added only after the `matches` branch below, but searchTier results carry
-    // no `matches`, so they returned early and never showed one.
     const excerpt = this.excerptFor(item as { id?: string; abstract?: string });
 
-    if (!suggestion.matches || !suggestion.matches.length) {
-      frag.createSpan({ text: `@${item.id}` });
-      if (item.title)
-        frag.createSpan({ text: item.title, cls: 'sw-suggest-title' });
-      const meta = getEntryMeta(item);
-      if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
-      this.appendExcerpt(frag, excerpt);
-      return el.setText(frag);
-    }
+    // Highlight the matched terms in EVERY field, on every render path. Doing
+    // it from TERMS rather than Fuse's `matches` matters because searchTier
+    // results carry no `matches` at all — so `@@`/`@@@` titles were never
+    // emphasised, and `@` emphasised only what Fuse happened to report.
+    const terms = this.termsFor(item, suggestion);
 
     const citekey = frag.createSpan({ text: '@' });
-    const title = frag.createSpan('sw-suggest-title');
+    this.appendHighlighted(citekey, item.id ?? '', terms);
 
-    let prevTitleIndex = 0;
-    let prevCiteIndex = 0;
+    if (item.title) {
+      const title = frag.createSpan('sw-suggest-title');
+      this.appendHighlighted(title, item.title, terms);
+    }
 
-    suggestion.matches.forEach((m) => {
-      if (m.key !== 'id' && m.key !== 'title') return;
-      m.indices.forEach((indices) => {
-        const start = indices[0];
-        const stop = indices[1] + 1;
-
-        const target = m.key === 'title' ? title : citekey;
-        const prev = m.key === 'title' ? prevTitleIndex : prevCiteIndex;
-
-        target.appendText(m.value.substring(prev, start));
-        target.append(createEl('strong', { text: m.value.substring(start, stop) }));
-
-        if (m.key === 'title') prevTitleIndex = stop;
-        else prevCiteIndex = stop;
-      });
-    });
-
-    if (item.title) title.appendText(item.title.substring(prevTitleIndex));
-    citekey.appendText(item.id.substring(prevCiteIndex));
+    // Author/editor names, so a search by name shows why it matched.
+    const authorText = this.authorTextFor(item);
+    if (authorText) {
+      const authors = frag.createSpan({ cls: 'sw-suggest-authors' });
+      this.appendHighlighted(authors, authorText, terms);
+    }
 
     const meta = getEntryMeta(item);
     if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
 
-    // `@@@` results can match only in the abstract, which is invisible from the
     this.appendExcerpt(frag, excerpt);
 
     el.setText(frag);
+  }
+
+  /**
+   * The terms to emphasise for this suggestion.
+   *
+   * `@@`/`@@@` use the interpretation that MATCHED (recorded per entry), so the
+   * emphasis matches what actually found the record. Single-`@` has no recorded
+   * terms, so it falls back to Fuse's own match indices.
+   */
+  private termsFor(
+    item: PartialCSLEntry,
+    suggestion: Fuse.FuseResult<PartialCSLEntry>
+  ): string[] {
+    const recorded = item.id ? this._excerptTermsByKey.get(item.id) : undefined;
+    if (recorded?.length) return recorded;
+    // Fall back to the literal matched substrings Fuse reported.
+    const out: string[] = [];
+    for (const m of suggestion.matches ?? []) {
+      for (const [a, b] of m.indices) out.push(m.value.substring(a, b + 1));
+    }
+    return out;
+  }
+
+  /** Author/editor names for display, matching `authorTextOf` in bibManager. */
+  private authorTextFor(item: PartialCSLEntry): string {
+    const e = item as { author?: any[]; editor?: any[] };
+    const parts: string[] = [];
+    for (const list of [e.author, e.editor]) {
+      for (const n of list ?? []) {
+        const name = n?.literal ?? [n?.given, n?.family].filter(Boolean).join(' ');
+        if (name) parts.push(name);
+      }
+    }
+    return parts.join('; ');
+  }
+
+  /** Append `text`, emphasising every span matching one of `terms`. */
+  private appendHighlighted(
+    el: HTMLElement,
+    text: string,
+    terms: readonly string[]
+  ): void {
+    const spans = findTermSpans(text, terms);
+    if (spans.length === 0) {
+      el.appendText(text);
+      return;
+    }
+    let at = 0;
+    for (const s of spans) {
+      if (s.start > at) el.appendText(text.slice(at, s.start));
+      el.append(createEl('strong', { text: text.slice(s.start, s.start + s.length) }));
+      at = s.start + s.length;
+    }
+    if (at < text.length) el.appendText(text.slice(at));
   }
 
   /** Append an excerpt line to a suggestion, emphasising the matched term. */

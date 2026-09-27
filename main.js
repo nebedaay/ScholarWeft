@@ -96399,6 +96399,35 @@ function indexOfTerm(text, term) {
     return -1;
   return Math.min(at, text.length);
 }
+function findTermSpans(text, terms) {
+  if (!text || terms.length === 0)
+    return [];
+  const found = [];
+  for (const term of terms) {
+    if (!term)
+      continue;
+    let from = 0;
+    for (; ; ) {
+      const at = indexOfTerm(text.slice(from), term);
+      if (at === -1)
+        break;
+      const start = from + at;
+      found.push({ start, length: term.length });
+      from = start + Math.max(term.length, 1);
+    }
+  }
+  const sorted = found.filter((s3) => s3.length > 0 && s3.start + s3.length <= text.length).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
+  const out = [];
+  for (const s3 of sorted) {
+    const prev = out[out.length - 1];
+    if (prev && s3.start < prev.start + prev.length)
+      continue;
+    if (prev && s3.start === prev.start)
+      continue;
+    out.push(s3);
+  }
+  return out;
+}
 function buildExcerpts(text, terms, opts = {}) {
   var _a, _b, _c;
   if (!text)
@@ -96427,31 +96456,66 @@ function buildExcerpts(text, terms, opts = {}) {
   }
   if (spans.length === 0)
     return [];
-  const windows = spans.map((s3) => ({
-    from: Math.max(0, s3.from - context),
-    to: Math.min(words2.length - 1, s3.to + context)
-  })).sort((a3, b3) => a3.from - b3.from);
-  const merged2 = [];
-  for (const w4 of windows) {
-    const last = merged2[merged2.length - 1];
-    if (last && w4.from <= last.to)
-      last.to = Math.max(last.to, w4.to);
-    else
-      merged2.push({ ...w4 });
+  const candidates = [];
+  for (let i3 = 0; i3 < spans.length; i3++) {
+    candidates.push({ from: spans[i3].from, to: spans[i3].to, terms: [i3] });
   }
+  for (let i3 = 0; i3 < spans.length; i3++) {
+    for (let j4 = i3 + 1; j4 < spans.length; j4++) {
+      const group = spans.slice(i3, j4 + 1);
+      candidates.push({
+        from: Math.min(...group.map((s3) => s3.from)),
+        to: Math.max(...group.map((s3) => s3.to)),
+        terms: group.map((_3, k4) => i3 + k4)
+      });
+    }
+  }
+  const widthOf = (c3) => words2.slice(Math.max(0, c3.from - context), Math.min(words2.length - 1, c3.to + context) + 1).map((w4) => w4.word).join(" ").length;
+  const hardWidth = Math.round(width * 1.6);
+  const ranked = candidates.filter((c3) => widthOf(c3) <= hardWidth).sort((a3, b3) => b3.terms.length - a3.terms.length || a3.to - a3.from - (b3.to - b3.from) || a3.from - b3.from);
+  const chosen = [];
+  const covered = new Set();
+  while (chosen.length < maxLines && covered.size < spans.length) {
+    const best = ranked.find((c3) => c3.terms.some((t4) => !covered.has(t4)));
+    if (!best)
+      break;
+    chosen.push({
+      from: Math.max(0, best.from - context),
+      to: Math.min(words2.length - 1, best.to + context)
+    });
+    for (const t4 of best.terms)
+      covered.add(t4);
+  }
+  for (let i3 = 0; i3 < spans.length && chosen.length < maxLines; i3++) {
+    if (covered.has(i3))
+      continue;
+    chosen.push({
+      from: Math.max(0, spans[i3].from - context),
+      to: Math.min(words2.length - 1, spans[i3].to + context)
+    });
+    covered.add(i3);
+  }
+  const merged2 = chosen.sort((a3, b3) => a3.from - b3.from);
   return merged2.slice(0, maxLines).map((span) => {
     let from = span.from;
     let to = span.to;
-    let textWords = words2.slice(from, to + 1).map((w4) => w4.word);
-    let joined = textWords.join(" ");
+    const keepsAllTerms = () => spans.every((s3) => s3.to < from || s3.from > to || s3.from >= from && s3.to <= to);
+    let joined = words2.slice(from, to + 1).map((w4) => w4.word).join(" ");
     while (joined.length > width && to - from > 1) {
       const mid = Math.floor((from + to) / 2);
-      if (mid - from > to - mid)
-        from++;
-      else
-        to--;
-      textWords = words2.slice(from, to + 1).map((w4) => w4.word);
-      joined = textWords.join(" ");
+      const tryFrom = mid - from > to - mid ? from + 1 : from;
+      const tryTo = tryFrom === from ? to - 1 : to;
+      const candidateFrom = tryFrom;
+      const candidateTo = tryTo;
+      const before = { from, to };
+      from = candidateFrom;
+      to = candidateTo;
+      if (!keepsAllTerms()) {
+        from = before.from;
+        to = before.to;
+        break;
+      }
+      joined = words2.slice(from, to + 1).map((w4) => w4.word).join(" ");
     }
     const prefix = from > 0 ? "\u2026 " : "";
     const suffix = to < words2.length - 1 ? " \u2026" : "";
@@ -96716,6 +96780,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     }
   }
   renderSuggestion(suggestion, el) {
+    var _a;
     if (isLoadingSuggestion(suggestion)) {
       el.setText("ScholarWeft: still loading your library \u2014 citekey search will be complete shortly.");
       return;
@@ -96723,44 +96788,64 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     const frag = createFragment();
     const item = suggestion.item;
     const excerpt = this.excerptFor(item);
-    if (!suggestion.matches || !suggestion.matches.length) {
-      frag.createSpan({ text: `@${item.id}` });
-      if (item.title)
-        frag.createSpan({ text: item.title, cls: "sw-suggest-title" });
-      const meta2 = getEntryMeta(item);
-      if (meta2)
-        frag.createSpan({ text: meta2, cls: "sw-suggest-meta" });
-      this.appendExcerpt(frag, excerpt);
-      return el.setText(frag);
-    }
+    const terms = this.termsFor(item, suggestion);
     const citekey = frag.createSpan({ text: "@" });
-    const title = frag.createSpan("sw-suggest-title");
-    let prevTitleIndex = 0;
-    let prevCiteIndex = 0;
-    suggestion.matches.forEach((m3) => {
-      if (m3.key !== "id" && m3.key !== "title")
-        return;
-      m3.indices.forEach((indices) => {
-        const start = indices[0];
-        const stop = indices[1] + 1;
-        const target = m3.key === "title" ? title : citekey;
-        const prev = m3.key === "title" ? prevTitleIndex : prevCiteIndex;
-        target.appendText(m3.value.substring(prev, start));
-        target.append(createEl("strong", { text: m3.value.substring(start, stop) }));
-        if (m3.key === "title")
-          prevTitleIndex = stop;
-        else
-          prevCiteIndex = stop;
-      });
-    });
-    if (item.title)
-      title.appendText(item.title.substring(prevTitleIndex));
-    citekey.appendText(item.id.substring(prevCiteIndex));
+    this.appendHighlighted(citekey, (_a = item.id) != null ? _a : "", terms);
+    if (item.title) {
+      const title = frag.createSpan("sw-suggest-title");
+      this.appendHighlighted(title, item.title, terms);
+    }
+    const authorText = this.authorTextFor(item);
+    if (authorText) {
+      const authors = frag.createSpan({ cls: "sw-suggest-authors" });
+      this.appendHighlighted(authors, authorText, terms);
+    }
     const meta = getEntryMeta(item);
     if (meta)
       frag.createSpan({ text: meta, cls: "sw-suggest-meta" });
     this.appendExcerpt(frag, excerpt);
     el.setText(frag);
+  }
+  termsFor(item, suggestion) {
+    var _a;
+    const recorded = item.id ? this._excerptTermsByKey.get(item.id) : void 0;
+    if (recorded == null ? void 0 : recorded.length)
+      return recorded;
+    const out = [];
+    for (const m3 of (_a = suggestion.matches) != null ? _a : []) {
+      for (const [a3, b3] of m3.indices)
+        out.push(m3.value.substring(a3, b3 + 1));
+    }
+    return out;
+  }
+  authorTextFor(item) {
+    var _a;
+    const e3 = item;
+    const parts = [];
+    for (const list of [e3.author, e3.editor]) {
+      for (const n2 of list != null ? list : []) {
+        const name = (_a = n2 == null ? void 0 : n2.literal) != null ? _a : [n2 == null ? void 0 : n2.given, n2 == null ? void 0 : n2.family].filter(Boolean).join(" ");
+        if (name)
+          parts.push(name);
+      }
+    }
+    return parts.join("; ");
+  }
+  appendHighlighted(el, text, terms) {
+    const spans = findTermSpans(text, terms);
+    if (spans.length === 0) {
+      el.appendText(text);
+      return;
+    }
+    let at = 0;
+    for (const s3 of spans) {
+      if (s3.start > at)
+        el.appendText(text.slice(at, s3.start));
+      el.append(createEl("strong", { text: text.slice(s3.start, s3.start + s3.length) }));
+      at = s3.start + s3.length;
+    }
+    if (at < text.length)
+      el.appendText(text.slice(at));
   }
   appendExcerpt(frag, excerpt) {
     if (!excerpt)

@@ -73,6 +73,50 @@ function indexOfTerm(text: string, term: string): number {
   return Math.min(at, text.length);
 }
 
+export interface TermSpan {
+  start: number;
+  length: number;
+}
+
+/**
+ * Every non-overlapping span in `text` where one of `terms` appears, in order.
+ *
+ * Shared by the excerpt builder and the field highlighter (author, title,
+ * citekey), so "where does this term appear" has ONE definition. Overlaps are
+ * resolved longest-first, so emphasising a short term inside a longer one does
+ * not leave a stray fragment bolded.
+ */
+export function findTermSpans(
+  text: string | null | undefined,
+  terms: readonly string[]
+): TermSpan[] {
+  if (!text || terms.length === 0) return [];
+  const found: TermSpan[] = [];
+  for (const term of terms) {
+    if (!term) continue;
+    // Find every occurrence, not just the first.
+    let from = 0;
+    for (;;) {
+      const at = indexOfTerm(text.slice(from), term);
+      if (at === -1) break;
+      const start = from + at;
+      found.push({ start, length: term.length });
+      from = start + Math.max(term.length, 1);
+    }
+  }
+  const sorted = found
+    .filter((s) => s.length > 0 && s.start + s.length <= text.length)
+    .sort((a, b) => a.start - b.start || b.length - a.length);
+  const out: TermSpan[] = [];
+  for (const s of sorted) {
+    const prev = out[out.length - 1];
+    if (prev && s.start < prev.start + prev.length) continue; // overlaps
+    if (prev && s.start === prev.start) continue;
+    out.push(s);
+  }
+  return out;
+}
+
 /**
  * Build excerpt lines for the terms found in `text`.
  *
@@ -109,35 +153,115 @@ export function buildExcerpts(
   }
   if (spans.length === 0) return [];
 
-  // Merge overlapping/adjacent windows: `from - context` and `to + context`.
-  const windows = spans
-    .map((s) => ({
-      from: Math.max(0, s.from - context),
-      to: Math.min(words.length - 1, s.to + context),
-    }))
-    .sort((a, b) => a.from - b.from);
-
-  const merged: Array<{ from: number; to: number }> = [];
-  for (const w of windows) {
-    const last = merged[merged.length - 1];
-    // Overlapping windows mean the terms are close: one line shows both.
-    if (last && w.from <= last.to) last.to = Math.max(last.to, w.to);
-    else merged.push({ ...w });
+  // Candidate windows, one per term plus each pair's span. Grouping is chosen
+  // by TERM COUNT rather than position alone: a slightly longer excerpt that
+  // covers three terms is more illustrative than two short lines covering two
+  // and one.
+  const candidates: Array<{ from: number; to: number; terms: number[] }> = [];
+  for (let i = 0; i < spans.length; i++) {
+    candidates.push({ from: spans[i].from, to: spans[i].to, terms: [i] });
   }
+  // Every contiguous run of terms, so a group spanning several is considered.
+  for (let i = 0; i < spans.length; i++) {
+    for (let j = i + 1; j < spans.length; j++) {
+      const group = spans.slice(i, j + 1);
+      candidates.push({
+        from: Math.min(...group.map((s) => s.from)),
+        to: Math.max(...group.map((s) => s.to)),
+        terms: group.map((_, k) => i + k),
+      });
+    }
+  }
+
+  // A window must fit a line once context is added; longer groups are only
+  // viable when the terms sit close together.
+  /**
+   * How wide a candidate's excerpt would be, in characters.
+   *
+   * The user's preference: a slightly longer excerpt that covers MORE terms
+   * beats two short lines covering fewer, because the most illustrative text is
+   * the best. So width is a SOFT limit — a window may exceed it when doing so
+   * gathers more terms, and only gives way when it would be unreasonably long.
+   */
+  const widthOf = (c: { from: number; to: number }) =>
+    words
+      .slice(Math.max(0, c.from - context), Math.min(words.length - 1, c.to + context) + 1)
+      .map((w) => w.word)
+      .join(' ').length;
+
+  /** Absolute ceiling: never show a line longer than this, however many terms. */
+  const hardWidth = Math.round(width * 1.6);
+
+  // Prefer windows covering MORE terms; break ties by the tighter span, so a
+  // compact excerpt wins over a sprawling one with the same coverage.
+  const ranked = candidates
+    .filter((c) => widthOf(c) <= hardWidth)
+    .sort(
+      (a, b) =>
+        b.terms.length - a.terms.length ||
+        (a.to - a.from) - (b.to - b.from) ||
+        a.from - b.from
+    );
+
+  // Greedily take the best windows, preferring those that cover terms NOT yet
+  // shown. Without that preference a window covering only already-shown terms
+  // could take the last slot, and a term with no window of its own would be
+  // dropped silently.
+  const chosen: Array<{ from: number; to: number }> = [];
+  const covered = new Set<number>();
+  while (chosen.length < maxLines && covered.size < spans.length) {
+    const best = ranked.find((c) => c.terms.some((t) => !covered.has(t)));
+    if (!best) break;
+    chosen.push({
+      from: Math.max(0, best.from - context),
+      to: Math.min(words.length - 1, best.to + context),
+    });
+    for (const t of best.terms) covered.add(t);
+  }
+
+  // Any term still uncovered gets its own line if room remains — better to show
+  // it than to drop it.
+  for (let i = 0; i < spans.length && chosen.length < maxLines; i++) {
+    if (covered.has(i)) continue;
+    chosen.push({
+      from: Math.max(0, spans[i].from - context),
+      to: Math.min(words.length - 1, spans[i].to + context),
+    });
+    covered.add(i);
+  }
+
+  const merged = chosen.sort((a, b) => a.from - b.from);
 
   return merged.slice(0, maxLines).map((span) => {
     let from = span.from;
     let to = span.to;
-    // Trim the window to something that fits a line, centred on the match.
-    let textWords = words.slice(from, to + 1).map((w) => w.word);
-    let joined = textWords.join(' ');
+    /** Which terms appear within [from,to], by word index. */
+    const keepsAllTerms = () =>
+      spans.every(
+        (s) =>
+          s.to < from ||
+          s.from > to ||
+          (s.from >= from && s.to <= to)
+      );
+    // Trim toward the comfortable width, but NEVER at the cost of a matched
+    // term: the most illustrative text is the text that contains the match.
+    let joined = words.slice(from, to + 1).map((w) => w.word).join(' ');
     while (joined.length > width && to - from > 1) {
-      // Drop from whichever side is longer, to keep the match centred.
       const mid = Math.floor((from + to) / 2);
-      if (mid - from > to - mid) from++;
-      else to--;
-      textWords = words.slice(from, to + 1).map((w) => w.word);
-      joined = textWords.join(' ');
+      const tryFrom = mid - from > to - mid ? from + 1 : from;
+      const tryTo = tryFrom === from ? to - 1 : to;
+      const candidateFrom = tryFrom;
+      const candidateTo = tryTo;
+      const before = { from, to };
+      from = candidateFrom;
+      to = candidateTo;
+      if (!keepsAllTerms()) {
+        // Shrinking would drop a match; stop here rather than lose it.
+        from = before.from;
+        to = before.to;
+        break;
+      }
+      joined = words.slice(from, to + 1).map((w) => w.word).join(' ');
     }
     const prefix = from > 0 ? '… ' : '';
     const suffix = to < words.length - 1 ? ' …' : '';

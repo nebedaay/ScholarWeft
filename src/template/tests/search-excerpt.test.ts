@@ -2,6 +2,7 @@ import {
   EXCERPT_WIDTH,
   buildExcerpts,
   excerptForResult,
+  findTermSpans,
 } from '../search-excerpt';
 
 const ABSTRACT =
@@ -130,5 +131,116 @@ describe('excerpts use the MATCHED terms, not the raw query', () => {
   it('produces a line for each term found apart', () => {
     const long = `${'filler '.repeat(40)} islam ${'filler '.repeat(40)} authority`;
     expect(buildExcerpts(long, ['islam', 'authority'])).toHaveLength(2);
+  });
+});
+
+describe('prefer the most illustrative excerpt', () => {
+  it('prefers ONE line covering several terms over two lines covering fewer', () => {
+    // The user's preference: the most illustrative text is the best. A wider
+    // window that gathers all the terms beats two narrow ones.
+    const text =
+      'The study of women and authority in practice is examined here, and the place of Islam within those debates is considered at length.';
+    const lines = buildExcerpts(text, ['women', 'authority', 'islam']);
+    expect(lines).toHaveLength(1);
+    const bolded = lines[0].matches.map((m) =>
+      lines[0].text.slice(m.start, m.start + m.length).toLowerCase()
+    );
+    expect(bolded).toEqual(['women', 'authority', 'islam']);
+  });
+
+  it('still splits when the terms are genuinely far apart', () => {
+    // No single reasonable window can cover them, so they get a line each.
+    const text =
+      'The study of women and authority in practice. ' +
+      'filler '.repeat(40) +
+      'Later we return to Islam.';
+    const lines = buildExcerpts(text, ['women', 'authority', 'islam']);
+    expect(lines).toHaveLength(2);
+  });
+
+  it('loses no term when it can be shown', () => {
+    // Terms within reach of a line are all shown; the cap only bites when they
+    // are genuinely too far apart for one line and there are more terms than
+    // lines.
+    const text =
+      'The study of women and authority in practice, and the place of Islam within those debates.';
+    const lines = buildExcerpts(text, ['women', 'authority', 'islam']);
+    const shown = lines
+      .flatMap((l) =>
+        l.matches.map((m) => l.text.slice(m.start, m.start + m.length).toLowerCase())
+      )
+      .sort();
+    expect(shown).toEqual(['authority', 'islam', 'women']);
+  });
+
+  it('maximises coverage when the cap forces a choice', () => {
+    // Three widely separated terms, two lines: prefer lines that cover MORE
+    // terms rather than one term each.
+    const text =
+      'women ' +
+      'filler '.repeat(20) +
+      'authority ' +
+      'filler '.repeat(20) +
+      'islam';
+    const lines = buildExcerpts(text, ['women', 'authority', 'islam']);
+    expect(lines.length).toBeLessThanOrEqual(2);
+    const shown = lines.flatMap((l) =>
+      l.matches.map((m) => l.text.slice(m.start, m.start + m.length).toLowerCase())
+    );
+    // Two terms shown (the best available), never fewer.
+    expect(shown.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('caps at two lines however many terms match', () => {
+    const text = ['alpha', 'beta', 'gamma', 'delta']
+      .map((w) => `${w} ${'pad '.repeat(30)}`)
+      .join(' ');
+    const lines = buildExcerpts(text, ['alpha', 'beta', 'gamma', 'delta']);
+    expect(lines.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('findTermSpans() — highlighting in any field', () => {
+  const title = 'Distinction: A Social Critique of the Judgment of Taste';
+
+  it('finds whole words', () => {
+    const spans = findTermSpans(title, ['social', 'critique']);
+    expect(spans.map((s) => title.slice(s.start, s.start + s.length))).toEqual([
+      'Social',
+      'Critique',
+    ]);
+  });
+
+  it('finds word prefixes, for abbreviated searches', () => {
+    const spans = findTermSpans(title, ['soc', 'crit']);
+    expect(spans.map((s) => title.slice(s.start, s.start + s.length))).toEqual([
+      'Soc',
+      'Crit',
+    ]);
+  });
+
+  it('is diacritic- and case-insensitive', () => {
+    expect(findTermSpans('Aimé Césaire', ['aime'])).toHaveLength(1);
+    expect(findTermSpans('Aime Cesaire', ['aimé'])).toHaveLength(1);
+  });
+
+  it('finds every occurrence, not just the first', () => {
+    expect(findTermSpans('social and social again', ['social'])).toHaveLength(2);
+  });
+
+  it('returns nothing for absent terms or empty input', () => {
+    expect(findTermSpans(title, ['zebra'])).toEqual([]);
+    expect(findTermSpans('', ['social'])).toEqual([]);
+    expect(findTermSpans(title, [])).toEqual([]);
+  });
+
+  it('never emits overlapping spans', () => {
+    // A short term inside a longer one must not produce a stray fragment.
+    const spans = findTermSpans('critique', ['crit', 'critique']);
+    for (let i = 1; i < spans.length; i++) {
+      expect(spans[i].start).toBeGreaterThanOrEqual(
+        spans[i - 1].start + spans[i - 1].length
+      );
+    }
   });
 });
