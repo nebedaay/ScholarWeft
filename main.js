@@ -94129,6 +94129,27 @@ function cslEntryHtmlToMarkdown(html) {
 }
 var RENDER_CACHE_VERSION = 3;
 var CITED_KEYS_INDEX_VERSION = 2;
+function authorTextOf(entry) {
+  const lists = [entry.author, entry.editor];
+  const parts = [];
+  for (const list of lists) {
+    for (const name of list != null ? list : []) {
+      const n2 = name;
+      const family = typeof (n2 == null ? void 0 : n2.family) === "string" ? n2.family : "";
+      const given = typeof (n2 == null ? void 0 : n2.given) === "string" ? n2.given : "";
+      const literal = typeof (n2 == null ? void 0 : n2.literal) === "string" ? n2.literal : "";
+      if (literal)
+        parts.push(literal);
+      if (given && family)
+        parts.push(`${given} ${family}`);
+      if (family)
+        parts.push(family);
+      if (given)
+        parts.push(given);
+    }
+  }
+  return parts.join(" ");
+}
 var fuseFn = (obj, path2) => {
   const val = Fuse.config.getFn(obj, path2);
   if (typeof val === "string")
@@ -94160,7 +94181,11 @@ var fuseTitleSettings = {
     return [
       { name: "title", weight: w4.title },
       { name: "author.family", weight: w4.creators },
-      { name: "author.literal", weight: w4.creators / 2 }
+      { name: "author.given", weight: w4.creators / 2 },
+      { name: "author.literal", weight: w4.creators / 2 },
+      { name: "editor.family", weight: w4.creators / 2 },
+      { name: "editor.given", weight: w4.creators / 4 },
+      { name: "editor.literal", weight: w4.creators / 4 }
     ];
   })()
 };
@@ -94175,7 +94200,11 @@ var fuseAbstractSettings = {
     return [
       { name: "title", weight: w4.title },
       { name: "author.family", weight: w4.creators },
+      { name: "author.given", weight: w4.creators / 2 },
       { name: "author.literal", weight: w4.creators / 2 },
+      { name: "editor.family", weight: w4.creators / 2 },
+      { name: "editor.given", weight: w4.creators / 4 },
+      { name: "editor.literal", weight: w4.creators / 4 },
       { name: "abstract", weight: w4.abstract }
     ];
   })()
@@ -94575,7 +94604,7 @@ var BibManager = class {
     }
   }
   searchTier(tier, query, limit) {
-    var _a, _b, _c;
+    var _a, _b;
     const fuse = this.fuseForTier(tier);
     if (!fuse)
       return [];
@@ -94587,11 +94616,8 @@ var BibManager = class {
     for (const entry of this.bibCache.values()) {
       const target = {
         title: (_a = entry.title) != null ? _a : null,
-        authorText: ((_b = entry.author) != null ? _b : []).map((a3) => {
-          var _a2, _b2;
-          return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
-        }).filter(Boolean).join(" "),
-        abstract: (_c = entry.abstract) != null ? _c : null
+        authorText: authorTextOf(entry),
+        abstract: (_b = entry.abstract) != null ? _b : null
       };
       let best = Number.POSITIVE_INFINITY;
       for (const interp of interpretationsFor(target, query, { includeAbstract })) {

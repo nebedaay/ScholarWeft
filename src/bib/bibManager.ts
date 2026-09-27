@@ -1,7 +1,7 @@
 import { EditorView } from '@codemirror/view';
 import CSL from 'citeproc';
 import type ReferenceList from 'src/main';
-import { PartialCSLEntry } from './types';
+import { CSLName, PartialCSLEntry } from './types';
 import Fuse from 'fuse.js';
 import {
   bibPathsToCSL,
@@ -112,6 +112,35 @@ const CITED_KEYS_INDEX_VERSION = 2;
  */
 const MIN_MEAN_CHUNK_FOR_GATE = 6;
 
+/**
+ * The searchable text for an entry's creators.
+ *
+ * Covers EVERY creator list (authors, editors) and EVERY name part (family,
+ * given, literal). Restricting this to `author.family` made first names and
+ * editor names unsearchable — works by Aimé Césaire matched only when his name
+ * appeared in a title, and nothing matched a book by its editor.
+ *
+ * Each creator contributes "given family" first so a name typed as written
+ * ("aime cesaire") is found contiguously, then the parts on their own.
+ */
+function authorTextOf(entry: PartialCSLEntry): string {
+  const lists: Array<CSLName[] | undefined> = [entry.author, entry.editor];
+  const parts: string[] = [];
+  for (const list of lists) {
+    for (const name of list ?? []) {
+      const n = name as { family?: string; given?: string; literal?: string };
+      const family = typeof n?.family === 'string' ? n.family : '';
+      const given = typeof n?.given === 'string' ? n.given : '';
+      const literal = typeof n?.literal === 'string' ? n.literal : '';
+      if (literal) parts.push(literal);
+      if (given && family) parts.push(`${given} ${family}`);
+      if (family) parts.push(family);
+      if (given) parts.push(given);
+    }
+  }
+  return parts.join(' ');
+}
+
 // Fuse getFn wrapper that strips diacritics from indexed string fields.
 const fuseFn = (obj: any, path: string | string[]) => {
   const val = Fuse.config.getFn(obj, path);
@@ -151,8 +180,15 @@ const fuseTitleSettings = {
     const w = tierWeights('title');
     return [
       { name: 'title', weight: w.title },
+      // ALL creator name fields, not just the family name: a work is looked up
+      // by "Aimé Césaire" as readily as by "Césaire", and a literal/corporate
+      // creator has no family name at all.
       { name: 'author.family', weight: w.creators },
+      { name: 'author.given', weight: w.creators / 2 },
       { name: 'author.literal', weight: w.creators / 2 },
+      { name: 'editor.family', weight: w.creators / 2 },
+      { name: 'editor.given', weight: w.creators / 4 },
+      { name: 'editor.literal', weight: w.creators / 4 },
     ];
   })(),
 };
@@ -173,7 +209,11 @@ const fuseAbstractSettings = {
     return [
       { name: 'title', weight: w.title },
       { name: 'author.family', weight: w.creators },
+      { name: 'author.given', weight: w.creators / 2 },
       { name: 'author.literal', weight: w.creators / 2 },
+      { name: 'editor.family', weight: w.creators / 2 },
+      { name: 'editor.given', weight: w.creators / 4 },
+      { name: 'editor.literal', weight: w.creators / 4 },
       { name: 'abstract', weight: w.abstract },
       // No `id` — see fuseTitleSettings.
     ];
@@ -894,10 +934,7 @@ export class BibManager {
     for (const entry of this.bibCache.values()) {
       const target = {
         title: entry.title ?? null,
-        authorText: (entry.author ?? [])
-          .map((a: any) => a?.family ?? a?.literal ?? '')
-          .filter(Boolean)
-          .join(' '),
+        authorText: authorTextOf(entry),
         abstract: (entry as { abstract?: string }).abstract ?? null,
       };
 
