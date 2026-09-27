@@ -209,14 +209,25 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         return indexReady ? [] : loadingSuggestion();
       }
 
-      LOG(`@${isTripleAtMode ? '@@' : '@'} fuse tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
+      LOG(`@${isTripleAtMode ? '@@' : '@'} tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
       if (!searchQuery) {
         const docs = (fuse as any)?._docs as PartialCSLEntry[] | undefined;
         return docs?.length
           ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 }))
           : [];
       }
-      const hits = fuse.search(normalizeDiacritics(searchQuery), { limit: this.limit });
+
+      // Terms are combined as an AND (see searchTier) so an item must contain
+      // every word, then re-ranked: a contiguous title hit is promoted, a
+      // fuzzy-only hit demoted.
+      const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
+      // searchTier already ranked; rerankKey refines using title contiguity,
+      // which Fuse's per-field score cannot express.
+      const hits = ranked.map((item, refIndex) => ({
+        item,
+        refIndex,
+        score: 0.5,
+      }));
       return this.rerank(hits, searchQuery);
     }
 

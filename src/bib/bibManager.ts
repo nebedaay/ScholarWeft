@@ -19,6 +19,8 @@ import {
   MIN_MATCH_CHARS,
   TIER_IGNORE_LOCATION,
   TIER_THRESHOLD,
+  combineTermSearches,
+  queryTerms,
   tierWeights,
 } from 'src/template/search-tier';
 import {
@@ -118,6 +120,12 @@ const fuseSettings = {
 };
 
 // Title/author-biased: used for @@ full-text autocomplete.
+//
+// `id` (the citekey) is deliberately NOT a key here. A citekey concatenates
+// author and title, so including it let a query beginning with the author's
+// surname rank that item above genuine matches — `bourdieu critique` returned
+// `bourdieuCeQue1982`, which contains no "critique" anywhere. Citekey search is
+// what the plain `@` tier is for.
 const fuseTitleSettings = {
   includeMatches: true,
   threshold: TIER_THRESHOLD.title,
@@ -130,7 +138,6 @@ const fuseTitleSettings = {
       { name: 'title', weight: w.title },
       { name: 'author.family', weight: w.creators },
       { name: 'author.literal', weight: w.creators / 2 },
-      { name: 'id', weight: w.citekey },
     ];
   })(),
 };
@@ -153,7 +160,7 @@ const fuseAbstractSettings = {
       { name: 'author.family', weight: w.creators },
       { name: 'author.literal', weight: w.creators / 2 },
       { name: 'abstract', weight: w.abstract },
-      { name: 'id', weight: w.citekey },
+      // No `id` — see fuseTitleSettings.
     ];
   })(),
 };
@@ -837,6 +844,45 @@ export class BibManager {
     } else {
       this.fuseAbstract.setCollection(data);
     }
+  }
+
+  /**
+   * Search one tier for a multi-word query.
+   *
+   * Terms are searched SEPARATELY and combined as an AND, rather than handing
+   * Fuse the whole phrase. Fuse matches one fuzzy string against one field at a
+   * time, so `bourdieu critique` otherwise fails an item whose surname is in
+   * the author field and the word in the title — the normal case — while a
+   * citekey like `bourdieuCeQue1982` ranks purely for sharing the prefix.
+   *
+   * Returns entries in ranked order.
+   */
+  searchTier(
+    tier: 'title' | 'abstract',
+    query: string,
+    limit: number
+  ): PartialCSLEntry[] {
+    const fuse = this.fuseForTier(tier);
+    if (!fuse) return [];
+    const terms = queryTerms(query);
+    if (terms.length === 0) return [];
+
+    const byId = new Map<string, PartialCSLEntry>();
+    for (const entry of this.bibCache.values()) byId.set(entry.id, entry);
+
+    const perTerm = terms.map((term) =>
+      fuse
+        .search(normalizeDiacritics(term), { limit: limit * 4 })
+        .map((hit) => ({
+          id: hit.item.id,
+          score: typeof hit.score === 'number' ? hit.score : 1,
+        }))
+    );
+
+    return combineTermSearches(perTerm)
+      .slice(0, limit)
+      .map((r) => byId.get(r.id))
+      .filter((e): e is PartialCSLEntry => !!e);
   }
 
   /**

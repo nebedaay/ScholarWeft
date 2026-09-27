@@ -93637,7 +93637,12 @@ function tierWeights(tier) {
 var TIER_THRESHOLD = {
   citekey: 0.35,
   title: 0.3,
-  abstract: 0.3
+  abstract: 0.85
+};
+var TIER_IGNORE_LOCATION = {
+  citekey: true,
+  title: true,
+  abstract: true
 };
 var MIN_MATCH_CHARS = 2;
 function containsPhrase(haystack, needle) {
@@ -93872,6 +93877,7 @@ var fuseSettings = {
 var fuseTitleSettings = {
   includeMatches: true,
   threshold: TIER_THRESHOLD.title,
+  ignoreLocation: TIER_IGNORE_LOCATION.title,
   minMatchCharLength: MIN_MATCH_CHARS,
   getFn: fuseFn,
   keys: (() => {
@@ -93887,6 +93893,7 @@ var fuseTitleSettings = {
 var fuseAbstractSettings = {
   includeMatches: true,
   threshold: TIER_THRESHOLD.abstract,
+  ignoreLocation: TIER_IGNORE_LOCATION.abstract,
   minMatchCharLength: MIN_MATCH_CHARS,
   getFn: fuseFn,
   keys: (() => {

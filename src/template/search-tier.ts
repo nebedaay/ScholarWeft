@@ -143,3 +143,66 @@ export function rerankKey(
   }
   return input.fuseScore + adjustment;
 }
+
+/**
+ * Split a query into search terms.
+ *
+ * Fuse matches ONE fuzzy string against each field, so a multi-word query like
+ * `bourdieu critique` only matches an item where a single field resembles that
+ * whole phrase. The normal scholarly case — surname in the author field, a word
+ * from the title in the title field — scores poorly, while a citekey such as
+ * `bourdieuCeQue1982` scores well merely for sharing the `bourdieu` prefix. So
+ * terms are searched separately and combined instead.
+ *
+ * A period is already stripped by the trigger; punctuation is dropped here.
+ */
+export function queryTerms(query: string): string[] {
+  return query
+    .split(/[\s,;]+/)
+    .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+    .filter((t) => t.length > 0);
+}
+
+export interface TermHit {
+  id: string;
+  /** Fuse's score for the BEST field hit, or Infinity when the term missed. */
+  score: number;
+}
+
+/**
+ * Combine per-term hit lists into one ranking, keeping only items that matched
+ * EVERY term (an AND search). Scores are summed, so an item matching more
+ * strongly across terms ranks higher.
+ *
+ * Requiring all terms is what removes the false positives: an item matching
+ * only the author's surname no longer qualifies for a two-word query where the
+ * second word appears nowhere in it.
+ */
+export function combineTermSearches(
+  perTerm: ReadonlyArray<ReadonlyArray<TermHit>>
+): Array<{ id: string; score: number }> {
+  if (perTerm.length === 0) return [];
+  if (perTerm.length === 1) {
+    return perTerm[0]
+      .map((h) => ({ id: h.id, score: h.score }))
+      .sort((a, b) => a.score - b.score);
+  }
+
+  let acc = new Map<string, number>();
+  for (const [i, hits] of perTerm.entries()) {
+    if (i === 0) {
+      for (const h of hits) acc.set(h.id, h.score);
+      continue;
+    }
+    const next = new Map<string, number>();
+    for (const h of hits) {
+      if (!acc.has(h.id)) continue; // missed an earlier term → not a match
+      next.set(h.id, acc.get(h.id)! + h.score);
+    }
+    acc = next;
+    if (acc.size === 0) return [];
+  }
+  return [...acc]
+    .map(([id, score]) => ({ id, score }))
+    .sort((a, b) => a.score - b.score);
+}
