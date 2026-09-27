@@ -157,3 +157,33 @@ describe('the space rules out combining across the boundary', () => {
     expect(i.some((x) => x.kind === 'chunks')).toBe(true);
   });
 });
+
+describe('the abstract tier can resolve an abbreviation', () => {
+  const abstractOnly = {
+    title: 'Interrogating Identity',
+    authorText: 'Hamil',
+    abstract: 'This essay examines the Maghrebian subject and social critique.',
+  };
+
+  it('derives a chunk reading from the abstract when the tier allows it', () => {
+    // `soccrit` has no coherent split in title/author, but "social critique"
+    // sits in the abstract — so the `@@@` tier must resolve it there.
+    const i = interpretationsFor(abstractOnly, 'soccrit', { includeAbstract: true });
+    expect(i.some((x) => x.kind === 'chunks')).toBe(true);
+  });
+
+  it('does NOT consult the abstract when the tier excludes it (@@)', () => {
+    const i = interpretationsFor(abstractOnly, 'soccrit', { includeAbstract: false });
+    expect(i.some((x) => x.kind === 'chunks')).toBe(false);
+  });
+
+  it('finds an abstract-only split too', () => {
+    const e = {
+      title: 'Nothing Relevant',
+      authorText: 'X',
+      abstract: 'A study of social critique in practice.',
+    };
+    const i = interpretationsFor(e, 'socialcritique', { includeAbstract: true });
+    expect(i.some((x) => x.kind === 'split')).toBe(true);
+  });
+});

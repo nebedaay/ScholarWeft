@@ -321,24 +321,17 @@ export function scoreEntry(
         prefixChunks(`${author} ${title}`, terms[0]),
       ];
       const best = candidates.reduce((a, b) => (b.words > a.words ? b : a));
-      if (best.full && best.words > 0) {
+      if (best.full && best.words > 1) {
+        // A MULTI-word alignment is a genuinely different reading (soccri →
+        // soc + cri). A single-chunk "alignment" is just the term itself, so
+        // there is nothing to reinterpret.
         effective = best.chunks;
-      } else {
-        // The run is not fully explained here — either it aligns to nothing or
-        // only partially (`socialcritique` consuming just `soc`). An
-        // unexplained string of letters is not a match; without this, a joined
-        // query passed coverage trivially as one "term" and matched entries the
-        // spaced form correctly rejects.
-        return {
-          exactPhrase: false,
-          covered: 0,
-          total: 0,
-          authorAndTitle: false,
-          prefixChunks: false,
-          interpretedWords: 0,
-          value: Number.POSITIVE_INFINITY,
-        };
       }
+      // Otherwise KEEP the term as typed and search it normally. An
+      // abbreviation reading is an ADDITIONAL interpretation, never a
+      // replacement: failing to align says nothing about whether the term
+      // itself matches. Rejecting here is what made `@@@maghrebian` return
+      // nothing — a plain word was treated as an unexplained abbreviation.
     }
   }
 
@@ -470,6 +463,10 @@ export function passesCoverage(score: RelevanceScore): boolean {
   // as the spaced form would — so the requirement comes from the score itself,
   // not from how many terms the caller tokenised.
   if (score.prefixChunks) return true;
-  if (score.interpretedWords <= 1) return true;
-  return score.total > 0 && score.covered >= score.total;
+  // EVERY interpretation must match something. A single term that matched
+  // nowhere is not a match — without this, a term Fuse happens to rank low, or
+  // an interpretation that fits no field, admitted every entry in the library.
+  if (score.total === 0) return true; // no terms to satisfy (defensive)
+  if (score.interpretedWords <= 1) return score.covered >= 1;
+  return score.covered >= score.total;
 }

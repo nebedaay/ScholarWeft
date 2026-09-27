@@ -75,15 +75,20 @@ export interface Interpretation {
  * interpretations.
  */
 export function interpretationsFor(
-  entry: { title?: string | null; authorText?: string | null },
-  query: string
+  entry: { title?: string | null; authorText?: string | null; abstract?: string | null },
+  query: string,
+  opts: { includeAbstract?: boolean } = {}
 ): Interpretation[] {
   const shape = queryShape(query);
   if (shape.words.length === 0) return [];
 
   const title = entry.title ?? '';
   const author = entry.authorText ?? '';
-  const combined = `${author} ${title}`;
+  // The `@@@` tier searches the abstract, so an abbreviation may be resolved
+  // against it too — otherwise `soccrit` would never find an item whose only
+  // "social critique" is in its abstract.
+  const abstract = opts.includeAbstract ? (entry.abstract ?? '') : '';
+  const combined = `${author} ${title} ${abstract}`.trim();
 
   const out: Interpretation[] = [];
 

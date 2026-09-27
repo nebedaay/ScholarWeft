@@ -902,7 +902,7 @@ export class BibManager {
 
       // Every way this query could read against THIS entry.
       let best = Number.POSITIVE_INFINITY;
-      for (const interp of interpretationsFor(target, query)) {
+      for (const interp of interpretationsFor(target, query, { includeAbstract })) {
         // Candidate test: Fuse must know every term of the interpretation.
         // Fuse cannot see a split across fields, so accept that too.
         const seenByFuse = interp.terms.every((t) =>

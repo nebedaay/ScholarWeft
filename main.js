@@ -93749,18 +93749,8 @@ function scoreEntry(target, query, opts = {}) {
         prefixChunks(`${author} ${title}`, terms[0])
       ];
       const best = candidates.reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
-      if (best.full && best.words > 0) {
+      if (best.full && best.words > 1) {
         effective = best.chunks;
-      } else {
-        return {
-          exactPhrase: false,
-          covered: 0,
-          total: 0,
-          authorAndTitle: false,
-          prefixChunks: false,
-          interpretedWords: 0,
-          value: Number.POSITIVE_INFINITY
-        };
       }
     }
   }
@@ -93845,9 +93835,11 @@ function passesCoverage(score) {
     return false;
   if (score.prefixChunks)
     return true;
-  if (score.interpretedWords <= 1)
+  if (score.total === 0)
     return true;
-  return score.total > 0 && score.covered >= score.total;
+  if (score.interpretedWords <= 1)
+    return score.covered >= 1;
+  return score.covered >= score.total;
 }
 
 // src/template/search-tier.ts
@@ -93879,14 +93871,15 @@ function queryShape(query) {
   const spaced = /\s/.test(query.trim());
   return { words: words2, spaced, run: words2.join("") };
 }
-function interpretationsFor(entry, query) {
-  var _a, _b;
+function interpretationsFor(entry, query, opts = {}) {
+  var _a, _b, _c;
   const shape = queryShape(query);
   if (shape.words.length === 0)
     return [];
   const title = (_a = entry.title) != null ? _a : "";
   const author = (_b = entry.authorText) != null ? _b : "";
-  const combined = `${author} ${title}`;
+  const abstract = opts.includeAbstract ? (_c = entry.abstract) != null ? _c : "" : "";
+  const combined = `${author} ${title} ${abstract}`.trim();
   const out = [];
   out.push({
     terms: shape.words,
@@ -94582,7 +94575,7 @@ var BibManager = class {
         abstract: (_c = entry.abstract) != null ? _c : null
       };
       let best = Number.POSITIVE_INFINITY;
-      for (const interp of interpretationsFor(target, query)) {
+      for (const interp of interpretationsFor(target, query, { includeAbstract })) {
         const seenByFuse = interp.terms.every((t4) => t4.length >= MIN_MATCH_CHARS ? hitsFor(t4).has(entry.id) : true);
         const knownHere = seenByFuse || scoreEntry(target, interp.terms.join(" "), { includeAbstract }).covered > 0;
         if (!knownHere)
