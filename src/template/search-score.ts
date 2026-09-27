@@ -141,6 +141,43 @@ export function looksLikeAbbreviation(query: string): boolean {
 }
 
 /**
+ * Does the run split into WHOLE words that the phrase actually contains?
+ *
+ * This is the guard that stops a coherent query being read as abbreviations.
+ * `socialcritique` splits cleanly into `social` + `critique`, so it must not
+ * align to "**Soc**cer **is** almost **cri**ing in **ti**me of **que**stioning"
+ * — the user's rule: *"if there's a series of coherent words, they're very
+ * unlikely made up of smaller chunks to look for."* Only when NO coherent split
+ * exists (`soccri`) is an abbreviation reading plausible.
+ *
+ * Without a dictionary the practical test is the entry itself: try every split
+ * of the run and, if the phrase contains each part as a real word, it is
+ * coherent. Best-effort by design — a false negative just means we fall back to
+ * chunk matching, which is scored below real word matches anyway.
+ */
+export function hasCoherentSplit(phrase: string, run: string): string[] | null {
+  const ws = new Set(words(phrase));
+  const q = norm(run);
+  if (!q) return null;
+  // Two-way split.
+  for (let i = MIN_MEANINGFUL_TERM; i <= q.length - MIN_MEANINGFUL_TERM; i++) {
+    const a = q.slice(0, i);
+    const b = q.slice(i);
+    if (ws.has(a) && ws.has(b)) return [a, b];
+  }
+  // Three-way split.
+  for (let i = MIN_MEANINGFUL_TERM; i < q.length; i++) {
+    for (let j = i + MIN_MEANINGFUL_TERM; j < q.length; j++) {
+      const a = q.slice(0, i);
+      const b = q.slice(i, j);
+      const c = q.slice(j);
+      if (ws.has(a) && ws.has(b) && ws.has(c)) return [a, b, c];
+    }
+  }
+  return null;
+}
+
+/**
  * Weighting difference between the two equivalent forms of a query.
  *
  * `bourdieu social critique` and `bourdieusocialcritique` are interpreted as the
@@ -236,32 +273,44 @@ export function scoreEntry(
   if (opts.includeAbstract) haystacksAll.push(target.abstract ?? '');
 
   // A JOINED run (`bourdieusocialcritique`) is interpreted as the words it was
-  // built from, so it goes through the SAME ranking as the spaced form. The run
-  // may span FIELDS — `bourdieu` from the author, `social critique` from the
-  // title — so alignment tries the title, the author, and the two together, and
-  // keeps whichever explains the most words.
+  // built from, so it goes through the SAME ranking as the spaced form.
+  //
+  // Two ways to recover those words, in priority order:
+  //   1. A COHERENT SPLIT — the run is made of real words this entry contains,
+  //      so `bourdieusocialcritique` = `bourdieu + social + critique`. This is
+  //      the user's rule: a series of coherent words is not an abbreviation.
+  //   2. CHUNK ALIGNMENT — no coherent reading exists (`soccri`), so word
+  //      prefixes are the only way to interpret it.
   let effective = terms;
   if (looksLikeAbbreviation(query) && terms.length === 1) {
-    const candidates = [
-      prefixChunks(title, terms[0]),
-      prefixChunks(author, terms[0]),
-      prefixChunks(`${author} ${title}`, terms[0]),
-    ];
-    const best = candidates.reduce((a, b) => (b.words > a.words ? b : a));
-    if (best.full && best.words > 1) effective = best.chunks;
-    else if (!best.full || best.words === 0) {
-      // The run aligns to nothing here: an opaque string of letters is not a
-      // match. Without this, a joined query would pass coverage trivially as a
-      // single "term" and match entries the spaced form correctly rejects.
-      return {
-        exactPhrase: false,
-        covered: 0,
-        total: 0,
-        authorAndTitle: false,
-        prefixChunks: false,
-        interpretedWords: 0,
-        value: Number.POSITIVE_INFINITY,
-      };
+    const coherent = hasCoherentSplit(`${author} ${title}`, terms[0]);
+    if (coherent) {
+      effective = coherent;
+    } else {
+      const candidates = [
+        prefixChunks(title, terms[0]),
+        prefixChunks(author, terms[0]),
+        prefixChunks(`${author} ${title}`, terms[0]),
+      ];
+      const best = candidates.reduce((a, b) => (b.words > a.words ? b : a));
+      if (best.full && best.words > 0) {
+        effective = best.chunks;
+      } else {
+        // The run is not fully explained here — either it aligns to nothing or
+        // only partially (`socialcritique` consuming just `soc`). An
+        // unexplained string of letters is not a match; without this, a joined
+        // query passed coverage trivially as one "term" and matched entries the
+        // spaced form correctly rejects.
+        return {
+          exactPhrase: false,
+          covered: 0,
+          total: 0,
+          authorAndTitle: false,
+          prefixChunks: false,
+          interpretedWords: 0,
+          value: Number.POSITIVE_INFINITY,
+        };
+      }
     }
   }
 

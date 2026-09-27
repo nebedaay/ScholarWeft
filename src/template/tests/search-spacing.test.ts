@@ -1,4 +1,5 @@
 import {
+  hasCoherentSplit,
   looksLikeAbbreviation,
   passesCoverage,
   prefixChunks,
@@ -116,5 +117,37 @@ describe('spaced prefix fragments (soc cri)', () => {
   it('treats both fragment forms as finding the same item', () => {
     expect(passesCoverage(scoreEntry(distinction, 'soc cri'))).toBe(true);
     expect(passesCoverage(scoreEntry(distinction, 'soccri'))).toBe(true);
+  });
+});
+
+describe('coherent splits beat chunk interpretations', () => {
+  const soccer = {
+    title: 'Soccer Is Almost Crying In Time Of Questioning',
+    authorText: 'X',
+  };
+
+  it('does NOT chunk-match a run that splits into real words', () => {
+    // `socialcritique` = social + critique, so it must never be read as
+    // "Soc|cer is| cri|ing in| ti|me of| que|stioning".
+    const s = scoreEntry(soccer, 'socialcritique');
+    expect(s.prefixChunks).toBe(false);
+    expect(passesCoverage(s)).toBe(false);
+  });
+
+  it('still chunk-matches a run with no coherent split', () => {
+    // `soccri` has no whole-word reading anywhere, so abbreviation is the
+    // only interpretation available.
+    const s = scoreEntry(distinction, 'soccri');
+    expect(s.prefixChunks).toBe(true);
+  });
+
+  it('returns the words of a coherent split, or null', () => {
+    expect(
+      hasCoherentSplit(
+        'Distinction: A Social Critique of the Judgment of Taste',
+        'socialcritique'
+      )
+    ).toEqual(['social', 'critique']);
+    expect(hasCoherentSplit('Distinction: A Social Critique', 'soccri')).toBeNull();
   });
 });

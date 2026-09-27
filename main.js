@@ -93667,6 +93667,28 @@ function looksLikeAbbreviation(query) {
     return false;
   return trimmed.length >= MIN_CHUNK;
 }
+function hasCoherentSplit(phrase, run) {
+  const ws = new Set(words(phrase));
+  const q4 = norm2(run);
+  if (!q4)
+    return null;
+  for (let i3 = MIN_MEANINGFUL_TERM; i3 <= q4.length - MIN_MEANINGFUL_TERM; i3++) {
+    const a3 = q4.slice(0, i3);
+    const b3 = q4.slice(i3);
+    if (ws.has(a3) && ws.has(b3))
+      return [a3, b3];
+  }
+  for (let i3 = MIN_MEANINGFUL_TERM; i3 < q4.length; i3++) {
+    for (let j4 = i3 + MIN_MEANINGFUL_TERM; j4 < q4.length; j4++) {
+      const a3 = q4.slice(0, i3);
+      const b3 = q4.slice(i3, j4);
+      const c3 = q4.slice(j4);
+      if (ws.has(a3) && ws.has(b3) && ws.has(c3))
+        return [a3, b3, c3];
+    }
+  }
+  return null;
+}
 function spacingConfidence(query) {
   return /\s/.test(query.trim()) ? 0 : 0.02;
 }
@@ -93717,24 +93739,29 @@ function scoreEntry(target, query, opts = {}) {
     haystacksAll.push((_c = target.abstract) != null ? _c : "");
   let effective = terms;
   if (looksLikeAbbreviation(query) && terms.length === 1) {
-    const candidates = [
-      prefixChunks(title, terms[0]),
-      prefixChunks(author, terms[0]),
-      prefixChunks(`${author} ${title}`, terms[0])
-    ];
-    const best = candidates.reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
-    if (best.full && best.words > 1)
-      effective = best.chunks;
-    else if (!best.full || best.words === 0) {
-      return {
-        exactPhrase: false,
-        covered: 0,
-        total: 0,
-        authorAndTitle: false,
-        prefixChunks: false,
-        interpretedWords: 0,
-        value: Number.POSITIVE_INFINITY
-      };
+    const coherent = hasCoherentSplit(`${author} ${title}`, terms[0]);
+    if (coherent) {
+      effective = coherent;
+    } else {
+      const candidates = [
+        prefixChunks(title, terms[0]),
+        prefixChunks(author, terms[0]),
+        prefixChunks(`${author} ${title}`, terms[0])
+      ];
+      const best = candidates.reduce((a3, b3) => b3.words > a3.words ? b3 : a3);
+      if (best.full && best.words > 0) {
+        effective = best.chunks;
+      } else {
+        return {
+          exactPhrase: false,
+          covered: 0,
+          total: 0,
+          authorAndTitle: false,
+          prefixChunks: false,
+          interpretedWords: 0,
+          value: Number.POSITIVE_INFINITY
+        };
+      }
     }
   }
   const phrase = terms.join(" ");
