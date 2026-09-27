@@ -1,8 +1,6 @@
 # Searching for references
 
-ScholarWeft's autocomplete is how you find a work to cite. There are three
-levels, each searching more than the last, and knowing what each one covers is
-the quickest way to get good results.
+ScholarWeft's search and autocomplete function is how you find a work to cite. Knowing what the two levels of search cover is the quickest way to get good results.
 
 ## The two levels
 
@@ -11,7 +9,7 @@ the quickest way to get good results.
 | `@` | **citekey, author** (first, last, single name) and **title** | You know the work or who wrote it |
 | `@@` | the above **plus abstract, publisher and containing work** (journal or book title) | You only remember what it was about, or where it was published |
 
-**`@@` is the same search as `@` with more fields** — not a different one. The
+**`@@` is the same search as `@` but adds more fields**. The
 extra fields rank *below* the `@` fields, so adding them widens the list without
 burying a title or author match.
 
@@ -19,7 +17,7 @@ Type the level, then your words; a **period closes the popup**, so search terms
 can include spaces.
 
 - `@smith` — works by Smith, plus any citekey beginning `smith`.
-- `@social critique` — a title.
+- `@social critique` — part of a title.
 - `@@maghrebian` — finds a work whose *abstract* mentions it, even when the
   title and author give no clue.
 
@@ -35,9 +33,7 @@ Bourdieu whose *title* contains "critique" — the words do not need to sit
 together.
 
 **Word beginnings count, endings do not.** `@@soc cri` finds "**Soc**ial
-**Cri**tique". A word must start with what you typed; a fragment of the middle
-of a word is ignored. You can type as little as three letters per word when you
-are abbreviating.
+**Cri**tique" and “Society of Crickets”. A word must start with what you typed; a fragment of the middle of a word is ignored. You can type as little as three letters per word when you are abbreviating.
 
 **Accents do not matter.** `cesaire` finds "Césaire" and `Césaire` finds
 "cesaire", in titles, names and abstracts alike.
@@ -48,9 +44,11 @@ work is findable by the person who compiled it.
 
 ## Tips
 
-- **Space your words.** `@@bergson memory` and `@@bergsonmemory` give the same
-  results; the space just says "these are two words". Use spaces — they make
-  your intent clear and are marginally preferred when ranking.
+- **Space your words.** `@@bergson memory` is the same search as
+  `@@bergsonmemory` when both words are found: the unspaced form additionally
+  tries to read the run as abbreviations, so it can match *more*, never a
+  different thing. Typing spaces is still better — it says exactly what you
+  mean and is marginally preferred when ranking.
 - **Abbreviate by beginnings.** `@@soccri` finds "Social Critique";
   `@@socthe` finds "Social Theory". This works because a person abbreviates
   words by their starts, so `soccri` is understood as *soc*ial *cri*tique.
@@ -74,11 +72,13 @@ work is findable by the person who compiled it.
 
 Results are ordered by how meaningfully they match, not by a single score:
 
-1. **An author *and* a title word** — the most precise match.
-2. **The exact phrase in the title** — searching `social critique` finds
+1. **An exact citekey**, or the query being the beginning of one — typing
+   `@smithTitleYear` puts that work first.
+2. **An author *and* a title word** — the most precise field match.
+3. **The exact phrase in the title** — searching `social critique` finds
    "A *Social Critique* of …" ahead of a title containing the words apart.
-3. **The words in the title**, whole words ahead of abbreviations.
-4. **The words in the abstract**, journal, or publisher (the `@@` extra).
+4. **The words in the title**, whole words ahead of abbreviations.
+5. **The words in the abstract**, journal, or publisher (the `@@` extra).
 
 A word appearing earlier in a title ranks above the same word later in it.
 **Nothing is ever dropped for appearing late, or for being in a long field** —
@@ -92,10 +92,13 @@ An abbreviation is understood by its beginnings:
 - `socthe` → *soc*ial *the*ory
 
 Three letters minimum per part, because two are ambiguous (`socr` is as likely
-to be Socrates). An abbreviation is **only** tried when the run as typed does
-not already read as whole words: `socialcritique` is understood as "social
-critique", never as "**Soc**cer **is** almost **cri**ing…". Coherent words
-always win over a fragment reading.
+to be Socrates).
+
+A coherent reading is tried **first and ranks highest**: `socialcritique` is
+understood as "social critique", never as "**Soc**cer **is** almost
+**cri**ing…". When no coherent reading exists, word-prefix readings are tried
+instead and rank below real words — so an abbreviation adds possibilities
+without displacing a genuine whole-word match.
 
 ## Relation to ZotLit
 

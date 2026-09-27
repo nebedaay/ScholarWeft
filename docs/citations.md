@@ -39,12 +39,9 @@ The export dialogue can additionally apply a style to a single export without ch
 - **Tooltip delay** — how long to hover before the tooltip appears.
 - **Mobile tap action** — what tapping a citation does on mobile. See [Mobile](./mobile.md).
 
-## Autocomplete and search
+## Search and autocomplete
 
-- Typing `@` searches citekey, author and title; `@@` adds the abstract, publisher and containing work. Both use ScholarWeft's own index — ZotLit is not required.
-- Every word must be present, words may sit in different fields, word beginnings count, and accents are ignored. The result count is shown at the bottom of the popup, and `@@` results include an excerpt showing where your terms were found.
-- **See [Searching for References](./searching.md)** for the full rules and tips.
-- `⌘↵` / `Ctrl+↵` wraps the selected key in `[@key]` unless you are already inside brackets.
+- **See [Searching for References](./searching.md)** for the full rules and tips on the two kinds of search (`@` and `@@`).
 
 ## Reference sidebar and bibliography commands
 

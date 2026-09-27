@@ -2,9 +2,10 @@
 
 <img src="./images/scholarweft-illustration.png" width="300" alt="ScholarWeft logo">
 
-Weaving your ideas, Obsidian, Zotero, and word processor output into a connected scholarly workflow. It integrates three processes:
+Weaving your ideas, Obsidian, Zotero, and word processor output into a connected scholarly workflow. It integrates four processes:
 
 - Importing and updating your Zotero citations and annotations into Obsidian as literature notes using a rich template
+- Searching your references by citekey, title, author, abstract, and publisher inside Obsidian to find the most relevant references
 - Connecting your works cited to your universe of thoughts, treating them as Zotero links while formatting them as formatted citations
 - Importing and exporting your scholarly writing while keeping active Zotero citations, using complex templates to produce publication-ready academic articles and books
 
@@ -12,15 +13,13 @@ ScholarWeft's unique **linked citations** format weaves every work you cite into
 
 Beyond linking your scholarly notes and references, ScholarWeft links your writing inside Obsidian to the world beyond Obsidian. Import DOCX and ODT documents as Obsidian notes, converting their Zotero citations to linked citations and importing a literature note for each cited work. Export an Obsidian note or compile a series of notes as a publication-ready DOCX, ODT, or PDF document with functioning citations — so you can do all your academic writing inside manageable, interlinked Obsidian notes, even long book projects.
 
-This plugin started as a fork of [Bripey Citation Suite](https://github.com/112345brian/bripey-citation-suite), a descendant of [Pandoc Reference List](https://github.com/community-archive/obsidian-pandoc-reference-list). It was renamed to reflect its more comprehensive and unique combination of functions.
-
 ## Documentation
 
 - [Setup](./docs/setup.md) — install and first steps
 - [Dependencies](./docs/dependencies.md) — what each feature needs, and where to get it
 - [Linked Citations](./docs/linked-citations.md) — the citation syntax
 - [Citations and References](./docs/citations.md) — formatting, autocomplete, tooltips, the reference sidebar
-- [Searching for References](./docs/searching.md) — what `@` and `@@` search, and tips for good results
+- [Searching for References](./docs/searching.md) — the two levels, what counts as a match, how results are ranked, and tips
 - [Bibliography](./docs/bibliography.md) — `.bib`/CSL sources, per-note overrides
 - [Zotero](./docs/zotero.md) — connection modes, port, libraries
 - [Literature Notes](./docs/literature-notes.md) — where notes live and how they are created
@@ -40,9 +39,8 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 - **Conventional pandoc citations** — `[@key]`, `[see @key, p. 25]` render too, and commands convert between formats losslessly.
 - **Live reference sidebar** — a searchable list of every citation in the current note, with copy and jump buttons.
 - **Insert bibliography at cursor** and **bibliography snapshot** (save a note's citations as a `.bib`, colour-coded by sync status).
-- **Search that finds the work** — `@` for citekey, author and title; `@@` to add abstracts and publication details. Whole-word aware, accent-insensitive, and it understands abbreviations (`soccri` → *soc*ial *cri*tique). See [Searching for References](./docs/searching.md).
-- **Smart bracket insertion** — `⌘↵` wraps the selection in `[@key]` without double-wrapping.
-- **Diacritic-insensitive search** — "Muller" finds "Müller".
+- **Search that finds the work, ranked by meaning** — `@` searches citekey, author and title; `@@` adds abstracts, publisher and containing work. Every word must be present, words may sit in different fields, word *beginnings* count (`soccri` → *soc*ial *cri*tique), and accents are ignored. Results are ordered by how meaningfully they match — an exact citekey, then author-with-title, then an exact title phrase, then title words, then the `@@` fields — so a title match is never buried by an abstract one. The popup shows the result count and, for `@@`, an excerpt of the abstract where your terms were found. See [Searching for References](./docs/searching.md).
+- **Smart bracket insertion** — `⌘↵` wraps the selection in `[@key]`, closing a wikilink with `]]` and a Pandoc citation with `]`.
 - **Citation decoration and tooltips** — colour-coded status; hover for a formatted preview, literature-note link, and Zotero link.
 - **Mobile support** — tap citations in reading mode, long-press in the editor. See [Mobile](./docs/mobile.md).
 
@@ -92,7 +90,7 @@ if (plugin?.api?.version === 1) {
 ## Credits
 
 - **Bripey Citation Suite** by [112345brian](https://github.com/112345brian) — the direct upstream fork
-- Original plugin by [mgmeyers](https://github.com/mgmeyers/obsidian-pandoc-reference-list), maintained by [obsidian-community](https://github.com/obsidian-community/obsidian-pandoc-reference-list)
+- Original [Pandoc Reference List](https://github.com/community-archive/obsidian-pandoc-reference-list) plugin by [mgmeyers](https://github.com/mgmeyers/obsidian-pandoc-reference-list), maintained by [obsidian-community](https://github.com/obsidian-community/obsidian-pandoc-reference-list)
 
 This fork incorporates changes from:
 
