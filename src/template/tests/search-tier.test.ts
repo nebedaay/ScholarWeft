@@ -2,7 +2,6 @@ import {
   TIER_IGNORE_LOCATION,
   MIN_MATCH_CHARS,
   TIER_THRESHOLD,
-  combineTermSearches,
   queryTerms,
   rerankKey,
   tierWeights,
@@ -87,65 +86,6 @@ describe('queryTerms()', () => {
   it('returns nothing for an empty or punctuation-only query', () => {
     expect(queryTerms('')).toEqual([]);
     expect(queryTerms('   ')).toEqual([]);
-  });
-});
-
-describe('combineTermSearches()', () => {
-  const bou = 'bourdieuCeQue1982';
-  const dis = 'distinction1984';
-  const kant = 'kantCritique1999';
-
-  it('requires EVERY term, so a partial match is dropped', () => {
-    // "bourdieuCeQue1982" hits "bourdieu" only; it contains no "critique".
-    const out = combineTermSearches([
-      [
-        { id: bou, score: 0.0 },
-        { id: dis, score: 0.2 },
-      ],
-      [
-        { id: dis, score: 0.25 },
-        { id: kant, score: 0.3 },
-      ],
-    ]);
-    expect(out.map((r) => r.id)).toEqual([dis]);
-  });
-
-  it('is the user-reported case: only the item with both terms survives', () => {
-    const out = combineTermSearches([
-      [{ id: bou, score: 0.05 }], // "bourdieu" (author surname, citekey)
-      [{ id: dis, score: 0.25 }], // "critique" (title word)
-    ]);
-    // No item matched both, so nothing is returned — rather than the
-    // author-only hit being surfaced as though it contained "critique".
-    expect(out).toEqual([]);
-  });
-
-  it('sums scores so a stronger all-term match ranks first', () => {
-    const out = combineTermSearches([
-      [
-        { id: 'a', score: 0.1 },
-        { id: 'b', score: 0.4 },
-      ],
-      [
-        { id: 'a', score: 0.1 },
-        { id: 'b', score: 0.05 },
-      ],
-    ]);
-    expect(out.map((r) => r.id)).toEqual(['a', 'b']);
-  });
-
-  it('passes a single term straight through, sorted', () => {
-    const out = combineTermSearches([
-      [
-        { id: 'x', score: 0.4 },
-        { id: 'y', score: 0.1 },
-      ],
-    ]);
-    expect(out.map((r) => r.id)).toEqual(['y', 'x']);
-  });
-
-  it('handles no terms', () => {
-    expect(combineTermSearches([])).toEqual([]);
   });
 });
 

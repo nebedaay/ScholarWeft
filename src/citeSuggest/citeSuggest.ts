@@ -10,7 +10,6 @@ import {
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
-import { rerankKey } from 'src/template/search-tier';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
@@ -217,18 +216,10 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
           : [];
       }
 
-      // Terms are combined as an AND (see searchTier) so an item must contain
-      // every word, then re-ranked: a contiguous title hit is promoted, a
-      // fuzzy-only hit demoted.
+      // searchTier ranks by exact phrase, coverage, whole words and position —
+      // and does its own AND filtering. Nothing further to re-rank here.
       const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
-      // searchTier already ranked; rerankKey refines using title contiguity,
-      // which Fuse's per-field score cannot express.
-      const hits = ranked.map((item, refIndex) => ({
-        item,
-        refIndex,
-        score: 0.5,
-      }));
-      return this.rerank(hits, searchQuery);
+      return ranked.map((item, refIndex) => ({ item, refIndex, score: 0 }));
     }
 
     // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
@@ -257,38 +248,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // Nothing from either the index or a live search. If the index is still
     // building, tell the user that rather than leaving the popup blank.
     return indexReady ? [] : loadingSuggestion();
-  }
-
-  /**
-   * Re-rank Fuse's hits with the pure relevance nudge (see `search-tier.ts`).
-   * Fuse's score is length-biased, so this demotes wild fuzzy matches — the
-   * "Slightly" → "The Social Life of Ghosttowns in Libya" case — without
-   * attempting full relevance scoring (that is the roadmap item).
-   */
-  private rerank(
-    hits: Fuse.FuseResult<PartialCSLEntry>[],
-    query: string
-  ): Fuse.FuseResult<PartialCSLEntry>[] {
-    if (hits.length < 2) return hits;
-    return hits
-      .map((hit) => ({
-        hit,
-        key: rerankKey(
-          {
-            title: hit.item?.title ?? null,
-            authorText: (hit.item?.author ?? [])
-              .map((a: any) => a?.family ?? a?.literal ?? '')
-              .filter(Boolean)
-              .join(' '),
-            abstract: (hit.item as any)?.abstract ?? null,
-            fuseScore: typeof hit.score === 'number' ? hit.score : 1,
-          },
-          query,
-          normalizeDiacritics
-        ),
-      }))
-      .sort((a, b) => a.key - b.key)
-      .map((r) => r.hit);
   }
 
   /**

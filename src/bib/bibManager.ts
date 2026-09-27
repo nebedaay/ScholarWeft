@@ -19,10 +19,10 @@ import {
   MIN_MATCH_CHARS,
   TIER_IGNORE_LOCATION,
   TIER_THRESHOLD,
-  combineTermSearches,
   queryTerms,
   tierWeights,
 } from 'src/template/search-tier';
+import { passesCoverage, scoreEntry } from 'src/template/search-score';
 import {
   PromiseCapability,
   copyElToClipboard,
@@ -867,22 +867,55 @@ export class BibManager {
     const terms = queryTerms(query);
     if (terms.length === 0) return [];
 
-    const byId = new Map<string, PartialCSLEntry>();
-    for (const entry of this.bibCache.values()) byId.set(entry.id, entry);
+    // Fuse gives RECALL only: which entries contain these terms AT ALL. The
+    // per-term limit must stay generous, because a short term like "social"
+    // matches hundreds of titles weakly, and an item whose title contains the
+    // exact phrase can rank last among them (a long title scores worse than a
+    // short one under Fuse's length normalisation). Truncating per term deleted
+    // exactly the items we wanted, before the AND ran — the cause of the
+    // long-standing "spacing loses the exact match" bug.
+    const perTerm = terms.map((term) => {
+      const hits = fuse.search(normalizeDiacritics(term));
+      return new Set(hits.map((h) => h.item.id));
+    });
 
-    const perTerm = terms.map((term) =>
-      fuse
-        .search(normalizeDiacritics(term), { limit: limit * 4 })
-        .map((hit) => ({
-          id: hit.item.id,
-          score: typeof hit.score === 'number' ? hit.score : 1,
-        }))
-    );
+    // Candidate set = entries matched by EVERY term (AND, so a spaced query is
+    // narrower than either term alone). Computed over the full hit lists.
+    let candidates: Set<string> | null = null;
+    for (const hits of perTerm) {
+      if (candidates === null) candidates = new Set(hits);
+      else candidates = new Set([...candidates].filter((id) => hits.has(id)));
+      if (candidates.size === 0) return [];
+    }
+    if (!candidates) return [];
 
-    return combineTermSearches(perTerm)
+    // Order by OUR scoring: exact phrase first, then coverage, whole words,
+    // and position. Fuse's own score is not used for ordering.
+    const includeAbstract = tier === 'abstract';
+    const scored: Array<{ entry: PartialCSLEntry; value: number }> = [];
+    for (const id of candidates) {
+      const entry = this.bibCache.get(id);
+      if (!entry) continue;
+      const score = scoreEntry(
+        {
+          title: entry.title ?? null,
+          authorText: (entry.author ?? [])
+            .map((a: any) => a?.family ?? a?.literal ?? '')
+            .filter(Boolean)
+            .join(' '),
+          abstract: (entry as { abstract?: string }).abstract ?? null,
+        },
+        query,
+        { includeAbstract }
+      );
+      if (!passesCoverage(score, terms.length)) continue;
+      scored.push({ entry, value: score.value });
+    }
+
+    return scored
+      .sort((a, b) => a.value - b.value)
       .slice(0, limit)
-      .map((r) => byId.get(r.id))
-      .filter((e): e is PartialCSLEntry => !!e);
+      .map((s) => s.entry);
   }
 
   /**

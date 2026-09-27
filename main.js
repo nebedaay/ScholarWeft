@@ -18584,14 +18584,14 @@ var require_citeproc_commonjs = __commonJS({
         var config = {
           quoteState: null,
           capitaliseWords: function(str3) {
-            var words = str3.split(" ");
-            for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
-              var word = words[i3];
+            var words2 = str3.split(" ");
+            for (var i3 = 0, ilen = words2.length; i3 < ilen; i3++) {
+              var word = words2[i3];
               if (word) {
-                words[i3] = CSL2.toLocaleLowerCase.call(state, word);
+                words2[i3] = CSL2.toLocaleLowerCase.call(state, word);
               }
             }
-            return words.join(" ");
+            return words2.join(" ");
           },
           skipWordsRex: null,
           tagState: [],
@@ -18604,14 +18604,14 @@ var require_citeproc_commonjs = __commonJS({
         var config = {
           quoteState: null,
           capitaliseWords: function(str3) {
-            var words = str3.split(" ");
-            for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
-              var word = words[i3];
+            var words2 = str3.split(" ");
+            for (var i3 = 0, ilen = words2.length; i3 < ilen; i3++) {
+              var word = words2[i3];
               if (word) {
-                words[i3] = CSL2.toLocaleUpperCase.call(state, word);
+                words2[i3] = CSL2.toLocaleUpperCase.call(state, word);
               }
             }
-            return words.join(" ");
+            return words2.join(" ");
           },
           skipWordsRex: null,
           tagState: [],
@@ -18624,19 +18624,19 @@ var require_citeproc_commonjs = __commonJS({
         var config = {
           quoteState: [],
           capitaliseWords: function(str3) {
-            var words = str3.split(" ");
-            for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
-              var word = words[i3];
+            var words2 = str3.split(" ");
+            for (var i3 = 0, ilen = words2.length; i3 < ilen; i3++) {
+              var word = words2[i3];
               if (word) {
                 if (config.isFirst) {
-                  words[i3] = _capitalise.call(state, word);
+                  words2[i3] = _capitalise.call(state, word);
                   config.isFirst = false;
                 } else {
-                  words[i3] = CSL2.toLocaleLowerCase.call(state, word);
+                  words2[i3] = CSL2.toLocaleLowerCase.call(state, word);
                 }
               }
             }
-            return words.join(" ");
+            return words2.join(" ");
           },
           skipWordsRex: null,
           tagState: [],
@@ -18651,9 +18651,9 @@ var require_citeproc_commonjs = __commonJS({
           capitaliseWords: function(str3, i3, followingTag) {
             if (str3.trim()) {
               var wordle = wordDoppel.split(str3);
-              var words = wordle.strings;
-              for (var j4 = 0, jlen = words.length; j4 < jlen; j4++) {
-                var word = words[j4];
+              var words2 = wordle.strings;
+              for (var j4 = 0, jlen = words2.length; j4 < jlen; j4++) {
+                var word = words2[j4];
                 if (!word) {
                   continue;
                 }
@@ -18661,7 +18661,7 @@ var require_citeproc_commonjs = __commonJS({
                 let capitalize = false;
                 if (word.length > 1 && !lcase.match(config.skipWordsRex)) {
                   capitalize = true;
-                } else if (j4 === words.length - 1 && followingTag === "-") {
+                } else if (j4 === words2.length - 1 && followingTag === "-") {
                   capitalize = true;
                 } else if (config.isFirst) {
                   capitalize = true;
@@ -18669,7 +18669,7 @@ var require_citeproc_commonjs = __commonJS({
                   capitalize = true;
                 }
                 if (capitalize && word === lcase) {
-                  words[j4] = _capitalise.call(state, word);
+                  words2[j4] = _capitalise.call(state, word);
                 }
                 config.afterPunct = false;
                 config.isFirst = false;
@@ -18694,13 +18694,13 @@ var require_citeproc_commonjs = __commonJS({
           quoteState: [],
           capitaliseWords: function(str3) {
             var wordle = wordDoppel.split(str3);
-            var words = wordle.strings;
-            for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
-              var word = words[i3];
+            var words2 = wordle.strings;
+            for (var i3 = 0, ilen = words2.length; i3 < ilen; i3++) {
+              var word = words2[i3];
               if (word) {
                 if (config.isFirst) {
                   if (word === CSL2.toLocaleLowerCase.call(state, word)) {
-                    words[i3] = _capitalise.call(state, word);
+                    words2[i3] = _capitalise.call(state, word);
                   }
                   config.isFirst = false;
                   break;
@@ -18721,12 +18721,12 @@ var require_citeproc_commonjs = __commonJS({
           quoteState: [],
           capitaliseWords: function(str3) {
             var wordle = wordDoppel.split(str3);
-            var words = wordle.strings;
-            for (var i3 = 0, ilen = words.length; i3 < ilen; i3++) {
-              var word = words[i3];
+            var words2 = wordle.strings;
+            for (var i3 = 0, ilen = words2.length; i3 < ilen; i3++) {
+              var word = words2[i3];
               if (word) {
                 if (word === CSL2.toLocaleLowerCase.call(state, word)) {
-                  words[i3] = _capitalise.call(state, word);
+                  words2[i3] = _capitalise.call(state, word);
                 }
               }
             }
@@ -67110,8 +67110,8 @@ var BibTeXParser = class {
           break;
         case "as-needed":
           cancel = (match2, stripped) => {
-            const words = tokenize(stripped, /\x0E\/?([a-z]+)\x0F/ig);
-            return words.find((w4) => w4.shape.match(/^(?!.*X).*x.*$/)) ? match2 : this.wrap(stripped, "ncx");
+            const words2 = tokenize(stripped, /\x0E\/?([a-z]+)\x0F/ig);
+            return words2.find((w4) => w4.shape.match(/^(?!.*X).*x.*$/)) ? match2 : this.wrap(stripped, "ncx");
           };
           break;
       }
@@ -92436,8 +92436,8 @@ function norm(weight = 1, mantissa = 3) {
       if (cache2.has(numTokens)) {
         return cache2.get(numTokens);
       }
-      const norm2 = 1 / Math.pow(numTokens, 0.5 * weight);
-      const n2 = parseFloat(Math.round(norm2 * m3) / m3);
+      const norm3 = 1 / Math.pow(numTokens, 0.5 * weight);
+      const n2 = parseFloat(Math.round(norm3 * m3) / m3);
       cache2.set(numTokens, n2);
       return n2;
     },
@@ -93269,9 +93269,9 @@ function parse5(query, options, { auto = true } = {}) {
 function computeScore(results, { ignoreFieldNorm = Config.ignoreFieldNorm }) {
   results.forEach((result) => {
     let totalScore = 1;
-    result.matches.forEach(({ key, norm: norm2, score }) => {
+    result.matches.forEach(({ key, norm: norm3, score }) => {
       const weight = key ? key.weight : null;
-      totalScore *= Math.pow(score === 0 && weight ? Number.EPSILON : score, (weight || 1) * (ignoreFieldNorm ? 1 : norm2));
+      totalScore *= Math.pow(score === 0 && weight ? Number.EPSILON : score, (weight || 1) * (ignoreFieldNorm ? 1 : norm3));
     });
     result.score = totalScore;
   });
@@ -93397,7 +93397,7 @@ var Fuse = class {
     const searcher = createSearcher(query, this.options);
     const { records } = this._myIndex;
     const results = [];
-    records.forEach(({ v: text, i: idx, n: norm2 }) => {
+    records.forEach(({ v: text, i: idx, n: norm3 }) => {
       if (!isDefined(text)) {
         return;
       }
@@ -93406,7 +93406,7 @@ var Fuse = class {
         results.push({
           item: text,
           idx,
-          matches: [{ score, value: text, norm: norm2, indices }]
+          matches: [{ score, value: text, norm: norm3, indices }]
         });
       }
     });
@@ -93496,7 +93496,7 @@ var Fuse = class {
     }
     let matches = [];
     if (isArray(value)) {
-      value.forEach(({ v: text, i: idx, n: norm2 }) => {
+      value.forEach(({ v: text, i: idx, n: norm3 }) => {
         if (!isDefined(text)) {
           return;
         }
@@ -93507,16 +93507,16 @@ var Fuse = class {
             key,
             value: text,
             idx,
-            norm: norm2,
+            norm: norm3,
             indices
           });
         }
       });
     } else {
-      const { v: text, n: norm2 } = value;
+      const { v: text, n: norm3 } = value;
       const { isMatch, score, indices } = searcher.searchIn(text);
       if (isMatch) {
-        matches.push({ score, key, value: text, norm: norm2, indices });
+        matches.push({ score, key, value: text, norm: norm3, indices });
       }
     }
     return matches;
@@ -93623,6 +93623,99 @@ var SimpleLRU = class {
   }
 };
 
+// src/template/search-score.ts
+var MIN_MEANINGFUL_TERM = 3;
+function words(text) {
+  return norm2(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+function queryTerms(query) {
+  return query.split(/[\s,;]+/).map((t4) => t4.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")).filter((t4) => t4.length > 0);
+}
+function norm2(s3) {
+  return s3.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+function matchesWord(text, term) {
+  if (!term)
+    return false;
+  const q4 = norm2(term);
+  if (!q4)
+    return false;
+  return words(text).some((w4) => w4 === q4 || w4.startsWith(q4));
+}
+function containsFragment(text, term) {
+  if (!term)
+    return false;
+  return norm2(text).includes(norm2(term));
+}
+function firstWordOffset(text, term) {
+  const t4 = norm2(text);
+  const q4 = norm2(term);
+  if (!q4)
+    return -1;
+  const re = new RegExp(`(^|[^\\p{L}\\p{N}])${q4.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "u");
+  const m3 = re.exec(t4);
+  if (!m3)
+    return -1;
+  return m3.index + m3[1].length;
+}
+function scoreEntry(target, query, opts = {}) {
+  var _a, _b, _c;
+  const terms = queryTerms(query);
+  if (terms.length === 0) {
+    return { exactPhrase: false, covered: 0, total: 0, value: 0 };
+  }
+  const title = (_a = target.title) != null ? _a : "";
+  const author = (_b = target.authorText) != null ? _b : "";
+  const haystacks = [title, author];
+  if (opts.includeAbstract)
+    haystacks.push((_c = target.abstract) != null ? _c : "");
+  const phrase = terms.join(" ");
+  const exactPhrase = !!title && containsFragment(title, phrase);
+  const meaningful = terms.filter((t4) => t4.length >= MIN_MEANINGFUL_TERM);
+  const forCoverage = meaningful.length > 0 ? meaningful : terms;
+  let covered = 0;
+  for (const term of forCoverage) {
+    if (haystacks.some((h3) => matchesWord(h3, term)))
+      covered++;
+  }
+  let wordHits = 0;
+  let fragmentOnly = 0;
+  let earliest = Number.POSITIVE_INFINITY;
+  let startBonus = 0;
+  for (const term of meaningful) {
+    if (matchesWord(title, term)) {
+      wordHits++;
+      const at = firstWordOffset(title, term);
+      if (at >= 0) {
+        earliest = Math.min(earliest, at);
+        if (at === 0)
+          startBonus++;
+      }
+    } else if (containsFragment(title, term)) {
+      fragmentOnly++;
+    }
+  }
+  if (exactPhrase) {
+    const at = firstWordOffset(title, phrase);
+    const pos = at < 0 ? 0.5 : Math.min(at / 100, 0.8);
+    return { exactPhrase, covered, total: forCoverage.length, value: pos };
+  }
+  const fullCoverage = covered >= forCoverage.length ? 1 : 2;
+  const penalty = fragmentOnly * 0.15;
+  const quality = 1 - Math.min(wordHits / Math.max(forCoverage.length, 1), 1) * 0.6 - Math.min(startBonus, 2) * 0.1;
+  return {
+    exactPhrase,
+    covered,
+    total: forCoverage.length,
+    value: fullCoverage + Math.max(quality, 0) + penalty
+  };
+}
+function passesCoverage(score, totalTerms) {
+  if (totalTerms <= 1)
+    return true;
+  return score.total > 0 && score.covered >= score.total;
+}
+
 // src/template/search-tier.ts
 function tierWeights(tier) {
   switch (tier) {
@@ -93645,33 +93738,6 @@ var TIER_IGNORE_LOCATION = {
   abstract: true
 };
 var MIN_MATCH_CHARS = 2;
-function containsPhrase(haystack, needle) {
-  if (!haystack)
-    return false;
-  return haystack.toLowerCase().includes(needle.toLowerCase());
-}
-function rerankKey(input, query, normalize2 = (s3) => s3) {
-  var _a, _b, _c;
-  const q4 = normalize2(query.trim());
-  const title = normalize2((_a = input.title) != null ? _a : "");
-  const author = normalize2((_b = input.authorText) != null ? _b : "");
-  const abstract = normalize2((_c = input.abstract) != null ? _c : "");
-  let adjustment = 0;
-  if (q4) {
-    const inTitle = containsPhrase(title, q4);
-    const inAuthor = containsPhrase(author, q4);
-    const inAbstract = containsPhrase(abstract, q4);
-    if (inTitle)
-      adjustment -= 1;
-    else if (inAuthor)
-      adjustment -= 0.3;
-    else if (inAbstract)
-      adjustment += 0.5;
-    else
-      adjustment += 1;
-  }
-  return input.fuseScore + adjustment;
-}
 
 // src/bib/bibManager.ts
 var import_obsidian26 = __toModule(require("obsidian"));
@@ -93885,8 +93951,7 @@ var fuseTitleSettings = {
     return [
       { name: "title", weight: w4.title },
       { name: "author.family", weight: w4.creators },
-      { name: "author.literal", weight: w4.creators / 2 },
-      { name: "id", weight: w4.citekey }
+      { name: "author.literal", weight: w4.creators / 2 }
     ];
   })()
 };
@@ -93902,8 +93967,7 @@ var fuseAbstractSettings = {
       { name: "title", weight: w4.title },
       { name: "author.family", weight: w4.creators },
       { name: "author.literal", weight: w4.creators / 2 },
-      { name: "abstract", weight: w4.abstract },
-      { name: "id", weight: w4.citekey }
+      { name: "abstract", weight: w4.abstract }
     ];
   })()
 };
@@ -94300,6 +94364,49 @@ var BibManager = class {
     } else {
       this.fuseAbstract.setCollection(data);
     }
+  }
+  searchTier(tier, query, limit) {
+    var _a, _b, _c;
+    const fuse = this.fuseForTier(tier);
+    if (!fuse)
+      return [];
+    const terms = queryTerms(query);
+    if (terms.length === 0)
+      return [];
+    const perTerm = terms.map((term) => {
+      const hits = fuse.search(normalizeDiacritics(term));
+      return new Set(hits.map((h3) => h3.item.id));
+    });
+    let candidates = null;
+    for (const hits of perTerm) {
+      if (candidates === null)
+        candidates = new Set(hits);
+      else
+        candidates = new Set([...candidates].filter((id) => hits.has(id)));
+      if (candidates.size === 0)
+        return [];
+    }
+    if (!candidates)
+      return [];
+    const includeAbstract = tier === "abstract";
+    const scored = [];
+    for (const id of candidates) {
+      const entry = this.bibCache.get(id);
+      if (!entry)
+        continue;
+      const score = scoreEntry({
+        title: (_a = entry.title) != null ? _a : null,
+        authorText: ((_b = entry.author) != null ? _b : []).map((a3) => {
+          var _a2, _b2;
+          return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
+        }).filter(Boolean).join(" "),
+        abstract: (_c = entry.abstract) != null ? _c : null
+      }, query, { includeAbstract });
+      if (!passesCoverage(score, terms.length))
+        continue;
+      scored.push({ entry, value: score.value });
+    }
+    return scored.sort((a3, b3) => a3.value - b3.value).slice(0, limit).map((s3) => s3.entry);
   }
   fuseForTier(tier) {
     var _a;
@@ -96117,13 +96224,13 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
           return zotlitResults;
         return indexReady ? [] : loadingSuggestion();
       }
-      LOG(`@${isTripleAtMode ? "@@" : "@"} fuse tier=${tier}, docs=`, (_c = (_b = fuse2 == null ? void 0 : fuse2._docs) == null ? void 0 : _b.length) != null ? _c : 0);
+      LOG(`@${isTripleAtMode ? "@@" : "@"} tier=${tier}, docs=`, (_c = (_b = fuse2 == null ? void 0 : fuse2._docs) == null ? void 0 : _b.length) != null ? _c : 0);
       if (!searchQuery) {
         const docs = fuse2 == null ? void 0 : fuse2._docs;
         return (docs == null ? void 0 : docs.length) ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 })) : [];
       }
-      const hits = fuse2.search(normalizeDiacritics(searchQuery), { limit: this.limit });
-      return this.rerank(hits, searchQuery);
+      const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
+      return ranked.map((item, refIndex) => ({ item, refIndex, score: 0 }));
     }
     let fuse = bibManager.fuse;
     const fileCacheEntry = bibManager.fileCache.get(context.file);
@@ -96141,25 +96248,6 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
       return liveItems.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
     }
     return indexReady ? [] : loadingSuggestion();
-  }
-  rerank(hits, query) {
-    if (hits.length < 2)
-      return hits;
-    return hits.map((hit) => {
-      var _a, _b, _c, _d, _e, _f;
-      return {
-        hit,
-        key: rerankKey({
-          title: (_b = (_a = hit.item) == null ? void 0 : _a.title) != null ? _b : null,
-          authorText: ((_d = (_c = hit.item) == null ? void 0 : _c.author) != null ? _d : []).map((a3) => {
-            var _a2, _b2;
-            return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
-          }).filter(Boolean).join(" "),
-          abstract: (_f = (_e = hit.item) == null ? void 0 : _e.abstract) != null ? _f : null,
-          fuseScore: typeof hit.score === "number" ? hit.score : 1
-        }, query, normalizeDiacritics)
-      };
-    }).sort((a3, b3) => a3.key - b3.key).map((r3) => r3.hit);
   }
   async zotlitFallback(searchQuery) {
     var _a, _b, _c;
