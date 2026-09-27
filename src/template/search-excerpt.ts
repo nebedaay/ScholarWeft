@@ -1,0 +1,134 @@
+/**
+ * Excerpts showing WHERE search terms were found, for `@@@` results.
+ *
+ * A result from the abstract tier can be puzzling without context: the term
+ * matched, but nothing in the title or author explains why. So each matched
+ * term earns a line of its surrounding text.
+ *
+ * The user's spec, verbatim intent:
+ *   - terms found close together share ONE line, so the relationship is visible;
+ *   - terms in different parts of the abstract get a line each;
+ *   - a few words before and after the term, whatever fits a line.
+ *
+ * Pure, so the layout rules are testable without rendering.
+ */
+
+/** Rough characters that fit one suggestion line. */
+export const EXCERPT_WIDTH = 90;
+
+/** Words of context kept on each side of a match. */
+export const CONTEXT_WORDS = 6;
+
+export interface Excerpt {
+  /** The display text, with the match intact and surrounding context. */
+  text: string;
+  /** Character offset of the match within `text`, for emphasis. */
+  matchStart: number;
+  matchLength: number;
+}
+
+/** Split text into word tokens with their offsets. */
+function tokens(text: string): Array<{ word: string; start: number }> {
+  const out: Array<{ word: string; start: number }> = [];
+  const re = /\S+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) out.push({ word: m[0], start: m.index });
+  return out;
+}
+
+function norm(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/** Case/diacritic-insensitive first offset of `term` in `text`, or -1. */
+function indexOfTerm(text: string, term: string): number {
+  const at = norm(text).indexOf(norm(term));
+  if (at === -1) return -1;
+  // Offsets align because NFD+strip preserves length for these characters.
+  return Math.min(at, text.length);
+}
+
+/**
+ * Build excerpt lines for the terms found in `text`.
+ *
+ * Overlapping windows are MERGED into one line, which is how "close together"
+ * becomes one excerpt: two terms within a couple of words of each other would
+ * otherwise produce two nearly identical lines. Terms far apart keep their own
+ * lines, capped at `maxLines`.
+ */
+export function buildExcerpts(
+  text: string | null | undefined,
+  terms: readonly string[],
+  opts: { maxLines?: number; width?: number; contextWords?: number } = {}
+): Excerpt[] {
+  if (!text) return [];
+  const maxLines = opts.maxLines ?? 2;
+  const width = opts.width ?? EXCERPT_WIDTH;
+  const context = opts.contextWords ?? CONTEXT_WORDS;
+
+  const words = tokens(text);
+  if (words.length === 0) return [];
+
+  // Word indices covering each term, so merging works on positions not chars.
+  const spans: Array<{ from: number; to: number }> = [];
+  for (const term of terms) {
+    if (!term) continue;
+    const at = indexOfTerm(text, term);
+    if (at === -1) continue;
+    const first = words.findIndex((w) => w.start >= at);
+    if (first === -1) continue;
+    const end = at + term.length;
+    let last = first;
+    while (last + 1 < words.length && words[last + 1].start < end) last++;
+    spans.push({ from: first, to: last });
+  }
+  if (spans.length === 0) return [];
+
+  // Merge overlapping/adjacent windows: `from - context` and `to + context`.
+  const windows = spans
+    .map((s) => ({
+      from: Math.max(0, s.from - context),
+      to: Math.min(words.length - 1, s.to + context),
+    }))
+    .sort((a, b) => a.from - b.from);
+
+  const merged: Array<{ from: number; to: number }> = [];
+  for (const w of windows) {
+    const last = merged[merged.length - 1];
+    // Overlapping windows mean the terms are close: one line shows both.
+    if (last && w.from <= last.to) last.to = Math.max(last.to, w.to);
+    else merged.push({ ...w });
+  }
+
+  return merged.slice(0, maxLines).map((span) => {
+    let from = span.from;
+    let to = span.to;
+    // Trim the window to something that fits a line, centred on the match.
+    let textWords = words.slice(from, to + 1).map((w) => w.word);
+    let joined = textWords.join(' ');
+    while (joined.length > width && to - from > 1) {
+      // Drop from whichever side is longer, to keep the match centred.
+      const mid = Math.floor((from + to) / 2);
+      if (mid - from > to - mid) from++;
+      else to--;
+      textWords = words.slice(from, to + 1).map((w) => w.word);
+      joined = textWords.join(' ');
+    }
+    const prefix = from > 0 ? '… ' : '';
+    const suffix = to < words.length - 1 ? ' …' : '';
+    const body = joined;
+    // Locate the first term's match inside the trimmed line.
+    const hit = terms
+      .map((t) => ({ t, at: indexOfTerm(body, t) }))
+      .filter((h) => h.at >= 0)
+      .sort((a, b) => a.at - b.at)[0];
+    return {
+      text: `${prefix}${body}${suffix}`,
+      matchStart: (hit ? hit.at : 0) + prefix.length,
+      matchLength: hit ? hit.t.length : 0,
+    };
+  });
+}

@@ -113,6 +113,32 @@ const CITED_KEYS_INDEX_VERSION = 2;
 const MIN_MEAN_CHUNK_FOR_GATE = 6;
 
 /**
+ * The published-venue text for an entry: the journal title, or the book title
+ * for a chapter; the series; and the publisher.
+ *
+ * Searched by the `@@@` tier only. Venue and publisher are broad — many works
+ * share a journal — so including them in `@@` would return long lists that are
+ * not about the work itself. In `@@@` they are a useful final reach: "the
+ * article in Past & Present" is a real way to look something up.
+ */
+function venueTextOf(entry: PartialCSLEntry): string {
+  const e = entry as {
+    'container-title'?: string;
+    'container-title-short'?: string;
+    'collection-title'?: string;
+    publisher?: string;
+  };
+  return [
+    e['container-title'],
+    e['container-title-short'],
+    e['collection-title'],
+    e.publisher,
+  ]
+    .filter((v): v is string => typeof v === 'string' && !!v.trim())
+    .join(' ');
+}
+
+/**
  * The searchable text for an entry's creators.
  *
  * Covers EVERY creator list (authors, editors) and EVERY name part (family,
@@ -214,6 +240,9 @@ const fuseAbstractSettings = {
       { name: 'editor.family', weight: w.creators / 2 },
       { name: 'editor.given', weight: w.creators / 4 },
       { name: 'editor.literal', weight: w.creators / 4 },
+      { name: 'container-title', weight: w.abstract / 2 },
+      { name: 'collection-title', weight: w.abstract / 2 },
+      { name: 'publisher', weight: w.abstract / 2 },
       { name: 'abstract', weight: w.abstract },
       // No `id` — see fuseTitleSettings.
     ];
@@ -923,6 +952,8 @@ export class BibManager {
     if (!fuse) return [];
     if (!isSearchableQuery(query)) return [];
     const includeAbstract = tier === 'abstract';
+    // Publication fields are an `@@@` reach only; see venueTextOf().
+    const includeVenue = includeAbstract;
 
     // Fuse is consulted only to SUGGEST spellings for the query's own terms —
     // never as a filter. The scorer decides membership from the entry's text,
@@ -936,11 +967,12 @@ export class BibManager {
         title: entry.title ?? null,
         authorText: authorTextOf(entry),
         abstract: (entry as { abstract?: string }).abstract ?? null,
+        venueText: venueTextOf(entry),
       };
 
       // Every way this query could read against THIS entry.
       let best = Number.POSITIVE_INFINITY;
-      for (const interp of interpretationsFor(target, query, { includeAbstract })) {
+      for (const interp of interpretationsFor(target, query, { includeAbstract, includeVenue })) {
         // NO FUSE GATE HERE. Fuse supplies RECALL only — a way to SUGGEST
         // candidates — and using its hits as a filter silently dropped entries
         // that plainly contain the terms: Fuse's score depends on where a term
@@ -951,7 +983,7 @@ export class BibManager {
         // The scorer alone decides membership, from the entry's own text. It is
         // the same matching the ranking uses, so what is considered and what is
         // ranked can never disagree.
-        const s = scoreEntry(target, interp.terms.join(' '), { includeAbstract });
+        const s = scoreEntry(target, interp.terms.join(' '), { includeAbstract, includeVenue });
         if (!passesCoverage(s)) continue;
         best = Math.min(best, s.value + interp.penalty);
       }

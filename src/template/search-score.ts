@@ -29,11 +29,22 @@ export interface ScoreTarget {
   title?: string | null;
   authorText?: string | null;
   abstract?: string | null;
+  /**
+   * Journal or book title, series, and publisher. Searched by the `@@@` tier
+   * only (see `ScoreOptions.includeVenue`), where it is a useful final reach
+   * without making `@@` noisy.
+   */
+  venueText?: string | null;
 }
 
 export interface ScoreOptions {
   /** Search the abstract too (the `@@@` tier). */
   includeAbstract?: boolean;
+  /**
+   * Search publication fields (journal/book title, series, publisher) too.
+   * `@@@` only — see `ScoreTarget.venueText`.
+   */
+  includeVenue?: boolean;
 }
 
 /** Terms shorter than this contribute nothing to word-boundary scoring. */
@@ -315,6 +326,7 @@ export function scoreEntry(
   const author = target.authorText ?? '';
   const haystacksAll = [title, author];
   if (opts.includeAbstract) haystacksAll.push(target.abstract ?? '');
+  if (opts.includeVenue) haystacksAll.push(target.venueText ?? '');
 
   // A JOINED run (`bourdieusocialcritique`) is interpreted as the words it was
   // built from, so it goes through the SAME ranking as the spaced form.

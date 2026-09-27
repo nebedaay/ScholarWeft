@@ -10,6 +10,7 @@ import {
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
+import { buildExcerpts } from 'src/template/search-excerpt';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
@@ -152,6 +153,26 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         purpose: 'Wrap cite key with brackets',
       },
     ]);
+
+    // A small count at the bottom of the popup, so it is clear how many
+    // results a search produced — useful when a query is broad, or when a
+    // narrow one unexpectedly returns nothing.
+    this._countEl = createDiv({ cls: 'sw-suggest-count' });
+  }
+
+  /** Footer element showing the result count; created once, updated per search. */
+  private _countEl: HTMLElement | null = null;
+
+  /** Show "N results" (or "no results") in the popup footer. */
+  private renderCount(count: number): void {
+    if (!this._countEl) return;
+    this._countEl.setText(
+      count === 1 ? '1 result' : count === 0 ? 'No results' : `${count} results`
+    );
+    const suggestEl = (this as any).suggestEl as HTMLElement | undefined;
+    if (suggestEl && this._countEl.parentElement !== suggestEl) {
+      suggestEl.appendChild(this._countEl);
+    }
   }
 
   async getSuggestions(
@@ -219,6 +240,11 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       // searchTier ranks by exact phrase, coverage, whole words and position —
       // and does its own AND filtering. Nothing further to re-rank here.
       const ranked = bibManager.searchTier(tier, searchQuery, this.limit);
+      // Excerpts are an `@@@` affordance: record the terms and the result count.
+      this._abstractQueryTerms = isTripleAtMode
+        ? searchQuery.split(/\s+/).filter((t) => t.length > 0)
+        : [];
+      this._lastResultCount = ranked.length;
       // TEMPORARY DIAGNOSTIC (survives production builds): reports how many
       // interpretations were tried and how many entries each produced, so a
       // "wildcard returns fewer than the full term" report can be traced.
@@ -230,8 +256,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       } catch {
         /* diagnostic only */
       }
+      this.renderCount(ranked.length);
       return ranked.map((item, refIndex) => ({ item, refIndex, score: 0 }));
     }
+
+    this._abstractQueryTerms = [];
+    this.renderCount(0);
 
     // ── single-@ mode: citekey-first search + live Zotero fallback ─────────
     // Use per-file Fuse index when the note has a frontmatter bibliography,
@@ -355,7 +385,45 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     const meta = getEntryMeta(item);
     if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
 
+    // `@@@` results can match only in the abstract, which is invisible from the
+    // title — so show where the terms were found. One line, or two when the
+    // terms sit in different parts of the abstract.
+    const excerpt = this.excerptFor(item as { abstract?: string });
+    if (excerpt) {
+      const line = frag.createDiv({ cls: 'sw-suggest-excerpt' });
+      if (
+        excerpt.matchLength > 0 &&
+        excerpt.matchStart + excerpt.matchLength <= excerpt.text.length
+      ) {
+        line.appendText(excerpt.text.slice(0, excerpt.matchStart));
+        line.append(
+          createEl('mark', {
+            text: excerpt.text.slice(
+              excerpt.matchStart,
+              excerpt.matchStart + excerpt.matchLength
+            ),
+          })
+        );
+        line.appendText(excerpt.text.slice(excerpt.matchStart + excerpt.matchLength));
+      } else {
+        line.setText(excerpt.text);
+      }
+    }
+
     el.setText(frag);
+  }
+
+  /** Terms of the most recent `@@@` query, for rendering excerpts. */
+  private _abstractQueryTerms: string[] = [];
+
+  /** How many results the most recent search produced, for the count row. */
+  private _lastResultCount = 0;
+
+  /** An excerpt for an `@@@` result, or null outside that tier. */
+  private excerptFor(item: { abstract?: string }): ReturnType<typeof buildExcerpts>[number] | null {
+    if (this._abstractQueryTerms.length === 0) return null;
+    const lines = buildExcerpts(item.abstract, this._abstractQueryTerms);
+    return lines[0] ?? null;
   }
 
   private lastSelect: EditorPosition = null;

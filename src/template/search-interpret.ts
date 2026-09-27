@@ -111,9 +111,14 @@ export interface Interpretation {
  * interpretations.
  */
 export function interpretationsFor(
-  entry: { title?: string | null; authorText?: string | null; abstract?: string | null },
+  entry: {
+    title?: string | null;
+    authorText?: string | null;
+    abstract?: string | null;
+    venueText?: string | null;
+  },
   query: string,
-  opts: { includeAbstract?: boolean } = {}
+  opts: { includeAbstract?: boolean; includeVenue?: boolean } = {}
 ): Interpretation[] {
   const shape = queryShape(query);
   if (shape.words.length === 0) return [];
@@ -124,7 +129,9 @@ export function interpretationsFor(
   // against it too — otherwise `soccrit` would never find an item whose only
   // "social critique" is in its abstract.
   const abstract = opts.includeAbstract ? (entry.abstract ?? '') : '';
-  const combined = `${author} ${title} ${abstract}`.trim();
+  // Publication fields are searched by `@@@` only, matching the scorer.
+  const venue = opts.includeVenue ? (entry.venueText ?? '') : '';
+  const combined = `${author} ${title} ${venue} ${abstract}`.trim();
 
   const out: Interpretation[] = [];
 

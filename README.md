@@ -20,6 +20,7 @@ This plugin started as a fork of [Bripey Citation Suite](https://github.com/1123
 - [Dependencies](./docs/dependencies.md) — what each feature needs, and where to get it
 - [Linked Citations](./docs/linked-citations.md) — the citation syntax
 - [Citations and References](./docs/citations.md) — formatting, autocomplete, tooltips, the reference sidebar
+- [Searching for References](./docs/searching.md) — what `@`, `@@` and `@@@` search, and tips for good results
 - [Bibliography](./docs/bibliography.md) — `.bib`/CSL sources, per-note overrides
 - [Zotero](./docs/zotero.md) — connection modes, port, libraries
 - [Literature Notes](./docs/literature-notes.md) — where notes live and how they are created
@@ -39,7 +40,7 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 - **Conventional pandoc citations** — `[@key]`, `[see @key, p. 25]` render too, and commands convert between formats losslessly.
 - **Live reference sidebar** — a searchable list of every citation in the current note, with copy and jump buttons.
 - **Insert bibliography at cursor** and **bibliography snapshot** (save a note's citations as a `.bib`, colour-coded by sync status).
-- **Citekey autocomplete and full-text search** — `@` searches citekeys (prefix → substring → fuzzy), `@@` adds title and author, `@@@` adds the abstract, all from ScholarWeft's own index. See [Citations](./docs/citations.md).
+- **Search that finds the work** — `@` for citekeys, `@@` for titles and creators, `@@@` to add abstracts and publication details. Whole-word aware, accent-insensitive, and it understands abbreviations (`soccri` → *soc*ial *cri*tique). See [Searching for References](./docs/searching.md).
 - **Smart bracket insertion** — `⌘↵` wraps the selection in `[@key]` without double-wrapping.
 - **Diacritic-insensitive search** — "Muller" finds "Müller".
 - **Citation decoration and tooltips** — colour-coded status; hover for a formatted preview, literature-note link, and Zotero link.
@@ -51,7 +52,6 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 - **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette. ScholarWeft's default template provides comprehensive bibliographic data in the note’s frontmatter and rich annotation callouts. See [Literature Notes](./docs/literature-notes.md).
 - **Multiple bibliography sources** — any number of `.bib`/CSL-JSON/CSL-YAML files plus Zotero, merged; Zotero wins on conflicts. See [Bibliography](./docs/bibliography.md).
 - **Native Zotero 7/8 API** — no Better BibTeX needed to resolve and format citations (BBT still required for Zotero 6, and still the easiest way to auto-generate citekeys). See [Zotero](./docs/zotero.md).
-- **Citekey and full-text autocomplete** — see above; the three tiers all run on ScholarWeft's own index.
 - **Citekey sync** — update citations and literature notes across the vault if your citekeys change; images attached from annotations are also renamed.
 
 ### Document import and export (desktop only)

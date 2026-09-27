@@ -931,6 +931,34 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   white-space: nowrap;
 }
 
+/* `@@@` excerpt: shows WHERE in the abstract a term was found, since the
+   title and author may not explain the match. */
+.sw-suggest-excerpt {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-style: italic;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-top: var(--size-4-1);
+}
+
+.sw-suggest-excerpt mark {
+  background-color: transparent;
+  color: var(--text-normal);
+  font-style: normal;
+  font-weight: var(--font-semibold);
+}
+
+/* Result count, pinned at the bottom of the suggestion popup. */
+.sw-suggest-count {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  padding: var(--size-4-1) var(--size-4-2);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
 .sw-suggest-loading-wrapper {
   display: flex;
   position: relative;
