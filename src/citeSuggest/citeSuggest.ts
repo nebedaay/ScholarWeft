@@ -11,6 +11,11 @@ import {
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
 import { buildExcerpts } from 'src/template/search-excerpt';
+import {
+  afterOpenBracketIn,
+  computeInsertion,
+  insertionHint,
+} from 'src/template/cite-insert';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
@@ -150,29 +155,41 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     this.setInstructions([
       {
         command: Platform.isMacOS ? '⌘ ↵' : 'ctrl ↵',
-        purpose: 'Wrap cite key with brackets',
+        // Updated per search to name the mark actually inserted (see
+        // renderCount), so `[[` users are told about `]]`.
+        purpose: 'wrap with brackets',
       },
     ]);
-
-    // A small count at the bottom of the popup, so it is clear how many
-    // results a search produced — useful when a query is broad, or when a
-    // narrow one unexpectedly returns nothing.
-    this._countEl = createDiv({ cls: 'sw-suggest-count' });
   }
 
-  /** Footer element showing the result count; created once, updated per search. */
-  private _countEl: HTMLElement | null = null;
-
-  /** Show "N results" (or "no results") in the popup footer. */
+  /**
+   * Update the footer row: the closing mark on the left, the result count on
+   * the right. One row, so the popup does not grow a second line.
+   */
   private renderCount(count: number): void {
-    if (!this._countEl) return;
-    this._countEl.setText(
-      count === 1 ? '1 result' : count === 0 ? 'No results' : `${count} results`
-    );
-    const suggestEl = (this as any).suggestEl as HTMLElement | undefined;
-    if (suggestEl && this._countEl.parentElement !== suggestEl) {
-      suggestEl.appendChild(this._countEl);
-    }
+    this.setInstructions([
+      {
+        command: Platform.isMacOS ? '⌘ ↵' : 'ctrl ↵',
+        purpose: this._insertionHint,
+      },
+      {
+        command: count === 0 ? 'No results' : `${count}`,
+        purpose: count === 1 ? 'result' : 'results',
+      },
+    ]);
+  }
+
+  /** Names the closing mark the current context will insert (`]` or `]]`). */
+  private _insertionHint = 'wrap with brackets';
+
+  /** Record the closing mark for the current context, for the footer hint. */
+  private setInsertionHint(context: EditorSuggestContext): void {
+    const line = context.editor.getLine(context.start.line) ?? '';
+    const beforeStart = line.substring(0, context.start.ch);
+    this._insertionHint = insertionHint({
+      beforeStart,
+      afterOpenBracket: afterOpenBracketIn(beforeStart),
+    });
   }
 
   async getSuggestions(
@@ -442,25 +459,19 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     const afterCursor = lineText.substring(context.end.ch);
     const beforeStart = lineText.substring(0, context.start.ch);
 
-    // Bracket-aware insertion (⌘/ctrl+Enter):
-    //   - charBefore is '[': user typed [@del — bracket already open, just close it
-    //   - cursor inside an existing [@...] block: already bracketed, no wrapping
-    //   - otherwise: wrap fully as [@citekey]
-    // Plain Enter always inserts @citekey regardless of bracket context.
-    let replaceStr: string;
-    if (event.metaKey || event.ctrlKey) {
-      const closingBracketAhead = afterCursor.includes(']');
-      const insideExistingBlock = closingBracketAhead && /\[@[^\]]*$/.test(beforeStart);
-      if (charBefore === '[') {
-        replaceStr = `@${id}]`;          // [@del → [@citekey]
-      } else if (insideExistingBlock) {
-        replaceStr = `@${id}`;           // [@k1; @del] → [@k1; @citekey]
-      } else {
-        replaceStr = `[@${id}]`;         // @del → [@citekey]
-      }
-    } else {
-      replaceStr = `@${id}`;
-    }
+    // `beforeStart` ends with the '@' (or '@@'), so the character before THAT is
+    // what shows whether a citation bracket is already open — `[@del` needs
+    // only `]`, where `@del` needs a full `[@key]` wrapper.
+    const afterOpenBracket = afterOpenBracketIn(beforeStart);
+
+    // Bracket-aware insertion, in one tested place (see cite-insert.ts): the
+    // closing delimiter must match the opening one, or a `[[@key]` wikilink is
+    // silently broken.
+    const { text: replaceStr } = computeInsertion(
+      id,
+      { beforeStart, afterCursor, charBefore, afterOpenBracket },
+      { wrap: !!(event.metaKey || event.ctrlKey) }
+    );
 
     context.editor.replaceRange(replaceStr, context.start, context.end);
     this.lastSelect = { ch: context.start.ch + replaceStr.length, line: context.start.line };
@@ -559,6 +570,10 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     if (lastSelect && cursor.ch === lastSelect.ch && cursor.line === lastSelect.line) {
       return null; // suppress re-trigger right after a selection
     }
+
+    // Name the mark this context will insert, so the footer hint matches the
+    // trigger the user is in (`]]` inside a wikilink, `]` inside `[@…`).
+    this.setInsertionHint({ editor, start: cursor } as EditorSuggestContext);
 
     const line = (editor.getLine(cursor.line) || '').substring(0, cursor.ch);
 

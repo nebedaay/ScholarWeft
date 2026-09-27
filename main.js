@@ -96441,6 +96441,42 @@ function buildExcerpts(text, terms, opts = {}) {
   });
 }
 
+// src/template/cite-insert.ts
+function insideUnclosedWikilink(beforeStart) {
+  const open2 = beforeStart.lastIndexOf("[[");
+  if (open2 === -1)
+    return false;
+  return beforeStart.indexOf("]]", open2) === -1;
+}
+function insertionHint(ctx) {
+  if (insideUnclosedWikilink(ctx.beforeStart))
+    return "close with ]]";
+  if (ctx.afterOpenBracket)
+    return "close with ]";
+  return "wrap with brackets";
+}
+function afterOpenBracketIn(beforeStart) {
+  const beforeAt = beforeStart.replace(/@+$/, "");
+  return beforeAt.endsWith("[") && !beforeAt.endsWith("[[");
+}
+function insideExistingBlock(beforeStart, afterCursor) {
+  return afterCursor.includes("]") && /\[@[^\]]*$/.test(beforeStart);
+}
+function computeInsertion(citekey, ctx, opts) {
+  if (!opts.wrap)
+    return { text: `@${citekey}` };
+  if (insideExistingBlock(ctx.beforeStart, ctx.afterCursor)) {
+    return { text: `@${citekey}` };
+  }
+  if (insideUnclosedWikilink(ctx.beforeStart)) {
+    return { text: `${citekey}]]` };
+  }
+  if (ctx.afterOpenBracket) {
+    return { text: `@${citekey}]` };
+  }
+  return { text: `[@${citekey}]` };
+}
+
 // src/citeSuggest/citeSuggest.ts
 var SUGGEST_DEBUG = false;
 var LOG = SUGGEST_DEBUG ? (...args) => console.log("[sw:suggest]", ...args) : (..._args) => {
@@ -96513,7 +96549,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
   constructor(app2, plugin) {
     super(app2);
     this.limit = 20;
-    this._countEl = null;
+    this._insertionHint = "wrap with brackets";
     this._abstractQueryTerms = [];
     this._lastResultCount = 0;
     this.lastSelect = null;
@@ -96528,19 +96564,30 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     this.setInstructions([
       {
         command: import_obsidian27.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
-        purpose: "Wrap cite key with brackets"
+        purpose: "wrap with brackets"
       }
     ]);
-    this._countEl = createDiv({ cls: "sw-suggest-count" });
   }
   renderCount(count) {
-    if (!this._countEl)
-      return;
-    this._countEl.setText(count === 1 ? "1 result" : count === 0 ? "No results" : `${count} results`);
-    const suggestEl = this.suggestEl;
-    if (suggestEl && this._countEl.parentElement !== suggestEl) {
-      suggestEl.appendChild(this._countEl);
-    }
+    this.setInstructions([
+      {
+        command: import_obsidian27.Platform.isMacOS ? "\u2318 \u21B5" : "ctrl \u21B5",
+        purpose: this._insertionHint
+      },
+      {
+        command: count === 0 ? "No results" : `${count}`,
+        purpose: count === 1 ? "result" : "results"
+      }
+    ]);
+  }
+  setInsertionHint(context) {
+    var _a;
+    const line = (_a = context.editor.getLine(context.start.line)) != null ? _a : "";
+    const beforeStart = line.substring(0, context.start.ch);
+    this._insertionHint = insertionHint({
+      beforeStart,
+      afterOpenBracket: afterOpenBracketIn(beforeStart)
+    });
   }
   async getSuggestions(context) {
     var _a, _b, _c, _d, _e, _f;
@@ -96711,20 +96758,8 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     const charBefore = lineText[context.start.ch - 1];
     const afterCursor = lineText.substring(context.end.ch);
     const beforeStart = lineText.substring(0, context.start.ch);
-    let replaceStr;
-    if (event.metaKey || event.ctrlKey) {
-      const closingBracketAhead = afterCursor.includes("]");
-      const insideExistingBlock = closingBracketAhead && /\[@[^\]]*$/.test(beforeStart);
-      if (charBefore === "[") {
-        replaceStr = `@${id}]`;
-      } else if (insideExistingBlock) {
-        replaceStr = `@${id}`;
-      } else {
-        replaceStr = `[@${id}]`;
-      }
-    } else {
-      replaceStr = `@${id}`;
-    }
+    const afterOpenBracket = afterOpenBracketIn(beforeStart);
+    const { text: replaceStr } = computeInsertion(id, { beforeStart, afterCursor, charBefore, afterOpenBracket }, { wrap: !!(event.metaKey || event.ctrlKey) });
     context.editor.replaceRange(replaceStr, context.start, context.end);
     this.lastSelect = { ch: context.start.ch + replaceStr.length, line: context.start.line };
     this.close();
@@ -96789,6 +96824,7 @@ var CiteSuggest = class extends import_obsidian27.EditorSuggest {
     if (lastSelect && cursor.ch === lastSelect.ch && cursor.line === lastSelect.line) {
       return null;
     }
+    this.setInsertionHint({ editor, start: cursor });
     const line = (editor.getLine(cursor.line) || "").substring(0, cursor.ch);
     const tripleMatch = line.match(tripleAtRE);
     if (tripleMatch) {
