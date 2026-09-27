@@ -249,6 +249,15 @@ export function findManagedRegion(body: string): ManagedRegion | null {
   return null;
 }
 
+/**
+ * How a re-import treats the generated `## Notes` (child notes):
+ *  - `ifEmpty` (default) — refill ONLY when the section has no content
+ *    (whitespace doesn't count); a section with any real content is left alone.
+ *  - `replace` — always replace the section content with the render.
+ *  - `firstImportOnly` — never touch it after the first import.
+ */
+export type NotesReimport = 'replace' | 'ifEmpty' | 'firstImportOnly';
+
 export interface ManagedRegionMergeOptions {
   /**
    * The template declares a managed region, so its ABSENCE in the render means
@@ -256,6 +265,8 @@ export interface ManagedRegionMergeOptions {
    * removed. Without this, an absent region is treated as "not managed here".
    */
   managesRegion?: boolean;
+  /** Re-import strategy for the generated `## Notes` section. */
+  notesReimport?: NotesReimport;
 }
 
 /**
@@ -301,10 +312,88 @@ export function mergeManagedRegion(
   return existingBody;
 }
 
+const NOTES_HEADING_RE = /^##[ \t]+Notes[ \t]*$/m;
+/** End of the `## Notes` section: the next heading, or a managed marker. */
+const NOTES_SECTION_END_RE =
+  /^(?:#{1,2}[ \t]|%%(?:\/)?(?:sw|zt)-managed%%)/m;
+
+/** The `## Notes` section of a body: its heading end, section end, content. */
+function notesSection(
+  body: string
+): { start: number; end: number; content: string } | null {
+  const m = NOTES_HEADING_RE.exec(body);
+  if (!m) return null;
+  const start = m.index + m[0].length;
+  const rest = body.slice(start);
+  const stop = NOTES_SECTION_END_RE.exec(rest);
+  const end = stop ? start + stop.index : body.length;
+  return { start, end, content: body.slice(start, end) };
+}
+
+/** Replace a section's content in place, keeping the heading and what follows. */
+function spliceNotesSection(
+  body: string,
+  section: { start: number; end: number },
+  content: string
+): string {
+  const before = body.slice(0, section.start).replace(/\n+$/, '');
+  const after = body.slice(section.end).replace(/^\n+/, '');
+  const head = content ? `${before}\n\n${content}` : before;
+  return after ? `${head}\n\n${after}` : `${head}\n`;
+}
+
+/**
+ * Reconcile the generated `## Notes` section on re-import, per `strategy`:
+ *
+ *  - `firstImportOnly` — leave the existing section exactly as it is.
+ *  - `ifEmpty` (default) — fill it from the render ONLY when it has no content
+ *    (whitespace doesn't count), matching the after-the-fact ZotLit insertion
+ *    path (`insertIntoNote`). A section with real content is never overwritten
+ *    (replace loses user edits) or appended to (append duplicates); only a
+ *    human or AI can judge whether content is redundant.
+ *  - `replace` — always put the rendered content there.
+ *
+ * Section end stops at the next heading or managed marker, so the empty test
+ * ignores the `%%sw-managed%%`/`%%zt-managed%%` region. A body with no
+ * `## Notes` heading is left as is.
+ */
+export function reconcileNotesSection(
+  existingBody: string,
+  renderedBody: string,
+  strategy: NotesReimport = 'ifEmpty'
+): string {
+  if (strategy === 'firstImportOnly') return existingBody;
+
+  const existing = notesSection(existingBody);
+  if (!existing) return existingBody;
+  const rendered = notesSection(renderedBody);
+  if (!rendered) return existingBody;
+
+  if (strategy === 'ifEmpty') {
+    if (existing.content.trim()) return existingBody; // user content — leave it
+    if (!rendered.content.trim()) return existingBody; // nothing to add
+  }
+
+  const content = rendered.content.replace(/^\n+|\n+$/g, '');
+  return spliceNotesSection(existingBody, existing, content);
+}
+
+/** `ifEmpty` alias kept for callers that only want the default behaviour. */
+export function fillEmptyNotesSection(
+  existingBody: string,
+  renderedBody: string
+): string {
+  return reconcileNotesSection(existingBody, renderedBody, 'ifEmpty');
+}
+
 /**
  * Re-import an existing note: merge the template's frontmatter fields and
  * reconcile its managed region, preserving all user content and out-of-scope
  * properties. `rendered` is the full output of a fresh template render.
+ *
+ * One generated area lives OUTSIDE the managed region: `## Notes` holds the
+ * item's Zotero child notes. It is only (re)filled when empty, so a re-import
+ * restores notes the user cleared but never overwrites their own writing.
  */
 export function mergeNote(
   existing: string,
@@ -315,9 +404,12 @@ export function mergeNote(
   const prior = splitNote(existing);
   const fresh = splitNote(rendered);
   const frontmatter = mergeFrontmatter(prior.frontmatter, specs);
-  const body =
+  let body =
     prior.frontmatter === null
       ? prior.body
       : mergeManagedRegion(prior.body, fresh.body, opts);
+  if (prior.frontmatter !== null) {
+    body = reconcileNotesSection(body, fresh.body, opts.notesReimport ?? 'ifEmpty');
+  }
   return joinNote(frontmatter, body);
 }

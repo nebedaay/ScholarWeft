@@ -290,7 +290,7 @@ luaotfload-tool --update    # every OS, once
 **The easy way:** the [setup script](#the-easy-way-run-the-setup-script) offers this step (it installs the Templater plugin; the configuration is finished from inside Obsidian on your next launch). Otherwise, do it from ScholarWeft's settings:
 
 1. In **Obsidian**: **Settings → Community plugins → Browse**, search `Templater`, **Install**, then **Enable**.
-2. Open **Settings → ScholarWeft → Literature note import** and click **Install the Basic note template and apply it to new notes**.
+2. Open **Settings → ScholarWeft → Addons for displaying and linking notes** and click **Install the Basic note template and apply it to new notes**.
    - It copies the template into a dedicated `sw-markdown-templates/` folder — **your own templates are left untouched.**
    - It sets Templater to apply that template to new notes at the top level of your vault.
    - If you already have a Templater rule for new notes, it asks whether to **Keep** your rule or **Replace** it — nothing is overwritten without your say-so.
@@ -305,7 +305,8 @@ luaotfload-tool --update    # every OS, once
 Open **Settings → ScholarWeft**.
 
 - **Bibliography** — Zotero is **already switched on** with **My Library** selected. If Zotero isn't running (or the checkbox from Step 2 is off), you'll see **“Cannot connect to Zotero”** with a **Retry** button and instructions. Use a `.bib` file instead of Zotero? Just turn the Zotero toggle off and add your file under *Bibliography files*.
-- **Literature note import** — where literature notes live and how they are created. ScholarWeft imports the notes itself by default using its own rich template. The ZotLit options (including **Install and use ScholarWeft's ZotLit import templates**, Step 4) appear only if you switch to ZotLit, an alternative Zotero import plugin. The literature note page also offers the option to **Install the Basic note template and apply it to new notes** (Step 6b), which installs the companion plugin (**Templater**) if it isn't there yet. See [Literature Notes](./literature-notes.md).
+- **Literature note import** — where literature notes live and how they are created. ScholarWeft imports the notes itself by default using its own rich template. The ZotLit options (including **Install and use ScholarWeft's ZotLit import templates**, Step 4) appear only if you switch to ZotLit, an alternative Zotero import plugin. See [Literature Notes](./literature-notes.md).
+- **Addons for displaying and linking notes** — optional, independent of the import path. **Install the Basic note template and apply it to new notes** (Step 5b) installs the companion plugin (**Templater**) if it isn't there yet. **Format YAML properties** writes and enables a CSS snippet that makes the `title`, `short-title`, `up`, and `related` properties stand out, with a colour picker for the title background and a size slider.
 - **Document import/export and compilation** — if you installed the document tools, each option shows a “not found” note until it detects them. ScholarWeft searches for a usable Python automatically (your `python3`/conda, or the setup script's `~/ScholarWeft/venv`), so **you normally don't have to set anything**. If it still reports Python missing:
   - **Path to Python 3** → paste your interpreter (e.g. `~/ScholarWeft/venv/bin/python3`, or your conda `python`)
   - **Path to Pandoc** → usually auto-detected (`/opt/homebrew/bin/pandoc` on Apple-silicon Macs)

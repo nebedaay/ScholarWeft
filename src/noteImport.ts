@@ -24,6 +24,11 @@ import {
   resolveLiteratureNoteFolder,
 } from './template/lit-folder';
 export { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
+import { readTemplate } from './template/note-template-io';
+export {
+  readTemplate,
+  copyDefaultTemplateToVault,
+} from './template/note-template-io';
 import {
   excerptImageName,
   findPreviousImagePath,
@@ -40,9 +45,6 @@ import { renderNote } from './template/render';
 import { getZotlitLiteratureFolder } from './zotlit';
 
 declare const require: (id: string) => any;
-
-/** Where our template is extracted, relative to the plugin directory. */
-const TEMPLATE_ASSET = 'sw-note-templates/sw-note.eta.md';
 
 const EMPTY_CHILDREN: RawZoteroChildren = {
   attachments: [],
@@ -93,19 +95,6 @@ export function literatureNoteFolder(plugin: ReferenceList): string {
     literatureNoteFolder: plugin.settings.literatureNoteFolder,
     zotlitFolder: getZotlitLiteratureFolder(plugin.app),
   });
-}
-
-/** Read the bundled own note template; also used by the data explorer preview. */
-export async function readTemplate(plugin: ReferenceList): Promise<string | null> {
-  const dir = plugin.manifest.dir;
-  if (!dir) return null;
-  const path = normalizePath(`${dir}/${TEMPLATE_ASSET}`);
-  try {
-    return await plugin.app.vault.adapter.read(path);
-  } catch (e) {
-    console.warn('[sw:import] note template not found at', path, e);
-    return null;
-  }
 }
 
 /**

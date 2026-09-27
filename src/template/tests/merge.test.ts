@@ -1,4 +1,5 @@
 import {
+  fillEmptyNotesSection,
   findManagedRegion,
   joinNote,
   MANAGED_CLOSE,
@@ -275,5 +276,47 @@ describe('mergeNote', () => {
     const specs = buildSpecs([['title', 'T']]);
     // Caller passes existing = null; mergeInto returns rendered unchanged.
     expect(mergeNote(rendered, rendered, specs)).toBe(rendered);
+  });
+
+  it('refills an emptied ## Notes on re-import', () => {
+    const specs = buildSpecs([['title', 'T']]);
+    const existing = '---\ntitle: T\n---\n\n## Notes\n\n';
+    const rendered =
+      '---\ntitle: T\n---\n\n## Notes\n\nChild one\n\n---\n\nChild two\n';
+    const out = mergeNote(existing, rendered, specs);
+    expect(out).toContain('Child one');
+    expect(out).toContain('\n---\n');
+    expect(out).toContain('Child two');
+  });
+});
+
+describe('fillEmptyNotesSection', () => {
+  const rendered = '## Notes\n\nFirst note\n\n---\n\nSecond note\n';
+
+  it('fills an empty Notes section from the render', () => {
+    expect(fillEmptyNotesSection('## Notes\n\n', rendered)).toBe(
+      '## Notes\n\nFirst note\n\n---\n\nSecond note\n'
+    );
+  });
+
+  it('never overwrites a section that has content', () => {
+    const existing = '## Notes\n\nMy own writing\n';
+    expect(fillEmptyNotesSection(existing, rendered)).toBe(existing);
+  });
+
+  it('fills before the managed region and keeps it intact', () => {
+    const existing =
+      `## Notes\n\n${MANAGED_OPEN}\n## Annotations\nx\n${MANAGED_CLOSE}\n`;
+    const out = fillEmptyNotesSection(existing, rendered);
+    expect(out.startsWith('## Notes\n\nFirst note')).toBe(true);
+    expect(out).toContain(MANAGED_OPEN);
+    expect(out).toContain(MANAGED_CLOSE);
+  });
+
+  it('does nothing without render content or without a Notes heading', () => {
+    expect(fillEmptyNotesSection('## Notes\n\n', '## Notes\n\n')).toBe(
+      '## Notes\n\n'
+    );
+    expect(fillEmptyNotesSection('# T\n\nx\n', rendered)).toBe('# T\n\nx\n');
   });
 });

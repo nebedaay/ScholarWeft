@@ -93,3 +93,142 @@ export function zotLitChoice(choice: ZotLitChoice): {
     ? { action: 'convert', remember: 'convert' }
     : { action: 'leave', remember: null };
 }
+
+// ── Citekey reconciliation (Zotero-key → note) ─────────────────────────────
+//
+// A Zotero item's citekey can change (Better BibTeX pin/edit). The item's
+// stable `zotero-key` does not, so the note carrying that key is the item's
+// note whatever its filename. The note ITSELF records the old name (its
+// filename, and/or its `citekey:` frontmatter), so no separate rename history
+// is needed: compare the note against the library's current citekey and rename
+// when they differ.
+
+/** True for a character that may continue a Pandoc/BBT citekey. Used as the
+ *  boundary when matching `@key` inside a filename: `@foo2012` must never match
+ *  `@foo2012a`, an excerpt image (`@key_p3_AB12`), or the note itself
+ *  (`@key.md`). */
+export function isCitekeyChar(ch: string): boolean {
+  return /[\p{L}\p{N}:.#$%&+\-?<>~_/]/u.test(ch);
+}
+
+/**
+ * The citekey a literature-note filename records (`@key` → `key`), or null when
+ * the basename is not a bare `@key` (derived files like `@key - transcription`,
+ * hand-named notes). `basename` is the filename WITHOUT its extension.
+ */
+export function citekeyFromBasename(basename: string): string | null {
+  const m = /^@([^\s/]+)$/.exec(basename);
+  return m ? m[1] : null;
+}
+
+/**
+ * New filename for a file derived from a reference — `@old - transcription.md`
+ * → `@new - transcription.md` — or null when `name` is not derived from
+ * `fromKey` (or is the note/excerpt image itself, which the boundary rule
+ * excludes because `.`/`_` continue a citekey).
+ */
+export function derivedRenameFor(
+  name: string,
+  fromKey: string,
+  toKey: string
+): string | null {
+  if (!fromKey || fromKey === toKey) return null;
+  const prefix = `@${fromKey}`;
+  if (!name.startsWith(prefix)) return null;
+  const next = name.charAt(prefix.length);
+  if (!next || isCitekeyChar(next)) return null;
+  return `@${toKey}${name.slice(prefix.length)}`;
+}
+
+/** A literature note as reconciliation sees it. */
+export interface ReconcileNote {
+  path: string;
+  /** Filename without extension (`@oldKey`). */
+  basename: string;
+  /** Frontmatter `citekey:`, if any. */
+  citekey: string | null;
+  /** Frontmatter `zotero-key` (stable; `KEY` or `KEYgGROUPID`). */
+  zoteroKey: string;
+}
+
+/** One note whose name/frontmatter no longer matches its item's citekey. */
+export interface NoteReconcile {
+  path: string;
+  /** New path; equal to `path` when only the frontmatter changes. */
+  newPath: string;
+  /** The stale key recorded by the note (filename, else frontmatter). */
+  fromKey: string;
+  /** The library's current citekey. */
+  toKey: string;
+  zoteroKey: string;
+  /** True when the `citekey:` frontmatter must be written. */
+  rekeyFrontmatter: boolean;
+}
+
+/** A derived file (`@old …`) to rename alongside its note. */
+export interface DerivedRename {
+  path: string;
+  newPath: string;
+  fromKey: string;
+  toKey: string;
+}
+
+/** Everything a reconcile pass would change. */
+export interface CitekeyReconcilePlan {
+  /** Notes that will be renamed/re-keyed. */
+  renames: NoteReconcile[];
+  /** Notes whose new name is already taken (reported, not acted on). */
+  blocked: NoteReconcile[];
+  /** Notes whose `zotero-key` is not in the loaded library (reported, not acted on). */
+  unresolved: ReconcileNote[];
+  derived: DerivedRename[];
+  /** Derived-file target names already taken; those renames are skipped. */
+  conflicts: string[];
+}
+
+/**
+ * Match notes to their item by stable `zotero-key` and plan the renames. Pure:
+ * the caller supplies the library resolver. A note is included only when its
+ * filename or `citekey:` differs from the resolved current citekey. A note
+ * whose filename is not `@key` is re-keyed in frontmatter but not renamed (the
+ * user's own name is respected).
+ */
+export function planCitekeyReconcile(
+  notes: ReconcileNote[],
+  resolveCitekey: (zoteroKey: string) => string | null
+): { renames: NoteReconcile[]; unresolved: ReconcileNote[] } {
+  const renames: NoteReconcile[] = [];
+  const unresolved: ReconcileNote[] = [];
+
+  for (const note of notes) {
+    const toKey = resolveCitekey(note.zoteroKey);
+    if (!toKey) {
+      unresolved.push(note);
+      continue;
+    }
+
+    const fnameKey = citekeyFromBasename(note.basename);
+    const fmKey = note.citekey;
+    const filenameDiffers = fnameKey != null && fnameKey !== toKey;
+    const fmDiffers = fmKey !== toKey;
+    if (!filenameDiffers && !fmDiffers) continue; // already current
+
+    const fromKey = filenameDiffers ? fnameKey! : fmKey ?? fnameKey ?? '';
+    let newPath = note.path;
+    if (filenameDiffers) {
+      const dir = note.path.replace(/[^/]+$/, '');
+      newPath = normalizePath(`${dir}@${toKey}.md`);
+    }
+
+    renames.push({
+      path: note.path,
+      newPath,
+      fromKey,
+      toKey,
+      zoteroKey: note.zoteroKey,
+      rekeyFrontmatter: fmDiffers,
+    });
+  }
+
+  return { renames, unresolved };
+}

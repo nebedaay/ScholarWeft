@@ -5,11 +5,15 @@ jest.mock(
 );
 
 import {
+  citekeyFromBasename,
+  derivedRenameFor,
   findAvailableNotePath,
   matchNoteByZoteroKey,
   isZotLitManaged,
+  planCitekeyReconcile,
   zotLitChoice,
   suffixCandidate,
+  type ReconcileNote,
 } from '../note-lookup';
 
 const candidates = [
@@ -92,5 +96,112 @@ describe('zotLitChoice', () => {
       action: 'leave',
       remember: null,
     });
+  });
+});
+
+describe('citekeyFromBasename', () => {
+  it('reads a bare @key name', () => {
+    expect(citekeyFromBasename('@smith2020')).toBe('smith2020');
+  });
+
+  it('rejects derived and hand-named files', () => {
+    expect(citekeyFromBasename('@smith2020 - transcription')).toBeNull();
+    expect(citekeyFromBasename('My Note')).toBeNull();
+  });
+});
+
+describe('derivedRenameFor', () => {
+  it('renames space-separated derived files', () => {
+    expect(
+      derivedRenameFor('@old - transcription - v. 2.md', 'old', 'new')
+    ).toBe('@new - transcription - v. 2.md');
+    expect(derivedRenameFor('@old V. 1 - translation.md', 'old', 'new')).toBe(
+      '@new V. 1 - translation.md'
+    );
+  });
+
+  it('never touches the note itself, images, or suffixed keys', () => {
+    // `.` and `_` continue a citekey, and `a` is a different key.
+    expect(derivedRenameFor('@old.md', 'old', 'new')).toBeNull();
+    expect(derivedRenameFor('@old_p6_AB12XYZ.png', 'old', 'new')).toBeNull();
+    expect(derivedRenameFor('@olda - transcription.md', 'old', 'new')).toBeNull();
+  });
+
+  it('is a no-op when the key did not change', () => {
+    expect(derivedRenameFor('@old - transcription.md', 'old', 'old')).toBeNull();
+  });
+});
+
+describe('planCitekeyReconcile', () => {
+  const resolve = (map: Record<string, string>) => (key: string) =>
+    map[key] ?? null;
+
+  const note = (
+    path: string,
+    basename: string,
+    citekey: string | null,
+    zoteroKey: string
+  ): ReconcileNote => ({ path, basename, citekey, zoteroKey });
+
+  it('plans a filename rename when the note still carries the old key', () => {
+    const { renames, unresolved } = planCitekeyReconcile(
+      [note('_2 Notes/@old.md', '@old', 'new', 'KEY1')],
+      resolve({ KEY1: 'new' })
+    );
+    expect(unresolved).toHaveLength(0);
+    expect(renames).toEqual([
+      {
+        path: '_2 Notes/@old.md',
+        newPath: '_2 Notes/@new.md',
+        fromKey: 'old',
+        toKey: 'new',
+        zoteroKey: 'KEY1',
+        rekeyFrontmatter: false,
+      },
+    ]);
+  });
+
+  it('re-keys the frontmatter when only citekey: is stale', () => {
+    const { renames } = planCitekeyReconcile(
+      [note('_2 Notes/@new.md', '@new', 'old', 'KEY1')],
+      resolve({ KEY1: 'new' })
+    );
+    expect(renames).toEqual([
+      {
+        path: '_2 Notes/@new.md',
+        newPath: '_2 Notes/@new.md',
+        fromKey: 'old',
+        toKey: 'new',
+        zoteroKey: 'KEY1',
+        rekeyFrontmatter: true,
+      },
+    ]);
+  });
+
+  it('ignores notes already current and reports unresolved keys', () => {
+    const { renames, unresolved } = planCitekeyReconcile(
+      [
+        note('_2 Notes/@new.md', '@new', 'new', 'KEY1'),
+        note('_2 Notes/@gone.md', '@gone', 'gone', 'MISSING'),
+      ],
+      resolve({ KEY1: 'new' })
+    );
+    expect(renames).toHaveLength(0);
+    expect(unresolved.map((n) => n.zoteroKey)).toEqual(['MISSING']);
+  });
+
+  it('respects group keys and hand-named notes', () => {
+    const { renames } = planCitekeyReconcile(
+      [
+        note('_2 Notes/@old.md', '@old', 'old', 'KEY1g42'),
+        note('_2 Notes/My Note.md', 'My Note', 'old', 'KEY2'),
+      ],
+      resolve({ KEY1g42: 'new', KEY2: 'fresh' })
+    );
+    expect(renames.map((r) => r.newPath)).toEqual([
+      '_2 Notes/@new.md',
+      '_2 Notes/My Note.md',
+    ]);
+    expect(renames[1].rekeyFrontmatter).toBe(true);
   });
 });

@@ -55,29 +55,43 @@ export const DEPENDENCIES = {
 
 export type DepKey = keyof typeof DEPENDENCIES;
 
+/**
+ * The Better BibTeX "Citation key formula" ScholarWeft recommends, so citekeys
+ * are short, stable, and free of punctuation: first author, a two-letter short
+ * title, year (e.g. `smithSo2020`). Set it in Zotero → Settings → Better BibTeX.
+ * Keep in sync with docs/setup.md and the install scripts.
+ */
+export const BBT_CITEKEY_FORMULA =
+  'auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct';
+
 export const DEPENDENCIES_DOC_URL =
   'https://github.com/nebedaay/ScholarWeft/blob/main/docs/dependencies.md';
 
 /**
  * Render a bordered note under a settings section explaining what it needs.
- * `deps` may be empty for a "nothing extra required" reassurance.
+ * `deps` may be empty for a "nothing extra required" reassurance. The optional
+ * `extra` callback appends project-specific content to the note's list (before
+ * the docs links) — used for the Better BibTeX citekey-formula suggestion.
  */
 export function renderDependencyNote(
   containerEl: HTMLElement,
   deps: DepKey[],
-  intro: string
+  intro: string,
+  extra?: (noteEl: HTMLElement, listEl: HTMLElement) => void
 ): void {
   const note = containerEl.createDiv({ cls: 'sw-dependency-note' });
   note.createDiv({ cls: 'sw-dependency-note-intro', text: intro });
-  if (deps.length) {
-    const ul = note.createEl('ul', { cls: 'sw-dependency-note-list' });
-    for (const key of deps) {
-      const d = DEPENDENCIES[key];
-      const li = ul.createEl('li');
-      li.createEl('a', { text: d.label, href: d.url }).setAttr('target', '_blank');
-      li.createSpan({ text: ` — ${d.enables}` });
-    }
+  // Created lazily so a note with no list items keeps no empty <ul>.
+  let ul: HTMLElement | null = null;
+  const list = (): HTMLElement =>
+    (ul ??= note.createEl('ul', { cls: 'sw-dependency-note-list' }));
+  for (const key of deps) {
+    const d = DEPENDENCIES[key];
+    const li = list().createEl('li');
+    li.createEl('a', { text: d.label, href: d.url }).setAttr('target', '_blank');
+    li.createSpan({ text: ` — ${d.enables}` });
   }
+  extra?.(note, list());
   const links = note.createDiv({ cls: 'sw-dependency-note-links' });
   const read = links.createEl('a', {
     cls: 'sw-dependency-note-more',

@@ -157,14 +157,14 @@ export default {
     'Open the note you want to export, then run this command again.',
   'Convert pandoc citations to linked citations (current note)':
     'Convert pandoc citations to linked citations (current note)',
-  'Update stale citekeys and literature note filenames (vault)': 'Update stale citekeys and literature note filenames (vault)',
+  'Review and update citekeys from Zotero': 'Review and update citekeys from Zotero',
+  'List citekey discrepancies': 'List citekey discrepancies',
   'Convert pandoc citations to linked citations (vault)': 'Convert pandoc citations to linked citations (vault)',
   'Revert linked citations to pandoc-style citations (current note)':
     'Revert linked citations to pandoc-style citations (current note)',
   'Revert linked citations to pandoc-style citations (vault)':
     'Revert linked citations to pandoc-style citations (vault)',
 
-  'Purge citekey rename history': 'Purge citekey rename history',
   'Update unresolved citations': 'Update unresolved citations',
 
   // src/view.ts
@@ -182,8 +182,21 @@ export default {
     'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
   'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.':
     'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.',
-  "Use ScholarWeft's own note template":
-    "Use ScholarWeft's own note template",
+  'Use ScholarWeft\'s own note template':
+    'Use ScholarWeft\'s own note template',
+  'Use the default template': 'Use the default template',
+  'Render notes with ScholarWeft\'s bundled literature-note template. Turn this off to render with a template of your own instead.':
+    'Render notes with ScholarWeft\'s bundled literature-note template. Turn this off to render with a template of your own instead.',
+  'Template file': 'Template file',
+  'Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.':
+    'Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.',
+  'Search note templates…': 'Search note templates…',
+  'Copy the default template to your vault':
+    'Copy the default template to your vault',
+  'Write a copy of ScholarWeft\'s bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates.':
+    'Write a copy of ScholarWeft\'s bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates.',
+  'Copy template': 'Copy template',
+  'Choose a folder…': 'Choose a folder…',
   "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.":
     "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
   'Child-note heading level':
@@ -192,6 +205,23 @@ export default {
     'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.',
   'Open in Zotero': 'Open in Zotero',
   'Filter references…': 'Filter references…',
+
+  // src/settings.tsx — Addons for displaying and linking notes
+  'Addons for displaying and linking notes':
+    'Addons for displaying and linking notes',
+  'Optional add-ons: the basic note template for new notes, and YAML property formatting.':
+    'Optional add-ons: the basic note template for new notes, and YAML property formatting.',
+  'Optional add-ons that help your notes display and link consistently. Neither needs an external tool.':
+    'Optional add-ons that help your notes display and link consistently. Neither needs an external tool.',
+  'Format YAML properties': 'Format YAML properties',
+  'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.':
+    'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.',
+  'Title background': 'Title background',
+  'Colour behind the title and short-title property values.':
+    'Colour behind the title and short-title property values.',
+  'Title size': 'Title size',
+  'Font size of the title property value, in rem (1rem = the body text size).':
+    'Font size of the title property value, in rem (1rem = the body text size).',
 
   // src/settings.tsx — Book Compiler (outline → markdown → docx)
   'Path to Python 3 (for Document Compiler)': 'Path to Python 3 (for Document Compiler)',

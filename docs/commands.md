@@ -13,7 +13,6 @@ Open the command palette with `Cmd/Ctrl+P` and type "ScholarWeft". The names bel
 | Convert pandoc citations to linked citations (vault) | Vault | For every note |
 | Revert linked citations to pandoc-style citations (current note) | Current note | `[[@key]]` → `[@key]` |
 | Revert linked citations to pandoc-style citations (vault) | Vault | For every note |
-| Purge citekey rename history | — | Clear the stored rename records |
 
 See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 
@@ -27,7 +26,8 @@ See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 | Update this literature note | Current note | Re-render the active note from its item (needs a `zotero-key`) |
 | Update all literature notes in the vault | Vault | Re-render every note that has a `zotero-key` |
 | Insert Zotero notes into literature notes (vault) | Vault | Copy a source's Zotero child notes into its literature note. ZotLit-only: listed only while ZotLit is the import path — see [Literature Notes](./literature-notes.md) |
-| Update stale citekeys and literature note filenames (vault) | Vault | Apply accumulated citekey renames |
+| Review and update citekeys from Zotero | Vault | Match notes to items by `zotero-key` and rename those whose citekey changed (also offered automatically after a Zotero refresh) |
+| List citekey discrepancies | Vault | Report-only: pending renames, notes whose new name is taken, and notes whose `zotero-key` is not in the loaded library (each linked) |
 
 See [Literature Notes](./literature-notes.md).
 

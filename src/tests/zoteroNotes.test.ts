@@ -3,6 +3,7 @@ jest.mock(
   () => ({
     TFile: class {},
     requestUrl: jest.fn(),
+    htmlToMarkdown: jest.fn((html: string) => html),
   }),
   { virtual: true }
 );
@@ -11,6 +12,7 @@ import {
   zoteroHtmlToMarkdown,
   findNotesSection,
   recordedKeys,
+  joinChildNotes,
 } from '../zoteroNotes';
 
 describe('zoteroHtmlToMarkdown', () => {
@@ -39,6 +41,17 @@ describe('zoteroHtmlToMarkdown', () => {
   it('strips unknown tags and collapses excess blank lines', () => {
     expect(zoteroHtmlToMarkdown('<div><span>keep</span></div>')).toBe('keep');
     expect(zoteroHtmlToMarkdown('a<br><br><br>b')).toBe('a\n\nb');
+  });
+});
+
+describe('joinChildNotes', () => {
+  it('separates multiple notes with a horizontal rule', () => {
+    expect(joinChildNotes(['one', 'two'])).toBe('one\n\n---\n\ntwo');
+  });
+
+  it('leaves a single note alone and drops empty chunks', () => {
+    expect(joinChildNotes(['one'])).toBe('one');
+    expect(joinChildNotes(['', '  ', 'two'])).toBe('two');
   });
 });
 

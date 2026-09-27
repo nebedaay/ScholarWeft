@@ -45,6 +45,8 @@ import { CiteSuggest } from './citeSuggest/citeSuggest';
 import { ExportModal } from './exportModal';
 import { ImportModal } from './importModal';
 import { CitekeyRenameModal } from './modals/citekeyRenameModal';
+import { CitekeyReconcileModal } from './modals/citekeyReconcileModal';
+import type { CitekeyReconcilePlan } from './template/note-lookup';
 import { ConflictModal } from './modals/conflictModal';
 import {
   SW_ZOTLIT_FOLDER,
@@ -85,6 +87,7 @@ function looksLikeReferenceListPlugin(id: string, name: string): boolean {
 import { convertActiveNote, convertVault } from './pandocToLinked';
 import { convertNoteToPandoc, convertVaultToPandoc } from './linkedToPandoc';
 import { setupAssets } from './assetSetup';
+import { applyYamlFormatting } from './yamlFormatting';
 
 const bibliographyExtensions = new Set(['bib', 'json', 'yaml', 'yml']);
 
@@ -226,6 +229,13 @@ export default class ReferenceList extends Plugin {
     // Extract bundled scripts and templates into the plugin directory so
     // users who installed via BRAT get everything they need automatically.
     await setupAssets(this);
+
+    // Re-assert the YAML-formatting snippet when the addon is on (regenerates
+    // the file if the user deleted it, and keeps it enabled). Never disables it
+    // when the addon is off — that is an explicit choice at the toggle.
+    if (this.settings.yamlFormattingEnabled === true) {
+      await applyYamlFormatting(this, true);
+    }
 
     // Register the sidebar view, but tolerate the view type already existing —
     // e.g. the OLD "scholar-weave" plugin (same code, same view type) is still
@@ -515,9 +525,6 @@ export default class ReferenceList extends Plugin {
       },
     });
 
-    // "Sync literature note filenames" is now merged into the combined
-    // "Update stale citekeys and literature note filenames" command below.
-
     this.addCommand({
       id: 'create-missing-lit-notes-note',
       name: t('Create literature notes for citations lacking notes (current note)'),
@@ -583,6 +590,7 @@ export default class ReferenceList extends Plugin {
       (progress as any).setProgress?.(0, 0);
       const r = await insertZoteroNotesVaultWide(this.app, {
         zoteroPort: this.settings.zoteroPort,
+        notesHeadingLevel: this.settings.ownNoteNotesHeadingLevel ?? 3,
         onProgress: (done, total) =>
           (progress as any).setProgress?.(done, total),
       });
@@ -692,30 +700,22 @@ export default class ReferenceList extends Plugin {
       callback: () => { void convertVaultToPandoc(this); },
     });
 
-    // Scan the vault for stale citekeys (from rename history) and offer to
-    // update them — and optionally sync literature note filenames — after the
-    // user confirms a summary of affected files.
+    // Match literature notes to their Zotero items by stable `zotero-key` and
+    // rename the note + associated files where the citekey changed. No stored
+    // rename history: the note itself records its old name. Also runs
+    // automatically after a Zotero refresh (see scheduleCitekeyReconcile).
     this.addCommand({
-      id: 'update-stale-citekeys',
-      name: t('Update stale citekeys and literature note filenames (vault)'),
-      callback: () => { void this.showCitekeyRenameDialog(); },
+      id: 'reconcile-citekeys',
+      name: t('Review and update citekeys from Zotero'),
+      callback: () => { void this.reviewCitekeyChanges(); },
     });
 
-    // Clear the accumulated citekey rename history. Use when all vault notes
-    // are known to be up-to-date and the history is no longer needed.
+    // Report-only view of the same reconcile: pending renames, notes that
+    // cannot be renamed (name taken), and notes not in the loaded library.
     this.addCommand({
-      id: 'purge-citekey-rename-history',
-      name: t('Purge citekey rename history'),
-      callback: () => {
-        const count = Object.keys(this.settings.citekeyRenameHistory ?? {}).length;
-        if (!count) {
-          new Notice('Citekey rename history is already empty.');
-          return;
-        }
-        this.settings.citekeyRenameHistory = {};
-        this.saveSettings();
-        new Notice(`Cleared ${count} citekey rename record${count !== 1 ? 's' : ''}.`);
-      },
+      id: 'list-citekey-discrepancies',
+      name: t('List citekey discrepancies'),
+      callback: () => { void this.listCitekeyDiscrepancies(); },
     });
 
     document.body.toggleClass(
@@ -1401,16 +1401,7 @@ export default class ReferenceList extends Plugin {
    * confused.
    */
   private findCitekeyByStableKey(stable: string): string | null {
-    const match = /^(.*?)(?:g(\d+))?$/.exec(stable);
-    const key = match?.[1] ?? stable;
-    const groupID = match?.[2] ? Number(match[2]) : null;
-    for (const [citekey, entry] of this.bibManager.bibCache) {
-      const e = entry as { _zoteroKey?: string; groupID?: number };
-      if (e?._zoteroKey !== key) continue;
-      if (groupID != null && e.groupID !== groupID) continue;
-      return citekey;
-    }
-    return null;
+    return this.bibManager.findCitekeyByStableKey(stable);
   }
 
   /**
@@ -1822,83 +1813,130 @@ export default class ReferenceList extends Plugin {
     new BibSnapshotModal(this.app, this, file, entries).open();
   }
 
-  /**
-   * Auto-update stale citekeys in the currently open note only (no modal,
-   * no vault scan).  Called automatically after a Zotero sync detects renames.
-   */
-  async autoUpdateCurrentNote(renameMap: Map<string, string>) {
-    const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
-    if (!file || !renameMap.size) return;
+  /** Set while an automatic reconcile pass is queued. */
+  private _reconcileQueued = false;
 
-    const changed = await this.bibManager.applyRenamesInFile(file, renameMap);
-    if (changed.length) {
-      const summary = changed.map((c) => `@${c.oldKey} → @${c.newKey}`).join(', ');
-      new Notice(`Auto-updated citekeys in current note: ${summary}`);
-    }
+  /**
+   * Queue a citekey reconcile pass after a Zotero load/refresh. Debounced and
+   * coalesced so a burst of refreshes cannot show more than one dialog. The
+   * pass is a cheap metadata scan and only prompts when it finds a change, so
+   * the user never has to run a command.
+   */
+  scheduleCitekeyReconcile() {
+    if (this._reconcileQueued) return;
+    this._reconcileQueued = true;
+    setTimeout(() => {
+      this._reconcileQueued = false;
+      void this.reviewCitekeyChanges(false).catch(console.error);
+    }, 2000);
   }
 
   /**
-   * Scan the vault for stale citekeys using the persisted rename history
-   * (or `overrideMap` if provided), show a confirmation modal, and on confirm
-   * apply the renames and optionally sync literature note filenames.
+   * Match every literature note to its Zotero item by stable `zotero-key` and,
+   * when the citekey changed, offer to rename the note, its derived files
+   * (transcriptions/translations), and stale citations. The note itself is the
+   * record of its old name, so no rename history is consulted. Interactive runs
+   * report when there is nothing to do; automatic runs stay silent.
+   *
+   * Returns true when a change was found (a dialog was opened).
    */
-  async showCitekeyRenameDialog(overrideMap?: Record<string, string>) {
-    const renameMap = overrideMap ?? this.settings.citekeyRenameHistory ?? {};
-    if (!Object.keys(renameMap).length) {
-      new Notice('No citekey rename history found.');
-      return;
-    }
-
-    const progress = new Notice('Scanning vault for stale citekeys…', 0);
-    let plan: import('./modals/citekeyRenameModal').RenamePlan;
+  async reviewCitekeyChanges(interactive = true): Promise<boolean> {
+    let plan: CitekeyReconcilePlan;
     try {
-      plan = await this.bibManager.findCitekeyUsagesInVault(renameMap);
-    } finally {
-      progress.hide();
+      plan = await this.bibManager.planCitekeyReconcile();
+    } catch (e) {
+      console.error('[sw:reconcile] planning failed', e);
+      if (interactive) new Notice('Could not check for citekey changes.');
+      return false;
     }
 
-    if (!plan.size) {
-      new Notice('No stale citekeys found in vault notes.');
-      return;
-    }
-
-    new CitekeyRenameModal(this.app, plan, async (includeLitNotes) => {
-      await this.bibManager.applyRenames(plan);
-      const fileCount = plan.size;
-      let msg = `Updated citekeys in ${fileCount} file${fileCount !== 1 ? 's' : ''}.`;
-
-      if (includeLitNotes) {
-        const renamed = await this.bibManager.syncLitNoteFilenames();
-        if (renamed.length) {
-          msg += `\nRenamed ${renamed.length} literature note${renamed.length !== 1 ? 's' : ''}: ` +
-            renamed.map((r) => `${r.from.split('/').pop()} → ${r.to.split('/').pop()}`).join(', ');
-        }
-
-        // A citekey change also moves our excerpt images (`@<citekey>_…`), so
-        // re-render the renamed notes through our own path to rename them.
-        if (this.settings.useOwnNoteTemplate === true && renamed.length) {
-          let refreshed = 0;
-          for (const r of renamed) {
-            const file = this.app.vault.getAbstractFileByPath(r.to);
-            if (file instanceof TFile && (await this.updateLiteratureNote(file))) {
-              refreshed++;
-            }
-          }
-          if (refreshed) {
-            msg += `\nRefreshed ${refreshed} note${refreshed !== 1 ? 's' : ''} (content + excerpt images).`;
-          }
+    const actionable = plan.renames.length > 0 || plan.derived.length > 0;
+    if (!actionable) {
+      if (interactive) {
+        // Nothing to apply, but there may be notes to resolve by hand.
+        if (plan.blocked.length || plan.unresolved.length) {
+          new CitekeyReconcileModal(this.app, plan, async () => {}).open();
+        } else {
+          new Notice('All literature note citekeys are up to date.');
         }
       }
+      return false;
+    }
 
-      new Notice(msg, 6000);
-    }).open();
+    new CitekeyReconcileModal(this.app, plan, () => this.applyReconcile(plan)).open();
+    return true;
+  }
+
+  /**
+   * Command: report every citekey discrepancy — pending renames, notes that
+   * cannot be renamed because the name is taken, and notes whose `zotero-key`
+   * is not in the current library — so the user knows where to go, without
+   * applying anything.
+   */
+  async listCitekeyDiscrepancies(): Promise<void> {
+    let plan: CitekeyReconcilePlan;
+    try {
+      plan = await this.bibManager.planCitekeyReconcile();
+    } catch (e) {
+      console.error('[sw:reconcile] planning failed', e);
+      new Notice('Could not list citekey discrepancies.');
+      return;
+    }
+
+    if (
+      !plan.renames.length &&
+      !plan.derived.length &&
+      !plan.blocked.length &&
+      !plan.unresolved.length
+    ) {
+      new Notice('No citekey discrepancies found.');
+      return;
+    }
+
+    new CitekeyReconcileModal(this.app, plan, () => this.applyReconcile(plan)).open();
+  }
+
+  /** Apply a reconcile plan and report what changed. */
+  private async applyReconcile(plan: CitekeyReconcilePlan): Promise<void> {
+    const res = await this.bibManager.applyCitekeyReconcile(plan);
+
+    // Re-render our own notes so annotations and excerpt images
+    // (`@<key>_p…_<annotationKey>.png`) follow the new citekey.
+    let refreshed = 0;
+    if (this.settings.useOwnNoteTemplate === true) {
+      for (const r of plan.renames) {
+        const file = this.app.vault.getAbstractFileByPath(r.newPath);
+        if (
+          file instanceof TFile &&
+          (await this.updateLiteratureNote(file, { confirm: false }))
+        ) {
+          refreshed++;
+        }
+      }
+    }
+
+    let msg =
+      `Updated ${res.notesRenamed} literature note${res.notesRenamed !== 1 ? 's' : ''}` +
+      (res.derivedRenamed
+        ? ` and ${res.derivedRenamed} associated file${res.derivedRenamed !== 1 ? 's' : ''}`
+        : '');
+    if (res.filesWithCitations) {
+      msg += `; citations updated in ${res.filesWithCitations} file${res.filesWithCitations !== 1 ? 's' : ''}`;
+    }
+    if (refreshed) msg += `; refreshed ${refreshed}`;
+    if (res.skipped.length) {
+      msg += `\nSkipped ${res.skipped.length} name${res.skipped.length !== 1 ? 's' : ''} already in use.`;
+    }
+    new Notice(msg + '.', 8000);
   }
 
   /**
    * Open a modal for the unresolved-citation badge in the reference panel.
-   * Partitions the file's unresolved citekeys into:
-   *   - fixable: keys present in the rename history → plan + "Fix stale citekeys" button
-   *   - truly unresolved: no known replacement → listed for info only
+   *
+   * A citekey changed in Zotero is the usual cause: the note still carries the
+   * old name, so `[[@old]]` looks unresolved. Try the stable-key reconcile
+   * first; when that finds nothing, list the keys that have no known
+   * replacement.
    */
   async showUnresolvedCitekeyDialog(file: TFile) {
     const fileCache = this.bibManager.fileCache.get(file);
@@ -1907,34 +1945,14 @@ export default class ReferenceList extends Plugin {
       return;
     }
 
-    const history = this.settings.citekeyRenameHistory ?? {};
-    const fixableMap: Record<string, string> = {};
-    const trulyUnresolved: string[] = [];
-
-    for (const key of fileCache.unresolvedKeys) {
-      if (history[key]) {
-        fixableMap[key] = history[key];
-      } else {
-        trulyUnresolved.push(key);
-      }
-    }
-
-    // Build a single-file rename plan from the fixable keys.
-    const plan: import('./modals/citekeyRenameModal').RenamePlan = new Map();
-    if (Object.keys(fixableMap).length) {
-      const changes = await this.bibManager.findCitekeyUsagesInFile(file, fixableMap);
-      if (changes.length) plan.set(file, changes);
-    }
+    if (await this.reviewCitekeyChanges(false)) return;
 
     new CitekeyRenameModal(
       this.app,
-      plan,
-      async (_includeLitNotes) => {
-        await this.bibManager.applyRenames(plan);
-        new Notice(`Updated stale citekeys in current note.`);
-      },
-      false,        // showLitNotesOption — not relevant for per-note fix
-      trulyUnresolved
+      new Map(),
+      async () => {},
+      false,
+      [...fileCache.unresolvedKeys]
     ).open();
   }
 

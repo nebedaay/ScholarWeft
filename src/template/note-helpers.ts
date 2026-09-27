@@ -41,8 +41,13 @@ import {
   type CreatorNamesOptions,
 } from './format';
 import { processAnnotations } from './annotations';
-import { escapeMarkdown, htmlFieldToMarkdown, noteHtmlToMarkdown } from './markdown';
-import { mergeNote } from './merge';
+import {
+  escapeMarkdown,
+  htmlFieldToMarkdown,
+  noteHtmlToMarkdown,
+  promoteShortFirstLine,
+} from './markdown';
+import { mergeNote, type NotesReimport } from './merge';
 import {
   YamlBuilder,
   type YamlFieldSpec,
@@ -68,6 +73,11 @@ export interface NoteImportOptions {
   creatorFormat?: string;
   /** Defaults for `annotation_callout`. */
   annotation?: AnnotationCalloutOptions;
+  /**
+   * Re-import strategy for the generated `## Notes` section:
+   * `ifEmpty` (default) / `replace` / `firstImportOnly`.
+   */
+  notesReimport?: NotesReimport;
 }
 
 /** Per-render state stored at `item.__sw`. */
@@ -189,7 +199,10 @@ export class NoteHelpers {
     opts: { managesRegion?: boolean; migrateRelated?: boolean } = {}
   ): string {
     if (!existing) return rendered;
-    return mergeNote(existing, rendered, this.fieldSpecs(ctx, opts), opts);
+    return mergeNote(existing, rendered, this.fieldSpecs(ctx, opts), {
+      managesRegion: opts.managesRegion,
+      notesReimport: this.stateOf(ctx).options.notesReimport,
+    });
   }
 
   // ── Filename ──
@@ -254,13 +267,19 @@ export class NoteHelpers {
    * Child notes as body Markdown. `inline` (default) emits each note's
    * converted text; `link` uses the note's imported file link when present and
    * falls back to the inline text, so a note is never silently dropped.
+   *
+   * Multiple child notes are separated by a horizontal rule (`---`) with blank
+   * lines around it, so two notes under one item are visibly distinct rather
+   * than running together.
    */
   zoteroNotes(
     ctx: NoteContext,
-    opts: { mode?: ZoteroNotesMode; level?: number } = {}
+    opts: { mode?: ZoteroNotesMode; level?: number; reimport?: NotesReimport } = {}
   ): string {
     const state = this.stateOf(ctx);
     state.notesRendered = true;
+    // Record the chosen re-import strategy for `mergeInto` to read after render.
+    if (opts.reimport) state.options.notesReimport = opts.reimport;
     if (!ctx.notes.length) return '';
     const mode = opts.mode ?? state.options.notesMode ?? 'inline';
     const level = opts.level ?? state.options.notesHeadingLevel ?? 3;
@@ -271,9 +290,15 @@ export class NoteHelpers {
         if (link) return link;
       }
       // Convert from the raw HTML when we have it, so the requested heading
-      // level is exact; fall back to the pre-converted Markdown.
-      if (note.html) return noteHtmlToMarkdown(note.html, { topLevel: level });
-      if (note.text) return note.text;
+      // level is exact; fall back to the pre-converted Markdown. Either way a
+      // short first line (Zotero's note title) becomes a heading at `level`.
+      if (note.html) {
+        return promoteShortFirstLine(
+          noteHtmlToMarkdown(note.html, { topLevel: level }),
+          level
+        );
+      }
+      if (note.text) return promoteShortFirstLine(note.text, level);
       // No text fetched and no imported file: fall back to a link if we have one.
       const link = note.noteLink?.();
       return link ?? '';
@@ -282,7 +307,7 @@ export class NoteHelpers {
     return ctx.notes
       .map(render)
       .filter((chunk) => chunk && chunk.trim())
-      .join('\n\n');
+      .join('\n\n---\n\n');
   }
 
   // ── Callouts ──

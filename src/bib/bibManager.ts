@@ -50,6 +50,14 @@ import { cite } from 'src/parser/citeproc';
 import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
+import {
+  derivedRenameFor,
+  planCitekeyReconcile,
+  type CitekeyReconcilePlan,
+  type DerivedRename,
+  type NoteReconcile,
+  type ReconcileNote,
+} from 'src/template/note-lookup';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
@@ -647,16 +655,10 @@ export class BibManager {
   /** Maps the stable 8-char Zotero item key (_zoteroKey) to the citekey
    *  currently stored in bibCache for that item. The Zotero item key never
    *  changes; the citekey can be renamed by the user in Zotero/BBT.
-   *  Used in mergeZoteroEntry to detect renames and evict stale citekeys. */
+   *  Used in mergeZoteroEntry to evict stale citekeys from the cache. The
+   *  vault notes themselves are reconciled afterwards by stable key (see
+   *  planCitekeyReconcile), so no persistent rename history is kept. */
   private _zoteroKeyToCitekey: Map<string, string> = new Map();
-
-  /**
-   * Citekey renames detected during the most recent refreshGlobalZBib() call.
-   * Maps old citekey → new citekey. Cleared at the start of each refresh.
-   * main.ts reads this after the refresh completes and prompts the user if
-   * non-empty. Public so main.ts can read it without going through a getter.
-   */
-  public _renamedThisRefresh: Map<string, string> = new Map();
 
   // Vault-relative paths of bib files to watch for changes.
   private watchedBibPaths: Set<string> = new Set();
@@ -748,7 +750,6 @@ export class BibManager {
     this.beginBackendLoad();
     this.fileCache.clear();
 
-    this._renamedThisRefresh.clear();
     this.bibCache.clear();
     this.bibSourceKeys.clear();
     this.conflictKeys.clear();
@@ -824,14 +825,10 @@ export class BibManager {
     this.markBackendReady();
     this.initPromise.resolve();
 
-    // loadGlobalZBib (above) calls mergeZoteroEntry for every item, which
-    // populates _renamedThisRefresh just like refreshGlobalZBib does.
-    // Check here so the "Refresh bibliography" button also triggers the
-    // current-note auto-update when a rename is detected.
-    if (this._renamedThisRefresh.size > 0) {
-      const snapshot = new Map(this._renamedThisRefresh);
-      setTimeout(() => this.plugin.autoUpdateCurrentNote(snapshot), 500);
-    }
+    // A citekey renamed in Zotero while Obsidian was closed is not visible as a
+    // cache delta (the in-memory item-key map starts empty), so reconcile the
+    // vault notes against the freshly-loaded library by stable key instead.
+    this.plugin.scheduleCitekeyReconcile();
   }
 
   /**
@@ -1447,40 +1444,19 @@ export class BibManager {
 
   // Merge a single Zotero entry into bibCache with full priority + dedup logic.
   private mergeZoteroEntry(entry: PartialCSLEntry) {
-    // ── Citekey-rename detection ──────────────────────────────────────────────
-    // The Zotero item key (_zoteroKey, an 8-char stable ID) never changes even
-    // when the user renames the citekey in Zotero or Better BibTeX. If we've
-    // seen this Zotero item before under a DIFFERENT citekey, the old citekey
-    // is now stale — delete it so the old key can no longer be cited or found.
+    // ── Stale-citekey eviction ────────────────────────────────────────────────
+    // The Zotero item key (_zoteroKey) never changes when the user renames the
+    // citekey in Zotero/BBT, so if we've seen this item before under a
+    // DIFFERENT citekey the old key is stale — drop it so it can no longer be
+    // cited or found. The vault notes that still carry the old key are
+    // reconciled by stable `zotero-key` later (see planCitekeyReconcile); no
+    // persistent rename history is needed for that.
     if (entry._zoteroKey) {
       const oldCitekey = this._zoteroKeyToCitekey.get(entry._zoteroKey);
       if (oldCitekey && oldCitekey !== entry.id) {
         this.bibCache.delete(oldCitekey);
         this.bibSourceKeys.delete(oldCitekey);
         this.conflictKeys.delete(oldCitekey);
-
-        // ── Persist rename history ───────────────────────────────────────────
-        // Record old → new in _renamedThisRefresh so the startup hook in
-        // main.ts can prompt the user after this refresh completes.
-        this._renamedThisRefresh.set(oldCitekey, entry.id);
-
-        // Persist to settings with chain-following so that notes which still
-        // contain a citekey from two or more renames ago are also updated.
-        // Strategy: scan the existing history for any value === oldCitekey and
-        // forward it to the new citekey. Then add oldCitekey → newCitekey.
-        // Example: history had {A: B} and we see B → C.
-        // After update: {A: C, B: C} — notes with @A get updated to @C in one
-        // pass, without needing intermediate @B entries first.
-        const history = this.plugin.settings.citekeyRenameHistory ?? {};
-        for (const [ancestor, current] of Object.entries(history)) {
-          if (current === oldCitekey) {
-            history[ancestor] = entry.id;
-          }
-        }
-        history[oldCitekey] = entry.id;
-        this.plugin.settings.citekeyRenameHistory = history;
-        // Persist immediately so the history survives plugin reloads.
-        void this.plugin.saveSettings();
       }
       this._zoteroKeyToCitekey.set(entry._zoteroKey, entry.id);
     }
@@ -1512,7 +1488,6 @@ export class BibManager {
     // causing duplicate fuse._docs entries and doubled suggestions.
     if (this._isRefreshingZBib) return;
     this._isRefreshingZBib = true;
-    this._renamedThisRefresh.clear();
 
     try {
       const { settings } = this.plugin;
@@ -1547,48 +1522,15 @@ export class BibManager {
       this.fileCache.clear();
       this.plugin.processReferences();
 
-      // If any citekeys were renamed during this refresh, silently apply the
-      // changes to the currently open note and show a brief Notice. A snapshot
-      // is taken so the map can be cleared by a subsequent refresh without
-      // affecting the pending setTimeout callback.
-      if (this._renamedThisRefresh.size > 0) {
-        const snapshot = new Map(this._renamedThisRefresh);
-        setTimeout(() => this.plugin.autoUpdateCurrentNote(snapshot), 1500);
-      }
+      // Reconcile the vault's literature notes against the refreshed library,
+      // matching each note to its item by stable `zotero-key`.
+      this.plugin.scheduleCitekeyReconcile();
     } finally {
       this._isRefreshingZBib = false;
     }
   }
 
   // ── Vault citekey-rename utilities ─────────────────────────────────────────
-
-  /**
-   * Apply renames to a single file in place, returning a list of which
-   * old→new pairs were actually found and replaced.  Used by the auto-update
-   * path so we don't scan the entire vault on every sync.
-   */
-  async applyRenamesInFile(
-    file: TFile,
-    renameMap: Map<string, string>
-  ): Promise<Array<{ oldKey: string; newKey: string }>> {
-    const { vault } = this.plugin.app;
-    const NC = '(?![\\p{L}\\p{N}:.#$%&\\-+?<>~_\\/])';
-    let content = await vault.read(file);
-    const changed: Array<{ oldKey: string; newKey: string }> = [];
-
-    for (const [oldKey, newKey] of renameMap) {
-      const escaped = oldKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(`@${escaped}${NC}`, 'gu');
-      if (re.test(content)) {
-        re.lastIndex = 0;
-        content = content.replace(re, `@${newKey}`);
-        changed.push({ oldKey, newKey });
-      }
-    }
-
-    if (changed.length) await vault.modify(file, content);
-    return changed;
-  }
 
   /**
    * Scan all markdown files in the vault for occurrences of citekeys listed
@@ -1642,41 +1584,6 @@ export class BibManager {
   }
 
   /**
-   * Scan a single file for stale citekeys in `renameMap`, returning a list of
-   * `CitekeyChange` objects (one per old→new pair that actually appears in the
-   * file).  Used by the unresolved-badge modal to show only the fixable keys
-   * that exist in the current note rather than scanning the whole vault.
-   */
-  async findCitekeyUsagesInFile(
-    file: TFile,
-    renameMap: Record<string, string>
-  ): Promise<import('../modals/citekeyRenameModal').CitekeyChange[]> {
-    const { vault } = this.plugin.app;
-    const NC = '(?![\\p{L}\\p{N}:.#$%&\\-+?<>~_\\/])';
-
-    const patterns: Array<{ oldKey: string; newKey: string; re: RegExp }> = [];
-    for (const [oldKey, newKey] of Object.entries(renameMap)) {
-      const escaped = oldKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      patterns.push({ oldKey, newKey, re: new RegExp(`@${escaped}${NC}`, 'gu') });
-    }
-
-    const content = await vault.read(file);
-    const lines = content.split('\n');
-    const changes: import('../modals/citekeyRenameModal').CitekeyChange[] = [];
-
-    for (const { oldKey, newKey, re } of patterns) {
-      const hitLines: number[] = [];
-      for (let i = 0; i < lines.length; i++) {
-        re.lastIndex = 0;
-        if (re.test(lines[i])) hitLines.push(i + 1);
-      }
-      if (hitLines.length) changes.push({ oldKey, newKey, lines: hitLines });
-    }
-
-    return changes;
-  }
-
-  /**
    * Apply a rename plan produced by `findCitekeyUsagesInVault` to the vault.
    * Each file is read, all matching `@oldKey` occurrences are replaced with
    * `@newKey` (respecting the same boundary), and the file is written back.
@@ -1698,6 +1605,162 @@ export class BibManager {
       }
       await vault.modify(file, content);
     }
+  }
+
+  /**
+   * Resolve a note's `zotero-key` frontmatter value — `KEY` (My Library) or
+   * `KEYgGROUPID` (a group library) — to the item's current citekey in the
+   * loaded library. The stable item key is what links a note to its Zotero
+   * item across citekey renames.
+   */
+  findCitekeyByStableKey(stable: string): string | null {
+    const match = /^(.*?)(?:g(\d+))?$/.exec(stable);
+    const key = match?.[1] ?? stable;
+    const groupID = match?.[2] ? Number(match[2]) : null;
+    for (const [citekey, entry] of this.bibCache) {
+      const e = entry as { _zoteroKey?: string; groupID?: number };
+      if (e?._zoteroKey !== key) continue;
+      if (groupID != null && e.groupID !== groupID) continue;
+      return citekey;
+    }
+    return null;
+  }
+
+  /**
+   * Reconcile every literature note (a markdown file carrying `zotero-key`)
+   * against the loaded library: match by the stable key, and where the note's
+   * filename or `citekey:` no longer equals the item's citekey, plan a rename.
+   * Also plans the derived files (transcriptions, translations) whose name
+   * starts with the stale `@key`. Reads only metadata + the vault file list, so
+   * it is cheap; nothing is changed until `applyCitekeyReconcile`.
+   */
+  async planCitekeyReconcile(): Promise<CitekeyReconcilePlan> {
+    const { vault, metadataCache } = this.plugin.app;
+
+    const notes: ReconcileNote[] = [];
+    for (const file of vault.getMarkdownFiles()) {
+      const fm = metadataCache.getFileCache(file)?.frontmatter;
+      const zk = fm?.['zotero-key'] ?? fm?.zoteroKey;
+      if (typeof zk !== 'string' || !zk.trim()) continue;
+      const ck = typeof fm?.citekey === 'string' ? fm.citekey : null;
+      notes.push({
+        path: file.path,
+        basename: file.basename,
+        citekey: ck,
+        zoteroKey: zk.trim(),
+      });
+    }
+
+    const { renames: planned, unresolved } = planCitekeyReconcile(notes, (stable) =>
+      this.findCitekeyByStableKey(stable)
+    );
+
+    // A note whose target name is already taken cannot be renamed — surface it
+    // instead of silently failing at apply time.
+    const renames: NoteReconcile[] = [];
+    const blocked: NoteReconcile[] = [];
+    for (const r of planned) {
+      if (r.newPath !== r.path && vault.getAbstractFileByPath(r.newPath)) {
+        blocked.push(r);
+      } else {
+        renames.push(r);
+      }
+    }
+
+    // Derived files follow the note's OLD key. The `@key` boundary excludes the
+    // note itself (`.`), excerpt images (`_`), and suffixed keys (`a`), all of
+    // which continue a citekey.
+    const derived: DerivedRename[] = [];
+    const seen = new Set<string>();
+    const conflicts: string[] = [];
+    const allFiles = vault.getFiles();
+    for (const r of renames) {
+      if (!r.fromKey || r.fromKey === r.toKey) continue;
+      for (const file of allFiles) {
+        const newName = derivedRenameFor(file.name, r.fromKey, r.toKey);
+        if (!newName) continue;
+        const dir = file.path.replace(/[^/]+$/, '');
+        const newPath = normalizePath(`${dir}${newName}`);
+        if (seen.has(newPath)) continue;
+        if (vault.getAbstractFileByPath(newPath)) {
+          conflicts.push(newPath);
+          continue;
+        }
+        seen.add(newPath);
+        derived.push({ path: file.path, newPath, fromKey: r.fromKey, toKey: r.toKey });
+      }
+    }
+
+    return { renames, blocked, unresolved, derived, conflicts };
+  }
+
+  /**
+   * Apply a reconcile plan: rename the notes (Obsidian rewrites their resolved
+   * `[[…]]` links as they move), rename the derived files, write the `citekey:`
+   * frontmatter, then rewrite any remaining `@old` citations the rename could
+   * not reach (plain `[@old]`, unresolved links). Own-template notes are
+   * re-rendered by the caller so annotations and excerpt images follow too.
+   */
+  async applyCitekeyReconcile(plan: CitekeyReconcilePlan): Promise<{
+    notesRenamed: number;
+    derivedRenamed: number;
+    skipped: string[];
+    filesWithCitations: number;
+  }> {
+    const { vault, fileManager } = this.plugin.app;
+    let notesRenamed = 0;
+    let derivedRenamed = 0;
+    const skipped: string[] = [];
+
+    for (const r of plan.renames) {
+      const file = vault.getAbstractFileByPath(r.path);
+      if (!(file instanceof TFile)) continue;
+      if (r.newPath !== r.path) {
+        if (vault.getAbstractFileByPath(r.newPath)) {
+          skipped.push(r.newPath);
+          continue;
+        }
+        await vault.rename(file, r.newPath);
+        notesRenamed++;
+      }
+      if (r.rekeyFrontmatter) {
+        const target = vault.getAbstractFileByPath(r.newPath);
+        if (target instanceof TFile) {
+          await fileManager.processFrontMatter(target, (fm) => {
+            fm.citekey = r.toKey;
+          });
+        }
+      }
+    }
+
+    for (const d of plan.derived) {
+      const file = vault.getAbstractFileByPath(d.path);
+      if (!(file instanceof TFile)) continue;
+      if (vault.getAbstractFileByPath(d.newPath)) {
+        skipped.push(d.newPath);
+        continue;
+      }
+      try {
+        await vault.rename(file, d.newPath);
+        derivedRenamed++;
+      } catch (e) {
+        console.warn('[sw:reconcile] derived rename failed', d.path, e);
+        skipped.push(d.path);
+      }
+    }
+
+    const renameMap: Record<string, string> = {};
+    for (const r of plan.renames) {
+      if (r.fromKey && r.fromKey !== r.toKey) renameMap[r.fromKey] = r.toKey;
+    }
+    let filesWithCitations = 0;
+    if (Object.keys(renameMap).length) {
+      const citePlan = await this.findCitekeyUsagesInVault(renameMap);
+      await this.applyRenames(citePlan);
+      filesWithCitations = citePlan.size;
+    }
+
+    return { notesRenamed, derivedRenamed, skipped, filesWithCitations };
   }
 
   // Build (or rebuild) the global CSL engine from the current bibCache.
@@ -2795,6 +2858,7 @@ export class BibManager {
     try {
       const res = await insertZoteroNotesForFiles(app, [file], {
         zoteroPort: this.plugin.settings.zoteroPort,
+        notesHeadingLevel: this.plugin.settings.ownNoteNotesHeadingLevel ?? 3,
       });
       debugLog('[sw:notes] fill result for', citekey, {
         inserted: res.inserted,
@@ -2811,55 +2875,6 @@ export class BibManager {
     } catch (e) {
       console.warn('[sw:notes] fill threw for', citekey, e);
     }
-  }
-
-  /**
-   * Scan the literature-note folder and rename any note whose `@filename` stem
-   * differs from its frontmatter `citekey:`. The citekey in frontmatter is
-   * authoritative (it tracks citekey migrations); the filename is what links
-   * use, so rename the file to `@<citekey>.md`. Obsidian propagates
-   * `[[@old]]` → `[[@new]]` links on rename automatically.
-   *
-   * The folder defaults to whichever one the selected import path uses, so the
-   * rename sweep follows the same rule as creation.
-   * Returns a list of {from, to} performed.
-   */
-  async syncLitNoteFilenames(folder?: string) {
-    const target =
-      folder ??
-      resolveLiteratureNoteFolder({
-        useOwnNoteTemplate: this.plugin.settings.useOwnNoteTemplate,
-        literatureNoteFolder: this.plugin.settings.literatureNoteFolder,
-        zotlitFolder: getZotlitLiteratureFolder(app),
-      });
-    const results: { from: string; to: string }[] = [];
-    if (!target) return results;
-    const dir = app.vault.getAbstractFileByPath(target);
-    if (!(dir instanceof TFolder)) return results;
-    const files = dir.children.filter(
-      (f): f is TFile => f instanceof TFile && /^@.+\.md$/.test(f.name)
-    );
-    for (const file of files) {
-      try {
-        const content = await app.vault.read(file);
-        const fm = app.metadataCache.getFileCache(file)?.frontmatter;
-        const citekey = fm?.citekey;
-        if (typeof citekey !== 'string' || !citekey) continue;
-        const stem = file.basename.startsWith('@')
-          ? file.basename.slice(1)
-          : file.basename;
-        if (stem === citekey) continue;
-        const newPath = normalizePath(
-          file.path.replace(/[^/]+$/, `@${citekey}.md`)
-        );
-        if (app.vault.getAbstractFileByPath(newPath)) continue; // target exists
-        await app.vault.rename(file, newPath);
-        results.push({ from: file.path, to: newPath });
-      } catch (e) {
-        console.warn('[lc] syncLitNoteFilenames: error on', file.path, e);
-      }
-    }
-    return results;
   }
 
   /**

@@ -71,6 +71,7 @@ function makePlugin(overrides: Record<string, any> = {}) {
     registerEvent: jest.fn(),
     saveSettings: jest.fn(),
     processReferences: jest.fn(),
+    scheduleCitekeyReconcile: jest.fn(),
     view: { setMessage: jest.fn() },
   } as any;
 }

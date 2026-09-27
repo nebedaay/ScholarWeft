@@ -143,6 +143,20 @@ describe('child-note helpers', () => {
     expect(helpers.zoteroNotes(ctx, { level: 2 })).toBe('## Wird\n\nBody');
   });
 
+  it('separates multiple child notes with a horizontal rule', () => {
+    const ctx = buildNoteContextWithChildren(entry, raw);
+    ctx.notes.push({ ...ctx.notes[0], key: 'N2', html: '<p>Second</p>' });
+    prepareTemplateData(ctx);
+    expect(helpers.zoteroNotes(ctx)).toBe('### Wird\n\nBody\n\n---\n\n### Second');
+  });
+
+  it('renders a short first line (Zotero note title) as a heading at the level', () => {
+    const ctx = buildNoteContextWithChildren(entry, raw);
+    ctx.notes[0].html = '<p>Notes on women</p><p>Body text</p>';
+    prepareTemplateData(ctx, { options: { notesHeadingLevel: 2 } });
+    expect(helpers.zoteroNotes(ctx)).toBe('## Notes on women\n\nBody text');
+  });
+
   it('links an imported note file in link mode', () => {
     const ctx = buildNoteContextWithChildren(entry, raw);
     ctx.notes[0].noteLink = (alias) => `[[@N1|${alias ?? '@N1'}]]`;

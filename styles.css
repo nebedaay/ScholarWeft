@@ -1588,6 +1588,11 @@ Annotation callouts
     color: var(--text-accent);
 }
 
+.sw-dependency-note code {
+    font-size: 0.95em;
+    word-break: break-all;
+}
+
 .sw-dependency-note-more {
     display: inline-block;
     margin-top: 4px;

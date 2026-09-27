@@ -13,6 +13,7 @@ import {
   htmlToMarkdownText,
   normalizeHeadingLevels,
   noteHtmlToMarkdown,
+  promoteShortFirstLine,
 } from '../markdown';
 
 const mockConvert = htmlToMarkdown as unknown as jest.Mock;
@@ -138,5 +139,33 @@ describe('htmlFieldToMarkdown()', () => {
     mockConvert.mockReturnValueOnce('A [title]');
     expect(htmlToMarkdownText('<i>A [title]</i>')).toBe('A [title]');
     expect(htmlToMarkdownText('')).toBe('');
+  });
+});
+
+describe('promoteShortFirstLine()', () => {
+  it('turns a short single first line into a heading at the level', () => {
+    expect(promoteShortFirstLine('Notes on women\n\nBody', 3)).toBe(
+      '### Notes on women\n\nBody'
+    );
+    expect(promoteShortFirstLine('Wird', 2)).toBe('## Wird');
+  });
+
+  it('leaves long, multi-line, or already-structured first blocks alone', () => {
+    const long = 'x'.repeat(101);
+    expect(promoteShortFirstLine(`${long}\n\nBody`, 3)).toBe(`${long}\n\nBody`);
+    expect(promoteShortFirstLine('line one\nline two\n\nBody', 3)).toBe(
+      'line one\nline two\n\nBody'
+    );
+    expect(promoteShortFirstLine('## Already\n\nBody', 3)).toBe(
+      '## Already\n\nBody'
+    );
+    expect(promoteShortFirstLine('- item\n\nBody', 3)).toBe('- item\n\nBody');
+    expect(promoteShortFirstLine('> quote\n\nBody', 3)).toBe('> quote\n\nBody');
+  });
+
+  it('respects a custom max length and empty input', () => {
+    expect(promoteShortFirstLine('abcd\n\nB', 3, 3)).toBe('abcd\n\nB');
+    expect(promoteShortFirstLine('abc\n\nB', 3, 3)).toBe('### abc\n\nB');
+    expect(promoteShortFirstLine('', 3)).toBe('');
   });
 });

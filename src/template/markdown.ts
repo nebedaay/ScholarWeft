@@ -114,6 +114,47 @@ export function htmlFieldToMarkdown(html: string | null | undefined): string {
   return escapeMarkdown(htmlToMarkdownText(html));
 }
 
+/** A first line longer than this is treated as prose, not a title. */
+export const NOTE_TITLE_MAX_LENGTH = 100;
+
+/** Block constructs that must never be turned into a heading. */
+const NON_TITLE_BLOCK_RE = /^(?:#{1,6}\s|```|~~~|>|\s*[-*+]\s|\s*\d+[.)]\s|\|)/;
+
+/**
+ * Promote a note's short first line to a heading at `level`.
+ *
+ * Zotero treats a note's first line as its title (it shows in the item pane and
+ * ZotLit uses it as the standalone note's filename), so render it as one too —
+ * but only when it reads as a title: a SINGLE line, at most
+ * {@link NOTE_TITLE_MAX_LENGTH} characters, not already a heading or other
+ * block (list, quote, fence, table, code). A longer or multi-line first
+ * paragraph is left as prose.
+ *
+ * A single child note whose first line is long, or whose body is a paragraph,
+ * is therefore unchanged; `## Notes` followed by `### <first line>` is the
+ * common shape.
+ */
+export function promoteShortFirstLine(
+  markdown: string,
+  level: number,
+  maxLength: number = NOTE_TITLE_MAX_LENGTH
+): string {
+  const text = markdown ?? '';
+  if (!text.trim()) return text;
+
+  const blank = text.search(/\n[ \t]*\n/);
+  const firstEnd = blank === -1 ? text.length : blank;
+  const first = text.slice(0, firstEnd);
+  if (first.includes('\n')) return text; // a real paragraph, not a title line
+
+  const line = first.trim();
+  if (!line || line.length > maxLength) return text;
+  if (NON_TITLE_BLOCK_RE.test(line)) return text;
+
+  const l = Math.min(6, Math.max(1, Math.floor(level) || 3));
+  return `${'#'.repeat(l)} ${line}${text.slice(firstEnd)}`;
+}
+
 export interface NoteMarkdownOptions {
   /** Level the note's shallowest heading should end up at. Default 3 (`###`). */
   topLevel?: number;

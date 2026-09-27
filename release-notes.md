@@ -1,61 +1,61 @@
 Install/update via BRAT.
 
-### Search is rebuilt, and no longer needs ZotLit
+### Write literature notes with your own template
 
-Autocomplete now runs entirely on ScholarWeft's own index. ZotLit's search was
-only an item lookup — it never searched PDF text — so nothing is lost, and the
-ranking is now ours to tune.
+ScholarWeft's Zotero import now renders each note from a template you control,
+with helpers that take care of the fiddly parts.
 
-**Two levels, and the wider one is the same search with more fields:**
+- **Use the default template** (on by default) keeps the bundled template.
+- Turn it off to pick a **Template file** anywhere in your vault — with
+  type-ahead, or the **Browse…** button.
+- **Copy the default template to your vault** writes an editable copy into a
+  folder you choose and selects it, so you can start from something that already
+  works. Your copy is an ordinary vault file; plugin updates never touch it.
 
-- `@` — **citekey, author and title**. A citekey is no longer the only thing it
-  finds: type an author or part of a title and it will find the work.
-- `@@` — the above **plus abstract, publisher and the containing work** (journal
-  or book title).
+Templates use the Eta language (`.eta.md`), and helper functions handle YAML and
+Markdown for you — you write what you want
+(`add_property('title', item.title)`) instead of indentation you have to debug.
+[Literature Notes](docs/literature-notes.md) documents every helper, the `item`
+data behind them, and how a re-import keeps only the managed frontmatter fields
+and annotations region up to date.
 
-Because `@@` only *adds* fields, it never hides a `@` match: results are ranked
-by how meaningfully they match, so an exact citekey comes first, then an author
-with a title word, then an exact title phrase, then title words, and the added
-fields last. (The brief `@@@` level is gone — `@@` covers it.)
+Want consistent citekeys? The Literature note import page now points to **Better
+BibTeX** and the citation-key formula that keeps keys short and free of
+punctuation (Zotero → Settings → Better BibTeX).
 
-**It understands how people actually search:**
+### Addons for displaying and linking notes
 
-- Every word must be present, so a second word always narrows.
-- Words may sit in **different fields** — `bourdieu critique` finds a work *by*
-  Bourdieu whose *title* contains "critique".
-- **Word beginnings count**: `soccri` finds *Soc*ial *Cri*tique. A fragment from
-  the middle of a word is ignored.
-- **Accents do not matter**, in titles, names and abstracts alike.
-- **All creator names are searched** — first name, family name, single-field
-  names like a corporate author, and editors.
-- **Coherent words win over abbreviations**: `socialcritique` is read as "social
-  critique", never as "**Soc**cer **is** almost **cri**ing…".
+Optional add-ons now have their own settings page — always visible, whether you
+import with ScholarWeft or ZotLit:
 
-`@@` results show an **excerpt of the abstract** where your terms were found, so
-you can see *why* an item matched when the title gives no clue, and the popup
-shows how many results there are ("Showing 20 of 137") so you can tell when to
-add another word. Matched terms are bolded in the title, author and excerpt.
+- **Basic note template** — installs the Basic note template and has Templater
+  apply it to new notes. It used to live with the ZotLit settings and vanished
+  whenever ScholarWeft's own import (the default) was on; now it is always
+  reachable.
+- **Format YAML properties** — makes `title`, `short-title`, `up` and `related`
+  stand out in the Properties view, with a colour picker for the title
+  background and a size slider. It writes and enables the CSS snippet for you.
 
-### Fresher data from Zotero
+### Citekey reconciliation
 
-- **Tags are read live when a note is imported**, rather than from the cached
-  library, so a tag just added in Zotero is there immediately.
-- **The library refreshes when Obsidian regains focus** — leave for Zotero, come
-  back, and your edits are picked up. Switching panes inside Obsidian does not
-  trigger it.
+When a Better BibTeX citekey changes, **Review and update citekeys from Zotero**
+matches notes to items by the stable `zotero-key`, shows a preview, and renames
+only what actually changed — the literature note, its derived transcriptions and
+translations, and citations across the vault. **List citekey discrepancies** is a
+report-only command for pending renames, names that are already taken, and notes
+whose item has left your library.
 
-### Fixes
+### Zotero child notes
 
-- Accepting a suggestion inside a wikilink now closes it correctly: `[[@key]]`
-  rather than the broken `[[@key]`.
-- Matched terms are bold only, leaving surrounding formatting — including
-  italics in an excerpt — untouched.
-- Diacritic matches are highlighted correctly, rather than located and then
-  emphasised in the wrong place.
+- When ScholarWeft inserts a source's Zotero child notes, a note's short first
+  line now renders as a heading at the configured level, and multiple notes are
+  separated by a horizontal rule — the same shape ScholarWeft's own template
+  produces.
+- Re-importing a literature note refills the generated `## Notes` section **only
+  when it is empty**, so notes you cleared come back, but your own writing there
+  is never overwritten.
 
 ### Everything already in ScholarWeft still works
 
-The reference sidebar, linked citations, literature-note import and update,
-ZotLit import templates (when ZotLit is selected), and document import/export
-are unchanged. See [Searching for References](docs/searching.md) for the full
-rules and tips.
+The reference sidebar, linked citations, search, document import and export, and
+ZotLit import templates (when ZotLit is selected) are unchanged.

@@ -1,4 +1,5 @@
 import { App, TFile, requestUrl } from 'obsidian';
+import { promoteShortFirstLine } from './template/markdown';
 
 /** Zotero's local REST API port (same default as `bib/helpers.ts`; inlined so
  *  this module doesn't pull the whole bib graph in for one string). */
@@ -61,6 +62,15 @@ export function zoteroHtmlToMarkdown(html: string): string {
   s = s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
   s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   return s;
+}
+
+/**
+ * Join converted child notes for one literature note. Multiple notes are
+ * separated by a horizontal rule with blank lines around it, matching the own
+ * template's `zotero_notes()` helper so both insertion paths read the same.
+ */
+export function joinChildNotes(parts: string[]): string {
+  return parts.filter((p) => p && p.trim()).join('\n\n---\n\n');
 }
 
 async function getJson(port: string, path: string): Promise<any> {
@@ -169,7 +179,8 @@ async function zoteroKeyOf(app: App, file: TFile): Promise<string | null> {
 async function insertIntoNote(
   app: App,
   file: TFile,
-  notes: ZoteroNote[]
+  notes: ZoteroNote[],
+  headingLevel = 3
 ): Promise<'inserted' | 'skipped' | 'no-notes'> {
   const content = await app.vault.read(file);
   const slot = findNotesSection(content);
@@ -180,14 +191,16 @@ async function insertIntoNote(
 
   const parts: string[] = [];
   for (const n of notes) {
-    const md = zoteroHtmlToMarkdown(n.html);
+    // A short first line is Zotero's note title — render it as a heading at the
+    // configured level (default `###`, one below `## Notes`).
+    const md = promoteShortFirstLine(zoteroHtmlToMarkdown(n.html), headingLevel);
     if (md) parts.push(md);
   }
   if (!parts.length) return 'no-notes';
 
   // Layout: a blank line under the heading, the notes, then a blank line
   // before ZotLit's managed region (so the region is clearly separated).
-  const block = '\n' + parts.join('\n\n') + '\n\n';
+  const block = '\n' + joinChildNotes(parts) + '\n\n';
   const before = content.slice(0, slot.sectionEnd).replace(/\s*$/, '\n');
   const after = content.slice(slot.sectionEnd).replace(/^\s*/, '');
   const marker = `\n${SW_ZN_MARK}: ${notes.map((n) => n.key).join(' ')}\n`;
@@ -201,6 +214,8 @@ async function insertIntoNote(
 export interface InsertOptions {
   onProgress?: (done: number, total: number) => void;
   zoteroPort?: string;
+  /** Heading level a child note's first line lands at (default 3, `###`). */
+  notesHeadingLevel?: number;
 }
 
 /**
@@ -227,7 +242,7 @@ export async function insertZoteroNotesVaultWide(
   for (const { file, key } of candidates) {
     try {
       const notes = await fetchChildNotes(port, key);
-      const r = await insertIntoNote(app, file, notes);
+      const r = await insertIntoNote(app, file, notes, opts.notesHeadingLevel ?? 3);
       if (r === 'inserted') result.inserted++;
       else if (r === 'skipped') result.skipped.push(file.path);
       else result.noNotes.push(file.path);
@@ -267,7 +282,7 @@ export async function insertZoteroNotesForFiles(
         continue;
       }
       const notes = await fetchChildNotes(port, key);
-      const r = await insertIntoNote(app, file, notes);
+      const r = await insertIntoNote(app, file, notes, opts.notesHeadingLevel ?? 3);
       if (r === 'inserted') {
         console.log(`ScholarWeft: inserted ${notes.length} Zotero note(s) into ${file.path}`);
       }

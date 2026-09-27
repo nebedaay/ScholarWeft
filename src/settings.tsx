@@ -23,15 +23,26 @@ import { SearchSelect } from './settings/SearchSelect';
 import { searchCSL, searchCSLLangs } from './settings/select.helpers';
 import { FolderSuggest } from './settings/FolderSuggest';
 import { BibFileSuggest } from './settings/BibFileSuggest';
+import { NoteTemplateSuggest } from './settings/NoteTemplateSuggest';
 import { cslListRaw } from './bib/cslList';
 import { langListRaw } from './bib/cslLangList';
 import { ZoteroPullSetting } from './settings/ZoteroPullSetting';
 import { ZoteroStylePicker } from './settings/ZoteroStylePicker';
-import { renderDependencyNote } from './dependencies';
+import {
+  renderDependencyNote,
+  DEPENDENCIES,
+  BBT_CITEKEY_FORMULA,
+} from './dependencies';
 import { probeTools, invalidateToolProbe } from './tools';
 import type { DepKey } from './dependencies';
 import { openDocs } from './docs';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
+import { copyDefaultTemplateToVault } from './noteImport';
+import {
+  applyYamlFormatting,
+  DEFAULT_YAML_TITLE_BACKGROUND,
+  DEFAULT_YAML_TITLE_SIZE,
+} from './yamlFormatting';
 import { debugLog } from './helpers';
 import { zotlitIsNoteImportPath } from './template/import-path';
 import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
@@ -67,6 +78,12 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
    * region. On by default; turning it off switches to ZotLit.
    */
   useOwnNoteTemplate: true,
+  /** When true (default), notes render with the bundled template in the plugin
+   *  folder. When off, `noteTemplatePath` selects a vault file instead. */
+  useDefaultNoteTemplate: true,
+  /** Vault-relative path to the user's literature-note template (used when
+   *  `useDefaultNoteTemplate` is off). Blank falls back to the bundled copy. */
+  noteTemplatePath: '',
   /** Heading level a child note's top heading is shifted to when inlined (default 3). */
   ownNoteNotesHeadingLevel: 3,
   /** Vault folder excerpt images are copied into (vault-root relative). */
@@ -77,6 +94,12 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
    *  by the own-template import path, whose settings show this field; when
    *  ZotLit is the chosen path, ZotLit's own folder applies instead. */
   literatureNoteFolder: DEFAULT_LITERATURE_NOTE_FOLDER,
+  /** "Format YAML properties" addon: makes title/up/related stand out. */
+  yamlFormattingEnabled: false,
+  /** `--title-background` for the YAML-formatting snippet. */
+  yamlTitleBackground: DEFAULT_YAML_TITLE_BACKGROUND,
+  /** `--title-size` (rem) for the YAML-formatting snippet. */
+  yamlTitleSize: DEFAULT_YAML_TITLE_SIZE,
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default: opening in Zotero already reveals all
    *  attachments, and the lookup costs per-citekey network time. */
@@ -208,6 +231,14 @@ export interface ReferenceListSettings {
    * managed frontmatter fields + `%%sw-managed%%` region. Off by default.
    */
   useOwnNoteTemplate?: boolean;
+  /**
+   * When true (default), literature notes render with the bundled template in
+   * the plugin folder. Turn it off to render with `noteTemplatePath`, a file in
+   * the vault the user can edit.
+   */
+  useDefaultNoteTemplate?: boolean;
+  /** Vault-relative path to the user's literature-note template. */
+  noteTemplatePath?: string;
   /** Heading level a child note's top heading is shifted to when inlined (default 3). */
   ownNoteNotesHeadingLevel?: number;
   /**
@@ -249,17 +280,6 @@ export interface ReferenceListSettings {
    * restart if the user closes it.
    */
   panelAutoOpened?: boolean;
-  /**
-   * Persistent history of citekey renames observed from Zotero. Each entry
-   * maps an old citekey to its current (most up-to-date) replacement, with
-   * chain-following applied so that A→B→C is stored as {A: C, B: C}.
-   *
-   * Used by "Update stale citekeys and literature note filenames (vault)" to
-   * find notes that contain citekeys from before one or more renames. Cleared
-   * by the companion "Purge citekey rename history" command.
-   */
-  citekeyRenameHistory?: Record<string, string>;
-
   /** Color for the underline under unlinked [@pandoc] citations (source view). */
   decorationColorUnlinked?: string;
   /** Color for the underline under [[@key]] citations that have a lit note. */
@@ -271,17 +291,24 @@ export interface ReferenceListSettings {
   styleMappings?: StyleMapping[];
   /** Master switch: when false, no mappings are applied on export. */
   styleMappingsEnabled?: boolean;
+  /** "Format YAML properties" addon: on/off. */
+  yamlFormattingEnabled?: boolean;
+  /** CSS colour for the YAML-formatting addon's `--title-background`. */
+  yamlTitleBackground?: string;
+  /** Font size (rem) for the YAML-formatting addon's `--title-size`. */
+  yamlTitleSize?: number;
 }
 
 const BIB_EXTENSIONS = new Set(['bib', 'json', 'yaml', 'yml']);
 
-type SettingsPage = 'home' | 'bibliography' | 'citations' | 'literature-notes' | 'documents';
+type SettingsPage = 'home' | 'bibliography' | 'citations' | 'literature-notes' | 'documents' | 'addons';
 
 const PAGE_TITLES: Record<Exclude<SettingsPage, 'home'>, string> = {
   bibliography: 'Bibliography',
   citations: 'Citation and reference formatting',
   'literature-notes': 'Literature note import',
   documents: 'Document import/export and compilation',
+  addons: 'Addons for displaying and linking notes',
 };
 
 /**
@@ -309,6 +336,55 @@ class BibFilePickerModal extends FuzzySuggestModal<TFile> {
 
   onChooseItem(file: TFile): void {
     this.onChoose(file.path);
+  }
+}
+
+/**
+ * Vault file picker for a custom literature-note template. Lists Markdown
+ * files (`.eta.md` templates included) and returns the chosen vault path.
+ */
+class NoteTemplatePickerModal extends FuzzySuggestModal<TFile> {
+  constructor(private onChoose: (path: string) => void) {
+    super(app);
+    this.setPlaceholder(t('Search note templates…'));
+  }
+
+  getItems(): TFile[] {
+    return app.vault
+      .getFiles()
+      .filter((f) => f.extension === 'md')
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  getItemText(file: TFile): string {
+    return file.path;
+  }
+
+  onChooseItem(file: TFile): void {
+    this.onChoose(file.path);
+  }
+}
+
+/** Vault folder picker, used by the "copy the default template" button. */
+class VaultFolderPickerModal extends FuzzySuggestModal<TFolder> {
+  constructor(private onChoose: (folder: string) => void) {
+    super(app);
+    this.setPlaceholder(t('Choose a folder…'));
+  }
+
+  getItems(): TFolder[] {
+    return app.vault
+      .getAllLoadedFiles()
+      .filter((f): f is TFolder => f instanceof TFolder)
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  getItemText(folder: TFolder): string {
+    return folder.path || '/';
+  }
+
+  onChooseItem(folder: TFolder): void {
+    this.onChoose(folder.path);
   }
 }
 
@@ -344,6 +420,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       case 'documents':
         this.renderDocuments(containerEl);
         break;
+      case 'addons':
+        this.renderAddons(containerEl);
+        break;
     }
   }
 
@@ -377,6 +456,11 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         page: 'documents',
         name: t('Document import/export and compilation'),
         desc: t('How to compile and export your documents as DOCX / ODT / PDF.'),
+      },
+      {
+        page: 'addons',
+        name: t('Addons for displaying and linking notes'),
+        desc: t('Optional add-ons: the basic note template for new notes, and YAML property formatting.'),
       },
     ];
 
@@ -1006,7 +1090,19 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     renderDependencyNote(
       containerEl,
       ['zotero'],
-      t('Creating literature notes needs Zotero for citekey and metadata lookup. ZotLit is an optional alternative, not a requirement.')
+      t('Creating literature notes needs Zotero for citekey and metadata lookup. ZotLit is an optional alternative, not a requirement.'),
+      (_note, list) => {
+        const li = list.createEl('li');
+        li.appendText('For consistent citekeys, install ');
+        li
+          .createEl('a', { text: 'Better BibTeX', href: DEPENDENCIES.bbt.url })
+          .setAttr('target', '_blank');
+        li.appendText(' in Zotero and set ');
+        li.createEl('code', { text: 'Citation key formula' });
+        li.appendText(' (Zotero → Settings → Better BibTeX) to ');
+        li.createEl('code', { text: BBT_CITEKEY_FORMULA });
+        li.appendText('.');
+      }
     );
 
     const useOwn = this.plugin.settings.useOwnNoteTemplate === true;
@@ -1047,6 +1143,68 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             });
           new FolderSuggest(this.app, text.inputEl);
         });
+
+      const useDefaultTemplate =
+        this.plugin.settings.useDefaultNoteTemplate !== false;
+
+      new Setting(containerEl)
+        .setName(t('Use the default template'))
+        .setDesc(
+          t(
+            "Render notes with ScholarWeft's bundled literature-note template. Turn this off to render with a template of your own instead."
+          )
+        )
+        .addToggle((toggle) =>
+          toggle.setValue(useDefaultTemplate).onChange((value) => {
+            this.plugin.settings.useDefaultNoteTemplate = value;
+            this.plugin.saveSettings();
+            this.display();
+          })
+        );
+
+      if (!useDefaultTemplate) {
+        new Setting(containerEl)
+          .setName(t('Template file'))
+          .setDesc(
+            t(
+              'Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.'
+            )
+          )
+          .addText((text) => {
+            text
+              .setPlaceholder('Templates/sw-note.eta.md')
+              .setValue(this.plugin.settings.noteTemplatePath ?? '')
+              .onChange((value) => {
+                this.plugin.settings.noteTemplatePath = value.trim();
+                this.plugin.saveSettings();
+              });
+            new NoteTemplateSuggest(this.app, text.inputEl);
+          })
+          .addButton((button) =>
+            button.setButtonText(t('Browse…')).onClick(() => {
+              new NoteTemplatePickerModal((path) => {
+                this.plugin.settings.noteTemplatePath = path;
+                this.plugin.saveSettings();
+                this.display();
+              }).open();
+            })
+          );
+      }
+
+      new Setting(containerEl)
+        .setName(t('Copy the default template to your vault'))
+        .setDesc(
+          t(
+            "Write a copy of ScholarWeft's bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates."
+          )
+        )
+        .addButton((button) =>
+          button.setButtonText(t('Copy template')).onClick(() => {
+            new VaultFolderPickerModal((folder) => {
+              void this.copyTemplateToFolder(folder);
+            }).open();
+          })
+        );
 
       new Setting(containerEl)
         .setName(t('Excerpt-image folder'))
@@ -1151,6 +1309,8 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               (progress as any).setProgress?.(0, 0);
               const r = await insertZoteroNotesVaultWide(this.app, {
                 zoteroPort: this.plugin.settings.zoteroPort,
+                notesHeadingLevel:
+                  this.plugin.settings.ownNoteNotesHeadingLevel ?? 3,
                 onProgress: (done, total) =>
                   (progress as any).setProgress?.(done, total),
               });
@@ -1210,6 +1370,21 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         });
       }
     }
+  }
+
+  // ── Addons for displaying and linking notes ──────────────────────────────
+
+  /**
+   * Optional, self-contained add-ons that shape how notes look and link:
+   * the Basic note template for new notes, and YAML property formatting.
+   * Deliberately independent of the literature-note import path.
+   */
+  private renderAddons(containerEl: HTMLElement): void {
+    containerEl.createEl('p', {
+      text: t(
+        'Optional add-ons that help your notes display and link consistently. Neither needs an external tool.'
+      ),
+    });
 
     if (Platform.isDesktop) {
       this.renderCompanionSetting(containerEl, {
@@ -1241,6 +1416,68 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         },
       });
     }
+
+    this.renderYamlFormatting(containerEl);
+  }
+
+  /**
+   * "Format YAML properties": a managed CSS snippet that makes the
+   * title / short-title / up / related properties stand out. The snippet is the
+   * user's own `sw-yaml-formatting.css`, with two configurable values.
+   */
+  private renderYamlFormatting(containerEl: HTMLElement): void {
+    const enabled = this.plugin.settings.yamlFormattingEnabled === true;
+
+    new Setting(containerEl)
+      .setName(t('Format YAML properties'))
+      .setDesc(
+        t(
+          'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.'
+        )
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(enabled).onChange(async (value) => {
+          this.plugin.settings.yamlFormattingEnabled = value;
+          await this.plugin.saveSettings();
+          await applyYamlFormatting(this.plugin, value);
+          this.display();
+        })
+      );
+
+    if (!enabled) return;
+
+    new Setting(containerEl)
+      .setName(t('Title background'))
+      .setDesc(t('Colour behind the title and short-title property values.'))
+      .addColorPicker((picker) =>
+        picker
+          .setValue(
+            this.plugin.settings.yamlTitleBackground ??
+              DEFAULT_YAML_TITLE_BACKGROUND
+          )
+          .onChange(async (value) => {
+            this.plugin.settings.yamlTitleBackground = value;
+            await this.plugin.saveSettings();
+            await applyYamlFormatting(this.plugin, true);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Title size'))
+      .setDesc(
+        t('Font size of the title property value, in rem (1rem = the body text size).')
+      )
+      .addSlider((slider) =>
+        slider
+          .setLimits(1, 4, 0.1)
+          .setValue(this.plugin.settings.yamlTitleSize ?? DEFAULT_YAML_TITLE_SIZE)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.yamlTitleSize = value;
+            await this.plugin.saveSettings();
+            await applyYamlFormatting(this.plugin, true);
+          })
+      );
   }
 
   /**
@@ -1258,6 +1495,30 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     const dir = this.app.vault.getAbstractFileByPath(folder);
     if (!(dir instanceof TFolder)) return false;
     return dir.children.some((c) => c instanceof TFile && c.extension === 'md');
+  }
+
+  /**
+   * Copy the bundled note template into a vault folder and select it, so the
+   * user can edit their own copy without it being overwritten by a plugin
+   * update.
+   */
+  private async copyTemplateToFolder(folder: string): Promise<void> {
+    const path = await copyDefaultTemplateToVault(this.plugin, folder);
+    if (!path) {
+      new Notice(
+        'ScholarWeft: could not read the bundled note template.',
+        8000
+      );
+      return;
+    }
+    this.plugin.settings.noteTemplatePath = path;
+    this.plugin.settings.useDefaultNoteTemplate = false;
+    await this.plugin.saveSettings();
+    new Notice(
+      `ScholarWeft: copied the default template to “${path}”. Your notes now use it — edit the copy to customise.`,
+      10000
+    );
+    this.display();
   }
 
   private renderCompanionSetting(
