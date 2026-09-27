@@ -22,7 +22,13 @@ import {
   queryTerms,
   tierWeights,
 } from 'src/template/search-tier';
-import { passesCoverage, prefixChunks, scoreEntry } from 'src/template/search-score';
+import {
+  explainsUnbrokenRun,
+  hasCoherentSplit,
+  passesCoverage,
+  prefixChunks,
+  scoreEntry,
+} from 'src/template/search-score';
 import {
   PromiseCapability,
   copyElToClipboard,
@@ -889,17 +895,30 @@ export class BibManager {
     }
     if (candidates === null) return [];
 
-    // A CONCATENATED PREFIX query (`soccri`, `socthe`) Fuse cannot find at all —
-    // it resembles no single field closely enough — yet it is a legitimate way
-    // to abbreviate. Scan for prefix-chunk matches and ADD them as candidates;
-    // the scorer ranks them below whole-word matches.
+    // An UNBROKEN run (`bourdieucritique`, `soccri`) is something Fuse cannot
+    // find at all — it resembles no single field closely enough — yet it is a
+    // legitimate way to type a phrase quickly. Scan for the two interpretations
+    // the scorer will use, and add the entries as candidates:
+    //
+    //   1. a coherent SPLIT into real words (`bourdieucritique` =
+    //      bourdieu + critique, spanning the author and the title);
+    //   2. CHUNK alignment of word prefixes (`soccri`) when no coherent
+    //      reading exists.
+    //
+    // Without this the scorer's (correct) handling never runs, because the
+    // entry was never a candidate: that is why `@@bourdieucritique` returned
+    // nothing while `@@bourdieu critique` worked.
+    const run = terms.join('');
     for (const entry of this.bibCache.values()) {
       if (candidates.has(entry.id)) continue;
-      const fitsTitle = prefixChunks(entry.title ?? '', terms.join('')).full;
-      const fitsAuthor = (entry.author ?? []).some((a: any) =>
-        prefixChunks(a?.family ?? a?.literal ?? '', terms.join('')).full
-      );
-      if (fitsTitle || fitsAuthor) candidates.add(entry.id);
+      const target = {
+        title: entry.title ?? null,
+        authorText: (entry.author ?? [])
+          .map((a: any) => a?.family ?? a?.literal ?? '')
+          .filter(Boolean)
+          .join(' '),
+      };
+      if (explainsUnbrokenRun(target, run)) candidates.add(entry.id);
     }
 
     // Order by OUR scoring: exact phrase first, then coverage, whole words,

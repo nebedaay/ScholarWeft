@@ -93689,6 +93689,14 @@ function hasCoherentSplit(phrase, run) {
   }
   return null;
 }
+function explainsUnbrokenRun(target, run) {
+  var _a, _b, _c;
+  const author = (_a = target.authorText) != null ? _a : "";
+  const combined = `${author} ${(_b = target.title) != null ? _b : ""}`;
+  if (hasCoherentSplit(combined, run))
+    return true;
+  return prefixChunks((_c = target.title) != null ? _c : "", run).full || prefixChunks(author, run).full || prefixChunks(combined, run).full;
+}
 function spacingConfidence(query) {
   return /\s/.test(query.trim()) ? 0 : 0.02;
 }
@@ -94522,15 +94530,18 @@ var BibManager = class {
     }
     if (candidates === null)
       return [];
+    const run = terms.join("");
     for (const entry of this.bibCache.values()) {
       if (candidates.has(entry.id))
         continue;
-      const fitsTitle = prefixChunks((_a = entry.title) != null ? _a : "", terms.join("")).full;
-      const fitsAuthor = ((_b = entry.author) != null ? _b : []).some((a3) => {
-        var _a2, _b2;
-        return prefixChunks((_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "", terms.join("")).full;
-      });
-      if (fitsTitle || fitsAuthor)
+      const target = {
+        title: (_a = entry.title) != null ? _a : null,
+        authorText: ((_b = entry.author) != null ? _b : []).map((a3) => {
+          var _a2, _b2;
+          return (_b2 = (_a2 = a3 == null ? void 0 : a3.family) != null ? _a2 : a3 == null ? void 0 : a3.literal) != null ? _b2 : "";
+        }).filter(Boolean).join(" ")
+      };
+      if (explainsUnbrokenRun(target, run))
         candidates.add(entry.id);
     }
     const includeAbstract = tier === "abstract";

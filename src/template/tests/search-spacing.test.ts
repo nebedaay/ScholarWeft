@@ -1,4 +1,5 @@
 import {
+  explainsUnbrokenRun,
   hasCoherentSplit,
   looksLikeAbbreviation,
   passesCoverage,
@@ -117,6 +118,51 @@ describe('spaced prefix fragments (soc cri)', () => {
   it('treats both fragment forms as finding the same item', () => {
     expect(passesCoverage(scoreEntry(distinction, 'soc cri'))).toBe(true);
     expect(passesCoverage(scoreEntry(distinction, 'soccri'))).toBe(true);
+  });
+});
+
+describe('priority: coherent first, then abbreviations, then chunks', () => {
+  const d = {
+    title: 'Distinction: A Social Critique of the Judgment of Taste',
+    authorText: 'Bourdieu',
+  };
+
+  it('finds an unbroken run that splits coherently ACROSS fields', () => {
+    // The reported failure: `@@bourdieucritique` returned nothing. Fuse cannot
+    // match the run, so the entry must be admitted as a candidate by
+    // interpretation — `bourdieu` (author) + `critique` (title).
+    expect(explainsUnbrokenRun(d, 'bourdieucritique')).toBe(true);
+    const s = scoreEntry(d, 'bourdieucritique');
+    expect(passesCoverage(s)).toBe(true);
+    expect(s.authorAndTitle).toBe(true);
+  });
+
+  it('gives both forms of that query the same answer', () => {
+    const spaced = scoreEntry(d, 'bourdieu critique');
+    const joined = scoreEntry(d, 'bourdieucritique');
+    expect(spaced.authorAndTitle).toBe(joined.authorAndTitle);
+    expect(Math.abs(spaced.value - joined.value)).toBeLessThan(0.05);
+  });
+
+  it('treats a coherent split as words, not chunks', () => {
+    const s = scoreEntry(d, 'bourdieucritique');
+    expect(s.prefixChunks).toBe(false); // words won, chunks never ran
+  });
+
+  it('falls back to chunks only when no coherent split exists', () => {
+    // `soccri` has no whole-word reading, so abbreviation is the only option.
+    const s = scoreEntry({ ...d, authorText: '' }, 'soccri');
+    expect(s.prefixChunks).toBe(true);
+    expect(passesCoverage(s)).toBe(true);
+  });
+
+  it('admits no candidate for a run that explains nothing', () => {
+    const soccer = {
+      title: 'Soccer Is Almost Crying In Time Of Questioning',
+      authorText: 'X',
+    };
+    // Coherent split wins, so `socialcritique` is never read as Soc|cer...
+    expect(explainsUnbrokenRun(soccer, 'socialcritique')).toBe(false);
   });
 });
 

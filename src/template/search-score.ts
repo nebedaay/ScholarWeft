@@ -178,6 +178,33 @@ export function hasCoherentSplit(phrase: string, run: string): string[] | null {
 }
 
 /**
+ * Would this entry be found for an UNBROKEN run (`bourdieucritique`, `soccri`)?
+ *
+ * Fuse cannot match such a run — it resembles no single field — so the entry
+ * must be admitted as a candidate by interpretation instead. Mirrors exactly
+ * what `scoreEntry` will do with it, so an admitted candidate always scores
+ * rather than being admitted pointlessly:
+ *
+ *   1. a coherent SPLIT into real words, which may span author and title
+ *      (`bourdieucritique` = bourdieu + critique);
+ *   2. CHUNK alignment of word prefixes (`soccri`) when no coherent reading
+ *      exists.
+ */
+export function explainsUnbrokenRun(
+  target: ScoreTarget,
+  run: string
+): boolean {
+  const author = target.authorText ?? '';
+  const combined = `${author} ${target.title ?? ''}`;
+  if (hasCoherentSplit(combined, run)) return true;
+  return (
+    prefixChunks(target.title ?? '', run).full ||
+    prefixChunks(author, run).full ||
+    prefixChunks(combined, run).full
+  );
+}
+
+/**
  * Weighting difference between the two equivalent forms of a query.
  *
  * `bourdieu social critique` and `bourdieusocialcritique` are interpreted as the
@@ -187,6 +214,7 @@ export function hasCoherentSplit(phrase: string, run: string): string[] | null {
  * The difference is small on purpose — it must never reorder genuinely different
  * matches, only break ties between equal ones.
  */
+
 export function spacingConfidence(query: string): number {
   return /\s/.test(query.trim()) ? 0 : 0.02;
 }
