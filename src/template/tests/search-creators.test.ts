@@ -76,3 +76,33 @@ describe('diacritics in the abstract', () => {
     expect(q('maghrébian')).toBe(true);
   });
 });
+
+describe('undivided (single-field) creator names', () => {
+  // In Zotero a creator may be a SINGLE field — `{ literal: 'UNESCO' }` in CSL,
+  // stored on the parent name element rather than as given/family children.
+  // authorTextOf() places the literal first, then any split parts.
+
+  it('finds an undivided corporate name', () => {
+    expect(finds('UNESCO', 'unesco')).toBe(true);
+  });
+
+  it('finds an undivided personal name', () => {
+    expect(finds('Aristotle', 'aristotle')).toBe(true);
+  });
+
+  it('finds an undivided name by prefix', () => {
+    expect(finds('UNESCO', 'unes')).toBe(true);
+  });
+
+  it('finds both undivided and split names on the same entry', () => {
+    const mixed = 'UNESCO Aimé Césaire Césaire Aimé';
+    expect(finds(mixed, 'unesco')).toBe(true);
+    expect(finds(mixed, 'aimecesaire')).toBe(true);
+    expect(finds(mixed, 'cesaire')).toBe(true);
+  });
+
+  it('is diacritic-insensitive for undivided names too', () => {
+    expect(finds('Césaire', 'cesaire')).toBe(true);
+    expect(finds('Cesaire', 'césaire')).toBe(true);
+  });
+});
