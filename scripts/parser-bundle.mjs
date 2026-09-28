@@ -4668,6 +4668,114 @@ var locatorToTerm = {
   }
 };
 
+// src/parser/code-mask.ts
+function maskCodeRegions(text) {
+  if (!text || text.indexOf("`") === -1 && text.indexOf("~~~") === -1) {
+    return text;
+  }
+  const chars = text.split("");
+  const n = text.length;
+  const blank = (from, to) => {
+    const end = Math.min(to, n);
+    for (let k = from; k < end; k++)
+      chars[k] = " ";
+  };
+  let i = 0;
+  while (i < n) {
+    const atLineStart = i === 0 || text[i - 1] === "\n";
+    if (atLineStart) {
+      const fence = fenceEnd(text, i);
+      if (fence !== null) {
+        blank(i, fence);
+        i = fence;
+        continue;
+      }
+    }
+    if (text[i] === "`") {
+      let run = 0;
+      while (i + run < n && text[i + run] === "`")
+        run++;
+      const close = findBacktickRun(text, i + run, run);
+      if (close !== -1) {
+        const end = close + run;
+        blank(i, end);
+        i = end;
+        continue;
+      }
+      i += run;
+      continue;
+    }
+    i++;
+  }
+  return chars.join("");
+}
+function fenceEnd(text, at) {
+  let j = at;
+  while (j < text.length && (text[j] === " " || text[j] === "	"))
+    j++;
+  const ch = text[j];
+  if (ch !== "`" && ch !== "~")
+    return null;
+  let markers = 0;
+  while (text[j + markers] === ch)
+    markers++;
+  if (markers < 3)
+    return null;
+  let pos = text.indexOf("\n", j);
+  pos = pos === -1 ? text.length : pos + 1;
+  while (pos < text.length) {
+    let k = pos;
+    while (k < text.length && (text[k] === " " || text[k] === "	"))
+      k++;
+    if (text[k] === ch) {
+      let run = 0;
+      while (text[k + run] === ch)
+        run++;
+      if (run >= markers) {
+        let e = k + run;
+        while (e < text.length && (text[e] === " " || text[e] === "	"))
+          e++;
+        if (e >= text.length || text[e] === "\n") {
+          return e < text.length ? e + 1 : text.length;
+        }
+      }
+    }
+    const next = text.indexOf("\n", pos);
+    if (next === -1)
+      break;
+    pos = next + 1;
+  }
+  return text.length;
+}
+function findBacktickRun(text, from, runLen) {
+  let j = from;
+  while (j < text.length) {
+    if (text[j] === "`") {
+      let run = 0;
+      while (text[j + run] === "`")
+        run++;
+      if (run === runLen)
+        return j;
+      j += run;
+    } else {
+      j++;
+    }
+  }
+  return -1;
+}
+
+// src/parser/compound.ts
+function mergeCompoundCitations(text) {
+  const ADJACENT = /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
+  let prev;
+  let out = text;
+  do {
+    prev = out;
+    out = out.replace(ADJACENT, "[$1; $3]");
+  } while (out !== prev);
+  return out;
+}
+
 // src/parser/parser.ts
 var SegmentType;
 (function(SegmentType2) {
@@ -4682,7 +4790,9 @@ var SegmentType;
   SegmentType2["locator"] = "locator";
   SegmentType2["locatorLabel"] = "locatorLabel";
   SegmentType2["separator"] = "separator";
+  SegmentType2["reference"] = "reference";
 })(SegmentType || (SegmentType = {}));
+var referenceAliasRe = /^(reference|ref)$/i;
 function newState() {
   return {
     bracketDepth: 0,
@@ -4903,6 +5013,7 @@ var parseExplicitLocator = (state) => {
 };
 function getCitations(segments, locale = "en-US") {
   const cites = [];
+  const reference = (segments == null ? void 0 : segments.reference) === true;
   let key;
   let prefix;
   let suffix;
@@ -5001,7 +5112,8 @@ function getCitations(segments, locale = "en-US") {
     data: segments,
     citations: cites,
     from: segments[0].from,
-    to: segments[segments.length - 1].to
+    to: segments[segments.length - 1].to,
+    reference: reference || void 0
   };
 }
 function romanToArabic(s) {
@@ -5036,44 +5148,82 @@ function expandAlias(alias, linkKey) {
 }
 var containerOpen = "\u27E6";
 var containerClose = "\u27E7";
+var containerMemberRe = /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
 function mergeContainerExpression(containerText) {
-  if (!containerText.startsWith(containerOpen) || !containerText.endsWith(containerClose)) {
+  var _a, _b;
+  const isUnicode = containerText.startsWith(containerOpen) && containerText.endsWith(containerClose);
+  const isBracket = !isUnicode && containerText.startsWith("[") && containerText.endsWith("]") && containerText[1] !== "[";
+  if (!isUnicode && !isBracket)
     return null;
-  }
-  const content = containerText.slice(containerOpen.length, containerText.length - containerClose.length);
-  const anyLinkRe = /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]/g;
-  let expr = "";
-  let members = 0;
-  let lastEnd = 0;
+  const strict = isUnicode;
+  const openLen = isUnicode ? containerOpen.length : 1;
+  const closeLen = isUnicode ? containerClose.length : 1;
+  const content = containerText.slice(openLen, containerText.length - closeLen);
+  const members = [];
+  containerMemberRe.lastIndex = 0;
   let m;
-  while (m = anyLinkRe.exec(content)) {
-    const [full, key, alias] = m;
-    const between = content.slice(lastEnd, m.index);
-    if (!/^[\s;]*$/.test(between))
-      return null;
-    if (members > 0 && !/;/.test(between))
-      return null;
-    if (members === 0 && /;/.test(between))
-      return null;
-    if (alias !== void 0 && !alias.includes("@"))
-      return null;
-    const aliasText = alias != null ? alias : "@" + key;
-    if (members > 0)
-      expr += "; ";
-    expr += expandAlias(aliasText, key);
-    members++;
-    lastEnd = m.index + full.length;
+  while (m = containerMemberRe.exec(content)) {
+    if (m[1] !== void 0) {
+      const alias = m[2];
+      members.push({
+        key: m[1],
+        alias,
+        ref: alias !== void 0 && referenceAliasRe.test(alias.trim()),
+        start: m.index,
+        end: m.index + m[0].length
+      });
+    } else {
+      const tail = ((_a = m[4]) != null ? _a : "").trim();
+      members.push({
+        key: m[3],
+        alias: tail ? `@@${tail}` : void 0,
+        ref: false,
+        start: m.index,
+        end: m.index + m[0].length
+      });
+    }
   }
-  if (members < 2)
+  const minMembers = strict ? 2 : 1;
+  if (members.length < minMembers)
     return null;
-  if (!/^[\s;]*$/.test(content.slice(lastEnd)))
+  const publicMembers = members.map((x) => ({
+    key: x.key,
+    alias: x.alias
+  }));
+  if (members.some((x) => x.ref)) {
+    const expr2 = members.map((x) => "@" + x.key).join("; ");
+    return { expr: "[" + expr2 + "]", members: publicMembers, reference: true };
+  }
+  let expr = "";
+  let lastEnd = 0;
+  for (let i = 0; i < members.length; i++) {
+    const mem = members[i];
+    if (strict) {
+      const between = content.slice(lastEnd, mem.start);
+      if (!/^[\s;]*$/.test(between))
+        return null;
+      if (i > 0 && !/;/.test(between))
+        return null;
+      if (i === 0 && /;/.test(between))
+        return null;
+      if (mem.alias !== void 0 && !mem.alias.includes("@"))
+        return null;
+    }
+    const aliasText = (_b = mem.alias) != null ? _b : "@" + mem.key;
+    if (i > 0)
+      expr += "; ";
+    expr += expandAlias(aliasText, mem.key);
+    lastEnd = mem.end;
+  }
+  if (strict && !/^[\s;]*$/.test(content.slice(lastEnd)))
     return null;
-  return "[" + expr + "]";
+  return { expr: "[" + expr + "]", members: publicMembers, reference: false };
 }
 function transformLinkAliases(str, linkCiteKey) {
-  var _a, _b, _c;
+  var _a;
   const out = [];
   const map = [];
+  const referenceRanges = [];
   let last = 0;
   const push = (ch, src) => {
     out.push(ch);
@@ -5137,30 +5287,15 @@ function transformLinkAliases(str, linkCiteKey) {
       }
       if (close === -1)
         break;
-      const inside = str.slice(open + 1, close);
-      const links = [];
-      let lm;
-      const linkRe = /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
-      while (lm = linkRe.exec(inside)) {
-        if (lm[1] !== void 0) {
-          links.push({ key: lm[1], alias: lm[2] });
-        } else {
-          const key = lm[3];
-          const tail = ((_a = lm[4]) != null ? _a : "").trim();
-          links.push({ key, alias: tail ? `@@${tail}` : void 0 });
-        }
-      }
-      if (links.length >= 1) {
-        const mergedParts = [];
-        for (const link of links) {
-          const aliasText = (_b = link.alias) != null ? _b : "@" + link.key;
-          mergedParts.push(expandAlias(aliasText, link.key));
-        }
+      const container = mergeContainerExpression(str.slice(open, close + 1));
+      if (container) {
         bracketContainers.push({
           open,
           close,
-          merged: "[" + mergedParts.join("; ") + "]"
+          merged: container.expr
         });
+        if (container.reference)
+          referenceRanges.push([open, close + 1]);
         scan = close + 1;
         continue;
       }
@@ -5195,21 +5330,33 @@ function transformLinkAliases(str, linkCiteKey) {
       if (merged === null)
         continue;
       copyRange(last, m.index);
-      for (let k = 0; k < merged.length; k++) {
-        push(merged[k], k === merged.length - 1 ? close : m.index);
+      for (let k = 0; k < merged.expr.length; k++) {
+        push(merged.expr[k], k === merged.expr.length - 1 ? close : m.index);
       }
+      if (merged.reference)
+        referenceRanges.push([m.index, close + 1]);
       specialRe.lastIndex = close + 1;
       last = close + 1;
       continue;
     }
     const full = m[0];
-    const key = (_c = m[1]) != null ? _c : m[3];
+    const key = (_a = m[1]) != null ? _a : m[3];
     const alias = m[2];
     const start = m.index;
     const end = m.index + full.length;
     copyRange(last, start + 1);
     if (alias !== void 0) {
       const aliasStart = start + 4 + key.length;
+      if (referenceAliasRe.test(alias.trim())) {
+        referenceRanges.push([start, end]);
+        const keyStart = start + 2;
+        for (let k = 0; k < key.length + 1; k++) {
+          push(str[keyStart + k], keyStart + k);
+        }
+        push("]", end - 2);
+        last = end;
+        continue;
+      }
       emitExpanded(alias, key, aliasStart);
       push("]", end - 2);
     } else {
@@ -5249,22 +5396,74 @@ function transformLinkAliases(str, linkCiteKey) {
       push(str[i], i);
       i++;
     }
-    return { text: out.join(""), map };
+    return { text: out.join(""), map, referenceRanges };
   }
   copyRange(last, str.length);
-  return { text: out.join(""), map };
+  return { text: out.join(""), map, referenceRanges };
 }
 function getCitationSegments(str, ignoreLinks = false, expandLinkAliases = false, linkCiteKey) {
+  return mergeAdjacentGroups(str, getCitationSegmentsRaw(str, ignoreLinks, expandLinkAliases, linkCiteKey));
+}
+function mergeAdjacentGroups(str, groups) {
+  if (groups.length < 2)
+    return groups;
+  const isNarrative = (g) => {
+    try {
+      return getCitations(g).citations.some((c) => c.composite === true);
+    } catch (e) {
+      return false;
+    }
+  };
+  const out = [];
+  for (const group of groups) {
+    const prev = out[out.length - 1];
+    if (prev && !prev.reference && !group.reference && !isNarrative(prev) && !isNarrative(group) && prev.length > 0 && group.length > 0 && prev[0].type === SegmentType.bracket && group[0].type === SegmentType.bracket) {
+      const prevLast = prev[prev.length - 1];
+      const prevEnd = str[prevLast.to] === "]" ? prevLast.to + 1 : prevLast.to;
+      const sep = str.slice(prevEnd, group[0].from);
+      if (/^[ \t]*\n?[ \t]*$/.test(sep)) {
+        prev.push({
+          type: SegmentType.separator,
+          from: prevEnd,
+          to: group[0].from,
+          val: ";"
+        }, ...group);
+        continue;
+      }
+    }
+    out.push(group);
+  }
+  return out;
+}
+function getCitationSegmentsRaw(str, ignoreLinks = false, expandLinkAliases = false, linkCiteKey) {
+  str = maskCodeRegions(str);
   if (expandLinkAliases && !ignoreLinks) {
-    const { text, map } = transformLinkAliases(str, linkCiteKey);
-    const groups = getCitationSegments(text, ignoreLinks);
+    const { text, map, referenceRanges } = transformLinkAliases(str, linkCiteKey);
+    const groups = getCitationSegmentsRaw(text, ignoreLinks);
     if (!groups.length)
       return groups;
-    return groups.map((group) => group.map((seg) => ({
-      ...seg,
-      from: map[seg.from],
-      to: map[seg.to - 1] + 1
-    })));
+    return groups.map((group) => {
+      var _a, _b;
+      const remapped = group.map((seg) => ({
+        ...seg,
+        from: map[seg.from],
+        to: map[seg.to - 1] + 1
+      }));
+      const groupTo = remapped.length > 0 ? remapped[remapped.length - 1].to : (_b = (_a = remapped[0]) == null ? void 0 : _a.to) != null ? _b : 0;
+      const groupFrom = remapped.length > 0 ? remapped[0].from : 0;
+      const range = referenceRanges.find(([f, t]) => f < groupTo && t > groupFrom);
+      if (range) {
+        remapped.reference = true;
+        remapped.referenceRange = range;
+        remapped.push({
+          type: SegmentType.reference,
+          from: range[0],
+          to: range[1],
+          val: ""
+        });
+      }
+      return remapped;
+    });
   }
   const segments = [];
   let state = null;
@@ -5614,5 +5813,7 @@ export {
   getCitationSegments,
   getCitations,
   getSegmentData,
-  mergeContainerExpression
+  mergeCompoundCitations,
+  mergeContainerExpression,
+  referenceAliasRe
 };

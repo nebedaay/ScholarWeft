@@ -31,7 +31,7 @@
  *   node scripts/convert-citations.mjs <input.md> <output.md>
  */
 
-import { expandAlias } from './parser-bundle.mjs';
+import { expandAlias, mergeCompoundCitations } from './parser-bundle.mjs';
 import { readFileSync, writeFileSync } from 'fs';
 
 // ── exact plugin regexes ─────────────────────────────────────────────────────
@@ -223,26 +223,10 @@ function convert(input, output) {
   });
   writeFileSync(
     output,
-    mergeAdjacentPandocCitations(outLines.join('\n')),
+    mergeCompoundCitations(outLines.join('\n')),
     'utf-8'
   );
   console.log(`Converted citations: ${input} → ${output}`);
-}
-
-// THE compound-forming step for the CLI, shared by containered and contiguous
-// references (mirrors src/convertCitations.ts `mergeCompoundCitations`).
-// `rewriteContainers` flattens container members to a plain sequence, so both
-// arrive here as `[@a] [@b]` and merge into `[@a; @b]`.
-function mergeAdjacentPandocCitations(text) {
-  const ADJACENT =
-    /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
-  let prev;
-  let out = text;
-  do {
-    prev = out;
-    out = out.replace(ADJACENT, '[$1; $3]');
-  } while (out !== prev);
-  return out;
 }
 
 const [, , input, output] = process.argv;

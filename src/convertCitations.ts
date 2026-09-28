@@ -22,6 +22,7 @@ import {
   expandAlias,
   getCitationSegments,
   getCitations,
+  mergeCompoundCitations,
   mergeContainerExpression,
 } from './parser/parser';
 import type { CitationSegments } from './parser/parser';
@@ -184,35 +185,10 @@ export function convertCitationsInText(text: string): string {
   const outLines = lines.map((line) =>
     /\[\[@/.test(line) ? rewriteContainers(line) : line
   );
+  // Compound formation is the SHARED function (src/parser/compound.ts), also
+  // used by the CLI, so containered and contiguous references take one path.
   return mergeCompoundCitations(outLines.join('\n'));
 }
-
-/**
- * THE compound-forming step, shared by containered and contiguous references.
- * `rewriteContainers` flattens container members into a plain sequence of pandoc
- * citations, so both a former container (`[@a] [@b]`) and genuinely adjacent
- * citations (`[[@a]] [[@b]]` → `[@a] [@b]`) arrive here identically and merge
- * into ONE multi-item citation `[@a; $b]`.
- *
- * Only bracket groups whose content contains `@` are merged, so markdown links
- * (`[text](url)`) and prose brackets are never touched. A bare narrative `@a`
- * (no brackets) is not merged. Separators allowed: spaces/tabs and at most ONE
- * newline — matching the in-app parser's contiguous rule.
- */
-export function mergeCompoundCitations(text: string): string {
-  const ADJACENT =
-    /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
-  let prev: string;
-  let out = text;
-  do {
-    prev = out;
-    out = out.replace(ADJACENT, '[$1; $3]');
-  } while (out !== prev);
-  return out;
-}
-
-/** @deprecated alias kept for callers/tests; use {@link mergeCompoundCitations}. */
-export const mergeAdjacentPandocCitations = mergeCompoundCitations;
 
 /**
  * Full-reference insertions (`[[@key|reference]]` / `[[@key|ref]]`, or a

@@ -108,6 +108,8 @@ function isValidPreKey(s?: string) {
   return !s || preKey.test(s);
 }
 
+export { mergeCompoundCitations } from './compound';
+
 export function getSegmentData(segments: Segment[]) {
   let key: string;
   let locator: string;
