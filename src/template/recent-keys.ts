@@ -271,3 +271,37 @@ export function cycleQueries(
   }
   return out;
 }
+
+/** Resolve a citekey through a rename map (old → new), bounded against cycles. */
+export function resolveRename(
+  key: string,
+  renames: ReadonlyMap<string, string>
+): string {
+  let cur = key;
+  for (let hops = 0; renames.has(cur) && hops < 10; hops++) {
+    cur = renames.get(cur)!;
+  }
+  return cur;
+}
+
+/**
+ * Reconcile cached citekeys against the LIVE library, at refresh time so search
+ * never has to vet: a renamed key is remapped (keeping its position), one that
+ * no longer resolves is dropped, and duplicates collapse. Order is preserved.
+ */
+export function reconcileKeys(
+  list: readonly string[],
+  live: { has(key: string): boolean },
+  renames: ReadonlyMap<string, string> = new Map()
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const key of list) {
+    const mapped = resolveRename(key, renames);
+    if (live.has(mapped) && !seen.has(mapped)) {
+      seen.add(mapped);
+      out.push(mapped);
+    }
+  }
+  return out;
+}

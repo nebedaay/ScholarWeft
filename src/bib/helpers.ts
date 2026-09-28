@@ -680,6 +680,8 @@ export async function refreshZBibNative(
   modified: Map<string, PartialCSLEntry>;
   /** True when this was a FULL rebuild (replace the caller's list, don't merge). */
   full: boolean;
+  /** Old citekey → new citekey, for remapping the search recents. */
+  renamed: Map<string, string>;
 } | null> {
   if (!(await isZoteroRunningNative(port))) return null;
 
@@ -747,6 +749,16 @@ export async function refreshZBibNative(
 
   const rawList = cacheData.items as CSLList;
 
+  // Old cache citekey → new citekey, matched by the STABLE Zotero key (`_zoteroKey`).
+  // A rename must be REMAPPED in the search recents, not merely dropped.
+  const renamed = new Map<string, string>();
+  for (const old of rawList) {
+    const zk = (old as { _zoteroKey?: unknown })._zoteroKey;
+    if (typeof zk !== 'string') continue;
+    const newId = zoteroKeyToNewId.get(zk);
+    if (newId && newId !== old.id) renamed.set(old.id, newId);
+  }
+
   // On a FULL fetch the list is rebuilt from scratch, so entries the library no
   // longer has (permanently deleted) are dropped. Otherwise merge the delta,
   // dropping only stale-citekey duplicates.
@@ -802,7 +814,7 @@ export async function refreshZBibNative(
     })
   );
 
-  return { list: applyGroupID(list, groupId), modified, full: fullFetch };
+  return { list: applyGroupID(list, groupId), modified, full: fullFetch, renamed };
 }
 
 export async function getItemJSONFromCiteKeysNative(

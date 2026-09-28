@@ -43,6 +43,8 @@ export interface ZoteroAdapter {
     modified: Map<string, PartialCSLEntry>;
     /** True when the whole library was rebuilt (replace, don't merge). */
     full?: boolean;
+    /** Old citekey → new citekey, for remapping the search recents. */
+    renamed?: Map<string, string>;
   } | null>;
 
   /**
@@ -141,6 +143,8 @@ export class NativeAdapter implements ZoteroAdapter {
     modified: Map<string, PartialCSLEntry>;
     /** True when the whole library was rebuilt (replace, don't merge). */
     full?: boolean;
+    /** Old citekey → new citekey, for remapping the search recents. */
+    renamed?: Map<string, string>;
   } | null> {
     return refreshZBibNative(this.port, '', groupId, libraryVersion);
   }

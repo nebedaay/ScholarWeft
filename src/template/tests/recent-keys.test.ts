@@ -10,8 +10,10 @@ import {
   normalizeKey,
   orderByRecency,
   prefixMatches,
+  reconcileKeys,
   recordQuery,
   recordRecentKey,
+  resolveRename,
   touchQueryHistory,
   touchRecentKey,
   type QueryHistoryMap,
@@ -148,6 +150,34 @@ describe('global query history + Tab cycling', () => {
   it('cycleQueries offers note queries then global, de-duplicated', () => {
     const list = cycleQueries([e('note1'), e('shared')], [e('shared'), e('global1')]);
     expect(list.map((x) => x.query)).toEqual(['note1', 'shared', 'global1']);
+  });
+});
+
+describe('reconcileKeys() — vet caches against the live library', () => {
+  const live = new Set(['a', 'b', 'new']);
+
+  it('drops keys that no longer resolve', () => {
+    expect(reconcileKeys(['a', 'gone', 'b'], live)).toEqual(['a', 'b']);
+  });
+
+  it('remaps a renamed key, keeping its position', () => {
+    expect(reconcileKeys(['a', 'old'], live, new Map([['old', 'new']]))).toEqual([
+      'a',
+      'new',
+    ]);
+  });
+
+  it('follows rename chains and collapses duplicates', () => {
+    expect(
+      reconcileKeys(['x', 'y'], live, new Map([['x', 'a'], ['y', 'a']]))
+    ).toEqual(['a']);
+    expect(
+      reconcileKeys(['old2'], live, new Map([['old2', 'old'], ['old', 'new']]))
+    ).toEqual(['new']);
+  });
+
+  it('resolveRename is bounded against cycles', () => {
+    expect(resolveRename('a', new Map([['a', 'b'], ['b', 'a']]))).toBeDefined();
   });
 });
 

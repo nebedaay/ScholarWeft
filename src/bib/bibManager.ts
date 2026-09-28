@@ -54,6 +54,7 @@ import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import {
   recordQuery,
   recordRecentKey,
+  reconcileKeys,
   touchQueryHistory,
   touchRecentKey,
   type QueryEntry,
@@ -1556,7 +1557,7 @@ export class BibManager {
 
       const adapter = this.getZoteroAdapter();
       const modifiedEntries: Map<string, PartialCSLEntry> = new Map();
-      let fullRebuilt = false;
+      const renamed = new Map<string, string>();
 
       for (const group of settings.zoteroGroups) {
         try {
@@ -1569,9 +1570,11 @@ export class BibManager {
 
           if (!res) continue;
           if (res.list?.length) group.lastUpdate = Date.now();
+          if (res.renamed?.size) {
+            for (const [oldId, newId] of res.renamed) renamed.set(oldId, newId);
+          }
 
           if (res.full && res.list) {
-            fullRebuilt = true;
             // FULL rebuild (background fetch, then swap): replace THIS group's
             // entries so a permanently deleted item is finally dropped. The swap
             // is a synchronous rebuild of the map, so consumers never see a gap.
@@ -1606,10 +1609,10 @@ export class BibManager {
         }
       }
 
-      // After a FULL rebuild the library is completely known, so drop recents
-      // that no longer resolve: the caches only ORDER results, but keeping a
-      // deleted citekey around is needless noise.
-      if (fullRebuilt) this.pruneRecentKeys();
+      // Reconcile the search caches with the refreshed library NOW, so search
+      // never has to vet: remap renamed citekeys, drop ones that no longer
+      // resolve. Done once per refresh, not per keystroke.
+      if (this.bibCache.size > 0) this.reconcileRecentKeys(renamed);
 
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
@@ -2689,16 +2692,19 @@ export class BibManager {
   }
 
   /**
-   * Drop recents that no longer resolve in the current library. Called after a
-   * FULL rebuild, when `bibCache` is completely known, purely to keep the file
-   * tidy — the caches only ORDER results, so a stale key was never shown anyway.
-   * Query history holds strings, not keys, so it needs no pruning.
+   * Reconcile the search recents with the CURRENT library, at REFRESH time so
+   * search never has to vet:
+   *  - a renamed citekey (old → new, matched by stable `_zoteroKey`) is
+   *    REMAPPED, keeping its recency position;
+   *  - a citekey that no longer resolves is dropped.
+   * Query history holds query STRINGS, not keys, so it needs no reconciliation.
    */
-  pruneRecentKeys(): void {
-    const keep = (k: string) => this.bibCache.has(k);
-    this.globalRecentKeys = this.globalRecentKeys.filter(keep);
+  reconcileRecentKeys(renames: Map<string, string> = new Map()): void {
+    const reconcileList = (list: readonly string[]): string[] =>
+      reconcileKeys(list, this.bibCache, renames);
+    this.globalRecentKeys = reconcileList(this.globalRecentKeys);
     for (const path of Object.keys(this.recentKeys)) {
-      const filtered = this.recentKeys[path].filter(keep);
+      const filtered = reconcileList(this.recentKeys[path]);
       if (filtered.length) this.recentKeys[path] = filtered;
       else delete this.recentKeys[path];
     }

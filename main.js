@@ -68584,6 +68584,15 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
       zoteroKeyToNewId.set(entry._zoteroKey, id);
   }
   const rawList = cacheData.items;
+  const renamed = new Map();
+  for (const old of rawList) {
+    const zk = old._zoteroKey;
+    if (typeof zk !== "string")
+      continue;
+    const newId = zoteroKeyToNewId.get(zk);
+    if (newId && newId !== old.id)
+      renamed.set(old.id, newId);
+  }
   const list = fullFetch ? [] : rawList.filter((item) => {
     if (!item._zoteroKey)
       return true;
@@ -68625,7 +68634,7 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
     builtAt: Date.now(),
     itemCount: (_a = currentCount != null ? currentCount : cachedCount) != null ? _a : void 0
   }));
-  return { list: applyGroupID(list, groupId), modified, full: fullFetch };
+  return { list: applyGroupID(list, groupId), modified, full: fullFetch, renamed };
 }
 async function getItemJSONFromCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKeys, libraryID) {
   if (!await isZoteroRunningNative(port))
@@ -94957,6 +94966,25 @@ function cycleQueries(noteHistory, globalHistory) {
   }
   return out;
 }
+function resolveRename(key, renames) {
+  let cur = key;
+  for (let hops = 0; renames.has(cur) && hops < 10; hops++) {
+    cur = renames.get(cur);
+  }
+  return cur;
+}
+function reconcileKeys(list, live, renames = new Map()) {
+  const out = [];
+  const seen = new Set();
+  for (const key of list) {
+    const mapped = resolveRename(key, renames);
+    if (live.has(mapped) && !seen.has(mapped)) {
+      seen.add(mapped);
+      out.push(mapped);
+    }
+  }
+  return out;
+}
 
 // src/bib/bibManager.ts
 var import_fast_deep_equal3 = __toModule(require_fast_deep_equal());
@@ -95851,7 +95879,7 @@ var BibManager = class {
     return removed;
   }
   async refreshGlobalZBib() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     if (this._isRefreshingZBib)
       return;
     this._isRefreshingZBib = true;
@@ -95861,7 +95889,7 @@ var BibManager = class {
         return;
       const adapter = this.getZoteroAdapter();
       const modifiedEntries = new Map();
-      let fullRebuilt = false;
+      const renamed = new Map();
       for (const group of settings.zoteroGroups) {
         try {
           const res = await adapter.refreshBib("", group.id, (_b = group.libraryVersion) != null ? _b : 0, group.lastUpdate);
@@ -95869,8 +95897,11 @@ var BibManager = class {
             continue;
           if ((_c = res.list) == null ? void 0 : _c.length)
             group.lastUpdate = Date.now();
+          if ((_d = res.renamed) == null ? void 0 : _d.size) {
+            for (const [oldId, newId] of res.renamed)
+              renamed.set(oldId, newId);
+          }
           if (res.full && res.list) {
-            fullRebuilt = true;
             for (const [id, e3] of [...this.bibCache]) {
               if (e3.groupID === group.id) {
                 this.bibCache.delete(id);
@@ -95899,8 +95930,8 @@ var BibManager = class {
           console.warn("[sw] trash prune failed:", e3);
         }
       }
-      if (fullRebuilt)
-        this.pruneRecentKeys();
+      if (this.bibCache.size > 0)
+        this.reconcileRecentKeys(renamed);
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
       this.fileCache.clear();
@@ -96629,11 +96660,11 @@ var BibManager = class {
     } catch (e3) {
     }
   }
-  pruneRecentKeys() {
-    const keep = (k4) => this.bibCache.has(k4);
-    this.globalRecentKeys = this.globalRecentKeys.filter(keep);
+  reconcileRecentKeys(renames = new Map()) {
+    const reconcileList = (list) => reconcileKeys(list, this.bibCache, renames);
+    this.globalRecentKeys = reconcileList(this.globalRecentKeys);
     for (const path2 of Object.keys(this.recentKeys)) {
-      const filtered = this.recentKeys[path2].filter(keep);
+      const filtered = reconcileList(this.recentKeys[path2]);
       if (filtered.length)
         this.recentKeys[path2] = filtered;
       else
