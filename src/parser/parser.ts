@@ -1,4 +1,5 @@
 import { locatorToTerm, locators } from './locators';
+import { maskCodeRegions } from './code-mask';
 
 export enum SegmentType {
   at = 'at',
@@ -982,6 +983,11 @@ export function getCitationSegments(
   expandLinkAliases: boolean = false,
   linkCiteKey?: string
 ): CitationSegments[] {
+  // A citekey inside `inline code` or a fenced block is NOT a citation: mask
+  // code regions first. Masking preserves length, so every offset below still
+  // maps 1:1 onto the original string, and no `@`/`[` survives in code.
+  str = maskCodeRegions(str);
+
   // Aliased-link citations only apply when link citations are processed at
   // all (ignoreLinks === false means renderLinkCitations is on).
   if (expandLinkAliases && !ignoreLinks) {

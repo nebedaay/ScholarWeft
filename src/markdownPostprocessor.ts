@@ -190,6 +190,12 @@ function buildCitationSpan(
   return span;
 }
 
+/** Is this text node inside a code span or block? Code is never a citation. */
+function isCodeNode(node: Node): boolean {
+  const parent = node.parentElement;
+  return !!parent && (parent.tagName === 'CODE' || parent.tagName === 'PRE');
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function processCiteKeys(plugin: ReferenceList) {
   return (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
@@ -277,6 +283,7 @@ export function processCiteKeys(plugin: ReferenceList) {
       const containerStarts: Text[] = [];
       let fn: Node | null;
       while ((fn = finder.nextNode())) {
+        if (isCodeNode(fn)) continue;
         if (fn.nodeValue && fn.nodeValue.includes(containerOpen)) {
           containerStarts.push(fn as Text);
         }
@@ -436,6 +443,7 @@ export function processCiteKeys(plugin: ReferenceList) {
         const bracketStarts: Text[] = [];
         let fn2: Node | null;
         while ((fn2 = finder2.nextNode())) {
+          if (isCodeNode(fn2)) continue;
           if (fn2.nodeValue && /(^|[^[])\[/.test(fn2.nodeValue)) {
             bracketStarts.push(fn2 as Text);
           }

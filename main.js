@@ -25544,6 +25544,102 @@ var locatorToTerm = {
   }
 };
 
+// src/parser/code-mask.ts
+function maskCodeRegions(text) {
+  if (!text || text.indexOf("`") === -1 && text.indexOf("~~~") === -1) {
+    return text;
+  }
+  const chars = text.split("");
+  const n2 = text.length;
+  const blank = (from, to) => {
+    const end = Math.min(to, n2);
+    for (let k4 = from; k4 < end; k4++)
+      chars[k4] = " ";
+  };
+  let i3 = 0;
+  while (i3 < n2) {
+    const atLineStart = i3 === 0 || text[i3 - 1] === "\n";
+    if (atLineStart) {
+      const fence = fenceEnd(text, i3);
+      if (fence !== null) {
+        blank(i3, fence);
+        i3 = fence;
+        continue;
+      }
+    }
+    if (text[i3] === "`") {
+      let run = 0;
+      while (i3 + run < n2 && text[i3 + run] === "`")
+        run++;
+      const close2 = findBacktickRun(text, i3 + run, run);
+      if (close2 !== -1) {
+        const end = close2 + run;
+        blank(i3, end);
+        i3 = end;
+        continue;
+      }
+      i3 += run;
+      continue;
+    }
+    i3++;
+  }
+  return chars.join("");
+}
+function fenceEnd(text, at) {
+  let j4 = at;
+  while (j4 < text.length && (text[j4] === " " || text[j4] === "	"))
+    j4++;
+  const ch = text[j4];
+  if (ch !== "`" && ch !== "~")
+    return null;
+  let markers = 0;
+  while (text[j4 + markers] === ch)
+    markers++;
+  if (markers < 3)
+    return null;
+  let pos = text.indexOf("\n", j4);
+  pos = pos === -1 ? text.length : pos + 1;
+  while (pos < text.length) {
+    let k4 = pos;
+    while (k4 < text.length && (text[k4] === " " || text[k4] === "	"))
+      k4++;
+    if (text[k4] === ch) {
+      let run = 0;
+      while (text[k4 + run] === ch)
+        run++;
+      if (run >= markers) {
+        let e3 = k4 + run;
+        while (e3 < text.length && (text[e3] === " " || text[e3] === "	"))
+          e3++;
+        if (e3 >= text.length || text[e3] === "\n") {
+          return e3 < text.length ? e3 + 1 : text.length;
+        }
+      }
+    }
+    const next = text.indexOf("\n", pos);
+    if (next === -1)
+      break;
+    pos = next + 1;
+  }
+  return text.length;
+}
+function findBacktickRun(text, from, runLen) {
+  let j4 = from;
+  while (j4 < text.length) {
+    if (text[j4] === "`") {
+      let run = 0;
+      while (text[j4 + run] === "`")
+        run++;
+      if (run === runLen)
+        return j4;
+      j4 += run;
+    } else {
+      j4++;
+    }
+  }
+  return -1;
+}
+
 // src/parser/parser.ts
 var SegmentType;
 (function(SegmentType2) {
@@ -26133,6 +26229,7 @@ function transformLinkAliases(str3, linkCiteKey) {
   return { text: out.join(""), map, referenceRanges };
 }
 function getCitationSegments(str3, ignoreLinks = false, expandLinkAliases = false, linkCiteKey) {
+  str3 = maskCodeRegions(str3);
   if (expandLinkAliases && !ignoreLinks) {
     const { text, map, referenceRanges } = transformLinkAliases(str3, linkCiteKey);
     const groups = getCitationSegments(text, ignoreLinks);
@@ -27429,6 +27526,10 @@ function buildCitationSpan(plugin, rendered, ctx, sourceText) {
   plugin.tooltipManager.bindPreviewTooltipHandler(span);
   return span;
 }
+function isCodeNode(node) {
+  const parent = node.parentElement;
+  return !!parent && (parent.tagName === "CODE" || parent.tagName === "PRE");
+}
 function processCiteKeys(plugin) {
   return (el, ctx) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -27463,6 +27564,8 @@ function processCiteKeys(plugin) {
       const containerStarts = [];
       let fn2;
       while (fn2 = finder.nextNode()) {
+        if (isCodeNode(fn2))
+          continue;
         if (fn2.nodeValue && fn2.nodeValue.includes(containerOpen2)) {
           containerStarts.push(fn2);
         }
@@ -27593,6 +27696,8 @@ function processCiteKeys(plugin) {
         const bracketStarts = [];
         let fn22;
         while (fn22 = finder2.nextNode()) {
+          if (isCodeNode(fn22))
+            continue;
           if (fn22.nodeValue && /(^|[^[])\[/.test(fn22.nodeValue)) {
             bracketStarts.push(fn22);
           }
