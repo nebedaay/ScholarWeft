@@ -96341,8 +96341,10 @@ var BibManager = class {
       entries[i3] = entry.replace(/>/, ` data-citekey="${e3[0]}">`);
       citeBibMap.set(e3[0], entries[i3]);
     });
-    for (const entry of entries)
-      htmlStr.push(entry);
+    for (const entry of entries) {
+      if (typeof entry === "string")
+        htmlStr.push(entry);
+    }
     htmlStr.push(metadata.bibend);
     let parsed = entries.length ? new DOMParser().parseFromString(htmlStr.join(""), "text/html").body.firstElementChild : null;
     if (parsed) {

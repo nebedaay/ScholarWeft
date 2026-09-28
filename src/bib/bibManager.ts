@@ -2319,12 +2319,17 @@ export class BibManager {
 
     metadata.entry_ids?.forEach((e: string, i: number) => {
       const entry = entries[i];
+      // citeproc can list an entry id with no rendered entry for it (seen with
+      // a completely contentless item), which left `entries[i]` undefined and
+      // threw on `.replace`, aborting the WHOLE bibliography.
       if (typeof entry !== 'string') return;
       entries[i] = entry.replace(/>/, ` data-citekey="${e[0]}">`);
       citeBibMap.set(e[0], entries[i]);
     });
 
-    for (const entry of entries) htmlStr.push(entry);
+    for (const entry of entries) {
+      if (typeof entry === 'string') htmlStr.push(entry);
+    }
 
     htmlStr.push(metadata.bibend);
     let parsed = entries.length
