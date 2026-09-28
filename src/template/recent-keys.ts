@@ -127,6 +127,26 @@ export function normalizeKey(s: string): string {
     .toLowerCase();
 }
 
+/**
+ * Is this entry worth offering in the recency/prefix list? An entry with NO
+ * title, author or editor (a bare `zoteroitemN` for an untitled, unattributed
+ * item) is noise there. It stays in the library, so an explicit search can still
+ * find it by citekey.
+ */
+export function isUsablePopupEntry(entry: {
+  title?: unknown;
+  author?: unknown;
+  editor?: unknown;
+}): boolean {
+  const nonEmpty = (v: unknown): boolean =>
+    typeof v === 'string'
+      ? v.trim().length > 0
+      : Array.isArray(v)
+        ? v.length > 0
+        : false;
+  return nonEmpty(entry.title) || nonEmpty(entry.author) || nonEmpty(entry.editor);
+}
+
 /** How recently a query must have been used in the SAME note to lead the
  *  0-character popup. Older queries stay available for Tab cycling. */
 export const LAST_SEARCH_WINDOW_MS = 5 * 60 * 1000;

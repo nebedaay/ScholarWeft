@@ -30,6 +30,7 @@ import {
   getLastQuery,
   getQueryHistory,
   getRecentKeys,
+  isUsablePopupEntry,
   orderByRecency,
   prefixMatches,
 } from 'src/template/recent-keys';
@@ -339,7 +340,9 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
     const entries = Array.from(bib.bibCache.values());
     if (!entries.length) return { items: [], total: 0 };
-    const base = query ? prefixMatches(entries, query) : entries;
+    // Hide untitled, unattributed items (bare `zoteroitemN`) from this list.
+    const usable = entries.filter(isUsablePopupEntry);
+    const base = query ? prefixMatches(usable, query) : usable;
     // THIS note's recents first, then the global MRU, then Zotero dateAdded —
     // concatenation is the tier order (first occurrence wins in the rank map),
     // so a note with no history still shows something useful.

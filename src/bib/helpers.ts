@@ -583,6 +583,43 @@ export async function getZBibNative(
   return { list: applyGroupID(cslItems, groupId), version };
 }
 
+/**
+ * Keys of items currently in the Zotero TRASH, for one library.
+ *
+ * `/items` EXCLUDES trashed items, so a trashed item is never in a refresh
+ * delta and would linger in our cache forever. The local API has no `/deleted`
+ * endpoint, so `/items/trash` is the only way to learn about them. Best-effort:
+ * an empty set on any failure.
+ */
+export async function fetchTrashedItemKeysNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  libraryID: number = 1
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!(await isZoteroRunningNative(port))) return out;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  const limit = 100;
+  let start = 0;
+  try {
+    for (;;) {
+      const { data } = await zoteroNativeGet(
+        port,
+        `/api/${libraryType}/${libraryId}/items/trash?format=json&limit=${limit}&start=${start}`
+      );
+      if (!Array.isArray(data) || data.length === 0) break;
+      for (const it of data) {
+        const key = String(it?.key ?? it?.data?.key ?? '');
+        if (key) out.add(key);
+      }
+      if (data.length < limit) break;
+      start += limit;
+    }
+  } catch {
+    // best effort — keep whatever was collected
+  }
+  return out;
+}
+
 /** CSL creator-list keys, used to detect a cache that predates `_creators`. */
 const CSL_CREATOR_KEYS = [
   'author',
@@ -678,6 +715,23 @@ export async function refreshZBibNative(
     }
   }
   for (const key of newKeys) list.push(modified.get(key)!);
+
+  // Drop items now in the Zotero TRASH. `/items` (full and delta) never returns
+  // them, so without this they stay in the cache (and the persisted file)
+  // forever after being trashed.
+  const trashed = await fetchTrashedItemKeysNative(port, groupId);
+  if (trashed.size) {
+    const kept = list.filter(
+      (item) =>
+        !(typeof item._zoteroKey === 'string' && trashed.has(item._zoteroKey))
+    );
+    list.length = 0;
+    list.push(...kept);
+    for (const [k, v] of [...modified.entries()]) {
+      const zk = (v as any)._zoteroKey;
+      if (typeof zk === 'string' && trashed.has(zk)) modified.delete(k);
+    }
+  }
 
   await app.vault.adapter.write(
     cachePath,

@@ -86,6 +86,8 @@ const CREATOR_TYPE_TO_CSL_ROLE: Record<string, string> = {
 export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | null {
   const data = item.data;
   if (!data?.citationKey) return null;
+  // Items in the Zotero trash are not part of the library — never cite them.
+  if (data.deleted) return null;
 
   const csl: any = {
     id: data.citationKey,

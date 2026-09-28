@@ -6,6 +6,7 @@ import {
   getQueryHistory,
   getRecentKeys,
   isQueryFresh,
+  isUsablePopupEntry,
   normalizeKey,
   orderByRecency,
   prefixMatches,
@@ -116,6 +117,20 @@ describe('per-note query history', () => {
   it('does not record an empty query', () => {
     const m = recordQuery({}, 'A.md', { query: '', doubleAt: false }, now);
     expect(getQueryHistory(m, 'A.md')).toHaveLength(0);
+  });
+});
+
+describe('isUsablePopupEntry()', () => {
+  it('keeps entries with a title, author or editor', () => {
+    expect(isUsablePopupEntry({ title: 'A Work' })).toBe(true);
+    expect(isUsablePopupEntry({ author: [{ family: 'X' }] })).toBe(true);
+    expect(isUsablePopupEntry({ editor: [{ family: 'Y' }] })).toBe(true);
+  });
+
+  it('drops untitled, unattributed items', () => {
+    expect(isUsablePopupEntry({ title: null, author: null })).toBe(false);
+    expect(isUsablePopupEntry({ title: '   ', author: [] })).toBe(false);
+    expect(isUsablePopupEntry({})).toBe(false);
   });
 });
 

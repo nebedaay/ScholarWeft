@@ -67975,6 +67975,8 @@ function zoteroItemToCSL(item, groupId) {
   const data = item.data;
   if (!(data == null ? void 0 : data.citationKey))
     return null;
+  if (data.deleted)
+    return null;
   const csl = {
     id: data.citationKey,
     type: ZOTERO_TYPE_TO_CSL[data.itemType] || "document",
@@ -68477,6 +68479,32 @@ async function getZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, loa
   await app.vault.adapter.write(cachePath, JSON.stringify({ items: cslItems, version }));
   return { list: applyGroupID(cslItems, groupId), version };
 }
+async function fetchTrashedItemKeysNative(port = DEFAULT_ZOTERO_PORT, libraryID = 1) {
+  var _a, _b, _c;
+  const out = new Set();
+  if (!await isZoteroRunningNative(port))
+    return out;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  const limit = 100;
+  let start = 0;
+  try {
+    for (; ; ) {
+      const { data } = await zoteroNativeGet(port, `/api/${libraryType}/${libraryId}/items/trash?format=json&limit=${limit}&start=${start}`);
+      if (!Array.isArray(data) || data.length === 0)
+        break;
+      for (const it of data) {
+        const key = String((_c = (_b = it == null ? void 0 : it.key) != null ? _b : (_a = it == null ? void 0 : it.data) == null ? void 0 : _a.key) != null ? _c : "");
+        if (key)
+          out.add(key);
+      }
+      if (data.length < limit)
+        break;
+      start += limit;
+    }
+  } catch (e3) {
+  }
+  return out;
+}
 var CSL_CREATOR_KEYS = [
   "author",
   "editor",
@@ -68550,6 +68578,17 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   }
   for (const key of newKeys)
     list.push(modified.get(key));
+  const trashed = await fetchTrashedItemKeysNative(port, groupId);
+  if (trashed.size) {
+    const kept = list.filter((item) => !(typeof item._zoteroKey === "string" && trashed.has(item._zoteroKey)));
+    list.length = 0;
+    list.push(...kept);
+    for (const [k4, v3] of [...modified.entries()]) {
+      const zk = v3._zoteroKey;
+      if (typeof zk === "string" && trashed.has(zk))
+        modified.delete(k4);
+    }
+  }
   await app.vault.adapter.write(cachePath, JSON.stringify({ items: list, version }));
   return { list: applyGroupID(list, groupId), modified };
 }
@@ -94814,6 +94853,10 @@ function prefixMatches(entries, query) {
 function normalizeKey(s3) {
   return s3.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
+function isUsablePopupEntry(entry) {
+  const nonEmpty = (v3) => typeof v3 === "string" ? v3.trim().length > 0 : Array.isArray(v3) ? v3.length > 0 : false;
+  return nonEmpty(entry.title) || nonEmpty(entry.author) || nonEmpty(entry.editor);
+}
 var LAST_SEARCH_WINDOW_MS = 5 * 60 * 1e3;
 var QUERY_HISTORY_PER_NOTE = 20;
 var QUERY_HISTORY_MAX_NOTES = 50;
@@ -95743,6 +95786,33 @@ var BibManager = class {
     }
     this.bibCache.set(entry.id, tagged);
   }
+  async pruneTrashedNative() {
+    var _a, _b;
+    const { settings } = this.plugin;
+    if (settings.useNativeZoteroAPI === false)
+      return 0;
+    const port = (_a = settings.zoteroPort) != null ? _a : DEFAULT_ZOTERO_PORT;
+    const trashed = new Set();
+    for (const group of (_b = settings.zoteroGroups) != null ? _b : []) {
+      try {
+        const keys = await fetchTrashedItemKeysNative(port, group.id);
+        for (const key of keys)
+          trashed.add(key);
+      } catch (e3) {
+      }
+    }
+    if (!trashed.size)
+      return 0;
+    let removed = 0;
+    for (const [id, entry] of [...this.bibCache]) {
+      const zk = entry._zoteroKey;
+      if (typeof zk === "string" && trashed.has(zk)) {
+        this.bibCache.delete(id);
+        removed++;
+      }
+    }
+    return removed;
+  }
   async refreshGlobalZBib() {
     var _a, _b, _c;
     if (this._isRefreshingZBib)
@@ -95767,6 +95837,13 @@ var BibManager = class {
           }
         } catch (e3) {
           console.error("scholar-weft: Zotero refresh failed:", e3);
+        }
+      }
+      if (settings.useNativeZoteroAPI !== false) {
+        try {
+          await this.pruneTrashedNative();
+        } catch (e3) {
+          console.warn("[sw] trash prune failed:", e3);
         }
       }
       this.plugin.saveSettings();
@@ -97702,7 +97779,8 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     const entries = Array.from(bib.bibCache.values());
     if (!entries.length)
       return { items: [], total: 0 };
-    const base = query ? prefixMatches(entries, query) : entries;
+    const usable = entries.filter(isUsablePopupEntry);
+    const base = query ? prefixMatches(usable, query) : usable;
     const recents = [
       ...getRecentKeys(bib.recentKeys, notePath),
       ...bib.globalRecentKeys

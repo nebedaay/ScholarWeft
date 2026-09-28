@@ -11,6 +11,7 @@ import {
   getCSLStyle,
   isAbsolutePath,
   pathBasename,
+  fetchTrashedItemKeysNative,
   DEFAULT_ZOTERO_PORT,
 } from './helpers';
 import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
@@ -1510,6 +1511,37 @@ export class BibManager {
     this.bibCache.set(entry.id, tagged);
   }
 
+  /**
+   * Remove Zotero-TRASH items from the in-memory library. `/items` excludes
+   * trash, so a trashed item is never in a refresh delta and would otherwise
+   * stay in `bibCache` — and so in the 0-character suggestion list — forever.
+   * Native API only. Returns the number removed.
+   */
+  async pruneTrashedNative(): Promise<number> {
+    const { settings } = this.plugin;
+    if (settings.useNativeZoteroAPI === false) return 0;
+    const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
+    const trashed = new Set<string>();
+    for (const group of settings.zoteroGroups ?? []) {
+      try {
+        const keys = await fetchTrashedItemKeysNative(port, group.id);
+        for (const key of keys) trashed.add(key);
+      } catch {
+        /* best effort */
+      }
+    }
+    if (!trashed.size) return 0;
+    let removed = 0;
+    for (const [id, entry] of [...this.bibCache]) {
+      const zk = (entry as { _zoteroKey?: string })._zoteroKey;
+      if (typeof zk === 'string' && trashed.has(zk)) {
+        this.bibCache.delete(id);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   async refreshGlobalZBib() {
     // Guard against concurrent executions. CiteSuggest calls this on every @
     // keystroke (rate-limited to 30 s) AND main.ts fires it unawaited at
@@ -1543,6 +1575,16 @@ export class BibManager {
           }
         } catch (e) {
           console.error('scholar-weft: Zotero refresh failed:', e);
+        }
+      }
+
+      // Items in the Zotero trash never appear in a delta; prune them so a
+      // trashed item cannot linger in the cache (native path only).
+      if (settings.useNativeZoteroAPI !== false) {
+        try {
+          await this.pruneTrashedNative();
+        } catch (e) {
+          console.warn('[sw] trash prune failed:', e);
         }
       }
 
