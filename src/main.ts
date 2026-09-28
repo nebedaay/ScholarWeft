@@ -47,6 +47,7 @@ import { ImportModal } from './importModal';
 import { CitekeyRenameModal } from './modals/citekeyRenameModal';
 import { CitekeyReconcileModal } from './modals/citekeyReconcileModal';
 import type { CitekeyReconcilePlan } from './template/note-lookup';
+import { isZotLitManaged } from './template/note-lookup';
 import { ConflictModal } from './modals/conflictModal';
 import {
   SW_ZOTLIT_FOLDER,
@@ -294,6 +295,8 @@ export default class ReferenceList extends Plugin {
     await this.bibManager.loadZLinks();
     // Restore the MRU list that drives the 0/1/2-character autocomplete.
     await this.bibManager.loadRecentKeys();
+    // Restore the Zotero child-delta watermark for auto note-update.
+    await this.bibManager.loadSyncState();
     this.api = {
       version: API_VERSION,
       focusReferenceListView: () => this.initLeaf(),
@@ -1518,6 +1521,140 @@ export default class ReferenceList extends Plugin {
       }.`,
       8000
     );
+  }
+
+  // ── Auto note-update (Zotero-driven) ────────────────────────────────────────
+
+  private _pendingAutoUpdate = new Set<string>();
+  private _autoUpdateTimer: number | null = null;
+  private _autoUpdateRunning = false;
+
+  /** Queue citekeys for an automatic note refresh (debounced + coalesced). */
+  scheduleAutoUpdate(citekeys: Iterable<string>): void {
+    if (this.settings.autoUpdateNotes === false) return;
+    let added = false;
+    for (const k of citekeys) {
+      if (k && !this._pendingAutoUpdate.has(k)) {
+        this._pendingAutoUpdate.add(k);
+        added = true;
+      }
+    }
+    if (!added && this._autoUpdateTimer != null) return;
+    if (this._autoUpdateTimer != null) return;
+    this._autoUpdateTimer = window.setTimeout(() => {
+      this._autoUpdateTimer = null;
+      void this.runAutoUpdate();
+    }, 3000);
+  }
+
+  private async runAutoUpdate(): Promise<void> {
+    if (this._autoUpdateRunning) return;
+    const pending = this._pendingAutoUpdate;
+    this._pendingAutoUpdate = new Set();
+    if (!pending.size) return;
+    this._autoUpdateRunning = true;
+    try {
+      await this.autoUpdateNotesForCitekeys(pending);
+    } catch (e) {
+      console.warn('[sw:auto-update] failed:', e);
+    } finally {
+      this._autoUpdateRunning = false;
+    }
+    if (this._pendingAutoUpdate.size) this.scheduleAutoUpdate([]);
+  }
+
+  /**
+   * Update the literature notes for `citekeys`. Non-destructive (managed fields
+   * + region only). The first automatic update shows a Notice with a one-click
+   * opt-out. ZotLit-managed notes are updated only when the setting is "Always
+   * convert" — otherwise they are skipped here rather than prompting mid-batch
+   * (the manual commands still prompt).
+   */
+  private async autoUpdateNotesForCitekeys(citekeys: Set<string>): Promise<void> {
+    if (this.settings.autoUpdateNotes === false) return;
+
+    if (!this.settings.autoUpdateNotified) {
+      this.settings.autoUpdateNotified = true;
+      await this.saveSettings();
+      this.notifyAutoUpdate();
+    }
+
+    const targets = await this.collectAutoUpdateFiles(citekeys);
+    if (!targets.length) return;
+
+    const progress = new Notice(
+      `Updating literature notes from Zotero… 0/${targets.length}`,
+      0
+    );
+    let updated = 0;
+    let skipped = 0;
+    for (const file of targets) {
+      if (await this.updateLiteratureNote(file, { confirm: false })) updated++;
+      else skipped++;
+      progress.setMessage(
+        `Updating literature notes from Zotero… ${updated + skipped}/${targets.length}`
+      );
+    }
+    progress.hide();
+    if (updated) {
+      new Notice(
+        `Zotero: updated ${updated} literature note${updated !== 1 ? 's' : ''}${
+          skipped ? `, skipped ${skipped}` : ''
+        }.`,
+        6000
+      );
+    }
+  }
+
+  /** Literature-note files for `citekeys`, honouring the ZotLit setting. */
+  private async collectAutoUpdateFiles(citekeys: Set<string>): Promise<TFile[]> {
+    const setting = this.settings.ownNoteZotLitHandling ?? 'ask';
+    const out: TFile[] = [];
+    const seen = new Set<string>();
+    for (const f of this.app.vault.getMarkdownFiles()) {
+      const fm = this.app.metadataCache.getFileCache(f)?.frontmatter;
+      let ck: string | null = null;
+      if (fm) {
+        if (typeof fm.citekey === 'string' && fm.citekey) ck = fm.citekey;
+        else if (typeof fm['zotero-key'] === 'string')
+          ck = this.findCitekeyByStableKey(fm['zotero-key']);
+      }
+      if (!ck && f.basename.startsWith('@')) ck = f.basename.slice(1);
+      if (!ck || !citekeys.has(ck) || seen.has(f.path)) continue;
+      // ZotLit-managed notes: only when explicitly told to convert, so a batch
+      // never opens a modal.
+      if (setting !== 'convert') {
+        try {
+          const content = await this.app.vault.cachedRead(f);
+          if (isZotLitManaged(content)) continue;
+        } catch {
+          /* unreadable — let updateLiteratureNote report it */
+        }
+      }
+      seen.add(f.path);
+      out.push(f);
+    }
+    return out;
+  }
+
+  private notifyAutoUpdate(): void {
+    const notice = new Notice('', 0);
+    const el = (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ?? notice.containerEl;
+    if (!el) {
+      notice.hide();
+      return;
+    }
+    el.createEl('div', {
+      text: 'ScholarWeft will now update a literature note automatically when its Zotero item changes.',
+    });
+    const btn = el.createEl('button', { text: "Don't auto-update" });
+    btn.addEventListener('click', () => {
+      this.settings.autoUpdateNotes = false;
+      void this.saveSettings();
+      new Notice('Auto note-update turned off (Settings → ScholarWeft → Literature note import).');
+      notice.hide();
+    });
+    window.setTimeout(() => notice.hide(), 15000);
   }
 
   async getCitekeysForFile(file?: TFile) {

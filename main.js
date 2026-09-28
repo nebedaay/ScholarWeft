@@ -27444,6 +27444,8 @@ var en_default = {
   "Choose a folder\u2026": "Choose a folder\u2026",
   "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.": "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
   "Child-note heading level": "Child-note heading level",
+  "Update literature notes automatically": "Update literature notes automatically",
+  "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.": "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.",
   'Heading level (1\u20136) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.': `Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`,
   "Open in Zotero": "Open in Zotero",
   "Filter references\u2026": "Filter references\u2026",
@@ -68613,6 +68615,70 @@ async function fetchTrashedItemKeysNative(port = DEFAULT_ZOTERO_PORT, libraryID 
   return out;
 }
 var LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1e3;
+async function fetchLibraryVersionNative(port = DEFAULT_ZOTERO_PORT, libraryID = 1) {
+  if (!await isZoteroRunningNative(port))
+    return 0;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { version } = await zoteroNativeGet(port, `/api/${libraryType}/${libraryId}/items?limit=1&format=json`);
+    return version || 0;
+  } catch (e3) {
+    return 0;
+  }
+}
+async function fetchItemsSinceNative(port, libraryID, itemType, since) {
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  const limit = 100;
+  let start = 0;
+  const out = [];
+  let version = 0;
+  for (; ; ) {
+    const { data, version: v3 } = await zoteroNativeGet(port, `/api/${libraryType}/${libraryId}/items?itemType=${itemType}&since=${since}&format=json&limit=${limit}&start=${start}`);
+    if (v3)
+      version = v3;
+    if (!Array.isArray(data) || data.length === 0)
+      break;
+    out.push(...data);
+    if (data.length < limit)
+      break;
+    start += limit;
+  }
+  return { items: out, version };
+}
+async function fetchChildDeltaNative(port, libraryID, since) {
+  if (!await isZoteroRunningNative(port))
+    return null;
+  try {
+    const att = await fetchItemsSinceNative(port, libraryID, "attachment", since);
+    const ann = await fetchItemsSinceNative(port, libraryID, "annotation", since);
+    const toItem = (it) => {
+      var _a, _b, _c, _d, _e;
+      const key = String((_c = (_b = it == null ? void 0 : it.key) != null ? _b : (_a = it == null ? void 0 : it.data) == null ? void 0 : _a.key) != null ? _c : "");
+      const parentItem = String((_e = (_d = it == null ? void 0 : it.data) == null ? void 0 : _d.parentItem) != null ? _e : "");
+      return key ? { key, parentItem } : null;
+    };
+    return {
+      attachments: att.items.map(toItem).filter((x4) => !!x4),
+      annotations: ann.items.map(toItem).filter((x4) => !!x4),
+      version: Math.max(att.version, ann.version)
+    };
+  } catch (e3) {
+    return null;
+  }
+}
+async function fetchItemParentNative(port, libraryID, itemKey) {
+  var _a;
+  if (!itemKey || !await isZoteroRunningNative(port))
+    return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { data } = await zoteroNativeGet(port, `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`);
+    const parent = (_a = data == null ? void 0 : data.data) == null ? void 0 : _a.parentItem;
+    return typeof parent === "string" && parent ? parent : null;
+  } catch (e3) {
+    return null;
+  }
+}
 var CSL_CREATOR_KEYS = [
   "author",
   "editor",
@@ -91303,6 +91369,8 @@ var DEFAULT_SETTINGS = {
   ownNoteNotesHeadingLevel: 3,
   ownNoteImageFolder: "Attachments",
   ownNoteZotLitHandling: "ask",
+  autoUpdateNotes: true,
+  autoUpdateNotified: false,
   literatureNoteFolder: DEFAULT_LITERATURE_NOTE_FOLDER,
   yamlFormattingEnabled: false,
   yamlTitleBackground: DEFAULT_YAML_TITLE_BACKGROUND,
@@ -91869,6 +91937,10 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
           this.plugin.saveSettings();
         });
       });
+      new import_obsidian23.Setting(containerEl).setName(t("Update literature notes automatically")).setDesc(t("When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.")).addToggle((toggle) => toggle.setValue(this.plugin.settings.autoUpdateNotes !== false).onChange((value) => {
+        this.plugin.settings.autoUpdateNotes = value;
+        this.plugin.saveSettings();
+      }));
       new import_obsidian23.Setting(containerEl).setName(t("Child-note heading level")).setDesc(t(`Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`)).addSlider((slider) => {
         var _a;
         return slider.setLimits(1, 6, 1).setValue((_a = this.plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3).setDynamicTooltip().onChange((value) => {
@@ -94932,6 +95004,43 @@ function cite(engine, group, uncitedItemIDs) {
   return out;
 }
 
+// src/template/zotero-sync.ts
+function emptySyncState() {
+  return { versions: {}, attachments: {} };
+}
+async function collectChangedItemKeys(state, attachments, annotations, lookupParent) {
+  const map = { ...state.attachments };
+  const changed = new Set();
+  for (const a3 of attachments) {
+    if (!a3.key)
+      continue;
+    if (a3.parentItem) {
+      map[a3.key] = a3.parentItem;
+      changed.add(a3.parentItem);
+    } else {
+      delete map[a3.key];
+    }
+  }
+  for (const an2 of annotations) {
+    if (!an2.parentItem)
+      continue;
+    let parentItem = map[an2.parentItem];
+    if (!parentItem) {
+      const resolved = await lookupParent(an2.parentItem);
+      if (resolved) {
+        map[an2.parentItem] = resolved;
+        parentItem = resolved;
+      }
+    }
+    if (parentItem)
+      changed.add(parentItem);
+  }
+  return { state: { ...state, attachments: map }, changedItemKeys: changed };
+}
+function stableKeyFor(itemKey, groupId) {
+  return groupId === 1 ? itemKey : `${itemKey}g${groupId}`;
+}
+
 // src/template/recent-keys.ts
 var RECENT_KEYS_LIMIT = 200;
 var RECENT_KEYS_MAX_NOTES = 50;
@@ -95362,6 +95471,7 @@ var BibManager = class {
     this.bibCache = new Map();
     this.recentKeys = {};
     this.globalRecentKeys = [];
+    this.syncState = emptySyncState();
     this.queryHistory = {};
     this.globalQueryHistory = [];
     this.zCitekeyToLinks = new Map();
@@ -95985,6 +96095,7 @@ var BibManager = class {
       const adapter = this.getZoteroAdapter();
       const modifiedEntries = new Map();
       const renamed = new Map();
+      let fullRebuilt = false;
       for (const group of settings.zoteroGroups) {
         try {
           const res = await adapter.refreshBib("", group.id, (_b = group.libraryVersion) != null ? _b : 0, group.lastUpdate);
@@ -95997,6 +96108,7 @@ var BibManager = class {
               renamed.set(oldId, newId);
           }
           if (res.full && res.list) {
+            fullRebuilt = true;
             for (const [id, e3] of [...this.bibCache]) {
               if (e3.groupID === group.id) {
                 this.bibCache.delete(id);
@@ -96027,6 +96139,17 @@ var BibManager = class {
       }
       if (this.bibCache.size > 0)
         this.reconcileRecentKeys(renamed);
+      if (settings.useNativeZoteroAPI !== false && settings.autoUpdateNotes !== false && !fullRebuilt && this.syncState) {
+        try {
+          const changed = await this.collectAutoUpdateCitekeys();
+          for (const k4 of modifiedEntries.keys())
+            changed.add(k4);
+          if (changed.size)
+            this.plugin.scheduleAutoUpdate(changed);
+        } catch (e3) {
+          console.warn("[sw] auto-update scan failed:", e3);
+        }
+      }
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
       this.fileCache.clear();
@@ -96754,6 +96877,59 @@ var BibManager = class {
       }
     } catch (e3) {
     }
+  }
+  async loadSyncState() {
+    try {
+      const raw = await app.vault.adapter.read((0, import_obsidian28.normalizePath)(`${SW_CACHE_DIR}/sync-state.json`));
+      const data = JSON.parse(raw);
+      this.syncState = {
+        versions: (data == null ? void 0 : data.versions) && typeof data.versions === "object" ? data.versions : {},
+        attachments: (data == null ? void 0 : data.attachments) && typeof data.attachments === "object" ? data.attachments : {}
+      };
+    } catch (e3) {
+    }
+  }
+  async saveSyncState() {
+    try {
+      const dir = (0, import_obsidian28.normalizePath)(SW_CACHE_DIR);
+      if (!await app.vault.adapter.exists(dir)) {
+        await app.vault.adapter.mkdir(dir);
+      }
+      await app.vault.adapter.write((0, import_obsidian28.normalizePath)(`${SW_CACHE_DIR}/sync-state.json`), JSON.stringify(this.syncState));
+    } catch (e3) {
+      console.warn("[sw] saveSyncState failed:", e3);
+    }
+  }
+  async collectAutoUpdateCitekeys() {
+    var _a, _b, _c;
+    const { settings } = this.plugin;
+    const port = (_a = settings.zoteroPort) != null ? _a : DEFAULT_ZOTERO_PORT;
+    const citekeys = new Set();
+    for (const group of (_b = settings.zoteroGroups) != null ? _b : []) {
+      const gid = String(group.id);
+      const since = (_c = this.syncState.versions[gid]) != null ? _c : 0;
+      if (!since) {
+        const v3 = await fetchLibraryVersionNative(port, group.id);
+        if (v3)
+          this.syncState.versions[gid] = v3;
+        continue;
+      }
+      const delta = await fetchChildDeltaNative(port, group.id, since);
+      if (!delta)
+        continue;
+      const { state, changedItemKeys } = await collectChangedItemKeys(this.syncState, delta.attachments, delta.annotations, (attachmentKey) => fetchItemParentNative(port, group.id, attachmentKey));
+      this.syncState = {
+        ...state,
+        versions: { ...state.versions, [gid]: delta.version || since }
+      };
+      for (const itemKey of changedItemKeys) {
+        const ck = this.findCitekeyByStableKey(stableKeyFor(itemKey, group.id));
+        if (ck)
+          citekeys.add(ck);
+      }
+    }
+    await this.saveSyncState();
+    return citekeys;
   }
   reconcileRecentKeys(renames = new Map()) {
     const reconcileList = (list) => reconcileKeys(list, this.bibCache, renames);
@@ -100911,6 +101087,9 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     this._runInsertZoteroNotes = null;
     this._zoteroNotesCommandAdded = false;
     this.statusBarText = null;
+    this._pendingAutoUpdate = new Set();
+    this._autoUpdateTimer = null;
+    this._autoUpdateRunning = false;
     this.suggestPosition = null;
     this.persistCitedKeysIndex = (0, import_obsidian38.debounce)(async () => {
       if (!this.bibManager.citedKeysIndexDirty)
@@ -101040,6 +101219,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     await this.bibManager.loadRenderedCache();
     await this.bibManager.loadZLinks();
     await this.bibManager.loadRecentKeys();
+    await this.bibManager.loadSyncState();
     this.api = {
       version: API_VERSION,
       focusReferenceListView: () => this.initLeaf(),
@@ -101866,6 +102046,120 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     }
     progress.hide();
     new import_obsidian38.Notice(`Updated ${updated} literature note(s)${skipped ? `, skipped ${skipped}` : ""}.`, 8e3);
+  }
+  scheduleAutoUpdate(citekeys) {
+    if (this.settings.autoUpdateNotes === false)
+      return;
+    let added = false;
+    for (const k4 of citekeys) {
+      if (k4 && !this._pendingAutoUpdate.has(k4)) {
+        this._pendingAutoUpdate.add(k4);
+        added = true;
+      }
+    }
+    if (!added && this._autoUpdateTimer != null)
+      return;
+    if (this._autoUpdateTimer != null)
+      return;
+    this._autoUpdateTimer = window.setTimeout(() => {
+      this._autoUpdateTimer = null;
+      void this.runAutoUpdate();
+    }, 3e3);
+  }
+  async runAutoUpdate() {
+    if (this._autoUpdateRunning)
+      return;
+    const pending = this._pendingAutoUpdate;
+    this._pendingAutoUpdate = new Set();
+    if (!pending.size)
+      return;
+    this._autoUpdateRunning = true;
+    try {
+      await this.autoUpdateNotesForCitekeys(pending);
+    } catch (e3) {
+      console.warn("[sw:auto-update] failed:", e3);
+    } finally {
+      this._autoUpdateRunning = false;
+    }
+    if (this._pendingAutoUpdate.size)
+      this.scheduleAutoUpdate([]);
+  }
+  async autoUpdateNotesForCitekeys(citekeys) {
+    if (this.settings.autoUpdateNotes === false)
+      return;
+    if (!this.settings.autoUpdateNotified) {
+      this.settings.autoUpdateNotified = true;
+      await this.saveSettings();
+      this.notifyAutoUpdate();
+    }
+    const targets = await this.collectAutoUpdateFiles(citekeys);
+    if (!targets.length)
+      return;
+    const progress = new import_obsidian38.Notice(`Updating literature notes from Zotero\u2026 0/${targets.length}`, 0);
+    let updated = 0;
+    let skipped = 0;
+    for (const file of targets) {
+      if (await this.updateLiteratureNote(file, { confirm: false }))
+        updated++;
+      else
+        skipped++;
+      progress.setMessage(`Updating literature notes from Zotero\u2026 ${updated + skipped}/${targets.length}`);
+    }
+    progress.hide();
+    if (updated) {
+      new import_obsidian38.Notice(`Zotero: updated ${updated} literature note${updated !== 1 ? "s" : ""}${skipped ? `, skipped ${skipped}` : ""}.`, 6e3);
+    }
+  }
+  async collectAutoUpdateFiles(citekeys) {
+    var _a, _b;
+    const setting = (_a = this.settings.ownNoteZotLitHandling) != null ? _a : "ask";
+    const out = [];
+    const seen = new Set();
+    for (const f3 of this.app.vault.getMarkdownFiles()) {
+      const fm = (_b = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _b.frontmatter;
+      let ck = null;
+      if (fm) {
+        if (typeof fm.citekey === "string" && fm.citekey)
+          ck = fm.citekey;
+        else if (typeof fm["zotero-key"] === "string")
+          ck = this.findCitekeyByStableKey(fm["zotero-key"]);
+      }
+      if (!ck && f3.basename.startsWith("@"))
+        ck = f3.basename.slice(1);
+      if (!ck || !citekeys.has(ck) || seen.has(f3.path))
+        continue;
+      if (setting !== "convert") {
+        try {
+          const content = await this.app.vault.cachedRead(f3);
+          if (isZotLitManaged(content))
+            continue;
+        } catch (e3) {
+        }
+      }
+      seen.add(f3.path);
+      out.push(f3);
+    }
+    return out;
+  }
+  notifyAutoUpdate() {
+    var _a;
+    const notice = new import_obsidian38.Notice("", 0);
+    const el = (_a = notice.noticeEl) != null ? _a : notice.containerEl;
+    if (!el) {
+      notice.hide();
+      return;
+    }
+    el.createEl("div", {
+      text: "ScholarWeft will now update a literature note automatically when its Zotero item changes."
+    });
+    const btn = el.createEl("button", { text: "Don't auto-update" });
+    btn.addEventListener("click", () => {
+      this.settings.autoUpdateNotes = false;
+      void this.saveSettings();
+      new import_obsidian38.Notice("Auto note-update turned off (Settings \u2192 ScholarWeft \u2192 Literature note import).");
+      notice.hide();
+    });
+    window.setTimeout(() => notice.hide(), 15e3);
   }
   async getCitekeysForFile(file) {
     var _a, _b;

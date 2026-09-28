@@ -209,6 +209,10 @@ export default {
     "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
   'Child-note heading level':
     'Child-note heading level',
+  'Update literature notes automatically':
+    'Update literature notes automatically',
+  'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.':
+    'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.',
   'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.':
     'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.',
   'Open in Zotero': 'Open in Zotero',

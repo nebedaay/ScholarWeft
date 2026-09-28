@@ -12,6 +12,9 @@ import {
   isAbsolutePath,
   pathBasename,
   fetchTrashedItemKeysNative,
+  fetchChildDeltaNative,
+  fetchItemParentNative,
+  fetchLibraryVersionNative,
   DEFAULT_ZOTERO_PORT,
 } from './helpers';
 import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
@@ -51,6 +54,12 @@ import { cite } from 'src/parser/citeproc';
 import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
+import {
+  collectChangedItemKeys,
+  emptySyncState,
+  stableKeyFor,
+  type SyncState,
+} from 'src/template/zotero-sync';
 import {
   recordQuery,
   recordRecentKey,
@@ -594,6 +603,10 @@ export class BibManager {
   /** MRU across ALL notes — the fallback for a note with no history of its own,
    *  so a fresh note still shows something useful. */
   globalRecentKeys: string[] = [];
+
+  /** Zotero child-delta watermark + attachment→item map for auto note-update.
+   *  Persisted to `.scholar-weft/sync-state.json`. */
+  syncState: SyncState = emptySyncState();
 
   /** Per-note query history, so the 0-character popup can re-run THIS note's
    *  last query and Tab can cycle its earlier ones. Kept per note, so tabbing
@@ -1558,6 +1571,7 @@ export class BibManager {
       const adapter = this.getZoteroAdapter();
       const modifiedEntries: Map<string, PartialCSLEntry> = new Map();
       const renamed = new Map<string, string>();
+      let fullRebuilt = false;
 
       for (const group of settings.zoteroGroups) {
         try {
@@ -1575,6 +1589,7 @@ export class BibManager {
           }
 
           if (res.full && res.list) {
+            fullRebuilt = true;
             // FULL rebuild (background fetch, then swap): replace THIS group's
             // entries so a permanently deleted item is finally dropped. The swap
             // is a synchronous rebuild of the map, so consumers never see a gap.
@@ -1613,6 +1628,25 @@ export class BibManager {
       // never has to vet: remap renamed citekeys, drop ones that no longer
       // resolve. Done once per refresh, not per keystroke.
       if (this.bibCache.size > 0) this.reconcileRecentKeys(renamed);
+
+      // Auto note-update: the changed METADATA citekeys are `modifiedEntries`;
+      // annotation/attachment changes come from the child delta (they never
+      // appear in the metadata delta). Skipped after a FULL rebuild, where every
+      // item is "modified" and nothing actually changed.
+      if (
+        settings.useNativeZoteroAPI !== false &&
+        settings.autoUpdateNotes !== false &&
+        !fullRebuilt &&
+        this.syncState
+      ) {
+        try {
+          const changed = await this.collectAutoUpdateCitekeys();
+          for (const k of modifiedEntries.keys()) changed.add(k);
+          if (changed.size) this.plugin.scheduleAutoUpdate(changed);
+        } catch (e) {
+          console.warn('[sw] auto-update scan failed:', e);
+        }
+      }
 
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
@@ -2689,6 +2723,84 @@ export class BibManager {
     } catch {
       // no persisted list yet — first run
     }
+  }
+
+  /** Restore the Zotero child-delta watermark + attachment map (once at startup). */
+  async loadSyncState(): Promise<void> {
+    try {
+      const raw = await app.vault.adapter.read(
+        normalizePath(`${SW_CACHE_DIR}/sync-state.json`)
+      );
+      const data = JSON.parse(raw);
+      this.syncState = {
+        versions:
+          data?.versions && typeof data.versions === 'object' ? data.versions : {},
+        attachments:
+          data?.attachments && typeof data.attachments === 'object'
+            ? data.attachments
+            : {},
+      };
+    } catch {
+      // first run — no watermark yet
+    }
+  }
+
+  async saveSyncState(): Promise<void> {
+    try {
+      const dir = normalizePath(SW_CACHE_DIR);
+      if (!(await app.vault.adapter.exists(dir))) {
+        await app.vault.adapter.mkdir(dir);
+      }
+      await app.vault.adapter.write(
+        normalizePath(`${SW_CACHE_DIR}/sync-state.json`),
+        JSON.stringify(this.syncState)
+      );
+    } catch (e) {
+      console.warn('[sw] saveSyncState failed:', e);
+    }
+  }
+
+  /**
+   * Citekeys whose NOTE content changed in Zotero since the last watermark —
+   * from annotation/attachment child deltas. (Metadata changes come from the
+   * refresh's `modified` map and are added by the caller.)
+   *
+   * The FIRST observation only establishes the watermark: everything would look
+   * "changed" at `since=0`, so nothing is reported.
+   */
+  private async collectAutoUpdateCitekeys(): Promise<Set<string>> {
+    const { settings } = this.plugin;
+    const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
+    const citekeys = new Set<string>();
+
+    for (const group of settings.zoteroGroups ?? []) {
+      const gid = String(group.id);
+      const since = this.syncState.versions[gid] ?? 0;
+      if (!since) {
+        const v = await fetchLibraryVersionNative(port, group.id);
+        if (v) this.syncState.versions[gid] = v;
+        continue;
+      }
+      const delta = await fetchChildDeltaNative(port, group.id, since);
+      if (!delta) continue;
+      const { state, changedItemKeys } = await collectChangedItemKeys(
+        this.syncState,
+        delta.attachments,
+        delta.annotations,
+        (attachmentKey) => fetchItemParentNative(port, group.id, attachmentKey)
+      );
+      this.syncState = {
+        ...state,
+        versions: { ...state.versions, [gid]: delta.version || since },
+      };
+      for (const itemKey of changedItemKeys) {
+        const ck = this.findCitekeyByStableKey(stableKeyFor(itemKey, group.id));
+        if (ck) citekeys.add(ck);
+      }
+    }
+
+    await this.saveSyncState();
+    return citekeys;
   }
 
   /**

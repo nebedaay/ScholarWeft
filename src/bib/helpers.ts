@@ -648,6 +648,103 @@ export async function fetchTrashedItemKeysNative(
  *  ever dropped. */
 const LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** The library's current `Last-Modified-Version`, or 0. */
+export async function fetchLibraryVersionNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  libraryID: number = 1
+): Promise<number> {
+  if (!(await isZoteroRunningNative(port))) return 0;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { version } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items?limit=1&format=json`
+    );
+    return version || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function fetchItemsSinceNative(
+  port: string,
+  libraryID: number,
+  itemType: string,
+  since: number
+): Promise<{ items: any[]; version: number }> {
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  const limit = 100;
+  let start = 0;
+  const out: any[] = [];
+  let version = 0;
+  for (;;) {
+    const { data, version: v } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items?itemType=${itemType}&since=${since}&format=json&limit=${limit}&start=${start}`
+    );
+    if (v) version = v;
+    if (!Array.isArray(data) || data.length === 0) break;
+    out.push(...data);
+    if (data.length < limit) break;
+    start += limit;
+  }
+  return { items: out, version };
+}
+
+/**
+ * Items changed since `since`, split into attachments and annotations, each with
+ * its parent key (attachment → top-level item; annotation → its attachment).
+ * This is what catches ANNOTATION edits, which never bump the parent item's
+ * version and so never appear in the metadata delta.
+ */
+export async function fetchChildDeltaNative(
+  port: string,
+  libraryID: number,
+  since: number
+): Promise<{
+  attachments: Array<{ key: string; parentItem: string }>;
+  annotations: Array<{ key: string; parentItem: string }>;
+  version: number;
+} | null> {
+  if (!(await isZoteroRunningNative(port))) return null;
+  try {
+    const att = await fetchItemsSinceNative(port, libraryID, 'attachment', since);
+    const ann = await fetchItemsSinceNative(port, libraryID, 'annotation', since);
+    const toItem = (it: any): { key: string; parentItem: string } | null => {
+      const key = String(it?.key ?? it?.data?.key ?? '');
+      const parentItem = String(it?.data?.parentItem ?? '');
+      return key ? { key, parentItem } : null;
+    };
+    return {
+      attachments: att.items.map(toItem).filter((x): x is { key: string; parentItem: string } => !!x),
+      annotations: ann.items.map(toItem).filter((x): x is { key: string; parentItem: string } => !!x),
+      version: Math.max(att.version, ann.version),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The top-level item key an attachment belongs to, or null (point lookup). */
+export async function fetchItemParentNative(
+  port: string,
+  libraryID: number,
+  itemKey: string
+): Promise<string | null> {
+  if (!itemKey || !(await isZoteroRunningNative(port))) return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { data } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`
+    );
+    const parent = data?.data?.parentItem;
+    return typeof parent === 'string' && parent ? parent : null;
+  } catch {
+    return null;
+  }
+}
+
 /** CSL creator-list keys, used to detect a cache that predates `_creators`. */
 const CSL_CREATOR_KEYS = [
   'author',
