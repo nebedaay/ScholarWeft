@@ -102496,6 +102496,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
       ((_d = byGroup.get(gid)) != null ? _d : byGroup.set(gid, []).get(gid)).push(f3);
     }
     const staleFolders = [];
+    const childFolders = await this.listChildFolders(base);
     for (const gid of new Set([
       ...((_e = this.settings.zoteroGroups) != null ? _e : []).map((g4) => g4.id),
       ...byGroup.keys()
@@ -102505,18 +102506,26 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid)
       });
-      const targetName = (_f = target.split("/").pop()) != null ? _f : "";
-      const parent = target.split("/").slice(0, -1).join("/");
-      const from = parent ? `${parent}/${targetName}` : targetName;
-      if (targetName.startsWith("Group "))
+      if (((_f = target.split("/").pop()) != null ? _f : "").startsWith("Group "))
         continue;
-      const oldPath = parent ? `${parent}/Group ${gid}` : `Group ${gid}`;
-      const exists = await this.app.vault.adapter.exists(oldPath);
-      console.log("[sw:move] group", gid, "target=", target, "oldExists=", exists, oldPath);
-      if (oldPath !== from && exists)
-        staleFolders.push({ from: oldPath, to: from });
+      const oldPath = childFolders.find((p4) => p4.split("/").pop() === `Group ${gid}`);
+      console.log("[sw:move] group", gid, "target=", target, "oldFolder=", oldPath);
+      if (oldPath && oldPath !== target) {
+        staleFolders.push({ from: oldPath, to: target });
+      }
     }
     return { byGroup, staleFolders };
+  }
+  async listChildFolders(folder) {
+    var _a;
+    try {
+      const norm4 = folder.replace(/\/+$/, "");
+      const listing = await this.app.vault.adapter.list(norm4 || "/");
+      return (_a = listing.folders) != null ? _a : [];
+    } catch (e3) {
+      console.warn("[sw:move] could not list", folder, e3);
+      return [];
+    }
   }
   async moveGroupNotes(byGroup, staleFolders = []) {
     const fm = this.app.fileManager;

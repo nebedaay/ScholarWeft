@@ -1779,10 +1779,12 @@ export default class ReferenceList extends Plugin {
       (byGroup.get(gid) ?? byGroup.set(gid, []).get(gid)!).push(f);
     }
 
-    // Group folders whose name no longer matches the library name. Detect these
-    // BEFORE moving notes, so the rename happens FIRST and the notes then simply
-    // follow the folder (no empty rename, no file-by-file move).
+    // Group folders whose name no longer matches the library name. Detected by
+    // LISTING the base folder child folders (not `adapter.exists`, which did not
+    // see a folder that was plainly on disk) and matching the legacy `Group N`
+    // name — then renamed directly, so the notes follow.
     const staleFolders: Array<{ from: string; to: string }> = [];
+    const childFolders = await this.listChildFolders(base);
     for (const gid of new Set([
       ...(this.settings.zoteroGroups ?? []).map((g) => g.id),
       ...byGroup.keys(),
@@ -1792,16 +1794,28 @@ export default class ReferenceList extends Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid),
       });
-      const targetName = target.split('/').pop() ?? '';
-      const parent = target.split('/').slice(0, -1).join('/');
-      const from = parent ? `${parent}/${targetName}` : targetName;
-      if (targetName.startsWith('Group ')) continue;
-      const oldPath = parent ? `${parent}/Group ${gid}` : `Group ${gid}`;
-      const exists = await this.app.vault.adapter.exists(oldPath);
-      console.log('[sw:move] group', gid, 'target=', target, 'oldExists=', exists, oldPath);
-      if (oldPath !== from && exists) staleFolders.push({ from: oldPath, to: from });
+      if ((target.split('/').pop() ?? '').startsWith('Group ')) continue;
+      const oldPath = childFolders.find(
+        (p) => p.split('/').pop() === `Group ${gid}`
+      );
+      console.log('[sw:move] group', gid, 'target=', target, 'oldFolder=', oldPath);
+      if (oldPath && oldPath !== target) {
+        staleFolders.push({ from: oldPath, to: target });
+      }
     }
     return { byGroup, staleFolders };
+  }
+
+  /** Vault-relative paths of the immediate child FOLDERS of `folder`. */
+  private async listChildFolders(folder: string): Promise<string[]> {
+    try {
+      const norm = folder.replace(/\/+$/, '');
+      const listing = await this.app.vault.adapter.list(norm || '/');
+      return listing.folders ?? [];
+    } catch (e) {
+      console.warn('[sw:move] could not list', folder, e);
+      return [];
+    }
   }
 
   private async moveGroupNotes(
