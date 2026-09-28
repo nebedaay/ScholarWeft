@@ -96298,6 +96298,9 @@ var BibManager = class {
     const match2 = /^(.*?)(?:g(\d+))?$/.exec(stable);
     const key = (_a = match2 == null ? void 0 : match2[1]) != null ? _a : stable;
     const groupID = (match2 == null ? void 0 : match2[2]) ? Number(match2[2]) : null;
+    const indexed = this._zoteroKeyToCitekey.get(key);
+    if (indexed && this.bibCache.has(indexed))
+      return indexed;
     for (const [citekey, entry] of this.bibCache) {
       const e3 = entry;
       if ((e3 == null ? void 0 : e3._zoteroKey) !== key)

@@ -1753,6 +1753,17 @@ export class BibManager {
     const match = /^(.*?)(?:g(\d+))?$/.exec(stable);
     const key = match?.[1] ?? stable;
     const groupID = match?.[2] ? Number(match[2]) : null;
+
+    // Prefer the persistent item-key index. `mergeZoteroEntry` de-dupes bibCache
+    // by CITEKEY, so when the SAME citekey exists in two libraries (a duplicate
+    // across My Library and a group) the newer copy SHADOWS the other and the
+    // shadowed item key is gone from bibCache — even though the note points at
+    // it. The index retains every item key we have ever seen. Require the
+    // resolved citekey to still be loaded, so a disabled/removed library does
+    // NOT resolve.
+    const indexed = this._zoteroKeyToCitekey.get(key);
+    if (indexed && this.bibCache.has(indexed)) return indexed;
+
     for (const [citekey, entry] of this.bibCache) {
       const e = entry as { _zoteroKey?: string; groupID?: number };
       if (e?._zoteroKey !== key) continue;

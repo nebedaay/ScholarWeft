@@ -1265,3 +1265,36 @@ describe('cited-keys index reconciliation', () => {
     );
   });
 });
+
+describe('findCitekeyByStableKey with duplicate citekeys across libraries', () => {
+  it('resolves the shadowed item key of a duplicate citekey', () => {
+    const { manager } = makeManager([]);
+    (manager as any).mergeZoteroEntry({
+      id: 'dup1995',
+      _zoteroKey: 'AAA11111',
+      groupID: 1,
+      _dateModified: '2026-02-01T00:00:00Z',
+    });
+    (manager as any).mergeZoteroEntry({
+      id: 'dup1995',
+      _zoteroKey: 'BBB22222',
+      groupID: 7,
+      _dateModified: '2026-09-01T00:00:00Z',
+    });
+    // The newer group copy owns the citekey, but BOTH item keys still resolve.
+    expect(manager.findCitekeyByStableKey('AAA11111')).toBe('dup1995');
+    expect(manager.findCitekeyByStableKey('BBB22222')).toBe('dup1995');
+    expect(manager.findCitekeyByStableKey('BBB22222g7')).toBe('dup1995');
+  });
+
+  it('does not resolve an item key whose citekey is no longer loaded', () => {
+    const { manager } = makeManager([]);
+    (manager as any).mergeZoteroEntry({
+      id: 'gone1995',
+      _zoteroKey: 'CCC33333',
+      groupID: 1,
+    });
+    manager.bibCache.delete('gone1995');
+    expect(manager.findCitekeyByStableKey('CCC33333')).toBeNull();
+  });
+});
