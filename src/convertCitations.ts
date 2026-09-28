@@ -180,7 +180,29 @@ export function convertCitationsInText(text: string): string {
   const outLines = lines.map((line) =>
     /\[\[@/.test(line) ? rewriteContainers(line) : line
   );
-  return outLines.join('\n');
+  return mergeAdjacentPandocCitations(outLines.join('\n'));
+}
+
+/**
+ * Merge pandoc bracket citations that are ADJACENT — separated only by spaces/
+ * tabs and at most ONE newline — into one multi-item citation, so
+ * `[[@a]] [[@b]]` exports as `[@a; @b]` rather than `[@a] [@b]`. Mirrors the
+ * parser's contiguous-citation rule (`getCitationSegments`).
+ *
+ * Only bracket groups whose content contains `@` are merged, so markdown links
+ * (`[text](url)`) and prose brackets are never touched. A bare narrative `@a`
+ * (no brackets) is not merged.
+ */
+export function mergeAdjacentPandocCitations(text: string): string {
+  const ADJACENT =
+    /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
+  let prev: string;
+  let out = text;
+  do {
+    prev = out;
+    out = out.replace(ADJACENT, '[$1; $3]');
+  } while (out !== prev);
+  return out;
 }
 
 /**

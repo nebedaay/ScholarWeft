@@ -217,8 +217,27 @@ function convert(input, output) {
     }
     return line;
   });
-  writeFileSync(output, outLines.join('\n'), 'utf-8');
+  writeFileSync(
+    output,
+    mergeAdjacentPandocCitations(outLines.join('\n')),
+    'utf-8'
+  );
   console.log(`Converted citations: ${input} → ${output}`);
+}
+
+// Merge pandoc bracket citations that are ADJACENT (spaces/tabs and at most one
+// newline apart) into one multi-item citation, so `[[@a]] [[@b]]` exports as
+// `[@a; @b]`. Mirrors src/convertCitations.ts and the parser rule.
+function mergeAdjacentPandocCitations(text) {
+  const ADJACENT =
+    /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
+  let prev;
+  let out = text;
+  do {
+    prev = out;
+    out = out.replace(ADJACENT, '[$1; $3]');
+  } while (out !== prev);
+  return out;
 }
 
 const [, , input, output] = process.argv;

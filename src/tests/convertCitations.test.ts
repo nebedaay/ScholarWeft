@@ -86,3 +86,20 @@ describe('full-reference insertions (export pre-render)', () => {
     expect(convertCitationsInText(withRefs)).toContain('then [@b, p. 2]');
   });
 });
+
+describe('convertCitationsInText() — contiguous citations merge', () => {
+  it('merges adjacent citations into one pandoc citation', () => {
+    expect(convertCitationsInText('[[@a]] [[@b]]')).toBe('[@a; @b]');
+    expect(convertCitationsInText('[[@a]]\n[[@b]]')).toBe('[@a; @b]');
+    expect(convertCitationsInText('[[@a]] [@b] [[@c]]')).toBe('[@a; @b; @c]');
+  });
+
+  it('does not merge across a blank line or with text between', () => {
+    expect(convertCitationsInText('[[@a]]\n\n[[@b]]')).toBe('[@a]\n\n[@b]');
+    expect(convertCitationsInText('[[@a]] and [[@b]]')).toBe('[@a] and [@b]');
+  });
+
+  it('does not merge a bare narrative citation', () => {
+    expect(convertCitationsInText('[[@a|@ -]] [[@b]]')).toBe('@a [@b]');
+  });
+});

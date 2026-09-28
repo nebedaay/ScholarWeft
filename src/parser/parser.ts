@@ -983,6 +983,70 @@ export function getCitationSegments(
   expandLinkAliases: boolean = false,
   linkCiteKey?: string
 ): CitationSegments[] {
+  return mergeAdjacentGroups(str, getCitationSegmentsRaw(str, ignoreLinks, expandLinkAliases, linkCiteKey));
+}
+
+/**
+ * Merge citation groups that are ADJACENT — separated only by spaces/tabs and
+ * at most ONE newline (a soft wrap), with no other text.
+ *
+ * `[[@a]] [[@b]]` then renders as ONE compound citation `(A 2000; B 1984)`
+ * instead of two, without needing the container. The container stays as the
+ * explicit form for when there IS text between members
+ * (`[ [[@a]]; see [[@b]] ]`).
+ *
+ * A synthetic `separator` segment is inserted between the groups, exactly as
+ * the container scanner does, so `getCitations` pushes the first citation before
+ * parsing the second. Reference groups are left alone.
+ */
+function mergeAdjacentGroups(
+  str: string,
+  groups: CitationSegments[]
+): CitationSegments[] {
+  if (groups.length < 2) return groups;
+  const out: CitationSegments[] = [];
+  for (const group of groups) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      !prev.reference &&
+      !group.reference &&
+      prev.length > 0 &&
+      group.length > 0 &&
+      // Only BRACKET-style citations merge; a bare narrative `@a` does not.
+      prev[0].type === SegmentType.bracket &&
+      group[0].type === SegmentType.bracket
+    ) {
+      const prevLast = prev[prev.length - 1];
+      // `to` is inclusive on some paths and exclusive on others; the char at
+      // `to` disambiguates (both kinds end with `]`).
+      const prevEnd =
+        str[prevLast.to] === ']' ? prevLast.to + 1 : prevLast.to;
+      const sep = str.slice(prevEnd, group[0].from);
+      if (/^[ \t]*\n?[ \t]*$/.test(sep)) {
+        prev.push(
+          {
+            type: SegmentType.separator,
+            from: prevEnd,
+            to: group[0].from,
+            val: ';',
+          },
+          ...group
+        );
+        continue;
+      }
+    }
+    out.push(group);
+  }
+  return out;
+}
+
+function getCitationSegmentsRaw(
+  str: string,
+  ignoreLinks: boolean = false,
+  expandLinkAliases: boolean = false,
+  linkCiteKey?: string
+): CitationSegments[] {
   // A citekey inside `inline code` or a fenced block is NOT a citation: mask
   // code regions first. Masking preserves length, so every offset below still
   // maps 1:1 onto the original string, and no `@`/`[` survives in code.
@@ -992,7 +1056,10 @@ export function getCitationSegments(
   // all (ignoreLinks === false means renderLinkCitations is on).
   if (expandLinkAliases && !ignoreLinks) {
     const { text, map, referenceRanges } = transformLinkAliases(str, linkCiteKey);
-    const groups = getCitationSegments(text, ignoreLinks);
+    // Use the RAW scanner here: merging before the reference flag is attached
+    // would pull an ordinary citation into a `|reference` group. The public
+    // wrapper merges AFTER mapping, so reference groups are skipped correctly.
+    const groups = getCitationSegmentsRaw(text, ignoreLinks);
     if (!groups.length) return groups as CitationSegments[];
     return groups.map((group) => {
       const remapped = group.map((seg) => ({
