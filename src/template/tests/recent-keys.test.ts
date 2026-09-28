@@ -1,16 +1,19 @@
 import {
   LAST_SEARCH_WINDOW_MS,
   RECENT_KEYS_LIMIT,
-  getLastSearch,
+  cycleQueries,
+  getLastQuery,
+  getQueryHistory,
   getRecentKeys,
-  isLastSearchFresh,
+  isQueryFresh,
   normalizeKey,
   orderByRecency,
   prefixMatches,
-  recordLastSearch,
+  recordQuery,
   recordRecentKey,
+  touchQueryHistory,
   touchRecentKey,
-  type LastSearchMap,
+  type QueryHistoryMap,
   type RecentKeysMap,
 } from '../recent-keys';
 
@@ -60,41 +63,76 @@ describe('prefixMatches()', () => {
   });
 });
 
-describe('per-note last query', () => {
+describe('per-note query history', () => {
   const now = 1_000_000;
 
-  it('records and reads back per note', () => {
-    const m = recordLastSearch({}, 'A.md', { query: 'social_theory', doubleAt: false }, now);
-    expect(getLastSearch(m, 'A.md', now + 1000)?.query).toBe('social_theory');
-    expect(getLastSearch(m, 'B.md', now)).toBeNull();
+  it('records and reads back per note, most recent first', () => {
+    let m: QueryHistoryMap = {};
+    m = recordQuery(m, 'A.md', { query: 'one', doubleAt: false }, now);
+    m = recordQuery(m, 'A.md', { query: 'two', doubleAt: true }, now + 1000);
+    expect(getQueryHistory(m, 'A.md').map((e) => e.query)).toEqual(['two', 'one']);
+    expect(getLastQuery(m, 'A.md', now + 2000)?.query).toBe('two');
+    expect(getLastQuery(m, 'B.md', now)).toBeNull();
   });
 
-  it('keeps one note\'s entry when another note is queried', () => {
-    let m: LastSearchMap = {};
-    m = recordLastSearch(m, 'A.md', { query: 'a', doubleAt: false }, now);
-    m = recordLastSearch(m, 'B.md', { query: 'b', doubleAt: true }, now + 1000);
-    expect(getLastSearch(m, 'A.md', now + 2000)?.query).toBe('a');
-    expect(getLastSearch(m, 'B.md', now + 2000)?.doubleAt).toBe(true);
+  it('keeps notes isolated', () => {
+    let m: QueryHistoryMap = {};
+    m = recordQuery(m, 'A.md', { query: 'a', doubleAt: false }, now);
+    m = recordQuery(m, 'B.md', { query: 'b', doubleAt: true }, now + 1000);
+    expect(getLastQuery(m, 'A.md', now + 2000)?.query).toBe('a');
+    expect(getLastQuery(m, 'B.md', now + 2000)?.doubleAt).toBe(true);
   });
 
-  it('expires after the window', () => {
-    const m = recordLastSearch({}, 'A.md', { query: 'a', doubleAt: false }, now);
-    expect(isLastSearchFresh(m['A.md'], now + LAST_SEARCH_WINDOW_MS - 1)).toBe(true);
-    expect(getLastSearch(m, 'A.md', now + LAST_SEARCH_WINDOW_MS)).toBeNull();
+  it('treats the last query as stale after the window', () => {
+    const m = recordQuery({}, 'A.md', { query: 'a', doubleAt: false }, now);
+    expect(
+      isQueryFresh(getQueryHistory(m, 'A.md')[0], now + LAST_SEARCH_WINDOW_MS - 1)
+    ).toBe(true);
+    expect(getLastQuery(m, 'A.md', now + LAST_SEARCH_WINDOW_MS)).toBeNull();
   });
 
-  it('prunes expired entries and caps the map', () => {
-    let m: LastSearchMap = {};
-    for (let i = 0; i < 30; i++) {
-      m = recordLastSearch(m, `N${i}.md`, { query: `q${i}`, doubleAt: false }, now + i);
+  it('de-duplicates by query+mode (same text, different mode is distinct)', () => {
+    let m: QueryHistoryMap = {};
+    m = recordQuery(m, 'A.md', { query: 'x', doubleAt: false }, now);
+    m = recordQuery(m, 'A.md', { query: 'y', doubleAt: false }, now + 1);
+    m = recordQuery(m, 'A.md', { query: 'x', doubleAt: false }, now + 2);
+    expect(getQueryHistory(m, 'A.md').map((e) => e.query)).toEqual(['x', 'y']);
+    m = recordQuery(m, 'A.md', { query: 'x', doubleAt: true }, now + 3);
+    expect(
+      getQueryHistory(m, 'A.md').map((e) => `${e.doubleAt ? '@@' : '@'}${e.query}`)
+    ).toEqual(['@@x', '@x', '@y']);
+  });
+
+  it('prunes the note count (least-recently-used first)', () => {
+    let m: QueryHistoryMap = {};
+    for (let i = 0; i < 60; i++) {
+      m = recordQuery(m, `N${i}.md`, { query: `q${i}`, doubleAt: false }, now + i);
     }
-    expect(Object.keys(m).length).toBeLessThanOrEqual(20);
-    expect(getLastSearch(m, 'N29.md', now + 30)?.query).toBe('q29');
+    expect(Object.keys(m).length).toBeLessThanOrEqual(50);
+    expect(getQueryHistory(m, 'N59.md')).toHaveLength(1);
+    expect(getQueryHistory(m, 'N0.md')).toHaveLength(0);
   });
 
   it('does not record an empty query', () => {
-    const m = recordLastSearch({}, 'A.md', { query: '', doubleAt: false }, now);
-    expect(getLastSearch(m, 'A.md', now)).toBeNull();
+    const m = recordQuery({}, 'A.md', { query: '', doubleAt: false }, now);
+    expect(getQueryHistory(m, 'A.md')).toHaveLength(0);
+  });
+});
+
+describe('global query history + Tab cycling', () => {
+  const now = 2_000_000;
+  const e = (query: string, doubleAt = false) => ({ query, doubleAt, at: now });
+
+  it('touchQueryHistory de-dupes by query+mode', () => {
+    let list = touchQueryHistory([], e('a'), now);
+    list = touchQueryHistory(list, e('b'), now);
+    list = touchQueryHistory(list, e('a'), now);
+    expect(list.map((x) => x.query)).toEqual(['a', 'b']);
+  });
+
+  it('cycleQueries offers note queries then global, de-duplicated', () => {
+    const list = cycleQueries([e('note1'), e('shared')], [e('shared'), e('global1')]);
+    expect(list.map((x) => x.query)).toEqual(['note1', 'shared', 'global1']);
   });
 });
 

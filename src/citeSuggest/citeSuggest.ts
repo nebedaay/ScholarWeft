@@ -26,7 +26,9 @@ import {
   triggerQueryText,
 } from 'src/template/cite-trigger';
 import {
-  getLastSearch,
+  cycleQueries,
+  getLastQuery,
+  getQueryHistory,
   getRecentKeys,
   orderByRecency,
   prefixMatches,
@@ -93,6 +95,13 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     (this as any).suggestEl.addClass('sw-suggest');
     (this as any).scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
       (this as any).suggestions.useSelectedItem(evt);
+      return false;
+    });
+    // Tab cycles through previous queries while the popup is open (it would
+    // otherwise indent the paragraph). Registered with no modifiers so it only
+    // fires in this scope; Shift+Tab is left to Obsidian.
+    (this as any).scope.register([], 'Tab', () => {
+      this.cycleHistory();
       return false;
     });
 
@@ -309,7 +318,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
     // 0 characters: this note's last query, when it is fresh.
     if (!query) {
-      const last = getLastSearch(bib.lastSearches, notePath, Date.now());
+      const last = getLastQuery(bib.queryHistory, notePath, Date.now());
       if (last) {
         const rerun = normalizeQueryText(last.query);
         if (rerun) {
@@ -340,6 +349,39 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     ];
     const ordered = orderByRecency(base, recents);
     return { items: ordered.slice(0, this.limit), total: ordered.length };
+  }
+
+  /**
+   * Tab: replace the query with the previous one (most recent first), cycling
+   * this note's queries then the global history, and wrapping at the end. The
+   * stored MODE (`@`/`@@`) is reproduced so the same results come back.
+   */
+  private cycleHistory(): void {
+    const context = this.context;
+    if (!context) return;
+    const bib = this.plugin.bibManager;
+    const notePath = this.plugin.app.workspace.getActiveFile()?.path ?? '';
+    const list = cycleQueries(
+      getQueryHistory(bib.queryHistory, notePath),
+      bib.globalQueryHistory
+    );
+    if (!list.length) return;
+
+    const doubleAt = context.query.startsWith(DOUBLE_AT_PREFIX);
+    const current = context.query.slice(doubleAt ? 1 : 0).trim();
+    const idx = list.findIndex(
+      (e) => e.query === current && e.doubleAt === doubleAt
+    );
+    const next = idx === -1 ? list[0] : list[(idx + 1) % list.length];
+    const text = `${next.doubleAt ? '@@' : '@'}${next.query}`;
+
+    // Replace from the marker to the cursor; Obsidian re-runs the suggest on the
+    // resulting editor change, so the results follow the query.
+    context.editor.replaceRange(text, context.start, context.end);
+    context.editor.setCursor({
+      line: context.start.line,
+      ch: context.start.ch + text.length,
+    });
   }
 
   /**

@@ -33,6 +33,10 @@ If the popup feels intrusive, raise **Characters after @ before searching**
 Recents and the last search are kept **per note**: notes are about different
 things, so they never share a history.
 
+**Tab** cycles back through the searches you have run — most recent first, this
+note's before other notes', wrapping at the end — and fills the search with each
+one, so a search from a moment ago is one keypress away.
+
 - `@smith` — works by Smith, plus any citekey beginning `smith`.
 - `@social critique` — part of a title.
 - `@@maghrebian` — finds a work whose *abstract* mentions it, even when the

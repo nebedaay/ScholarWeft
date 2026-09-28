@@ -51,10 +51,12 @@ import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZote
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import {
-  recordLastSearch,
+  recordQuery,
   recordRecentKey,
+  touchQueryHistory,
   touchRecentKey,
-  type LastSearchMap,
+  type QueryEntry,
+  type QueryHistoryMap,
   type RecentKeysMap,
 } from 'src/template/recent-keys';
 import {
@@ -591,10 +593,13 @@ export class BibManager {
    *  so a fresh note still shows something useful. */
   globalRecentKeys: string[] = [];
 
-  /** Per-note last query that produced a selected citation, so the 0-character
-   *  popup can re-run THIS note's query (within the freshness window). Kept
-   *  per note, so tabbing away and querying elsewhere does not clobber it. */
-  lastSearches: LastSearchMap = {};
+  /** Per-note query history, so the 0-character popup can re-run THIS note's
+   *  last query and Tab can cycle its earlier ones. Kept per note, so tabbing
+   *  away and querying elsewhere does not clobber it. */
+  queryHistory: QueryHistoryMap = {};
+
+  /** Global query history — the Tab fallback for a note with no history. */
+  globalQueryHistory: QueryEntry[] = [];
 
   /** True as soon as the Fuse index is built — gates autocomplete independently
    *  of the CSL engine so `@` suggestions are available before citeproc compiles
@@ -2485,16 +2490,24 @@ export class BibManager {
     search: { query: string; doubleAt: boolean; notePath: string }
   ): void {
     if (search.notePath) {
+      const now = Date.now();
       if (citekey) {
         this.recentKeys = recordRecentKey(this.recentKeys, search.notePath, citekey);
         this.globalRecentKeys = touchRecentKey(this.globalRecentKeys, citekey);
       }
-      this.lastSearches = recordLastSearch(
-        this.lastSearches,
+      this.queryHistory = recordQuery(
+        this.queryHistory,
         search.notePath,
         search,
-        Date.now()
+        now
       );
+      if (search.query) {
+        this.globalQueryHistory = touchQueryHistory(
+          this.globalQueryHistory,
+          search,
+          now
+        );
+      }
     }
     void this.saveRecentKeys();
   }
@@ -2511,7 +2524,8 @@ export class BibManager {
         JSON.stringify({
           recentKeys: this.recentKeys,
           globalRecentKeys: this.globalRecentKeys,
-          lastSearches: this.lastSearches,
+          queryHistory: this.queryHistory,
+          globalQueryHistory: this.globalQueryHistory,
         })
       );
     } catch (e) {
@@ -2551,21 +2565,42 @@ export class BibManager {
           (k: unknown): k is string => typeof k === 'string' && !!k
         );
       }
-      const searches = data?.lastSearches;
-      if (searches && typeof searches === 'object') {
-        const out: LastSearchMap = {};
-        for (const [path, entry] of Object.entries(
-          searches as Record<string, any>
-        )) {
-          if (entry && typeof entry.query === 'string' && entry.query) {
-            out[path] = {
-              query: entry.query,
-              doubleAt: !!entry.doubleAt,
-              at: typeof entry.at === 'number' ? entry.at : 0,
-            };
-          }
+      const toEntry = (e: any): QueryEntry | null =>
+        e && typeof e.query === 'string' && e.query
+          ? {
+              query: e.query,
+              doubleAt: !!e.doubleAt,
+              at: typeof e.at === 'number' ? e.at : 0,
+            }
+          : null;
+
+      const history = data?.queryHistory;
+      if (history && typeof history === 'object' && !Array.isArray(history)) {
+        const out: QueryHistoryMap = {};
+        for (const [path, list] of Object.entries(history as Record<string, unknown>)) {
+          if (!Array.isArray(list)) continue;
+          const entries = list
+            .map(toEntry)
+            .filter((e): e is QueryEntry => e !== null);
+          if (entries.length) out[path] = entries;
         }
-        this.lastSearches = out;
+        this.queryHistory = out;
+      } else if (data?.lastSearches && typeof data.lastSearches === 'object') {
+        // Migrate the earlier single-per-note `lastSearches` shape.
+        const out: QueryHistoryMap = {};
+        for (const [path, entryRaw] of Object.entries(
+          data.lastSearches as Record<string, any>
+        )) {
+          const entry = toEntry(entryRaw);
+          if (entry) out[path] = [entry];
+        }
+        this.queryHistory = out;
+      }
+
+      if (Array.isArray(data?.globalQueryHistory)) {
+        this.globalQueryHistory = data.globalQueryHistory
+          .map(toEntry)
+          .filter((e: QueryEntry | null): e is QueryEntry => e !== null);
       }
     } catch {
       // no persisted list yet — first run

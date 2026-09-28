@@ -128,67 +128,126 @@ export function normalizeKey(s: string): string {
 }
 
 /** How recently a query must have been used in the SAME note to lead the
- *  0-character popup. */
+ *  0-character popup. Older queries stay available for Tab cycling. */
 export const LAST_SEARCH_WINDOW_MS = 5 * 60 * 1000;
 
-/** Cap on remembered per-note queries; older notes are pruned first. */
-export const LAST_SEARCH_MAX_NOTES = 20;
+/** Cap on remembered queries per note, and on remembered notes. */
+export const QUERY_HISTORY_PER_NOTE = 20;
+export const QUERY_HISTORY_MAX_NOTES = 50;
+/** Cap on the global query history (the fallback for a note with no history). */
+export const GLOBAL_QUERY_HISTORY_LIMIT = 50;
 
-/** The query that last produced a selected citation, for ONE note. */
-export interface LastSearch {
+/** One remembered query. */
+export interface QueryEntry {
   /** As typed (underscores included); normalise before searching. */
   query: string;
   /** True when it was an `@@` search (abstract/venue tier). */
   doubleAt: boolean;
-  /** Epoch ms of the selection. */
+  /** Epoch ms it was last used. */
   at: number;
 }
 
-/** Vault path → that note's last query. Per-note, so tabbing away and querying
- *  in another note does NOT clobber this note's entry. */
-export type LastSearchMap = Record<string, LastSearch>;
+/** Vault path → that note's query history, most recent first. */
+export type QueryHistoryMap = Record<string, QueryEntry[]>;
 
-/** Is this entry still worth leading the 0-character list with? */
-export function isLastSearchFresh(
-  last: LastSearch | null | undefined,
+/** Is this entry fresh enough to lead the 0-character list with? */
+export function isQueryFresh(
+  entry: QueryEntry | null | undefined,
   now: number
 ): boolean {
-  if (!last || !last.query) return false;
-  const age = now - last.at;
+  if (!entry || !entry.query) return false;
+  const age = now - entry.at;
   return age >= 0 && age < LAST_SEARCH_WINDOW_MS;
 }
 
-/** The usable last query for `notePath`, or null. */
-export function getLastSearch(
-  map: LastSearchMap | null | undefined,
+/** This note's query history (most recent first). */
+export function getQueryHistory(
+  map: QueryHistoryMap | null | undefined,
+  notePath: string
+): QueryEntry[] {
+  return map?.[notePath] ?? [];
+}
+
+/** The note's most recent query, when it is fresh; else null. */
+export function getLastQuery(
+  map: QueryHistoryMap | null | undefined,
   notePath: string,
   now: number
-): LastSearch | null {
-  const last = map?.[notePath];
-  return isLastSearchFresh(last, now) ? last : null;
+): QueryEntry | null {
+  const first = getQueryHistory(map, notePath)[0];
+  return isQueryFresh(first, now) ? first : null;
+}
+
+/** Same query text AND mode? */
+function sameQuery(
+  a: { query: string; doubleAt: boolean },
+  b: { query: string; doubleAt: boolean }
+): boolean {
+  return a.query === b.query && a.doubleAt === b.doubleAt;
 }
 
 /**
- * Record `search` for `notePath`, dropping expired entries, keeping the newest
- * `maxNotes`. Pure, so the pruning is a test.
+ * Record `entry` for `notePath`: pushed to the front, de-duplicated by
+ * query+mode, capped per note; the number of remembered notes is capped by
+ * least-recently-used. Pure, so the pruning is a test.
  */
-export function recordLastSearch(
-  map: LastSearchMap | null | undefined,
+export function recordQuery(
+  map: QueryHistoryMap | null | undefined,
   notePath: string,
-  search: { query: string; doubleAt: boolean },
+  entry: { query: string; doubleAt: boolean },
   now: number,
-  maxNotes = LAST_SEARCH_MAX_NOTES
-): LastSearchMap {
-  const next: LastSearchMap = {};
-  for (const [path, entry] of Object.entries(map ?? {})) {
-    if (path !== notePath && isLastSearchFresh(entry, now)) next[path] = entry;
+  perNote = QUERY_HISTORY_PER_NOTE,
+  maxNotes = QUERY_HISTORY_MAX_NOTES
+): QueryHistoryMap {
+  if (!notePath || !entry.query) return { ...(map ?? {}) };
+  const next: QueryHistoryMap = {};
+  for (const [path, list] of Object.entries(map ?? {})) {
+    if (path !== notePath) next[path] = list;
   }
-  if (search.query) {
-    next[notePath] = { query: search.query, doubleAt: search.doubleAt, at: now };
+  // Re-insert the touched note LAST so object order is least-recently-used.
+  const prior = getQueryHistory(map, notePath).filter((e) => !sameQuery(e, entry));
+  next[notePath] = [
+    { query: entry.query, doubleAt: entry.doubleAt, at: now },
+    ...prior,
+  ].slice(0, perNote);
+  const paths = Object.keys(next);
+  if (paths.length > maxNotes) {
+    for (const path of paths.slice(0, paths.length - maxNotes)) delete next[path];
   }
-  return Object.fromEntries(
-    Object.entries(next)
-      .sort((a, b) => b[1].at - a[1].at)
-      .slice(0, Math.max(1, maxNotes))
-  );
+  return next;
+}
+
+/** Push `entry` to the front of the global query history. */
+export function touchQueryHistory(
+  list: readonly QueryEntry[],
+  entry: { query: string; doubleAt: boolean },
+  now: number,
+  limit = GLOBAL_QUERY_HISTORY_LIMIT
+): QueryEntry[] {
+  if (!entry.query) return [...list];
+  return [
+    { query: entry.query, doubleAt: entry.doubleAt, at: now },
+    ...list.filter((e) => !sameQuery(e, entry)),
+  ].slice(0, limit);
+}
+
+/**
+ * The order Tab cycles through: THIS note's queries (most recent first), then
+ * the global history, de-duplicated by query+mode so a query in both is offered
+ * once.
+ */
+export function cycleQueries(
+  noteHistory: readonly QueryEntry[],
+  globalHistory: readonly QueryEntry[]
+): QueryEntry[] {
+  const out: QueryEntry[] = [];
+  const seen = new Set<string>();
+  for (const entry of [...noteHistory, ...globalHistory]) {
+    if (!entry.query) continue;
+    const key = `${entry.doubleAt ? '@@' : '@'}\u0000${entry.query}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+  return out;
 }
