@@ -1668,7 +1668,12 @@ export default class ReferenceList extends Plugin {
    * dispatching a CodeMirror transaction that would prematurely dismiss it.
    */
   isCitationSuggestOpen(): boolean {
-    return this.citeSuggest?.isOpen?.() === true;
+    const suggest = this.citeSuggest as unknown as
+      | { isPopupOpen?: () => boolean }
+      | undefined;
+    return typeof suggest?.isPopupOpen === 'function'
+      ? suggest.isPopupOpen() === true
+      : false;
   }
 
   /** Apply the three decoration underline colors from settings as CSS custom

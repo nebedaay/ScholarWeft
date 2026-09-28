@@ -97296,7 +97296,6 @@ var BibManager = class {
     if (hash)
       this.dispatchedHashes.set(file.path, hash);
     app.workspace.getLeavesOfType("markdown").forEach((l4) => {
-      var _a, _b;
       const view = l4.view;
       if (view.file === file) {
         const previewMode = view.previewMode;
@@ -97315,7 +97314,7 @@ var BibManager = class {
         } else if (typeof view.onMarkdownFold === "function") {
           view.onMarkdownFold();
         }
-        const suggestOpen = ((_b = (_a = this.plugin).isCitationSuggestOpen) == null ? void 0 : _b.call(_a)) === true;
+        const suggestOpen = typeof this.plugin.isCitationSuggestOpen === "function" ? this.plugin.isCitationSuggestOpen() : false;
         const cm = view.editor.cm;
         if (!suggestOpen && cm.dispatch) {
           cm.dispatch({
@@ -97843,17 +97842,18 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
         }
       } else {
         const { entries, total } = bibManager.searchTier(tier, searchQuery, this.limit);
-        this._matchedTermsByKey = new Map(entries.map((e3) => [e3.entry.id, e3.terms]));
-        this.renderCount(entries.length, total);
-        if (entries.length > 0) {
-          return entries.map(({ entry }, refIndex) => ({
+        const usable = entries.filter((e3) => isUsablePopupEntry(e3.entry));
+        this._matchedTermsByKey = new Map(usable.map((e3) => [e3.entry.id, e3.terms]));
+        this.renderCount(usable.length, total);
+        if (usable.length > 0) {
+          return usable.map(({ entry }, refIndex) => ({
             item: entry,
             refIndex,
             score: 0
           }));
         }
       }
-      const live = await this.liveSearch(searchQuery, "text");
+      const live = (await this.liveSearch(searchQuery, "text")).filter(isUsablePopupEntry);
       if (live.length) {
         LOG("live Zotero returned", live.length, "items");
         this._matchedTermsByKey = new Map(live.map((item) => [item.id, [searchQuery]]));
@@ -98057,7 +98057,7 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     const terms = item.id ? this._matchedTermsByKey.get(item.id) : void 0;
     return excerptsForResult(item, terms != null ? terms : [], { maxLines: 3 });
   }
-  isOpen() {
+  isPopupOpen() {
     return !!this.context;
   }
   selectSuggestion(suggestion, event) {
@@ -101871,8 +101871,8 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     return true;
   }
   isCitationSuggestOpen() {
-    var _a, _b;
-    return ((_b = (_a = this.citeSuggest) == null ? void 0 : _a.isOpen) == null ? void 0 : _b.call(_a)) === true;
+    const suggest = this.citeSuggest;
+    return typeof (suggest == null ? void 0 : suggest.isPopupOpen) === "function" ? suggest.isPopupOpen() === true : false;
   }
   applyCitationColors() {
     const { decorationColorUnlinked, decorationColorLinked, decorationColorUnimported } = this.settings;

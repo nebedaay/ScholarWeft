@@ -3695,7 +3695,10 @@ export class BibManager {
         // DISMISSES the popup — which is why a search appeared to "time out"
         // while you were reading it. The dispatch is deferred to the next edit
         // after the popup closes.
-        const suggestOpen = this.plugin.isCitationSuggestOpen?.() === true;
+        const suggestOpen =
+          typeof this.plugin.isCitationSuggestOpen === 'function'
+            ? this.plugin.isCitationSuggestOpen()
+            : false;
         const cm = (view.editor as any).cm as EditorView;
         if (!suggestOpen && cm.dispatch) {
           cm.dispatch({

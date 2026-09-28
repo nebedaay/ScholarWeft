@@ -263,19 +263,22 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
           searchQuery,
           this.limit
         );
+        // No-garbage policy: an entry with no title, author or editor is never
+        // offered, at any tier.
+        const usable = entries.filter((e) => isUsablePopupEntry(e.entry));
         // The terms recorded are those of the interpretation that MATCHED each
         // entry, not the raw query: an unbroken query like `islamwomenauthority`
         // appears in no field, while the words it split into do. Used for BOTH
         // the excerpt (`@@`) and for highlighting every field — so this must be
         // recorded for BOTH tiers.
         this._matchedTermsByKey = new Map(
-          entries.map((e) => [e.entry.id, e.terms])
+          usable.map((e) => [e.entry.id, e.terms])
         );
         // Show an honest count: "20 of 137" when the list is truncated, so a
         // capped result does not read like "only 20 matched".
-        this.renderCount(entries.length, total);
-        if (entries.length > 0) {
-          return entries.map(({ entry }, refIndex) => ({
+        this.renderCount(usable.length, total);
+        if (usable.length > 0) {
+          return usable.map(({ entry }, refIndex) => ({
             item: entry,
             refIndex,
             score: 0,
@@ -285,7 +288,9 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
       // Nothing in the index — try Zotero live, then ZotLit, then say
       // "still loading" if the index is still building.
-      const live = await this.liveSearch(searchQuery, 'text');
+      const live = (await this.liveSearch(searchQuery, 'text')).filter(
+        isUsablePopupEntry
+      );
       if (live.length) {
         LOG('live Zotero returned', live.length, 'items');
         this._matchedTermsByKey = new Map(
@@ -611,8 +616,10 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   private lastSelect: EditorPosition = null;
 
   /** Is the popup currently open? Used by the background re-render to avoid
-   *  dispatching a CodeMirror transaction that would dismiss it. */
-  isOpen(): boolean {
+   *  dispatching a CodeMirror transaction that would dismiss it.
+   *  NOT named `isOpen`: Obsidian's base class has a boolean `isOpen`, which
+   *  shadows the method and made it uncallable. */
+  isPopupOpen(): boolean {
     return !!this.context;
   }
 
