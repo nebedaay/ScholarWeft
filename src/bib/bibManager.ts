@@ -1556,6 +1556,7 @@ export class BibManager {
 
       const adapter = this.getZoteroAdapter();
       const modifiedEntries: Map<string, PartialCSLEntry> = new Map();
+      let fullRebuilt = false;
 
       for (const group of settings.zoteroGroups) {
         try {
@@ -1570,6 +1571,7 @@ export class BibManager {
           if (res.list?.length) group.lastUpdate = Date.now();
 
           if (res.full && res.list) {
+            fullRebuilt = true;
             // FULL rebuild (background fetch, then swap): replace THIS group's
             // entries so a permanently deleted item is finally dropped. The swap
             // is a synchronous rebuild of the map, so consumers never see a gap.
@@ -1603,6 +1605,11 @@ export class BibManager {
           console.warn('[sw] trash prune failed:', e);
         }
       }
+
+      // After a FULL rebuild the library is completely known, so drop recents
+      // that no longer resolve: the caches only ORDER results, but keeping a
+      // deleted citekey around is needless noise.
+      if (fullRebuilt) this.pruneRecentKeys();
 
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
@@ -2679,6 +2686,23 @@ export class BibManager {
     } catch {
       // no persisted list yet — first run
     }
+  }
+
+  /**
+   * Drop recents that no longer resolve in the current library. Called after a
+   * FULL rebuild, when `bibCache` is completely known, purely to keep the file
+   * tidy — the caches only ORDER results, so a stale key was never shown anyway.
+   * Query history holds strings, not keys, so it needs no pruning.
+   */
+  pruneRecentKeys(): void {
+    const keep = (k: string) => this.bibCache.has(k);
+    this.globalRecentKeys = this.globalRecentKeys.filter(keep);
+    for (const path of Object.keys(this.recentKeys)) {
+      const filtered = this.recentKeys[path].filter(keep);
+      if (filtered.length) this.recentKeys[path] = filtered;
+      else delete this.recentKeys[path];
+    }
+    void this.saveRecentKeys();
   }
 
   private warming = false;

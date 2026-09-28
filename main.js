@@ -95861,6 +95861,7 @@ var BibManager = class {
         return;
       const adapter = this.getZoteroAdapter();
       const modifiedEntries = new Map();
+      let fullRebuilt = false;
       for (const group of settings.zoteroGroups) {
         try {
           const res = await adapter.refreshBib("", group.id, (_b = group.libraryVersion) != null ? _b : 0, group.lastUpdate);
@@ -95869,6 +95870,7 @@ var BibManager = class {
           if ((_c = res.list) == null ? void 0 : _c.length)
             group.lastUpdate = Date.now();
           if (res.full && res.list) {
+            fullRebuilt = true;
             for (const [id, e3] of [...this.bibCache]) {
               if (e3.groupID === group.id) {
                 this.bibCache.delete(id);
@@ -95897,6 +95899,8 @@ var BibManager = class {
           console.warn("[sw] trash prune failed:", e3);
         }
       }
+      if (fullRebuilt)
+        this.pruneRecentKeys();
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
       this.fileCache.clear();
@@ -96624,6 +96628,18 @@ var BibManager = class {
       }
     } catch (e3) {
     }
+  }
+  pruneRecentKeys() {
+    const keep = (k4) => this.bibCache.has(k4);
+    this.globalRecentKeys = this.globalRecentKeys.filter(keep);
+    for (const path2 of Object.keys(this.recentKeys)) {
+      const filtered = this.recentKeys[path2].filter(keep);
+      if (filtered.length)
+        this.recentKeys[path2] = filtered;
+      else
+        delete this.recentKeys[path2];
+    }
+    void this.saveRecentKeys();
   }
   async warmCitedFiles() {
     if (this.warming)
