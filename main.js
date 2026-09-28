@@ -96990,6 +96990,8 @@ var BibManager = class {
   }
   async collectAutoUpdateCitekeys() {
     var _a, _b, _c;
+    if (this.isBackendLoading)
+      return new Set();
     const { settings } = this.plugin;
     const port = (_a = settings.zoteroPort) != null ? _a : DEFAULT_ZOTERO_PORT;
     const citekeys = new Set();
@@ -102432,6 +102434,8 @@ var ReferenceList = class extends import_obsidian39.Plugin {
     }, 2e3);
   }
   async reviewCitekeyChanges(interactive = true) {
+    if (this.bibManager.isBackendLoading)
+      return false;
     let plan;
     try {
       plan = await this.bibManager.planCitekeyReconcile();

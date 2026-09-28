@@ -2774,6 +2774,8 @@ export class BibManager {
    * "changed" at `since=0`, so nothing is reported.
    */
   private async collectAutoUpdateCitekeys(): Promise<Set<string>> {
+    // Same guard: a partial library would mis-resolve group items.
+    if (this.isBackendLoading) return new Set<string>();
     const { settings } = this.plugin;
     const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
     const citekeys = new Set<string>();

@@ -2036,6 +2036,11 @@ export default class ReferenceList extends Plugin {
    * Returns true when a change was found (a dialog was opened).
    */
   async reviewCitekeyChanges(interactive = true): Promise<boolean> {
+    // Never reconcile against a PARTIAL library: while the backend is still
+    // loading, group libraries may not be in `bibCache` yet, and every note from
+    // them would be reported as "not in the loaded library". The refresh path
+    // schedules another pass once the load completes.
+    if (this.bibManager.isBackendLoading) return false;
     let plan: CitekeyReconcilePlan;
     try {
       plan = await this.bibManager.planCitekeyReconcile();
