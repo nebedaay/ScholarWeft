@@ -484,6 +484,14 @@ export default class ReferenceList extends Plugin {
     });
 
     this.addCommand({
+      id: 'file-group-notes',
+      name: t('File literature notes into their library folders'),
+      callback: async () => {
+        await this.offerGroupNoteMove(true);
+      },
+    });
+
+    this.addCommand({
       id: 'update-literature-note',
       name: t('Update this literature note'),
       checkCallback: (checking) => {
@@ -1693,20 +1701,70 @@ export default class ReferenceList extends Plugin {
   }
 
   /**
-   * One-time offer to move existing group-library notes into their library's
+   * One-time offer to file existing group-library notes under their library's
    * auto-named subfolder. Nothing moves without consent; files are moved with
    * `fileManager.renameFile`, so Obsidian rewrites `[[…]]` links automatically.
+   *
+   * `force` re-runs it regardless of the recorded flag (the palette command).
    */
-  async offerGroupNoteMove(): Promise<void> {
-    if (this.settings.groupNoteMoveOffered) return;
+  async offerGroupNoteMove(force = false): Promise<void> {
+    if (this.settings.groupNoteMoveOffered && !force) return;
     const base = this.bibManager.resolveBaseNoteFolder();
-    if (!base && base !== '') return;
+    if (base == null) return;
 
+    // Notes needing a move, AND stale library folders to rename (created before
+    // a group's name was known — e.g. a "Group 6667607" folder whose library is
+    // now "Andrea Lickacz readings").
+    const { byGroup, staleFolders } = await this.planGroupNoteMove(base);
+    const total = [...byGroup.values()].reduce((n, a) => n + a.length, 0);
+    const totalMoves = total + staleFolders.length;
+    if (!totalMoves) {
+      this.settings.groupNoteMoveOffered = true;
+      await this.saveSettings();
+      if (force) new Notice('All literature notes are already in their library folders.');
+      return;
+    }
+
+    const nameOf = (gid: number) => this.bibManager.libraryNameFor(gid) ?? `Group ${gid}`;
+    const notice = new Notice('', 0);
+    const el =
+      (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ??
+      notice.containerEl;
+    if (!el) return;
+    el.createEl('div', {
+      text:
+        (total
+          ? `${total} literature note${total !== 1 ? 's' : ''} outside ${
+              total !== 1 ? 'their' : 'its'
+            } library folder. `
+          : '') +
+        (staleFolders.length
+          ? `${staleFolders.length} library folder${
+              staleFolders.length !== 1 ? 's' : ''
+            } need renaming (${staleFolders
+              .map((f) => `${f.from.split('/').pop()} → ${f.to.split('/').pop()}`)
+              .join(', ')}).`
+          : ''),
+    });
+    const move = el.createEl('button', { text: 'Fix folders', cls: 'mod-cta' });
+    const dismiss = el.createEl('button', { text: 'Not now' });
+    dismiss.addEventListener('click', () => notice.hide());
+    move.addEventListener('click', () => {
+      notice.hide();
+      void this.moveGroupNotes(byGroup, staleFolders);
+      void nameOf;
+    });
+  }
+
+  /** Plan: which notes to move, and which library folders to rename. */
+  private async planGroupNoteMove(base: string): Promise<{
+    byGroup: Map<number, TFile[]>;
+    staleFolders: Array<{ from: string; to: string }>;
+  }> {
     const byGroup = new Map<number, TFile[]>();
     for (const f of this.app.vault.getMarkdownFiles()) {
-      const zk = this.app.metadataCache.getFileCache(f)?.frontmatter?.[
-        'zotero-key'
-      ];
+      const zk =
+        this.app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'];
       if (typeof zk !== 'string') continue;
       const m = /^.*?g(\d+)$/.exec(zk.trim());
       if (!m) continue;
@@ -1717,57 +1775,60 @@ export default class ReferenceList extends Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid),
       });
-      // Already in the right place (or below it)?
-      if (f.path.startsWith(target + '/') || f.parent?.path === target) continue;
+      if (f.parent?.path === target) continue;
       (byGroup.get(gid) ?? byGroup.set(gid, []).get(gid)!).push(f);
     }
 
-    const total = [...byGroup.values()].reduce((n, a) => n + a.length, 0);
-    if (!total) {
-      this.settings.groupNoteMoveOffered = true;
-      await this.saveSettings();
-      return;
+    // Group folders whose name no longer matches the library name.
+    const staleFolders: Array<{ from: string; to: string }> = [];
+    for (const gid of new Set([
+      ...(this.settings.zoteroGroups ?? []).map((g) => g.id),
+      ...byGroup.keys(),
+    ])) {
+      const target = literatureNoteFolderFor({
+        base,
+        groupID: gid,
+        groupName: this.bibManager.libraryNameFor(gid),
+      });
+      const targetName = target.split('/').pop() ?? '';
+      const parent = target.split('/').slice(0, -1).join('/');
+      const from = parent ? `${parent}/${targetName}` : targetName;
+      // Find a sibling folder for this group created under an older (numeric)
+      // name, when the library now has a proper name.
+      if (!targetName.startsWith('Group ')) {
+        const oldName = `Group ${gid}`;
+        const oldPath = parent ? `${parent}/${oldName}` : oldName;
+        if (oldPath !== from && (await this.app.vault.adapter.exists(oldPath))) {
+          staleFolders.push({ from: oldPath, to: from });
+        }
+      }
     }
-
-    const notice = new Notice('', 0);
-    const el = (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ?? notice.containerEl;
-    if (!el) return;
-    el.createEl('div', {
-      text: `${total} literature note${total !== 1 ? 's' : ''} from a group library ${
-        total !== 1 ? 'are' : 'is'
-      } outside its library folder.`,
-    });
-    const move = el.createEl('button', { text: 'Move them', cls: 'mod-cta' });
-    const dismiss = el.createEl('button', { text: 'Not now' });
-    dismiss.addEventListener('click', () => notice.hide());
-    move.addEventListener('click', () => {
-      notice.hide();
-      void this.moveGroupNotes(byGroup);
-    });
+    return { byGroup, staleFolders };
   }
 
-  private async moveGroupNotes(byGroup: Map<number, TFile[]>): Promise<void> {
+  private async moveGroupNotes(
+    byGroup: Map<number, TFile[]>,
+    staleFolders: Array<{ from: string; to: string }> = []
+  ): Promise<void> {
     const fm = this.app.fileManager;
     let moved = 0;
     let failed = 0;
-    for (const files of byGroup.values()) {
+    const base = this.bibManager.resolveBaseNoteFolder();
+    for (const [gid, files] of byGroup) {
+      const folder = literatureNoteFolderFor({
+        base,
+        groupID: gid,
+        groupName: this.bibManager.libraryNameFor(gid),
+      });
+      try {
+        if (!(await this.app.vault.adapter.exists(folder))) {
+          await this.app.vault.adapter.mkdir(folder);
+        }
+      } catch (e) {
+        console.warn('[sw:move] could not create folder', folder, e);
+      }
       for (const f of files) {
-        const zk = this.app.metadataCache.getFileCache(f)?.frontmatter?.[
-          'zotero-key'
-        ];
-        const m = typeof zk === 'string' ? /^.*?g(\d+)$/.exec(zk.trim()) : null;
-        if (!m) continue;
-        const gid = Number(m[1]);
-        const base = this.bibManager.resolveBaseNoteFolder();
-        const folder = literatureNoteFolderFor({
-          base,
-          groupID: gid,
-          groupName: this.bibManager.libraryNameFor(gid),
-        });
         try {
-          if (!(await this.app.vault.adapter.exists(folder))) {
-            await this.app.vault.adapter.mkdir(folder);
-          }
           const target = `${folder}/${f.name}`;
           if (target === f.path) continue;
           await fm.renameFile(f, target);
@@ -1778,12 +1839,27 @@ export default class ReferenceList extends Plugin {
         }
       }
     }
+    // Rename stale library folders (after any file moves, so they may be empty).
+    let renamed = 0;
+    for (const { from, to } of staleFolders) {
+      try {
+        const folder = this.app.vault.getAbstractFileByPath(from);
+        if (folder) {
+          await fm.renameFile(folder as never, to);
+          renamed++;
+        }
+      } catch (e) {
+        console.warn('[sw:move] failed to rename folder', from, e);
+        failed++;
+      }
+    }
     this.settings.groupNoteMoveOffered = true;
     await this.saveSettings();
     new Notice(
-      `Moved ${moved} literature note${moved !== 1 ? 's' : ''}${
-        failed ? `, ${failed} failed (see console)` : ''
-      }.`,
+      `Moved ${moved} note${moved !== 1 ? 's' : ''}` +
+        (renamed ? `, renamed ${renamed} folder${renamed !== 1 ? 's' : ''}` : '') +
+        (failed ? `, ${failed} failed (see console)` : '') +
+        '.',
       8000
     );
   }

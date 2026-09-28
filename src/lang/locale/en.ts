@@ -220,6 +220,8 @@ export default {
   Yes: 'Yes',
   No: 'No',
   Skip: 'Skip',
+  'File literature notes into their library folders':
+    'File literature notes into their library folders',
   'Citekey changes detected': 'Citekey changes detected',
   'Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?':
     'Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?',

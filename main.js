@@ -231,6 +231,7 @@ var init_en = __esm({
       Yes: "Yes",
       No: "No",
       Skip: "Skip",
+      "File literature notes into their library folders": "File literature notes into their library folders",
       "Citekey changes detected": "Citekey changes detected",
       "Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?": "Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?",
       "Update citekeys automatically": "Update citekeys automatically",
@@ -101582,6 +101583,13 @@ var ReferenceList = class extends import_obsidian40.Plugin {
       }
     });
     this.addCommand({
+      id: "file-group-notes",
+      name: t("File literature notes into their library folders"),
+      callback: async () => {
+        await this.offerGroupNoteMove(true);
+      }
+    });
+    this.addCommand({
       id: "update-literature-note",
       name: t("Update this literature note"),
       checkCallback: (checking) => {
@@ -102428,13 +102436,45 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     }
     return out;
   }
-  async offerGroupNoteMove() {
-    var _a, _b, _c, _d, _e;
-    if (this.settings.groupNoteMoveOffered)
+  async offerGroupNoteMove(force = false) {
+    var _a;
+    if (this.settings.groupNoteMoveOffered && !force)
       return;
     const base = this.bibManager.resolveBaseNoteFolder();
-    if (!base && base !== "")
+    if (base == null)
       return;
+    const { byGroup, staleFolders } = await this.planGroupNoteMove(base);
+    const total = [...byGroup.values()].reduce((n2, a3) => n2 + a3.length, 0);
+    const totalMoves = total + staleFolders.length;
+    if (!totalMoves) {
+      this.settings.groupNoteMoveOffered = true;
+      await this.saveSettings();
+      if (force)
+        new import_obsidian40.Notice("All literature notes are already in their library folders.");
+      return;
+    }
+    const nameOf = (gid) => {
+      var _a2;
+      return (_a2 = this.bibManager.libraryNameFor(gid)) != null ? _a2 : `Group ${gid}`;
+    };
+    const notice = new import_obsidian40.Notice("", 0);
+    const el = (_a = notice.noticeEl) != null ? _a : notice.containerEl;
+    if (!el)
+      return;
+    el.createEl("div", {
+      text: (total ? `${total} literature note${total !== 1 ? "s" : ""} outside ${total !== 1 ? "their" : "its"} library folder. ` : "") + (staleFolders.length ? `${staleFolders.length} library folder${staleFolders.length !== 1 ? "s" : ""} need renaming (${staleFolders.map((f3) => `${f3.from.split("/").pop()} \u2192 ${f3.to.split("/").pop()}`).join(", ")}).` : "")
+    });
+    const move = el.createEl("button", { text: "Fix folders", cls: "mod-cta" });
+    const dismiss = el.createEl("button", { text: "Not now" });
+    dismiss.addEventListener("click", () => notice.hide());
+    move.addEventListener("click", () => {
+      notice.hide();
+      void this.moveGroupNotes(byGroup, staleFolders);
+      void 0;
+    });
+  }
+  async planGroupNoteMove(base) {
+    var _a, _b, _c, _d, _e, _f;
     const byGroup = new Map();
     for (const f3 of this.app.vault.getMarkdownFiles()) {
       const zk = (_b = (_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
@@ -102451,53 +102491,53 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid)
       });
-      if (f3.path.startsWith(target + "/") || ((_c = f3.parent) == null ? void 0 : _c.path) === target)
+      if (((_c = f3.parent) == null ? void 0 : _c.path) === target)
         continue;
       ((_d = byGroup.get(gid)) != null ? _d : byGroup.set(gid, []).get(gid)).push(f3);
     }
-    const total = [...byGroup.values()].reduce((n2, a3) => n2 + a3.length, 0);
-    if (!total) {
-      this.settings.groupNoteMoveOffered = true;
-      await this.saveSettings();
-      return;
+    const staleFolders = [];
+    for (const gid of new Set([
+      ...((_e = this.settings.zoteroGroups) != null ? _e : []).map((g4) => g4.id),
+      ...byGroup.keys()
+    ])) {
+      const target = literatureNoteFolderFor({
+        base,
+        groupID: gid,
+        groupName: this.bibManager.libraryNameFor(gid)
+      });
+      const targetName = (_f = target.split("/").pop()) != null ? _f : "";
+      const parent = target.split("/").slice(0, -1).join("/");
+      const from = parent ? `${parent}/${targetName}` : targetName;
+      if (!targetName.startsWith("Group ")) {
+        const oldName = `Group ${gid}`;
+        const oldPath = parent ? `${parent}/${oldName}` : oldName;
+        if (oldPath !== from && await this.app.vault.adapter.exists(oldPath)) {
+          staleFolders.push({ from: oldPath, to: from });
+        }
+      }
     }
-    const notice = new import_obsidian40.Notice("", 0);
-    const el = (_e = notice.noticeEl) != null ? _e : notice.containerEl;
-    if (!el)
-      return;
-    el.createEl("div", {
-      text: `${total} literature note${total !== 1 ? "s" : ""} from a group library ${total !== 1 ? "are" : "is"} outside its library folder.`
-    });
-    const move = el.createEl("button", { text: "Move them", cls: "mod-cta" });
-    const dismiss = el.createEl("button", { text: "Not now" });
-    dismiss.addEventListener("click", () => notice.hide());
-    move.addEventListener("click", () => {
-      notice.hide();
-      void this.moveGroupNotes(byGroup);
-    });
+    return { byGroup, staleFolders };
   }
-  async moveGroupNotes(byGroup) {
-    var _a, _b;
+  async moveGroupNotes(byGroup, staleFolders = []) {
     const fm = this.app.fileManager;
     let moved = 0;
     let failed = 0;
-    for (const files of byGroup.values()) {
+    const base = this.bibManager.resolveBaseNoteFolder();
+    for (const [gid, files] of byGroup) {
+      const folder = literatureNoteFolderFor({
+        base,
+        groupID: gid,
+        groupName: this.bibManager.libraryNameFor(gid)
+      });
+      try {
+        if (!await this.app.vault.adapter.exists(folder)) {
+          await this.app.vault.adapter.mkdir(folder);
+        }
+      } catch (e3) {
+        console.warn("[sw:move] could not create folder", folder, e3);
+      }
       for (const f3 of files) {
-        const zk = (_b = (_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
-        const m3 = typeof zk === "string" ? /^.*?g(\d+)$/.exec(zk.trim()) : null;
-        if (!m3)
-          continue;
-        const gid = Number(m3[1]);
-        const base = this.bibManager.resolveBaseNoteFolder();
-        const folder = literatureNoteFolderFor({
-          base,
-          groupID: gid,
-          groupName: this.bibManager.libraryNameFor(gid)
-        });
         try {
-          if (!await this.app.vault.adapter.exists(folder)) {
-            await this.app.vault.adapter.mkdir(folder);
-          }
           const target = `${folder}/${f3.name}`;
           if (target === f3.path)
             continue;
@@ -102509,9 +102549,22 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         }
       }
     }
+    let renamed = 0;
+    for (const { from, to } of staleFolders) {
+      try {
+        const folder = this.app.vault.getAbstractFileByPath(from);
+        if (folder) {
+          await fm.renameFile(folder, to);
+          renamed++;
+        }
+      } catch (e3) {
+        console.warn("[sw:move] failed to rename folder", from, e3);
+        failed++;
+      }
+    }
     this.settings.groupNoteMoveOffered = true;
     await this.saveSettings();
-    new import_obsidian40.Notice(`Moved ${moved} literature note${moved !== 1 ? "s" : ""}${failed ? `, ${failed} failed (see console)` : ""}.`, 8e3);
+    new import_obsidian40.Notice(`Moved ${moved} note${moved !== 1 ? "s" : ""}` + (renamed ? `, renamed ${renamed} folder${renamed !== 1 ? "s" : ""}` : "") + (failed ? `, ${failed} failed (see console)` : "") + ".", 8e3);
   }
   async getCitekeysForFile(file) {
     var _a, _b;
