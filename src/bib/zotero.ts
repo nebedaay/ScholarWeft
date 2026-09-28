@@ -45,6 +45,8 @@ export interface ZoteroAdapter {
     full?: boolean;
     /** Old citekey → new citekey, for remapping the search recents. */
     renamed?: Map<string, string>;
+    /** New library version, so the caller advances its watermark. */
+    version?: number;
   } | null>;
 
   /**
@@ -145,6 +147,8 @@ export class NativeAdapter implements ZoteroAdapter {
     full?: boolean;
     /** Old citekey → new citekey, for remapping the search recents. */
     renamed?: Map<string, string>;
+    /** New library version, so the caller advances its watermark. */
+    version?: number;
   } | null> {
     return refreshZBibNative(this.port, '', groupId, libraryVersion);
   }

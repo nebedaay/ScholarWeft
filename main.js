@@ -68858,7 +68858,13 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
     builtAt: Date.now(),
     itemCount: (_a = currentCount != null ? currentCount : cachedCount) != null ? _a : void 0
   }));
-  return { list: applyGroupID(list, groupId), modified, full: fullFetch, renamed };
+  return {
+    list: applyGroupID(list, groupId),
+    modified,
+    full: fullFetch,
+    renamed,
+    version
+  };
 }
 async function getItemJSONFromCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKeys, libraryID) {
   if (!await isZoteroRunningNative(port))
@@ -96182,6 +96188,9 @@ var BibManager = class {
             continue;
           if ((_c = res.list) == null ? void 0 : _c.length)
             group.lastUpdate = Date.now();
+          if (typeof res.version === "number" && res.version > 0) {
+            group.libraryVersion = res.version;
+          }
           if ((_d = res.renamed) == null ? void 0 : _d.size) {
             for (const [oldId, newId] of res.renamed)
               renamed.set(oldId, newId);

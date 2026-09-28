@@ -779,6 +779,9 @@ export async function refreshZBibNative(
   full: boolean;
   /** Old citekey → new citekey, for remapping the search recents. */
   renamed: Map<string, string>;
+  /** The library's new Last-Modified-Version, so the caller can advance its
+   *  watermark (otherwise the SAME delta is re-fetched on every refresh). */
+  version: number;
 } | null> {
   if (!(await isZoteroRunningNative(port))) return null;
 
@@ -911,7 +914,13 @@ export async function refreshZBibNative(
     })
   );
 
-  return { list: applyGroupID(list, groupId), modified, full: fullFetch, renamed };
+  return {
+    list: applyGroupID(list, groupId),
+    modified,
+    full: fullFetch,
+    renamed,
+    version,
+  };
 }
 
 export async function getItemJSONFromCiteKeysNative(

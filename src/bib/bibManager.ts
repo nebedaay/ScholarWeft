@@ -1584,6 +1584,11 @@ export class BibManager {
 
           if (!res) continue;
           if (res.list?.length) group.lastUpdate = Date.now();
+          // Advance the watermark, or the SAME items are reported as changed on
+          // EVERY refresh (a frozen `since` re-fetches the same delta).
+          if (typeof res.version === 'number' && res.version > 0) {
+            group.libraryVersion = res.version;
+          }
           if (res.renamed?.size) {
             for (const [oldId, newId] of res.renamed) renamed.set(oldId, newId);
           }
