@@ -575,12 +575,35 @@ export async function getZBibNative(
     if (cslItem) cslItems.push(cslItem);
   }
 
+  const itemCount = await fetchLibraryCountNative(port, groupId);
   await app.vault.adapter.write(
     cachePath,
-    JSON.stringify({ items: cslItems, version, builtAt: Date.now() })
+    JSON.stringify({ items: cslItems, version, builtAt: Date.now(), itemCount })
   );
 
   return { list: applyGroupID(cslItems, groupId), version };
+}
+
+/**
+ * The library's current top-level item count (`Total-Results` for `/items`).
+ * One cheap request that notices a DELETION: a delta can never report one, but a
+ * shrinking total can. Returns null when Zotero is unreachable.
+ */
+export async function fetchLibraryCountNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  libraryID: number = 1
+): Promise<number | null> {
+  if (!(await isZoteroRunningNative(port))) return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { totalResults } = await zoteroNativeGet(
+      port,
+      `/api/${libraryType}/${libraryId}/items?itemType=-attachment&limit=1&format=json`
+    );
+    return typeof totalResults === 'number' ? totalResults : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -652,7 +675,12 @@ export async function refreshZBibNative(
   _cacheDir: string,
   groupId: number,
   sinceVersion: number
-): Promise<{ list: CSLList; modified: Map<string, PartialCSLEntry> } | null> {
+): Promise<{
+  list: CSLList;
+  modified: Map<string, PartialCSLEntry>;
+  /** True when this was a FULL rebuild (replace the caller's list, don't merge). */
+  full: boolean;
+} | null> {
   if (!(await isZoteroRunningNative(port))) return null;
 
   const cachePath = normalizePath(`${CACHE_DIR}/zotero-native-library-${groupId}.json`);
@@ -678,13 +706,19 @@ export async function refreshZBibNative(
     sinceVersion = 0;
   }
 
-  // Also force a periodic FULL re-fetch. A delta can never report a permanently
-  // deleted item (it is in neither `/items` nor `/items/trash`), so only a full
-  // rebuild drops it. A cache predating `builtAt` counts as stale.
+  // Also force a FULL re-fetch when the library COUNT shrank (one cheap
+  // request — a delta can never report a deletion), or when the cache is older
+  // than LIBRARY_RESYNC_MS (covers corruption / silent drift). Only a full
+  // rebuild drops a permanently deleted item.
   const cacheBuiltAt = typeof cacheData.builtAt === 'number' ? cacheData.builtAt : 0;
-  if (list0.length && Date.now() - cacheBuiltAt > LIBRARY_RESYNC_MS) {
-    sinceVersion = 0;
-  }
+  const cachedCount =
+    typeof cacheData.itemCount === 'number' ? cacheData.itemCount : null;
+  const currentCount = await fetchLibraryCountNative(port, groupId);
+  const shrank =
+    currentCount != null && cachedCount != null && currentCount < cachedCount;
+  const stale =
+    Boolean(list0.length) && Date.now() - cacheBuiltAt > LIBRARY_RESYNC_MS;
+  if (shrank || stale) sinceVersion = 0;
   const fullFetch = sinceVersion === 0;
 
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
@@ -760,10 +794,15 @@ export async function refreshZBibNative(
 
   await app.vault.adapter.write(
     cachePath,
-    JSON.stringify({ items: list, version, builtAt: Date.now() })
+    JSON.stringify({
+      items: list,
+      version,
+      builtAt: Date.now(),
+      itemCount: currentCount ?? cachedCount ?? undefined,
+    })
   );
 
-  return { list: applyGroupID(list, groupId), modified };
+  return { list: applyGroupID(list, groupId), modified, full: fullFetch };
 }
 
 export async function getItemJSONFromCiteKeysNative(

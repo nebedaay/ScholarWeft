@@ -1569,9 +1569,25 @@ export class BibManager {
           if (!res) continue;
           if (res.list?.length) group.lastUpdate = Date.now();
 
-          for (const [k, v] of res.modified.entries()) {
-            this.mergeZoteroEntry(v);
-            modifiedEntries.set(k, this.bibCache.get(k)!);
+          if (res.full && res.list) {
+            // FULL rebuild (background fetch, then swap): replace THIS group's
+            // entries so a permanently deleted item is finally dropped. The swap
+            // is a synchronous rebuild of the map, so consumers never see a gap.
+            for (const [id, e] of [...this.bibCache]) {
+              if ((e as { groupID?: number }).groupID === group.id) {
+                this.bibCache.delete(id);
+              }
+            }
+            for (const e of res.list) {
+              this.mergeZoteroEntry(e);
+              const merged = this.bibCache.get(e.id);
+              if (merged) modifiedEntries.set(e.id, merged);
+            }
+          } else {
+            for (const [k, v] of res.modified.entries()) {
+              this.mergeZoteroEntry(v);
+              modifiedEntries.set(k, this.bibCache.get(k)!);
+            }
           }
         } catch (e) {
           console.error('scholar-weft: Zotero refresh failed:', e);

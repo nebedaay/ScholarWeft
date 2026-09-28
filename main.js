@@ -68476,8 +68476,20 @@ async function getZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, loa
     if (cslItem)
       cslItems.push(cslItem);
   }
-  await app.vault.adapter.write(cachePath, JSON.stringify({ items: cslItems, version, builtAt: Date.now() }));
+  const itemCount = await fetchLibraryCountNative(port, groupId);
+  await app.vault.adapter.write(cachePath, JSON.stringify({ items: cslItems, version, builtAt: Date.now(), itemCount }));
   return { list: applyGroupID(cslItems, groupId), version };
+}
+async function fetchLibraryCountNative(port = DEFAULT_ZOTERO_PORT, libraryID = 1) {
+  if (!await isZoteroRunningNative(port))
+    return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
+  try {
+    const { totalResults } = await zoteroNativeGet(port, `/api/${libraryType}/${libraryId}/items?itemType=-attachment&limit=1&format=json`);
+    return typeof totalResults === "number" ? totalResults : null;
+  } catch (e3) {
+    return null;
+  }
 }
 async function fetchTrashedItemKeysNative(port = DEFAULT_ZOTERO_PORT, libraryID = 1) {
   var _a, _b, _c;
@@ -68527,6 +68539,7 @@ var CSL_CREATOR_KEYS = [
   "editorial-director"
 ];
 async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, sinceVersion) {
+  var _a;
   if (!await isZoteroRunningNative(port))
     return null;
   const cachePath = (0, import_obsidian6.normalizePath)(`${CACHE_DIR}/zotero-native-library-${groupId}.json`);
@@ -68547,9 +68560,12 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
     sinceVersion = 0;
   }
   const cacheBuiltAt = typeof cacheData.builtAt === "number" ? cacheData.builtAt : 0;
-  if (list0.length && Date.now() - cacheBuiltAt > LIBRARY_RESYNC_MS) {
+  const cachedCount = typeof cacheData.itemCount === "number" ? cacheData.itemCount : null;
+  const currentCount = await fetchLibraryCountNative(port, groupId);
+  const shrank = currentCount != null && cachedCount != null && currentCount < cachedCount;
+  const stale = Boolean(list0.length) && Date.now() - cacheBuiltAt > LIBRARY_RESYNC_MS;
+  if (shrank || stale)
     sinceVersion = 0;
-  }
   const fullFetch = sinceVersion === 0;
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
   const { items: rawItems, version } = await fetchAllZoteroItemsNative(port, libraryType, libraryId, sinceVersion);
@@ -68603,8 +68619,13 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   }
   if (!(rawItems == null ? void 0 : rawItems.length) && pruned === 0)
     return null;
-  await app.vault.adapter.write(cachePath, JSON.stringify({ items: list, version, builtAt: Date.now() }));
-  return { list: applyGroupID(list, groupId), modified };
+  await app.vault.adapter.write(cachePath, JSON.stringify({
+    items: list,
+    version,
+    builtAt: Date.now(),
+    itemCount: (_a = currentCount != null ? currentCount : cachedCount) != null ? _a : void 0
+  }));
+  return { list: applyGroupID(list, groupId), modified, full: fullFetch };
 }
 async function getItemJSONFromCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKeys, libraryID) {
   if (!await isZoteroRunningNative(port))
@@ -95847,9 +95868,23 @@ var BibManager = class {
             continue;
           if ((_c = res.list) == null ? void 0 : _c.length)
             group.lastUpdate = Date.now();
-          for (const [k4, v3] of res.modified.entries()) {
-            this.mergeZoteroEntry(v3);
-            modifiedEntries.set(k4, this.bibCache.get(k4));
+          if (res.full && res.list) {
+            for (const [id, e3] of [...this.bibCache]) {
+              if (e3.groupID === group.id) {
+                this.bibCache.delete(id);
+              }
+            }
+            for (const e3 of res.list) {
+              this.mergeZoteroEntry(e3);
+              const merged2 = this.bibCache.get(e3.id);
+              if (merged2)
+                modifiedEntries.set(e3.id, merged2);
+            }
+          } else {
+            for (const [k4, v3] of res.modified.entries()) {
+              this.mergeZoteroEntry(v3);
+              modifiedEntries.set(k4, this.bibCache.get(k4));
+            }
           }
         } catch (e3) {
           console.error("scholar-weft: Zotero refresh failed:", e3);

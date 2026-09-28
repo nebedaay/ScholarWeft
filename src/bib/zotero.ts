@@ -41,6 +41,8 @@ export interface ZoteroAdapter {
   ): Promise<{
     list?: PartialCSLEntry[];
     modified: Map<string, PartialCSLEntry>;
+    /** True when the whole library was rebuilt (replace, don't merge). */
+    full?: boolean;
   } | null>;
 
   /**
@@ -137,6 +139,8 @@ export class NativeAdapter implements ZoteroAdapter {
   ): Promise<{
     list?: PartialCSLEntry[];
     modified: Map<string, PartialCSLEntry>;
+    /** True when the whole library was rebuilt (replace, don't merge). */
+    full?: boolean;
   } | null> {
     return refreshZBibNative(this.port, '', groupId, libraryVersion);
   }
