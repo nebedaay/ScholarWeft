@@ -94418,7 +94418,7 @@ function scoreEntry(target, query, opts = {}) {
         authorAndTitle: false,
         prefixChunks: false,
         interpretedWords: 1,
-        matchedTerms: [citekey],
+        matchedTerms: effective,
         value: -2
       };
     }
@@ -94430,7 +94430,7 @@ function scoreEntry(target, query, opts = {}) {
         authorAndTitle: false,
         prefixChunks: false,
         interpretedWords: 1,
-        matchedTerms: [citekey],
+        matchedTerms: effective,
         value: -1 + Math.min(citekey.length - q4.length, 99) / 1e3
       };
     }
@@ -97327,12 +97327,10 @@ var import_obsidian29 = __toModule(require("obsidian"));
 // src/template/search-excerpt.ts
 var EXCERPT_WIDTH = 90;
 var CONTEXT_WORDS = 6;
-function excerptForResult(item, queryTerms3) {
-  var _a;
+function excerptsForResult(item, queryTerms3, opts = {}) {
   if (queryTerms3.length === 0)
-    return null;
-  const lines = buildExcerpts(item.abstract, queryTerms3);
-  return (_a = lines[0]) != null ? _a : null;
+    return [];
+  return buildExcerpts(item.abstract, queryTerms3, opts);
 }
 function tokens(text) {
   const out = [];
@@ -97852,7 +97850,7 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     }
     const frag = createFragment();
     const item = suggestion.item;
-    const excerpt = this.excerptFor(item);
+    const excerpts = this.excerptsFor(item);
     const terms = this.termsFor(item, suggestion);
     const citekey = frag.createSpan({ text: "@" });
     this.appendHighlighted(citekey, (_a = item.id) != null ? _a : "", terms);
@@ -97868,7 +97866,7 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     const meta = getEntryMeta(item);
     if (meta)
       frag.createSpan({ text: meta, cls: "sw-suggest-meta" });
-    this.appendExcerpt(frag, excerpt);
+    this.appendExcerpts(frag, excerpts);
     el.setText(frag);
   }
   termsFor(item, suggestion) {
@@ -97926,29 +97924,29 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     if (at < text.length)
       el.appendText(text.slice(at));
   }
-  appendExcerpt(frag, excerpt) {
-    if (!excerpt)
-      return;
-    const line = frag.createDiv({ cls: "sw-suggest-excerpt" });
-    let at = 0;
-    for (const m3 of excerpt.matches) {
-      if (m3.length <= 0 || m3.start < at || m3.start + m3.length > excerpt.text.length) {
-        continue;
+  appendExcerpts(frag, excerpts) {
+    for (const excerpt of excerpts) {
+      const line = frag.createDiv({ cls: "sw-suggest-excerpt" });
+      let at = 0;
+      for (const m3 of excerpt.matches) {
+        if (m3.length <= 0 || m3.start < at || m3.start + m3.length > excerpt.text.length) {
+          continue;
+        }
+        if (m3.start > at)
+          line.appendText(excerpt.text.slice(at, m3.start));
+        line.append(createEl("strong", {
+          cls: "sw-suggest-match",
+          text: excerpt.text.slice(m3.start, m3.start + m3.length)
+        }));
+        at = m3.start + m3.length;
       }
-      if (m3.start > at)
-        line.appendText(excerpt.text.slice(at, m3.start));
-      line.append(createEl("strong", {
-        cls: "sw-suggest-match",
-        text: excerpt.text.slice(m3.start, m3.start + m3.length)
-      }));
-      at = m3.start + m3.length;
+      if (at < excerpt.text.length)
+        line.appendText(excerpt.text.slice(at));
     }
-    if (at < excerpt.text.length)
-      line.appendText(excerpt.text.slice(at));
   }
-  excerptFor(item) {
+  excerptsFor(item) {
     const terms = item.id ? this._matchedTermsByKey.get(item.id) : void 0;
-    return excerptForResult(item, terms != null ? terms : []);
+    return excerptsForResult(item, terms != null ? terms : [], { maxLines: 3 });
   }
   selectSuggestion(suggestion, event) {
     var _a, _b;

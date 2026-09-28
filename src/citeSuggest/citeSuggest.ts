@@ -10,7 +10,7 @@ import {
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
-import { excerptForResult, findTermSpans } from 'src/template/search-excerpt';
+import { excerptsForResult, findTermSpans } from 'src/template/search-excerpt';
 import {
   afterOpenBracketIn,
   computeInsertion,
@@ -442,7 +442,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     }
     const frag = createFragment();
     const item = suggestion.item;
-    const excerpt = this.excerptFor(item as { id?: string; abstract?: string });
+    const excerpts = this.excerptsFor(item as { id?: string; abstract?: string });
 
     // Highlight the matched terms in EVERY field, on every render path. Doing
     // it from TERMS rather than Fuse's `matches` matters because searchTier
@@ -469,7 +469,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     const meta = getEntryMeta(item);
     if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
 
-    this.appendExcerpt(frag, excerpt);
+    this.appendExcerpts(frag, excerpts);
 
     el.setText(frag);
 
@@ -553,30 +553,37 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     if (at < text.length) el.appendText(text.slice(at));
   }
 
-  /** Append an excerpt line to a suggestion, emphasising the matched term. */
-  private appendExcerpt(
+  /**
+   * Append the excerpt lines to a suggestion, emphasising EVERY matched term in
+   * each. Several lines are shown when the terms sit far apart, so 2–3 matched
+   * terms can each be visible; terms close together share one line.
+   */
+  private appendExcerpts(
     frag: DocumentFragment,
-    excerpt: ReturnType<typeof excerptForResult>
+    excerpts: ReturnType<typeof excerptsForResult>
   ): void {
-    if (!excerpt) return;
-    const line = frag.createDiv({ cls: 'sw-suggest-excerpt' });
-    // Emphasise EVERY matched term in the line, not just the first: a line can
-    // hold several matched words, and bolding one made the rest look ordinary.
-    let at = 0;
-    for (const m of excerpt.matches) {
-      if (m.length <= 0 || m.start < at || m.start + m.length > excerpt.text.length) {
-        continue;
+    for (const excerpt of excerpts) {
+      const line = frag.createDiv({ cls: 'sw-suggest-excerpt' });
+      let at = 0;
+      for (const m of excerpt.matches) {
+        if (
+          m.length <= 0 ||
+          m.start < at ||
+          m.start + m.length > excerpt.text.length
+        ) {
+          continue;
+        }
+        if (m.start > at) line.appendText(excerpt.text.slice(at, m.start));
+        line.append(
+          createEl('strong', {
+            cls: 'sw-suggest-match',
+            text: excerpt.text.slice(m.start, m.start + m.length),
+          })
+        );
+        at = m.start + m.length;
       }
-      if (m.start > at) line.appendText(excerpt.text.slice(at, m.start));
-      line.append(
-        createEl('strong', {
-          cls: 'sw-suggest-match',
-          text: excerpt.text.slice(m.start, m.start + m.length),
-        })
-      );
-      at = m.start + m.length;
+      if (at < excerpt.text.length) line.appendText(excerpt.text.slice(at));
     }
-    if (at < excerpt.text.length) line.appendText(excerpt.text.slice(at));
   }
 
   /**
@@ -589,16 +596,16 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
   /** An excerpt for an abstract match, or null when the terms are not there. */
   /**
-   * An excerpt for an abstract match, or null when the terms are not there.
+   * Abstract excerpt lines for a result, one per group of matched terms (up to
+   * three), or none when the terms are not in the abstract.
    *
    * Public so the render decision is testable: the excerpt was previously
    * rendered only after the `matches` branch, but `searchTier` results carry no
-   * `matches`, so they returned early and never showed one. A test asserting
-   * this path exists is what stops that regressing.
+   * `matches`, so they returned early and never showed one.
    */
-  excerptFor(item: { id?: string; abstract?: string | null }) {
+  excerptsFor(item: { id?: string; abstract?: string | null }) {
     const terms = item.id ? this._matchedTermsByKey.get(item.id) : undefined;
-    return excerptForResult(item, terms ?? []);
+    return excerptsForResult(item, terms ?? [], { maxLines: 3 });
   }
 
   private lastSelect: EditorPosition = null;

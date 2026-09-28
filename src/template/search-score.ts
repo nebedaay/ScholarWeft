@@ -387,6 +387,10 @@ export function scoreEntry(
   if (citekey && query.trim()) {
     const key = citekey.toLowerCase();
     const q = query.trim().toLowerCase().replace(/^@+/, '');
+    // The matched TERMS (not the whole citekey) drive highlighting, so a query
+    // that happens to prefix a citekey still bolds the same words in the title
+    // and abstract. Recording `[citekey]` bolded the entire key and suppressed
+    // every other field.
     if (q && key === q) {
       return {
         exactPhrase: true,
@@ -395,7 +399,7 @@ export function scoreEntry(
         authorAndTitle: false,
         prefixChunks: false,
         interpretedWords: 1,
-        matchedTerms: [citekey],
+        matchedTerms: effective,
         value: -2,
       };
     }
@@ -407,7 +411,7 @@ export function scoreEntry(
         authorAndTitle: false,
         prefixChunks: false,
         interpretedWords: 1,
-        matchedTerms: [citekey],
+        matchedTerms: effective,
         // Still ahead of every other band (0.0+), behind an exact match.
         value: -1 + Math.min(citekey.length - q.length, 99) / 1000,
       };

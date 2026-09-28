@@ -39,13 +39,25 @@ export interface Excerpt {
  * the tier that needs it. A pure decision, applied on every render path, cannot
  * regress that way.
  */
+export function excerptsForResult(
+  item: { abstract?: string | null },
+  queryTerms: readonly string[],
+  opts: { maxLines?: number } = {}
+): Excerpt[] {
+  if (queryTerms.length === 0) return [];
+  return buildExcerpts(item.abstract, queryTerms, opts);
+}
+
+/**
+ * Convenience: the FIRST excerpt, or null. Kept for callers and tests that
+ * want a single line; the suggester renders every line via
+ * {@link excerptsForResult} so several matched terms can each be shown.
+ */
 export function excerptForResult(
   item: { abstract?: string | null },
   queryTerms: readonly string[]
 ): Excerpt | null {
-  if (queryTerms.length === 0) return null;
-  const lines = buildExcerpts(item.abstract, queryTerms);
-  return lines[0] ?? null;
+  return excerptsForResult(item, queryTerms)[0] ?? null;
 }
 
 

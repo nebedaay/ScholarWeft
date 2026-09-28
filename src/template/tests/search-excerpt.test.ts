@@ -2,6 +2,7 @@ import {
   EXCERPT_WIDTH,
   buildExcerpts,
   excerptForResult,
+  excerptsForResult,
   findTermSpans,
 } from '../search-excerpt';
 import { scoreEntry } from '../search-score';
@@ -432,5 +433,41 @@ describe('@@ is @ with MORE FIELDS, and the extra fields rank below', () => {
     expect(wide.indexOf('title')).toBeLessThan(wide.indexOf('venue'));
     expect(wide.indexOf('author')).toBeLessThan(wide.indexOf('abstract'));
     expect(wide.indexOf('author')).toBeLessThan(wide.indexOf('venue'));
+  });
+});
+
+describe('excerptsForResult() — every line', () => {
+  it('returns several lines when the terms sit apart (up to maxLines)', () => {
+    const para = Array.from({ length: 12 }, (_, i) => `word${i}`).join(' ');
+    const abstract = `Alpha ${para}. Beta ${para}. Gamma ${para}.`;
+    const lines = excerptsForResult(
+      { abstract },
+      ['alpha', 'beta', 'gamma'],
+      { maxLines: 3 }
+    );
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    for (const line of lines) expect(line.text.length).toBeGreaterThan(0);
+  });
+
+  it('merges terms close together into one line', () => {
+    const abstract = 'Alpha and beta appear side by side in this short abstract.';
+    const lines = excerptsForResult({ abstract }, ['alpha', 'beta'], {
+      maxLines: 3,
+    });
+    expect(lines).toHaveLength(1);
+    expect(lines[0].matches.length).toBe(2);
+  });
+
+  it('excerptForResult is the first line', () => {
+    const abstract = 'One alpha here. Two beta there.';
+    const all = excerptsForResult({ abstract }, ['alpha', 'beta']);
+    expect(excerptForResult({ abstract }, ['alpha', 'beta'])).toEqual(
+      all[0] ?? null
+    );
+  });
+
+  it('returns [] with no terms or no abstract', () => {
+    expect(excerptsForResult({ abstract: 'x' }, [])).toEqual([]);
+    expect(excerptsForResult({ abstract: null }, ['x'])).toEqual([]);
   });
 });

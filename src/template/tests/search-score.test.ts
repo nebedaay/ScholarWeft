@@ -53,3 +53,22 @@ describe('probe', () => {
     expect(single).toContain('filler');
   });
 });
+
+describe('citekey matches record the interpreted TERMS', () => {
+  const item = {
+    citekey: 'certeaupracticeeverydaylife1984',
+    title: 'The Practice of Everyday Life',
+    authorText: 'Certeau',
+  };
+
+  it('a citekey PREFIX match does not bold the whole citekey', () => {
+    const s = scoreEntry(item, 'certeaupracticeeveryday');
+    expect(s.value).toBeLessThan(0); // the citekey band still wins
+    expect(s.matchedTerms).toEqual(['certeau', 'practice', 'everyday']);
+  });
+
+  it('an EXACT citekey match records the query term', () => {
+    const s = scoreEntry(item, 'certeaupracticeeverydaylife1984');
+    expect(s.matchedTerms).toEqual(['certeaupracticeeverydaylife1984']);
+  });
+});
