@@ -102508,20 +102508,34 @@ var ReferenceList = class extends import_obsidian40.Plugin {
       const targetName = (_f = target.split("/").pop()) != null ? _f : "";
       const parent = target.split("/").slice(0, -1).join("/");
       const from = parent ? `${parent}/${targetName}` : targetName;
-      if (!targetName.startsWith("Group ")) {
-        const oldName = `Group ${gid}`;
-        const oldPath = parent ? `${parent}/${oldName}` : oldName;
-        if (oldPath !== from && await this.app.vault.adapter.exists(oldPath)) {
-          staleFolders.push({ from: oldPath, to: from });
-        }
-      }
+      if (targetName.startsWith("Group "))
+        continue;
+      const oldPath = parent ? `${parent}/Group ${gid}` : `Group ${gid}`;
+      const exists = await this.app.vault.adapter.exists(oldPath);
+      console.log("[sw:move] group", gid, "target=", target, "oldExists=", exists, oldPath);
+      if (oldPath !== from && exists)
+        staleFolders.push({ from: oldPath, to: from });
     }
     return { byGroup, staleFolders };
   }
   async moveGroupNotes(byGroup, staleFolders = []) {
     const fm = this.app.fileManager;
     let moved = 0;
+    let renamed = 0;
     let failed = 0;
+    for (const { from, to } of staleFolders) {
+      try {
+        const folder = this.app.vault.getAbstractFileByPath(from);
+        console.log("[sw:move] rename folder", from, "->", to, "found=", !!folder);
+        if (folder) {
+          await fm.renameFile(folder, to);
+          renamed++;
+        }
+      } catch (e3) {
+        console.warn("[sw:move] failed to rename folder", from, e3);
+        failed++;
+      }
+    }
     const base = this.bibManager.resolveBaseNoteFolder();
     for (const [gid, files] of byGroup) {
       const folder = literatureNoteFolderFor({
@@ -102529,15 +102543,13 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid)
       });
-      try {
-        if (!await this.app.vault.adapter.exists(folder)) {
-          await this.app.vault.adapter.mkdir(folder);
-        }
-      } catch (e3) {
-        console.warn("[sw:move] could not create folder", folder, e3);
-      }
       for (const f3 of files) {
+        if (f3.path.startsWith(folder + "/"))
+          continue;
         try {
+          if (!await this.app.vault.adapter.exists(folder)) {
+            await this.app.vault.adapter.mkdir(folder);
+          }
           const target = `${folder}/${f3.name}`;
           if (target === f3.path)
             continue;
@@ -102549,21 +102561,12 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         }
       }
     }
-    let renamed = 0;
-    for (const { from, to } of staleFolders) {
-      try {
-        const folder = this.app.vault.getAbstractFileByPath(from);
-        if (folder) {
-          await fm.renameFile(folder, to);
-          renamed++;
-        }
-      } catch (e3) {
-        console.warn("[sw:move] failed to rename folder", from, e3);
-        failed++;
-      }
-    }
     this.settings.groupNoteMoveOffered = true;
     await this.saveSettings();
+    if (!moved && !renamed && !failed) {
+      new import_obsidian40.Notice("All literature notes are already in their library folders.");
+      return;
+    }
     new import_obsidian40.Notice(`Moved ${moved} note${moved !== 1 ? "s" : ""}` + (renamed ? `, renamed ${renamed} folder${renamed !== 1 ? "s" : ""}` : "") + (failed ? `, ${failed} failed (see console)` : "") + ".", 8e3);
   }
   async getCitekeysForFile(file) {

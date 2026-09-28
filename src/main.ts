@@ -1779,7 +1779,9 @@ export default class ReferenceList extends Plugin {
       (byGroup.get(gid) ?? byGroup.set(gid, []).get(gid)!).push(f);
     }
 
-    // Group folders whose name no longer matches the library name.
+    // Group folders whose name no longer matches the library name. Detect these
+    // BEFORE moving notes, so the rename happens FIRST and the notes then simply
+    // follow the folder (no empty rename, no file-by-file move).
     const staleFolders: Array<{ from: string; to: string }> = [];
     for (const gid of new Set([
       ...(this.settings.zoteroGroups ?? []).map((g) => g.id),
@@ -1793,15 +1795,11 @@ export default class ReferenceList extends Plugin {
       const targetName = target.split('/').pop() ?? '';
       const parent = target.split('/').slice(0, -1).join('/');
       const from = parent ? `${parent}/${targetName}` : targetName;
-      // Find a sibling folder for this group created under an older (numeric)
-      // name, when the library now has a proper name.
-      if (!targetName.startsWith('Group ')) {
-        const oldName = `Group ${gid}`;
-        const oldPath = parent ? `${parent}/${oldName}` : oldName;
-        if (oldPath !== from && (await this.app.vault.adapter.exists(oldPath))) {
-          staleFolders.push({ from: oldPath, to: from });
-        }
-      }
+      if (targetName.startsWith('Group ')) continue;
+      const oldPath = parent ? `${parent}/Group ${gid}` : `Group ${gid}`;
+      const exists = await this.app.vault.adapter.exists(oldPath);
+      console.log('[sw:move] group', gid, 'target=', target, 'oldExists=', exists, oldPath);
+      if (oldPath !== from && exists) staleFolders.push({ from: oldPath, to: from });
     }
     return { byGroup, staleFolders };
   }
@@ -1812,7 +1810,26 @@ export default class ReferenceList extends Plugin {
   ): Promise<void> {
     const fm = this.app.fileManager;
     let moved = 0;
+    let renamed = 0;
     let failed = 0;
+
+    // 1. Rename stale library FOLDERS first, so notes already inside follow the
+    //    folder instead of being moved file by file (and the target exists).
+    for (const { from, to } of staleFolders) {
+      try {
+        const folder = this.app.vault.getAbstractFileByPath(from);
+        console.log('[sw:move] rename folder', from, '->', to, 'found=', !!folder);
+        if (folder) {
+          await fm.renameFile(folder as never, to);
+          renamed++;
+        }
+      } catch (e) {
+        console.warn('[sw:move] failed to rename folder', from, e);
+        failed++;
+      }
+    }
+
+    // 2. Move any note still outside its folder.
     const base = this.bibManager.resolveBaseNoteFolder();
     for (const [gid, files] of byGroup) {
       const folder = literatureNoteFolderFor({
@@ -1820,15 +1837,13 @@ export default class ReferenceList extends Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid),
       });
-      try {
-        if (!(await this.app.vault.adapter.exists(folder))) {
-          await this.app.vault.adapter.mkdir(folder);
-        }
-      } catch (e) {
-        console.warn('[sw:move] could not create folder', folder, e);
-      }
       for (const f of files) {
+        // Already under the target (e.g. the folder was just renamed)?
+        if (f.path.startsWith(folder + '/')) continue;
         try {
+          if (!(await this.app.vault.adapter.exists(folder))) {
+            await this.app.vault.adapter.mkdir(folder);
+          }
           const target = `${folder}/${f.name}`;
           if (target === f.path) continue;
           await fm.renameFile(f, target);
@@ -1839,22 +1854,13 @@ export default class ReferenceList extends Plugin {
         }
       }
     }
-    // Rename stale library folders (after any file moves, so they may be empty).
-    let renamed = 0;
-    for (const { from, to } of staleFolders) {
-      try {
-        const folder = this.app.vault.getAbstractFileByPath(from);
-        if (folder) {
-          await fm.renameFile(folder as never, to);
-          renamed++;
-        }
-      } catch (e) {
-        console.warn('[sw:move] failed to rename folder', from, e);
-        failed++;
-      }
-    }
+
     this.settings.groupNoteMoveOffered = true;
     await this.saveSettings();
+    if (!moved && !renamed && !failed) {
+      new Notice('All literature notes are already in their library folders.');
+      return;
+    }
     new Notice(
       `Moved ${moved} note${moved !== 1 ? 's' : ''}` +
         (renamed ? `, renamed ${renamed} folder${renamed !== 1 ? 's' : ''}` : '') +
