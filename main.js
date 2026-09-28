@@ -88761,6 +88761,25 @@ function rememberLibraryName(groupID, name) {
   if (groupID && groupID !== 1 && n2)
     LIBRARY_NAME_CACHE.set(groupID, n2);
 }
+var FOLDER_NAME_CACHE = new Map();
+function rememberFolderName(groupID, folderName) {
+  if (groupID && groupID !== 1 && folderName) {
+    FOLDER_NAME_CACHE.set(groupID, folderName);
+  }
+}
+function lastFolderName(groupID) {
+  return FOLDER_NAME_CACHE.get(groupID);
+}
+function seedFolderNames(map) {
+  for (const [gid, name] of Object.entries(map != null ? map : {})) {
+    const id = Number(gid);
+    if (id && name)
+      FOLDER_NAME_CACHE.set(id, name);
+  }
+}
+function folderNameSnapshot() {
+  return Object.fromEntries(FOLDER_NAME_CACHE);
+}
 function libraryDisplayName(groupID, fromSettings) {
   var _a;
   const fromSettingsTrimmed = (fromSettings != null ? fromSettings : "").trim();
@@ -91144,16 +91163,20 @@ function literatureNoteFolder(plugin) {
   });
 }
 function noteFolderForEntry(plugin, entry) {
-  var _a, _b;
+  var _a, _b, _c;
   const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
   if (groupID === 1)
     return literatureNoteFolder(plugin);
   const name = (_b = (_a = plugin.bibManager) == null ? void 0 : _a.libraryNameFor(groupID)) != null ? _b : null;
-  return literatureNoteFolderFor({
+  const folder = literatureNoteFolderFor({
     base: literatureNoteFolder(plugin),
     groupID,
     groupName: name
   });
+  const folderName = (_c = folder.split("/").pop()) != null ? _c : "";
+  if (folderName)
+    rememberFolderName(groupID, folderName);
+  return folder;
 }
 async function fetchChildren(plugin, entry) {
   const key = entry == null ? void 0 : entry._zoteroKey;
@@ -95187,7 +95210,7 @@ function cite(engine, group, uncitedItemIDs) {
 
 // src/template/zotero-sync.ts
 function emptySyncState() {
-  return { versions: {}, attachments: {} };
+  return { versions: {}, attachments: {}, libraryFolders: {} };
 }
 async function collectChangedItemKeys(state, attachments, annotations, lookupParent) {
   const map = { ...state.attachments };
@@ -97086,8 +97109,10 @@ var BibManager = class {
       const data = JSON.parse(raw);
       this.syncState = {
         versions: (data == null ? void 0 : data.versions) && typeof data.versions === "object" ? data.versions : {},
-        attachments: (data == null ? void 0 : data.attachments) && typeof data.attachments === "object" ? data.attachments : {}
+        attachments: (data == null ? void 0 : data.attachments) && typeof data.attachments === "object" ? data.attachments : {},
+        libraryFolders: (data == null ? void 0 : data.libraryFolders) && typeof data.libraryFolders === "object" ? data.libraryFolders : {}
       };
+      seedFolderNames(this.syncState.libraryFolders);
     } catch (e3) {
     }
   }
@@ -97097,6 +97122,10 @@ var BibManager = class {
       if (!await app.vault.adapter.exists(dir)) {
         await app.vault.adapter.mkdir(dir);
       }
+      this.syncState = {
+        ...this.syncState,
+        libraryFolders: folderNameSnapshot()
+      };
       await app.vault.adapter.write((0, import_obsidian28.normalizePath)(`${SW_CACHE_DIR}/sync-state.json`), JSON.stringify(this.syncState));
     } catch (e3) {
       console.warn("[sw] saveSyncState failed:", e3);
@@ -102474,7 +102503,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     });
   }
   async planGroupNoteMove(base) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const byGroup = new Map();
     for (const f3 of this.app.vault.getMarkdownFiles()) {
       const zk = (_b = (_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
@@ -102497,8 +102526,20 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     }
     const staleFolders = [];
     const childFolders = await this.listChildFolders(base);
+    const childNames = new Set(childFolders.map((p4) => {
+      var _a2;
+      return (_a2 = p4.split("/").pop()) != null ? _a2 : "";
+    }));
+    const otherTargets = new Set([...((_e = this.settings.zoteroGroups) != null ? _e : []).map((g4) => g4.id), ...byGroup.keys()].map((gid) => literatureNoteFolderFor({
+      base,
+      groupID: gid,
+      groupName: this.bibManager.libraryNameFor(gid)
+    })).filter((p4) => {
+      var _a2;
+      return childNames.has((_a2 = p4.split("/").pop()) != null ? _a2 : "");
+    }));
     for (const gid of new Set([
-      ...((_e = this.settings.zoteroGroups) != null ? _e : []).map((g4) => g4.id),
+      ...((_f = this.settings.zoteroGroups) != null ? _f : []).map((g4) => g4.id),
       ...byGroup.keys()
     ])) {
       const target = literatureNoteFolderFor({
@@ -102506,12 +102547,27 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid)
       });
-      if (((_f = target.split("/").pop()) != null ? _f : "").startsWith("Group "))
+      const targetName = (_g = target.split("/").pop()) != null ? _g : "";
+      if (targetName.startsWith("Group "))
         continue;
-      const oldPath = childFolders.find((p4) => p4.split("/").pop() === `Group ${gid}`);
-      console.log("[sw:move] group", gid, "target=", target, "oldFolder=", oldPath);
+      const candidates = [
+        `Group ${gid}`,
+        (_h = lastFolderName(gid)) != null ? _h : ""
+      ].filter((n2) => n2 && n2 !== targetName);
+      const oldPath = childFolders.find((p4) => {
+        var _a2;
+        const name = (_a2 = p4.split("/").pop()) != null ? _a2 : "";
+        if (!candidates.includes(name))
+          return false;
+        return !otherTargets.has(p4);
+      });
+      console.log("[sw:move] group", gid, "target=", target, "oldFolder=", oldPath, "prevName=", lastFolderName(gid));
       if (oldPath && oldPath !== target) {
         staleFolders.push({ from: oldPath, to: target });
+      } else if (oldPath && oldPath === target) {
+        rememberFolderName(gid, targetName);
+      } else if (childNames.has(targetName)) {
+        rememberFolderName(gid, targetName);
       }
     }
     return { byGroup, staleFolders };

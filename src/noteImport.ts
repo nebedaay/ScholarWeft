@@ -22,6 +22,7 @@ import type { RawZoteroChildren } from './template/children';
 import {
   DEFAULT_LITERATURE_NOTE_FOLDER,
   literatureNoteFolderFor,
+  rememberFolderName,
   resolveLiteratureNoteFolder,
 } from './template/lit-folder';
 export { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
@@ -111,11 +112,16 @@ function noteFolderForEntry(
   const groupID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : 1;
   if (groupID === 1) return literatureNoteFolder(plugin);
   const name = plugin.bibManager?.libraryNameFor(groupID) ?? null;
-  return literatureNoteFolderFor({
+  const folder = literatureNoteFolderFor({
     base: literatureNoteFolder(plugin),
     groupID,
     groupName: name,
   });
+  // Remember the folder name used, so a later Zotero RENAME of the library can be
+  // detected and offered as a folder rename.
+  const folderName = folder.split('/').pop() ?? '';
+  if (folderName) rememberFolderName(groupID, folderName);
+  return folder;
 }
 
 /**

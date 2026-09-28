@@ -44,6 +44,35 @@ export function rememberLibraryName(groupID: number, name: string | null | undef
   if (groupID && groupID !== 1 && n) LIBRARY_NAME_CACHE.set(groupID, n);
 }
 
+/** The last name a group's FOLDER was created/renamed under, so a rename in
+ *  Zotero can be detected and offered. Keyed by group id. */
+const FOLDER_NAME_CACHE = new Map<number, string>();
+
+/** Record the folder name currently in use for a group. */
+export function rememberFolderName(groupID: number, folderName: string): void {
+  if (groupID && groupID !== 1 && folderName) {
+    FOLDER_NAME_CACHE.set(groupID, folderName);
+  }
+}
+
+/** The folder name last used for a group, if any. */
+export function lastFolderName(groupID: number): string | undefined {
+  return FOLDER_NAME_CACHE.get(groupID);
+}
+
+/** Seed the folder-name cache (e.g. from persisted state at startup). */
+export function seedFolderNames(map: Record<string, string> | undefined): void {
+  for (const [gid, name] of Object.entries(map ?? {})) {
+    const id = Number(gid);
+    if (id && name) FOLDER_NAME_CACHE.set(id, name);
+  }
+}
+
+/** The whole folder-name cache, for persistence. */
+export function folderNameSnapshot(): Record<string, string> {
+  return Object.fromEntries(FOLDER_NAME_CACHE);
+}
+
 /** A group's display name: settings first, then the cache, then `Group N`. */
 export function libraryDisplayName(
   groupID: number,

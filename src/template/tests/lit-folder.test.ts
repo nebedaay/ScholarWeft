@@ -1,7 +1,11 @@
 import {
+  folderNameSnapshot,
+  lastFolderName,
   libraryDisplayName,
   literatureNoteFolderFor,
+  rememberFolderName,
   rememberLibraryName,
+  seedFolderNames,
   sanitizeLibraryFolderName,
 } from '../lit-folder';
 
@@ -88,5 +92,22 @@ describe('literatureNoteFolderFor() with the name cache', () => {
     expect(literatureNoteFolderFor({ base: 'Notes', groupID: 6667607 })).toBe(
       'Notes/Andrea Lickacz readings'
     );
+  });
+});
+
+describe('folder-name record (rename detection)', () => {
+  it('remembers and returns the last folder name for a group', () => {
+    rememberFolderName(6667607, 'AL Readings');
+    expect(lastFolderName(6667607)).toBe('AL Readings');
+  });
+
+  it('seeds from persisted state', () => {
+    seedFolderNames({ '4242': 'Old Name' });
+    expect(lastFolderName(4242)).toBe('Old Name');
+  });
+
+  it('snapshots for persistence', () => {
+    rememberFolderName(1234, 'X');
+    expect(folderNameSnapshot()['1234']).toBe('X');
   });
 });

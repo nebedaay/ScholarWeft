@@ -55,9 +55,11 @@ import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZote
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import {
+  folderNameSnapshot,
   literatureNoteFolderFor,
   libraryDisplayName,
   rememberLibraryName,
+  seedFolderNames,
 } from 'src/template/lit-folder';
 import {
   collectChangedItemKeys,
@@ -2783,7 +2785,12 @@ export class BibManager {
           data?.attachments && typeof data.attachments === 'object'
             ? data.attachments
             : {},
+        libraryFolders:
+          data?.libraryFolders && typeof data.libraryFolders === 'object'
+            ? data.libraryFolders
+            : {},
       };
+      seedFolderNames(this.syncState.libraryFolders);
     } catch {
       // first run — no watermark yet
     }
@@ -2795,6 +2802,10 @@ export class BibManager {
       if (!(await app.vault.adapter.exists(dir))) {
         await app.vault.adapter.mkdir(dir);
       }
+      this.syncState = {
+        ...this.syncState,
+        libraryFolders: folderNameSnapshot(),
+      };
       await app.vault.adapter.write(
         normalizePath(`${SW_CACHE_DIR}/sync-state.json`),
         JSON.stringify(this.syncState)

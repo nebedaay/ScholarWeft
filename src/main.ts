@@ -66,7 +66,9 @@ import {
 } from './template/related-migration';
 import {
   DEFAULT_LITERATURE_NOTE_FOLDER,
+  lastFolderName,
   literatureNoteFolderFor,
+  rememberFolderName,
   resolveLiteratureNoteFolder,
 } from './template/lit-folder';
 import { shouldRefreshOnRefocus } from './template/refocus';
@@ -1781,10 +1783,27 @@ export default class ReferenceList extends Plugin {
 
     // Group folders whose name no longer matches the library name. Detected by
     // LISTING the base folder child folders (not `adapter.exists`, which did not
-    // see a folder that was plainly on disk) and matching the legacy `Group N`
-    // name — then renamed directly, so the notes follow.
+    // see a folder that was plainly on disk) and matching either the legacy
+    // `Group N` name OR the PREVIOUS library name (the group was renamed in
+    // Zotero: 'AL Readings' → 'AL MA project'), then renamed directly so the
+    // notes follow.
     const staleFolders: Array<{ from: string; to: string }> = [];
     const childFolders = await this.listChildFolders(base);
+    const childNames = new Set(
+      childFolders.map((p) => p.split('/').pop() ?? '')
+    );
+    const otherTargets = new Set(
+      [...(this.settings.zoteroGroups ?? []).map((g) => g.id), ...byGroup.keys()]
+        .map((gid) =>
+          literatureNoteFolderFor({
+            base,
+            groupID: gid,
+            groupName: this.bibManager.libraryNameFor(gid),
+          })
+        )
+        .filter((p) => childNames.has(p.split('/').pop() ?? ''))
+    );
+
     for (const gid of new Set([
       ...(this.settings.zoteroGroups ?? []).map((g) => g.id),
       ...byGroup.keys(),
@@ -1794,13 +1813,33 @@ export default class ReferenceList extends Plugin {
         groupID: gid,
         groupName: this.bibManager.libraryNameFor(gid),
       });
-      if ((target.split('/').pop() ?? '').startsWith('Group ')) continue;
-      const oldPath = childFolders.find(
-        (p) => p.split('/').pop() === `Group ${gid}`
+      const targetName = target.split('/').pop() ?? '';
+      if (targetName.startsWith('Group ')) continue;
+
+      // A folder for this group that is NOT the current target: the legacy
+      // `Group N` name, or the previously-recorded folder name (a rename).
+      const candidates = [
+        `Group ${gid}`,
+        lastFolderName(gid) ?? '',
+      ].filter((n) => n && n !== targetName);
+      const oldPath = childFolders.find((p) => {
+        const name = p.split('/').pop() ?? '';
+        if (!candidates.includes(name)) return false;
+        // Do not steal a folder that IS another group's current target.
+        return !otherTargets.has(p);
+      });
+      console.log(
+        '[sw:move] group', gid, 'target=', target, 'oldFolder=', oldPath,
+        'prevName=', lastFolderName(gid)
       );
-      console.log('[sw:move] group', gid, 'target=', target, 'oldFolder=', oldPath);
       if (oldPath && oldPath !== target) {
         staleFolders.push({ from: oldPath, to: target });
+      } else if (oldPath && oldPath === target) {
+        // Current name confirmed — remember it as the folder's name so a later
+        // Zotero rename can be detected.
+        rememberFolderName(gid, targetName);
+      } else if (childNames.has(targetName)) {
+        rememberFolderName(gid, targetName);
       }
     }
     return { byGroup, staleFolders };

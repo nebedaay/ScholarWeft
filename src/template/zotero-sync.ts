@@ -24,10 +24,13 @@ export interface SyncState {
   versions: Record<string, number>;
   /** attachmentKey → top-level item key. */
   attachments: Record<string, string>;
+  /** groupId → the library folder name last used, so a Zotero rename of the
+   *  library can be detected and offered as a folder rename. */
+  libraryFolders?: Record<string, string>;
 }
 
 export function emptySyncState(): SyncState {
-  return { versions: {}, attachments: {} };
+  return { versions: {}, attachments: {}, libraryFolders: {} };
 }
 
 /**
