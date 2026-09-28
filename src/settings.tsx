@@ -91,8 +91,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   ownNoteImageFolder: 'Attachments',
   /** How to treat an existing ZotLit note when our template renders it. */
   ownNoteZotLitHandling: 'ask',
-  autoUpdateNotes: true,
-  autoUpdateNotified: false,
+  // autoUpdateNotes is intentionally NOT set: undefined means "not yet chosen",
+  // so the user is asked before any note is modified.
   /** Where ScholarWeft creates its own literature notes (vault-relative). Used
    *  by the own-template import path, whose settings show this field; when
    *  ZotLit is the chosen path, ZotLit's own folder applies instead. */
@@ -261,11 +261,9 @@ export interface ReferenceListSettings {
    */
   ownNoteZotLitHandling?: 'ask' | 'convert' | 'leave';
   /** Automatically re-render a literature note when its Zotero item changes
-   *  (metadata, or annotations/attachments). On by default; the first automatic
-   *  update shows a Notice with a one-click opt-out. */
+   *  (metadata, or annotations/attachments). `undefined` = not yet chosen (the
+   *  user is asked before anything is modified); `true`/`false` = chosen. */
   autoUpdateNotes?: boolean;
-  /** Whether that first-run notice has been shown. */
-  autoUpdateNotified?: boolean;
   /**
    * When true, a newly created literature note gets the item's Zotero child
    * notes inserted automatically (into its managed "## Notes" section), so it
@@ -1284,17 +1282,26 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         .setName(t('Update literature notes automatically'))
         .setDesc(
           t(
-            'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.'
+            'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.'
           )
         )
-        .addToggle((toggle) =>
-          toggle
-            .setValue(this.plugin.settings.autoUpdateNotes !== false)
-            .onChange((value) => {
+        .then((setting) => {
+          const makeRadio = (label: string, value: boolean) => {
+            const wrap = setting.controlEl.createEl('label', {
+              cls: 'sw-auto-update-radio',
+            });
+            const input = wrap.createEl('input', { type: 'radio' });
+            input.name = 'sw-auto-update';
+            input.checked = this.plugin.settings.autoUpdateNotes === value;
+            input.addEventListener('change', () => {
               this.plugin.settings.autoUpdateNotes = value;
               this.plugin.saveSettings();
-            })
-        );
+            });
+            wrap.appendText(' ' + label);
+          };
+          makeRadio(t('Yes'), true);
+          makeRadio(t('No'), false);
+        });
 
       new Setting(containerEl)
         .setName(t('Child-note heading level'))

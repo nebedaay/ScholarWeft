@@ -211,8 +211,14 @@ export default {
     'Child-note heading level',
   'Update literature notes automatically':
     'Update literature notes automatically',
-  'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.':
-    'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.',
+  'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.':
+    'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.',
+  'Update literature notes automatically?':
+    'Update literature notes automatically?',
+  'ScholarWeft can update a literature note automatically whenever its Zotero item changes — its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.':
+    'ScholarWeft can update a literature note automatically whenever its Zotero item changes — its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.',
+  Yes: 'Yes',
+  No: 'No',
   'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.':
     'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.',
   'Open in Zotero': 'Open in Zotero',

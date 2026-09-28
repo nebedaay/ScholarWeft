@@ -1528,18 +1528,25 @@ export default class ReferenceList extends Plugin {
   private _pendingAutoUpdate = new Set<string>();
   private _autoUpdateTimer: number | null = null;
   private _autoUpdateRunning = false;
+  private _autoUpdatePrompting = false;
 
-  /** Queue citekeys for an automatic note refresh (debounced + coalesced). */
+  /**
+   * Queue citekeys for an automatic note refresh. NOTHING is modified until the
+   * setting is YES: if it is UNSET the user is asked FIRST (and the answer
+   * becomes the setting); if NO the change is ignored.
+   */
   scheduleAutoUpdate(citekeys: Iterable<string>): void {
     if (this.settings.autoUpdateNotes === false) return;
-    let added = false;
-    for (const k of citekeys) {
-      if (k && !this._pendingAutoUpdate.has(k)) {
-        this._pendingAutoUpdate.add(k);
-        added = true;
-      }
+    for (const k of citekeys) if (k) this._pendingAutoUpdate.add(k);
+    if (this.settings.autoUpdateNotes === undefined) {
+      void this.promptAutoUpdateConsent();
+      return;
     }
-    if (!added && this._autoUpdateTimer != null) return;
+    this.armAutoUpdate();
+  }
+
+  /** Debounce (3 s) + coalesce the pending update run. */
+  private armAutoUpdate(): void {
     if (this._autoUpdateTimer != null) return;
     this._autoUpdateTimer = window.setTimeout(() => {
       this._autoUpdateTimer = null;
@@ -1547,7 +1554,33 @@ export default class ReferenceList extends Plugin {
     }, 3000);
   }
 
+  /** Ask once, BEFORE any note is modified; the answer becomes the setting. */
+  private async promptAutoUpdateConsent(): Promise<void> {
+    if (this._autoUpdatePrompting || this.settings.autoUpdateNotes !== undefined) {
+      return;
+    }
+    this._autoUpdatePrompting = true;
+    try {
+      const { AutoUpdateConsentModal } = await import(
+        './modals/autoUpdateConsentModal'
+      );
+      const yes = await new Promise<boolean>((resolve) =>
+        new AutoUpdateConsentModal(this.app, resolve).open()
+      );
+      this.settings.autoUpdateNotes = yes;
+      await this.saveSettings();
+      if (yes) {
+        if (this._pendingAutoUpdate.size) this.armAutoUpdate();
+      } else {
+        this._pendingAutoUpdate.clear();
+      }
+    } finally {
+      this._autoUpdatePrompting = false;
+    }
+  }
+
   private async runAutoUpdate(): Promise<void> {
+    if (this.settings.autoUpdateNotes !== true) return;
     if (this._autoUpdateRunning) return;
     const pending = this._pendingAutoUpdate;
     this._pendingAutoUpdate = new Set();
@@ -1560,25 +1593,16 @@ export default class ReferenceList extends Plugin {
     } finally {
       this._autoUpdateRunning = false;
     }
-    if (this._pendingAutoUpdate.size) this.scheduleAutoUpdate([]);
+    if (this._pendingAutoUpdate.size) this.armAutoUpdate();
   }
 
   /**
    * Update the literature notes for `citekeys`. Non-destructive (managed fields
-   * + region only). The first automatic update shows a Notice with a one-click
-   * opt-out. ZotLit-managed notes are updated only when the setting is "Always
-   * convert" — otherwise they are skipped here rather than prompting mid-batch
-   * (the manual commands still prompt).
+   * + region only). ZotLit-managed notes are updated only when the setting is
+   * "Always convert" — otherwise they are skipped here rather than prompting
+   * mid-batch (the manual commands still prompt).
    */
   private async autoUpdateNotesForCitekeys(citekeys: Set<string>): Promise<void> {
-    if (this.settings.autoUpdateNotes === false) return;
-
-    if (!this.settings.autoUpdateNotified) {
-      this.settings.autoUpdateNotified = true;
-      await this.saveSettings();
-      this.notifyAutoUpdate();
-    }
-
     const targets = await this.collectAutoUpdateFiles(citekeys);
     if (!targets.length) return;
 
@@ -1635,26 +1659,6 @@ export default class ReferenceList extends Plugin {
       out.push(f);
     }
     return out;
-  }
-
-  private notifyAutoUpdate(): void {
-    const notice = new Notice('', 0);
-    const el = (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ?? notice.containerEl;
-    if (!el) {
-      notice.hide();
-      return;
-    }
-    el.createEl('div', {
-      text: 'ScholarWeft will now update a literature note automatically when its Zotero item changes.',
-    });
-    const btn = el.createEl('button', { text: "Don't auto-update" });
-    btn.addEventListener('click', () => {
-      this.settings.autoUpdateNotes = false;
-      void this.saveSettings();
-      new Notice('Auto note-update turned off (Settings → ScholarWeft → Literature note import).');
-      notice.hide();
-    });
-    window.setTimeout(() => notice.hide(), 15000);
   }
 
   async getCitekeysForFile(file?: TFile) {

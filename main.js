@@ -83,6 +83,189 @@ var require_fast_deep_equal = __commonJS({
   }
 });
 
+// src/lang/locale/en.ts
+var en_default;
+var init_en = __esm({
+  "src/lang/locale/en.ts"() {
+    en_default = {
+      "Path to bibliography file": "Path to bibliography file",
+      "Bibliography files": "Bibliography files",
+      'One or more bibliography files (.bib, .json, or .yaml). Vault-relative paths work on all platforms; absolute paths work on desktop only. All files are merged \u2014 Zotero wins on conflict. Can be overridden per-note via the "bibliography" frontmatter key.': 'One or more bibliography files (.bib, .json, or .yaml). Vault-relative paths work on all platforms; absolute paths work on desktop only. All files are merged \u2014 Zotero wins on conflict. Can be overridden per-note via the "bibliography" frontmatter key.',
+      "Add file": "Add file",
+      "Remove": "Remove",
+      "Prioritize citation completion": "Prioritize citation completion",
+      'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.': `Use this plugin's citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin's suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian's link search can't see unimported references.`,
+      'Move the citation autocomplete suggester to the front of Obsidian\'s internal queue so it wins when multiple plugins respond to "@". Disable this if another plugin\'s "@" completions stop working.': `Move the citation autocomplete suggester to the front of Obsidian's internal queue so it wins when multiple plugins respond to "@". Disable this if another plugin's "@" completions stop working.`,
+      "Save bibliography snapshot": "Save bibliography snapshot",
+      "Save bibliography snapshot for this note": "Save bibliography snapshot for this note",
+      "Citations not in local bibliography snapshot": "Citations not in local bibliography snapshot",
+      "Save as": "Save as",
+      "Cancel": "Cancel",
+      "Save": "Save",
+      "Path to Pandoc (optional)": "Path to Pandoc (optional)",
+      "Absolute path to the Pandoc executable. When set, Pandoc is used to convert .bib/.yaml files instead of the built-in parser. Leave blank to use the built-in parser (works on all platforms).": "Absolute path to the Pandoc executable. When set, Pandoc is used to convert .bib/.yaml files instead of the built-in parser. Leave blank to use the built-in parser (works on all platforms).",
+      "Auto-detect Pandoc": "Auto-detect Pandoc",
+      "Browse\u2026": "Browse\u2026",
+      "Search\u2026": "Search\u2026",
+      'The absolute path to your desired bibliography file. This can be overridden on a per-file basis by setting "bibliography" in the file\'s frontmatter.': `The absolute path to your desired bibliography file. This can be overridden on a per-file basis by setting "bibliography" in the file's frontmatter.`,
+      'Path to your bibliography file (.bib, .json, or .yaml). Can be vault-relative (e.g. references.bib) or absolute. Can be overridden per-note via the "bibliography" frontmatter key.': 'Path to your bibliography file (.bib, .json, or .yaml). Can be vault-relative (e.g. references.bib) or absolute. Can be overridden per-note via the "bibliography" frontmatter key.',
+      'Path to your bibliography file (.bib, .json, or .yaml). Vault-relative paths (e.g. references.bib) work on all platforms. Absolute paths work on desktop only. On blur, absolute paths inside the vault are automatically shortened to vault-relative. Can be overridden per-note via the "bibliography" frontmatter key.': 'Path to your bibliography file (.bib, .json, or .yaml). Vault-relative paths (e.g. references.bib) work on all platforms. Absolute paths work on desktop only. On blur, absolute paths inside the vault are automatically shortened to vault-relative. Can be overridden per-note via the "bibliography" frontmatter key.',
+      "Select a bibliography file.": "Select a bibliography file.",
+      "Custom citation style": "Custom citation style",
+      "Citation style": "Citation style",
+      "Citation style language": "Citation style language",
+      "Search...": "Search...",
+      'Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file\'s frontmatter. A URL can be supplied when setting the style via frontmatter.': `Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file's frontmatter. A URL can be supplied when setting the style via frontmatter.`,
+      'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key. A URL can be supplied when setting the style via frontmatter.': 'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key. A URL can be supplied when setting the style via frontmatter.',
+      'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key \u2014 a bare Zotero style name, a path, or a URL.': 'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key \u2014 a bare Zotero style name, a path, or a URL.',
+      "Zotero data folder": "Zotero data folder",
+      'Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note\'s "csl" frontmatter and to list styles for export.': `Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note's "csl" frontmatter and to list styles for export.`,
+      "Select a CSL file located on your computer": "Select a CSL file located on your computer",
+      "Fallback path to Pandoc": "Fallback path to Pandoc",
+      "The absolute path to the Pandoc executable. This plugin will attempt to locate pandoc for you and will use this path if it fails to do so. To find pandoc, use the output of 'which pandoc' in a terminal on Mac/Linux or 'Get-Command pandoc' in powershell on Windows.": "The absolute path to the Pandoc executable. This plugin will attempt to locate pandoc for you and will use this path if it fails to do so. To find pandoc, use the output of 'which pandoc' in a terminal on Mac/Linux or 'Get-Command pandoc' in powershell on Windows.",
+      "Attempt to find Pandoc automatically": "Attempt to find Pandoc automatically",
+      "Unable to find pandoc on your system. If it is installed, please manually enter a path.": "Unable to find pandoc on your system. If it is installed, please manually enter a path.",
+      "Hide links in references": "Hide links in references",
+      "Replace links with link icons to save space.": "Replace links with link icons to save space.",
+      "Show PDF links in references": "Show PDF links in references",
+      'Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.': 'Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.',
+      "Citation decoration": "Citation decoration",
+      "Highlight citation keys with colors and underlines in the editor. Colors and underline styles can be customized with the Style Settings plugin.": "Highlight citation keys with colors and underlines in the editor. Colors and underline styles can be customized with the Style Settings plugin.",
+      "Preview": "Preview",
+      "citation \xB7 wikilink citation \xB7 unresolved": "citation \xB7 wikilink citation \xB7 unresolved",
+      "Show citekey tooltips": "Show citekey tooltips",
+      "When enabled, hovering over citekeys will open a tooltip containing a formatted citation.": "When enabled, hovering over citekeys will open a tooltip containing a formatted citation.",
+      "Tooltip delay": "Tooltip delay",
+      "Set the amount of time (in milliseconds) to wait before displaying tooltips.": "Set the amount of time (in milliseconds) to wait before displaying tooltips.",
+      "Validate Pandoc configuration": "Validate Pandoc configuration",
+      Validate: "Validate",
+      "Validation successful": "Validation successful",
+      "Trigger reference search with [@ or [[@": "Trigger reference search with [@ or [[@",
+      "@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.": "@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.",
+      "Characters after @ before searching": "Characters after @ before searching",
+      "How many characters you type after @ or @@ before the search popup opens. 0 opens it immediately with your most recent references; 1 or 2 wait for that many characters. Raise it if the popup feels intrusive.": "How many characters you type after @ or @@ before the search popup opens. 0 opens it immediately with your most recent references; 1 or 2 wait for that many characters. Raise it if the popup feels intrusive.",
+      "0 \u2014 open immediately with recent references": "0 \u2014 open immediately with recent references",
+      "1 character": "1 character",
+      "2 characters": "2 characters",
+      "Pull bibliography from Zotero": "Pull bibliography from Zotero",
+      "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.": "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.",
+      "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file.": "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file.",
+      "Use native Zotero API (Zotero 7/8)": "Use native Zotero API (Zotero 7/8)",
+      "Query the standard Zotero local API directly using the native citationKey field introduced in Zotero 7/8. Better BibTeX is not required when this is enabled.": "Query the standard Zotero local API directly using the native citationKey field introduced in Zotero 7/8. Better BibTeX is not required when this is enabled.",
+      "Zotero port": "Zotero port",
+      "Use 24119 for Juris-M or specify a custom port if you have changed Zotero's default.": "Use 24119 for Juris-M or specify a custom port if you have changed Zotero's default.",
+      "Render live preview inline citations": "Render live preview inline citations",
+      "Render reading mode inline citations": "Render reading mode inline citations",
+      "Convert [@pandoc] citations to formatted inline citations in live preview mode.": "Convert [@pandoc] citations to formatted inline citations in live preview mode.",
+      "Convert [@pandoc] citations to formatted inline citations in reading mode.": "Convert [@pandoc] citations to formatted inline citations in reading mode.",
+      "Process citations in links": "Process citations in links",
+      "Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.": "Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.",
+      "Format link aliases as Pandoc citations": "Format link aliases as Pandoc citations",
+      'When enabled, aliased citation links like [[@key|see also @@, 6]] are parsed as Pandoc citations and rendered as [see also @key, 6] instead of a plain link label. Use @@ inside the alias as a shortcut for the link\'s own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. Requires "Process citations in links".': `When enabled, aliased citation links like [[@key|see also @@, 6]] are parsed as Pandoc citations and rendered as [see also @key, 6] instead of a plain link label. Use @@ inside the alias as a shortcut for the link's own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. Requires "Process citations in links".`,
+      "Link citations to literature notes": "Link citations to literature notes",
+      "Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.": "Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.",
+      "Please provide the path to Pandoc in the ScholarWeft plugin settings.": "Please provide the path to Pandoc in the ScholarWeft plugin settings.",
+      "Click to copy": "Click to copy",
+      "Click to jump to citation": "Click to jump to citation",
+      "Copy citekey": "Copy citekey",
+      "Copy reference": "Copy reference",
+      "Copy list": "Copy list",
+      "Unresolved citations": "Unresolved citations",
+      "No citations found in the current document.": "No citations found in the current document.",
+      References: "References",
+      'This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file\'s frontmatter. A language code must be used when setting the language via frontmatter.': `This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file's frontmatter. A language code must be used when setting the language via frontmatter.`,
+      "See here for a list of available language codes": "See here for a list of available language codes",
+      "Cannot connect to Zotero": "Cannot connect to Zotero",
+      "ZoteroConnectionHelp": "Check, in this order: (1) Zotero is running \u2014 ScholarWeft loads your library automatically once it starts, so no refresh is needed; (2) no OTHER vault is connected to Zotero \u2014 only one vault can connect at a time, so close any other vault or Obsidian window using it; (3) in Zotero, open Settings (macOS: Zotero \u2192 Settings\u2026; Windows/Linux: Edit \u2192 Settings\u2026), choose the Advanced tab, and turn ON \u201CAllow other applications on this computer to connect to Zotero\u201D. Click Retry when done. (If you would rather use a .bib file, turn Zotero off below.)",
+      "Start Zotero and try again.": "Start Zotero and try again.",
+      "Libraries to include in bibliography": "Libraries to include in bibliography",
+      "Please provide the path to your bibliography file in the ScholarWeft plugin settings.": "Please provide the path to your bibliography file in the ScholarWeft plugin settings.",
+      "Refresh bibliography": "Refresh bibliography",
+      "ScholarWeft settings": "ScholarWeft settings",
+      "Insert bibliography at cursor": "Insert bibliography at cursor",
+      "Sync literature note filenames to citekeys": "Sync literature note filenames to citekeys",
+      "Create literature notes for citations lacking notes (current note)": "Create literature notes for citations lacking notes (current note)",
+      "Create literature notes for citations lacking notes (vault)": "Create literature notes for citations lacking notes (vault)",
+      "No citation found for ": "No citation found for ",
+      "Mobile tap action": "Mobile tap action",
+      "What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.": "What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.",
+      "Show citation info": "Show citation info",
+      "Copy citation to clipboard": "Copy citation to clipboard",
+      "Open link (Zotero \u2192 PDF \u2192 URL)": "Open link (Zotero \u2192 PDF \u2192 URL)",
+      "Close": "Close",
+      "Show reference list": "Show reference list",
+      "Compile and export the current document (DOCX, ODT, PDF, LaTeX)": "Compile and export the current document (DOCX, ODT, PDF, LaTeX)",
+      "Open the note you want to export, then run this command again.": "Open the note you want to export, then run this command again.",
+      "Convert pandoc citations to linked citations (current note)": "Convert pandoc citations to linked citations (current note)",
+      "Review and update citekeys from Zotero": "Review and update citekeys from Zotero",
+      "List citekey discrepancies": "List citekey discrepancies",
+      "Convert pandoc citations to linked citations (vault)": "Convert pandoc citations to linked citations (vault)",
+      "Revert linked citations to pandoc-style citations (current note)": "Revert linked citations to pandoc-style citations (current note)",
+      "Revert linked citations to pandoc-style citations (vault)": "Revert linked citations to pandoc-style citations (vault)",
+      "Update unresolved citations": "Update unresolved citations",
+      "Open literature note": "Open literature note",
+      "Create literature note": "Create literature note",
+      "Literature notes folder": "Literature notes folder",
+      'Folder where the plugin\'s own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.': `Folder where the plugin's own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.`,
+      "Create literature notes with ZotLit": "Create literature notes with ZotLit",
+      "Install and use ScholarWeft's ZotLit import templates": "Install and use ScholarWeft's ZotLit import templates",
+      "Install templates": "Install templates",
+      'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.': `Copies ScholarWeft's ZotLit templates into "sw-zotlit-templates/" and points ZotLit's "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.`,
+      "When ZotLit is available, the tooltip's \"Create literature note\" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.": `When ZotLit is available, the tooltip's "Create literature note" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.`,
+      "Use ScholarWeft's own note template": "Use ScholarWeft's own note template",
+      "Use the default template": "Use the default template",
+      "Render notes with ScholarWeft's bundled literature-note template. Turn this off to render with a template of your own instead.": "Render notes with ScholarWeft's bundled literature-note template. Turn this off to render with a template of your own instead.",
+      "Template file": "Template file",
+      "Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.": "Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.",
+      "Search note templates\u2026": "Search note templates\u2026",
+      "Copy the default template to your vault": "Copy the default template to your vault",
+      "Write a copy of ScholarWeft's bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates.": "Write a copy of ScholarWeft's bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates.",
+      "Copy template": "Copy template",
+      "Choose a folder\u2026": "Choose a folder\u2026",
+      "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.": "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
+      "Child-note heading level": "Child-note heading level",
+      "Update literature notes automatically": "Update literature notes automatically",
+      "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.": "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.",
+      "Update literature notes automatically?": "Update literature notes automatically?",
+      "ScholarWeft can update a literature note automatically whenever its Zotero item changes \u2014 its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.": "ScholarWeft can update a literature note automatically whenever its Zotero item changes \u2014 its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.",
+      Yes: "Yes",
+      No: "No",
+      'Heading level (1\u20136) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.': `Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`,
+      "Open in Zotero": "Open in Zotero",
+      "Filter references\u2026": "Filter references\u2026",
+      "Addons for displaying and linking notes": "Addons for displaying and linking notes",
+      "Optional add-ons: the basic note template for new notes, and YAML property formatting.": "Optional add-ons: the basic note template for new notes, and YAML property formatting.",
+      "Optional add-ons that help your notes display and link consistently. Neither needs an external tool.": "Optional add-ons that help your notes display and link consistently. Neither needs an external tool.",
+      "Format YAML properties": "Format YAML properties",
+      "Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.": "Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.",
+      "Title background": "Title background",
+      "Colour behind the title and short-title property values.": "Colour behind the title and short-title property values.",
+      "Title size": "Title size",
+      "Font size of the title property value, in rem (1rem = the body text size).": "Font size of the title property value, in rem (1rem = the body text size).",
+      "Path to Python 3 (for Document Compiler)": "Path to Python 3 (for Document Compiler)",
+      'Absolute path to the python3 interpreter used by the "Compile outline\u2026" and "Compile + export to docx" commands. Leave blank to auto-detect (python3 on PATH, then common install locations).': 'Absolute path to the python3 interpreter used by the "Compile outline\u2026" and "Compile + export to docx" commands. Leave blank to auto-detect (python3 on PATH, then common install locations).',
+      "Docx export templates directory (optional)": "Docx export templates directory (optional)",
+      "Directory of your .docx export templates. Vault-relative (e.g. Export Templates) or absolute. Leave blank to use <vault>/Export Templates/, then the templates bundled with the plugin.": "Directory of your .docx export templates. Vault-relative (e.g. Export Templates) or absolute. Leave blank to use <vault>/Export Templates/, then the templates bundled with the plugin.",
+      "Default output folder for compiled/exported documents (optional)": "Default output folder for compiled/exported documents (optional)",
+      'Vault-relative folder where "Compile and export the current document" puts the compiled markdown and export. Leave blank to use the source file\'s own folder. Can be changed per-export in the modal.': `Vault-relative folder where "Compile and export the current document" puts the compiled markdown and export. Leave blank to use the source file's own folder. Can be changed per-export in the modal.`,
+      "This entry exists in both your .bib file and Zotero. Zotero data is shown.": "This entry exists in both your .bib file and Zotero. Zotero data is shown."
+    };
+  }
+});
+
+// src/lang/helpers.ts
+function t(key) {
+  var _a;
+  return (_a = locale[key]) != null ? _a : key;
+}
+var locale;
+var init_helpers = __esm({
+  "src/lang/helpers.ts"() {
+    init_en();
+    locale = en_default;
+  }
+});
+
 // node_modules/lodash.merge/index.js
 var require_lodash = __commonJS({
   "node_modules/lodash.merge/index.js"(exports, module2) {
@@ -20860,12 +21043,56 @@ var init_formatChangeModal = __esm({
   }
 });
 
+// src/modals/autoUpdateConsentModal.ts
+var autoUpdateConsentModal_exports = {};
+__export(autoUpdateConsentModal_exports, {
+  AutoUpdateConsentModal: () => AutoUpdateConsentModal
+});
+var import_obsidian38, AutoUpdateConsentModal;
+var init_autoUpdateConsentModal = __esm({
+  "src/modals/autoUpdateConsentModal.ts"() {
+    import_obsidian38 = __toModule(require("obsidian"));
+    init_helpers();
+    AutoUpdateConsentModal = class extends import_obsidian38.Modal {
+      constructor(app2, onChoose) {
+        super(app2);
+        this.onChoose = onChoose;
+        this.answered = false;
+      }
+      onOpen() {
+        const { contentEl } = this;
+        contentEl.createEl("h3", {
+          text: t("Update literature notes automatically?")
+        });
+        contentEl.createEl("p", {
+          text: t("ScholarWeft can update a literature note automatically whenever its Zotero item changes \u2014 its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.")
+        });
+        new import_obsidian38.Setting(contentEl).addButton((b3) => b3.setButtonText(t("Yes")).setCta().onClick(() => this.choose(true))).addButton((b3) => b3.setButtonText(t("No")).onClick(() => this.choose(false)));
+      }
+      choose(yes) {
+        if (this.answered)
+          return;
+        this.answered = true;
+        this.close();
+        this.onChoose(yes);
+      }
+      onClose() {
+        this.contentEl.empty();
+        if (!this.answered) {
+          this.answered = true;
+          this.onChoose(false);
+        }
+      }
+    };
+  }
+});
+
 // src/main.ts
 __export(exports, {
   default: () => ReferenceList
 });
 var import_state2 = __toModule(require("@codemirror/state"));
-var import_obsidian38 = __toModule(require("obsidian"));
+var import_obsidian39 = __toModule(require("obsidian"));
 
 // src/editorExtension.ts
 var import_language = __toModule(require("@codemirror/language"));
@@ -27306,173 +27533,8 @@ function cslToBibTeX(entries) {
   return entries.map(entryToBibTeX).join("\n\n") + "\n";
 }
 
-// src/lang/locale/en.ts
-var en_default = {
-  "Path to bibliography file": "Path to bibliography file",
-  "Bibliography files": "Bibliography files",
-  'One or more bibliography files (.bib, .json, or .yaml). Vault-relative paths work on all platforms; absolute paths work on desktop only. All files are merged \u2014 Zotero wins on conflict. Can be overridden per-note via the "bibliography" frontmatter key.': 'One or more bibliography files (.bib, .json, or .yaml). Vault-relative paths work on all platforms; absolute paths work on desktop only. All files are merged \u2014 Zotero wins on conflict. Can be overridden per-note via the "bibliography" frontmatter key.',
-  "Add file": "Add file",
-  "Remove": "Remove",
-  "Prioritize citation completion": "Prioritize citation completion",
-  'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.': `Use this plugin's citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin's suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian's link search can't see unimported references.`,
-  'Move the citation autocomplete suggester to the front of Obsidian\'s internal queue so it wins when multiple plugins respond to "@". Disable this if another plugin\'s "@" completions stop working.': `Move the citation autocomplete suggester to the front of Obsidian's internal queue so it wins when multiple plugins respond to "@". Disable this if another plugin's "@" completions stop working.`,
-  "Save bibliography snapshot": "Save bibliography snapshot",
-  "Save bibliography snapshot for this note": "Save bibliography snapshot for this note",
-  "Citations not in local bibliography snapshot": "Citations not in local bibliography snapshot",
-  "Save as": "Save as",
-  "Cancel": "Cancel",
-  "Save": "Save",
-  "Path to Pandoc (optional)": "Path to Pandoc (optional)",
-  "Absolute path to the Pandoc executable. When set, Pandoc is used to convert .bib/.yaml files instead of the built-in parser. Leave blank to use the built-in parser (works on all platforms).": "Absolute path to the Pandoc executable. When set, Pandoc is used to convert .bib/.yaml files instead of the built-in parser. Leave blank to use the built-in parser (works on all platforms).",
-  "Auto-detect Pandoc": "Auto-detect Pandoc",
-  "Browse\u2026": "Browse\u2026",
-  "Search\u2026": "Search\u2026",
-  'The absolute path to your desired bibliography file. This can be overridden on a per-file basis by setting "bibliography" in the file\'s frontmatter.': `The absolute path to your desired bibliography file. This can be overridden on a per-file basis by setting "bibliography" in the file's frontmatter.`,
-  'Path to your bibliography file (.bib, .json, or .yaml). Can be vault-relative (e.g. references.bib) or absolute. Can be overridden per-note via the "bibliography" frontmatter key.': 'Path to your bibliography file (.bib, .json, or .yaml). Can be vault-relative (e.g. references.bib) or absolute. Can be overridden per-note via the "bibliography" frontmatter key.',
-  'Path to your bibliography file (.bib, .json, or .yaml). Vault-relative paths (e.g. references.bib) work on all platforms. Absolute paths work on desktop only. On blur, absolute paths inside the vault are automatically shortened to vault-relative. Can be overridden per-note via the "bibliography" frontmatter key.': 'Path to your bibliography file (.bib, .json, or .yaml). Vault-relative paths (e.g. references.bib) work on all platforms. Absolute paths work on desktop only. On blur, absolute paths inside the vault are automatically shortened to vault-relative. Can be overridden per-note via the "bibliography" frontmatter key.',
-  "Select a bibliography file.": "Select a bibliography file.",
-  "Custom citation style": "Custom citation style",
-  "Citation style": "Citation style",
-  "Citation style language": "Citation style language",
-  "Search...": "Search...",
-  'Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file\'s frontmatter. A URL can be supplied when setting the style via frontmatter.': `Path to a CSL file. This can be an absolute path or one relative to your vault. This will override the style selected above. This can be overridden on a per-file basis by setting "csl" or "citation-style" in the file's frontmatter. A URL can be supplied when setting the style via frontmatter.`,
-  'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key. A URL can be supplied when setting the style via frontmatter.': 'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key. A URL can be supplied when setting the style via frontmatter.',
-  'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key \u2014 a bare Zotero style name, a path, or a URL.': 'Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key \u2014 a bare Zotero style name, a path, or a URL.',
-  "Zotero data folder": "Zotero data folder",
-  'Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note\'s "csl" frontmatter and to list styles for export.': `Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note's "csl" frontmatter and to list styles for export.`,
-  "Select a CSL file located on your computer": "Select a CSL file located on your computer",
-  "Fallback path to Pandoc": "Fallback path to Pandoc",
-  "The absolute path to the Pandoc executable. This plugin will attempt to locate pandoc for you and will use this path if it fails to do so. To find pandoc, use the output of 'which pandoc' in a terminal on Mac/Linux or 'Get-Command pandoc' in powershell on Windows.": "The absolute path to the Pandoc executable. This plugin will attempt to locate pandoc for you and will use this path if it fails to do so. To find pandoc, use the output of 'which pandoc' in a terminal on Mac/Linux or 'Get-Command pandoc' in powershell on Windows.",
-  "Attempt to find Pandoc automatically": "Attempt to find Pandoc automatically",
-  "Unable to find pandoc on your system. If it is installed, please manually enter a path.": "Unable to find pandoc on your system. If it is installed, please manually enter a path.",
-  "Hide links in references": "Hide links in references",
-  "Replace links with link icons to save space.": "Replace links with link icons to save space.",
-  "Show PDF links in references": "Show PDF links in references",
-  'Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.': 'Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.',
-  "Citation decoration": "Citation decoration",
-  "Highlight citation keys with colors and underlines in the editor. Colors and underline styles can be customized with the Style Settings plugin.": "Highlight citation keys with colors and underlines in the editor. Colors and underline styles can be customized with the Style Settings plugin.",
-  "Preview": "Preview",
-  "citation \xB7 wikilink citation \xB7 unresolved": "citation \xB7 wikilink citation \xB7 unresolved",
-  "Show citekey tooltips": "Show citekey tooltips",
-  "When enabled, hovering over citekeys will open a tooltip containing a formatted citation.": "When enabled, hovering over citekeys will open a tooltip containing a formatted citation.",
-  "Tooltip delay": "Tooltip delay",
-  "Set the amount of time (in milliseconds) to wait before displaying tooltips.": "Set the amount of time (in milliseconds) to wait before displaying tooltips.",
-  "Validate Pandoc configuration": "Validate Pandoc configuration",
-  Validate: "Validate",
-  "Validation successful": "Validation successful",
-  "Trigger reference search with [@ or [[@": "Trigger reference search with [@ or [[@",
-  "@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.": "@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.",
-  "Characters after @ before searching": "Characters after @ before searching",
-  "How many characters you type after @ or @@ before the search popup opens. 0 opens it immediately with your most recent references; 1 or 2 wait for that many characters. Raise it if the popup feels intrusive.": "How many characters you type after @ or @@ before the search popup opens. 0 opens it immediately with your most recent references; 1 or 2 wait for that many characters. Raise it if the popup feels intrusive.",
-  "0 \u2014 open immediately with recent references": "0 \u2014 open immediately with recent references",
-  "1 character": "1 character",
-  "2 characters": "2 characters",
-  "Pull bibliography from Zotero": "Pull bibliography from Zotero",
-  "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.": "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.",
-  "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file.": "When enabled, bibliography data will be pulled from Zotero rather than a bibliography file.",
-  "Use native Zotero API (Zotero 7/8)": "Use native Zotero API (Zotero 7/8)",
-  "Query the standard Zotero local API directly using the native citationKey field introduced in Zotero 7/8. Better BibTeX is not required when this is enabled.": "Query the standard Zotero local API directly using the native citationKey field introduced in Zotero 7/8. Better BibTeX is not required when this is enabled.",
-  "Zotero port": "Zotero port",
-  "Use 24119 for Juris-M or specify a custom port if you have changed Zotero's default.": "Use 24119 for Juris-M or specify a custom port if you have changed Zotero's default.",
-  "Render live preview inline citations": "Render live preview inline citations",
-  "Render reading mode inline citations": "Render reading mode inline citations",
-  "Convert [@pandoc] citations to formatted inline citations in live preview mode.": "Convert [@pandoc] citations to formatted inline citations in live preview mode.",
-  "Convert [@pandoc] citations to formatted inline citations in reading mode.": "Convert [@pandoc] citations to formatted inline citations in reading mode.",
-  "Process citations in links": "Process citations in links",
-  "Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.": "Include [[@pandoc]] citations in the reference list and format them as inline citations in live preview mode.",
-  "Format link aliases as Pandoc citations": "Format link aliases as Pandoc citations",
-  'When enabled, aliased citation links like [[@key|see also @@, 6]] are parsed as Pandoc citations and rendered as [see also @key, 6] instead of a plain link label. Use @@ inside the alias as a shortcut for the link\'s own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. Requires "Process citations in links".': `When enabled, aliased citation links like [[@key|see also @@, 6]] are parsed as Pandoc citations and rendered as [see also @key, 6] instead of a plain link label. Use @@ inside the alias as a shortcut for the link's own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. Requires "Process citations in links".`,
-  "Link citations to literature notes": "Link citations to literature notes",
-  "Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.": "Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.",
-  "Please provide the path to Pandoc in the ScholarWeft plugin settings.": "Please provide the path to Pandoc in the ScholarWeft plugin settings.",
-  "Click to copy": "Click to copy",
-  "Click to jump to citation": "Click to jump to citation",
-  "Copy citekey": "Copy citekey",
-  "Copy reference": "Copy reference",
-  "Copy list": "Copy list",
-  "Unresolved citations": "Unresolved citations",
-  "No citations found in the current document.": "No citations found in the current document.",
-  References: "References",
-  'This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file\'s frontmatter. A language code must be used when setting the language via frontmatter.': `This can be overridden on a per-file basis by setting "lang" or "citation-language" in the file's frontmatter. A language code must be used when setting the language via frontmatter.`,
-  "See here for a list of available language codes": "See here for a list of available language codes",
-  "Cannot connect to Zotero": "Cannot connect to Zotero",
-  "ZoteroConnectionHelp": "Check, in this order: (1) Zotero is running \u2014 ScholarWeft loads your library automatically once it starts, so no refresh is needed; (2) no OTHER vault is connected to Zotero \u2014 only one vault can connect at a time, so close any other vault or Obsidian window using it; (3) in Zotero, open Settings (macOS: Zotero \u2192 Settings\u2026; Windows/Linux: Edit \u2192 Settings\u2026), choose the Advanced tab, and turn ON \u201CAllow other applications on this computer to connect to Zotero\u201D. Click Retry when done. (If you would rather use a .bib file, turn Zotero off below.)",
-  "Start Zotero and try again.": "Start Zotero and try again.",
-  "Libraries to include in bibliography": "Libraries to include in bibliography",
-  "Please provide the path to your bibliography file in the ScholarWeft plugin settings.": "Please provide the path to your bibliography file in the ScholarWeft plugin settings.",
-  "Refresh bibliography": "Refresh bibliography",
-  "ScholarWeft settings": "ScholarWeft settings",
-  "Insert bibliography at cursor": "Insert bibliography at cursor",
-  "Sync literature note filenames to citekeys": "Sync literature note filenames to citekeys",
-  "Create literature notes for citations lacking notes (current note)": "Create literature notes for citations lacking notes (current note)",
-  "Create literature notes for citations lacking notes (vault)": "Create literature notes for citations lacking notes (vault)",
-  "No citation found for ": "No citation found for ",
-  "Mobile tap action": "Mobile tap action",
-  "What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.": "What happens when you tap a citation on mobile. On desktop, hover tooltips are used instead.",
-  "Show citation info": "Show citation info",
-  "Copy citation to clipboard": "Copy citation to clipboard",
-  "Open link (Zotero \u2192 PDF \u2192 URL)": "Open link (Zotero \u2192 PDF \u2192 URL)",
-  "Close": "Close",
-  "Show reference list": "Show reference list",
-  "Compile and export the current document (DOCX, ODT, PDF, LaTeX)": "Compile and export the current document (DOCX, ODT, PDF, LaTeX)",
-  "Open the note you want to export, then run this command again.": "Open the note you want to export, then run this command again.",
-  "Convert pandoc citations to linked citations (current note)": "Convert pandoc citations to linked citations (current note)",
-  "Review and update citekeys from Zotero": "Review and update citekeys from Zotero",
-  "List citekey discrepancies": "List citekey discrepancies",
-  "Convert pandoc citations to linked citations (vault)": "Convert pandoc citations to linked citations (vault)",
-  "Revert linked citations to pandoc-style citations (current note)": "Revert linked citations to pandoc-style citations (current note)",
-  "Revert linked citations to pandoc-style citations (vault)": "Revert linked citations to pandoc-style citations (vault)",
-  "Update unresolved citations": "Update unresolved citations",
-  "Open literature note": "Open literature note",
-  "Create literature note": "Create literature note",
-  "Literature notes folder": "Literature notes folder",
-  'Folder where the plugin\'s own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.': `Folder where the plugin's own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.`,
-  "Create literature notes with ZotLit": "Create literature notes with ZotLit",
-  "Install and use ScholarWeft's ZotLit import templates": "Install and use ScholarWeft's ZotLit import templates",
-  "Install templates": "Install templates",
-  'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.': `Copies ScholarWeft's ZotLit templates into "sw-zotlit-templates/" and points ZotLit's "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.`,
-  "When ZotLit is available, the tooltip's \"Create literature note\" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.": `When ZotLit is available, the tooltip's "Create literature note" button creates the note with ZotLit's templates instead of the plugin's basic template. Falls back to the plugin template when ZotLit is absent or this is off.`,
-  "Use ScholarWeft's own note template": "Use ScholarWeft's own note template",
-  "Use the default template": "Use the default template",
-  "Render notes with ScholarWeft's bundled literature-note template. Turn this off to render with a template of your own instead.": "Render notes with ScholarWeft's bundled literature-note template. Turn this off to render with a template of your own instead.",
-  "Template file": "Template file",
-  "Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.": "Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.",
-  "Search note templates\u2026": "Search note templates\u2026",
-  "Copy the default template to your vault": "Copy the default template to your vault",
-  "Write a copy of ScholarWeft's bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates.": "Write a copy of ScholarWeft's bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates.",
-  "Copy template": "Copy template",
-  "Choose a folder\u2026": "Choose a folder\u2026",
-  "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.": "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
-  "Child-note heading level": "Child-note heading level",
-  "Update literature notes automatically": "Update literature notes automatically",
-  "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.": "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.",
-  'Heading level (1\u20136) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.': `Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`,
-  "Open in Zotero": "Open in Zotero",
-  "Filter references\u2026": "Filter references\u2026",
-  "Addons for displaying and linking notes": "Addons for displaying and linking notes",
-  "Optional add-ons: the basic note template for new notes, and YAML property formatting.": "Optional add-ons: the basic note template for new notes, and YAML property formatting.",
-  "Optional add-ons that help your notes display and link consistently. Neither needs an external tool.": "Optional add-ons that help your notes display and link consistently. Neither needs an external tool.",
-  "Format YAML properties": "Format YAML properties",
-  "Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.": "Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.",
-  "Title background": "Title background",
-  "Colour behind the title and short-title property values.": "Colour behind the title and short-title property values.",
-  "Title size": "Title size",
-  "Font size of the title property value, in rem (1rem = the body text size).": "Font size of the title property value, in rem (1rem = the body text size).",
-  "Path to Python 3 (for Document Compiler)": "Path to Python 3 (for Document Compiler)",
-  'Absolute path to the python3 interpreter used by the "Compile outline\u2026" and "Compile + export to docx" commands. Leave blank to auto-detect (python3 on PATH, then common install locations).': 'Absolute path to the python3 interpreter used by the "Compile outline\u2026" and "Compile + export to docx" commands. Leave blank to auto-detect (python3 on PATH, then common install locations).',
-  "Docx export templates directory (optional)": "Docx export templates directory (optional)",
-  "Directory of your .docx export templates. Vault-relative (e.g. Export Templates) or absolute. Leave blank to use <vault>/Export Templates/, then the templates bundled with the plugin.": "Directory of your .docx export templates. Vault-relative (e.g. Export Templates) or absolute. Leave blank to use <vault>/Export Templates/, then the templates bundled with the plugin.",
-  "Default output folder for compiled/exported documents (optional)": "Default output folder for compiled/exported documents (optional)",
-  'Vault-relative folder where "Compile and export the current document" puts the compiled markdown and export. Leave blank to use the source file\'s own folder. Can be changed per-export in the modal.': `Vault-relative folder where "Compile and export the current document" puts the compiled markdown and export. Leave blank to use the source file's own folder. Can be changed per-export in the modal.`,
-  "This entry exists in both your .bib file and Zotero. Zotero data is shown.": "This entry exists in both your .bib file and Zotero. Zotero data is shown."
-};
-
-// src/lang/helpers.ts
-var locale = en_default;
-function t(key) {
-  var _a;
-  return (_a = locale[key]) != null ? _a : key;
-}
+// src/main.ts
+init_helpers();
 
 // src/markdownPostprocessor.ts
 var import_obsidian3 = __toModule(require("obsidian"));
@@ -28067,6 +28129,7 @@ function processCiteKeys(plugin) {
 
 // src/settings.tsx
 var import_obsidian23 = __toModule(require("obsidian"));
+init_helpers();
 
 // src/bib/pandoc.ts
 var import_obsidian4 = __toModule(require("obsidian"));
@@ -86218,6 +86281,7 @@ var import_obsidian10 = __toModule(require("obsidian"));
 
 // src/modals/templaterRuleModal.ts
 var import_obsidian9 = __toModule(require("obsidian"));
+init_helpers();
 var TemplaterRuleModal = class extends import_obsidian9.Modal {
   constructor(app2, existing, ours, decide) {
     super(app2);
@@ -87773,6 +87837,7 @@ var NoteTemplateSuggest = class extends import_obsidian14.AbstractInputSuggest {
 };
 
 // src/settings/ZoteroPullSetting.tsx
+init_helpers();
 function validateGroups(plugin, groups) {
   const validated = [];
   plugin.settings.zoteroGroups.forEach((g4) => {
@@ -91369,8 +91434,6 @@ var DEFAULT_SETTINGS = {
   ownNoteNotesHeadingLevel: 3,
   ownNoteImageFolder: "Attachments",
   ownNoteZotLitHandling: "ask",
-  autoUpdateNotes: true,
-  autoUpdateNotified: false,
   literatureNoteFolder: DEFAULT_LITERATURE_NOTE_FOLDER,
   yamlFormattingEnabled: false,
   yamlTitleBackground: DEFAULT_YAML_TITLE_BACKGROUND,
@@ -91937,10 +92000,23 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
           this.plugin.saveSettings();
         });
       });
-      new import_obsidian23.Setting(containerEl).setName(t("Update literature notes automatically")).setDesc(t("When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). The first automatic update offers a one-click opt-out.")).addToggle((toggle) => toggle.setValue(this.plugin.settings.autoUpdateNotes !== false).onChange((value) => {
-        this.plugin.settings.autoUpdateNotes = value;
-        this.plugin.saveSettings();
-      }));
+      new import_obsidian23.Setting(containerEl).setName(t("Update literature notes automatically")).setDesc(t("When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.")).then((setting) => {
+        const makeRadio = (label, value) => {
+          const wrap = setting.controlEl.createEl("label", {
+            cls: "sw-auto-update-radio"
+          });
+          const input = wrap.createEl("input", { type: "radio" });
+          input.name = "sw-auto-update";
+          input.checked = this.plugin.settings.autoUpdateNotes === value;
+          input.addEventListener("change", () => {
+            this.plugin.settings.autoUpdateNotes = value;
+            this.plugin.saveSettings();
+          });
+          wrap.appendText(" " + label);
+        };
+        makeRadio(t("Yes"), true);
+        makeRadio(t("No"), false);
+      });
       new import_obsidian23.Setting(containerEl).setName(t("Child-note heading level")).setDesc(t(`Heading level (1\u20136) that an inlined Zotero child note's own top heading is shifted to. 3 puts it one level below the "## Notes" heading.`)).addSlider((slider) => {
         var _a;
         return slider.setLimits(1, 6, 1).setValue((_a = this.plugin.settings.ownNoteNotesHeadingLevel) != null ? _a : 3).setDynamicTooltip().onChange((value) => {
@@ -92349,6 +92425,7 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
 
 // src/tooltip.ts
 var import_obsidian24 = __toModule(require("obsidian"));
+init_helpers();
 var import_text_clipper = __toModule(require_dist());
 var TooltipManager = class {
   constructor(plugin) {
@@ -92730,6 +92807,7 @@ var TooltipManager = class {
 
 // src/view.ts
 var import_obsidian25 = __toModule(require("obsidian"));
+init_helpers();
 var viewType = "scholar-weft-reference-list";
 var ReferenceListView = class extends import_obsidian25.ItemView {
   constructor(leaf, plugin) {
@@ -95192,6 +95270,7 @@ function reconcileKeys(list, live, renames = new Map()) {
 
 // src/bib/bibManager.ts
 var import_fast_deep_equal3 = __toModule(require_fast_deep_equal());
+init_helpers();
 var normalizeDiacritics = (s3) => s3.normalize("NFD").replace(/\p{Mn}/gu, "");
 function cslEntryHtmlToMarkdown(html) {
   let s3 = html.trim();
@@ -101022,7 +101101,7 @@ function looksLikeReferenceListPlugin(id, name) {
 }
 var bibliographyExtensions = new Set(["bib", "json", "yaml", "yml"]);
 function isBibliographyFile(file) {
-  return file instanceof import_obsidian38.TFile && bibliographyExtensions.has(file.extension);
+  return file instanceof import_obsidian39.TFile && bibliographyExtensions.has(file.extension);
 }
 function posixDirname(p4) {
   const idx = p4.lastIndexOf("/");
@@ -101048,9 +101127,9 @@ function getFileRelativePath(sourceFile, targetPath) {
 function bibliographyMatchesPath(sourceFile, bibliography, targetPath) {
   var _a, _b, _c;
   const sourceDir = posixDirname(sourceFile.path);
-  const normalizedBibliography = (0, import_obsidian38.normalizePath)(bibliography);
-  const noteRelativePath = (0, import_obsidian38.normalizePath)(`${sourceDir}/${normalizedBibliography}`);
-  const vaultRelativePath = (0, import_obsidian38.normalizePath)(normalizedBibliography);
+  const normalizedBibliography = (0, import_obsidian39.normalizePath)(bibliography);
+  const noteRelativePath = (0, import_obsidian39.normalizePath)(`${sourceDir}/${normalizedBibliography}`);
+  const vaultRelativePath = (0, import_obsidian39.normalizePath)(normalizedBibliography);
   if (noteRelativePath === targetPath || vaultRelativePath === targetPath) {
     return true;
   }
@@ -101079,7 +101158,7 @@ function updateBibliographyPath(sourceFile, bibliography, oldPath, newPath) {
   }
   return getUpdatedPath(bibliography);
 }
-var ReferenceList = class extends import_obsidian38.Plugin {
+var ReferenceList = class extends import_obsidian39.Plugin {
   constructor() {
     super(...arguments);
     this.cacheDir = SW_CACHE_DIR;
@@ -101090,16 +101169,17 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     this._pendingAutoUpdate = new Set();
     this._autoUpdateTimer = null;
     this._autoUpdateRunning = false;
+    this._autoUpdatePrompting = false;
     this.suggestPosition = null;
-    this.persistCitedKeysIndex = (0, import_obsidian38.debounce)(async () => {
+    this.persistCitedKeysIndex = (0, import_obsidian39.debounce)(async () => {
       if (!this.bibManager.citedKeysIndexDirty)
         return;
       if (this.bibManager.indexMdCount <= 0)
         return;
       try {
-        const path2 = (0, import_obsidian38.normalizePath)(`${this.cacheDir}/cited-keys.json`);
-        if (!await this.app.vault.adapter.exists((0, import_obsidian38.normalizePath)(this.cacheDir))) {
-          await this.app.vault.adapter.mkdir((0, import_obsidian38.normalizePath)(this.cacheDir));
+        const path2 = (0, import_obsidian39.normalizePath)(`${this.cacheDir}/cited-keys.json`);
+        if (!await this.app.vault.adapter.exists((0, import_obsidian39.normalizePath)(this.cacheDir))) {
+          await this.app.vault.adapter.mkdir((0, import_obsidian39.normalizePath)(this.cacheDir));
         }
         await this.app.vault.adapter.write(path2, JSON.stringify(this.bibManager.serializeCitedKeysIndex()));
         this.bibManager.citedKeysIndexDirty = false;
@@ -101107,27 +101187,27 @@ var ReferenceList = class extends import_obsidian38.Plugin {
         console.warn("[lc] persistCitedKeysIndex: error", e3);
       }
     }, 2e3);
-    this.persistRenderedCache = (0, import_obsidian38.debounce)(async () => {
+    this.persistRenderedCache = (0, import_obsidian39.debounce)(async () => {
       await this.bibManager.saveRenderedCache();
     }, 3e3);
     this._lastRefocusRefreshAt = 0;
     this._lastAwayAt = 0;
     this._relatedMigration = parseMigrationState(null);
-    this.persistRelatedMigration = (0, import_obsidian38.debounce)(async () => {
+    this.persistRelatedMigration = (0, import_obsidian39.debounce)(async () => {
       try {
-        const dir = (0, import_obsidian38.normalizePath)(this.cacheDir);
+        const dir = (0, import_obsidian39.normalizePath)(this.cacheDir);
         if (!await this.app.vault.adapter.exists(dir)) {
           await this.app.vault.adapter.mkdir(dir);
         }
-        await this.app.vault.adapter.write((0, import_obsidian38.normalizePath)(`${this.cacheDir}/related-migrated.json`), serializeMigrationState(this._relatedMigration));
+        await this.app.vault.adapter.write((0, import_obsidian39.normalizePath)(`${this.cacheDir}/related-migrated.json`), serializeMigrationState(this._relatedMigration));
       } catch (e3) {
         console.warn("[sw:import] could not persist related-migration state", e3);
       }
     }, 2e3);
-    this.persistZLinks = (0, import_obsidian38.debounce)(async () => {
+    this.persistZLinks = (0, import_obsidian39.debounce)(async () => {
       await this.bibManager.saveZLinks();
     }, 5e3);
-    this.emitSettingsUpdate = (0, import_obsidian38.debounce)((cb) => {
+    this.emitSettingsUpdate = (0, import_obsidian39.debounce)((cb) => {
       var _a;
       if (this.initPromise.settled) {
         (_a = this.view) == null ? void 0 : _a.contentEl.toggleClass("collapsed-links", !!this.settings.hideLinks);
@@ -101141,7 +101221,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       const run = ++this.processReferencesRun;
       const isCurrent = () => run === this.processReferencesRun;
       const { settings, view } = this;
-      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
       const scopedSettings = activeView ? getScopedSettings(activeView.file) : null;
       if (!((_a = settings.bibliographyPaths) == null ? void 0 : _a.length) && !settings.pullFromZotero && !((_b = scopedSettings == null ? void 0 : scopedSettings.bibliography) == null ? void 0 : _b.length)) {
         return view == null ? void 0 : view.setMessage(t("Please provide the path to your bibliography file in the ScholarWeft plugin settings."));
@@ -101177,8 +101257,8 @@ var ReferenceList = class extends import_obsidian38.Plugin {
   }
   async migrateCacheDir() {
     const adapter = this.app.vault.adapter;
-    const next = (0, import_obsidian38.normalizePath)(SW_CACHE_DIR);
-    const prev = (0, import_obsidian38.normalizePath)(SW_CACHE_DIR_LEGACY);
+    const next = (0, import_obsidian39.normalizePath)(SW_CACHE_DIR);
+    const prev = (0, import_obsidian39.normalizePath)(SW_CACHE_DIR_LEGACY);
     try {
       if (await adapter.exists(next))
         return;
@@ -101210,7 +101290,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     } else {
       this.registerView(dataExplorerViewType, (leaf) => new DataExplorerView(leaf, this));
     }
-    this.emitter = new import_obsidian38.Events();
+    this.emitter = new import_obsidian39.Events();
     this.bibManager = new BibManager(this);
     if (this._pendingCitedKeysIndex) {
       this.bibManager.deserializeCitedKeysIndex(this._pendingCitedKeysIndex);
@@ -101238,7 +101318,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       const { settings, bibManager } = this;
       debugLog("[sw:main] initPromise.then fired \u2014 starting bib load");
       const hasSources = ((_b = (_a2 = settings.bibliographyPaths) == null ? void 0 : _a2.length) != null ? _b : 0) > 0 || settings.pullFromZotero;
-      const loadNotice = hasSources ? new import_obsidian38.Notice("ScholarWeft: preparing your references\u2026", 0) : null;
+      const loadNotice = hasSources ? new import_obsidian39.Notice("ScholarWeft: preparing your references\u2026", 0) : null;
       const setNotice = (msg) => {
         try {
           loadNotice == null ? void 0 : loadNotice.setMessage(`ScholarWeft: ${msg}`);
@@ -101366,7 +101446,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
         const entries = cache2.bib.findAll(".csl-entry");
         if (!entries.length)
           return;
-        const text = entries.map((e3) => (0, import_obsidian38.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
+        const text = entries.map((e3) => (0, import_obsidian39.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
         editor.replaceSelection(text);
       }
     });
@@ -101374,7 +101454,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       id: "snapshot-bibliography",
       name: t("Save bibliography snapshot for this note"),
       checkCallback: (checking) => {
-        const view = this.app.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+        const view = this.app.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
         if (!(view == null ? void 0 : view.file))
           return false;
         const entries = this.bibManager.snapshotEntries(view.file);
@@ -101390,10 +101470,10 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       name: t("Create literature notes for citations lacking notes (current note)"),
       callback: async () => {
         var _a2;
-        const view = this.app.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+        const view = this.app.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
         if (!(view == null ? void 0 : view.file))
           return;
-        const progress = new import_obsidian38.Notice("Creating literature notes\u2026", 0);
+        const progress = new import_obsidian39.Notice("Creating literature notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes({ file: view.file }, (done, total) => {
           var _a3;
@@ -101402,7 +101482,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
         progress.hide();
         await this.fillZoteroNotesForCitekeys(missingKeys, view.file);
         this.processReferences();
-        new import_obsidian38.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations.` : "All citations in this note already have literature notes.", 6e3);
+        new import_obsidian39.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations.` : "All citations in this note already have literature notes.", 6e3);
       }
     });
     this.addCommand({
@@ -101410,7 +101490,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       name: t("Create literature notes for citations lacking notes (vault)"),
       callback: async () => {
         var _a2;
-        const progress = new import_obsidian38.Notice("Creating literature notes\u2026", 0);
+        const progress = new import_obsidian39.Notice("Creating literature notes\u2026", 0);
         (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes({ allVault: true }, (done, total) => {
           var _a3;
@@ -101419,12 +101499,12 @@ var ReferenceList = class extends import_obsidian38.Plugin {
         progress.hide();
         await this.fillZoteroNotesForCitekeys(missingKeys, null);
         this.processReferences();
-        new import_obsidian38.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations vault-wide.` : "All cited works in the vault already have literature notes.", 6e3);
+        new import_obsidian39.Notice(missingKeys.length ? `Created literature notes for ${created}/${missingKeys.length} missing citations vault-wide.` : "All cited works in the vault already have literature notes.", 6e3);
       }
     });
     const run = async () => {
       var _a2, _b;
-      const progress = new import_obsidian38.Notice("Inserting Zotero notes\u2026", 0);
+      const progress = new import_obsidian39.Notice("Inserting Zotero notes\u2026", 0);
       (_a2 = progress.setProgress) == null ? void 0 : _a2.call(progress, 0, 0);
       const r3 = await insertZoteroNotesVaultWide(this.app, {
         zoteroPort: this.settings.zoteroPort,
@@ -101445,29 +101525,29 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       if (r3.failed.length) {
         lines.push(`${r3.failed.length} could not be read from Zotero \u2014 is Zotero running? (see the developer console)`);
       }
-      new import_obsidian38.Notice(`ScholarWeft: ${lines.join("\n")}`, 1e4);
+      new import_obsidian39.Notice(`ScholarWeft: ${lines.join("\n")}`, 1e4);
       if (r3.skipped.length) {
         debugLog('ScholarWeft: notes skipped because "## Notes" already had content:\n' + r3.skipped.join("\n"));
       }
     };
     this._runInsertZoteroNotes = run;
     this.registerZoteroNotesCommand();
-    if (import_obsidian38.Platform.isDesktop) {
+    if (import_obsidian39.Platform.isDesktop) {
       this.addCommand({
         id: "compile-export-book",
         name: t("Compile and export the current document (DOCX, ODT, PDF, LaTeX)"),
         callback: () => {
           var _a2;
-          const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian38.MarkdownView)) == null ? void 0 : _a2.file;
+          const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian39.MarkdownView)) == null ? void 0 : _a2.file;
           if (!file) {
-            new import_obsidian38.Notice(t("Open the note you want to export, then run this command again."), 6e3);
+            new import_obsidian39.Notice(t("Open the note you want to export, then run this command again."), 6e3);
             return;
           }
           new ExportModal(app2, this, file).open();
         }
       });
     }
-    if (import_obsidian38.Platform.isDesktop) {
+    if (import_obsidian39.Platform.isDesktop) {
       this.addCommand({
         id: "import-document",
         name: t("Import a Word or ODT document with Zotero citations"),
@@ -101481,7 +101561,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       name: t("Convert pandoc citations to linked citations (current note)"),
       checkCallback: (checking) => {
         var _a2;
-        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian38.MarkdownView)) == null ? void 0 : _a2.file;
+        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian39.MarkdownView)) == null ? void 0 : _a2.file;
         if (!file)
           return false;
         if (!checking) {
@@ -101502,7 +101582,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       name: t("Revert linked citations to pandoc-style citations (current note)"),
       checkCallback: (checking) => {
         var _a2;
-        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian38.MarkdownView)) == null ? void 0 : _a2.file;
+        const file = (_a2 = app2.workspace.getActiveViewOfType(import_obsidian39.MarkdownView)) == null ? void 0 : _a2.file;
         if (!file)
           return false;
         if (!checking)
@@ -101534,21 +101614,21 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     document.body.toggleClass("sw-tooltips", this.settings.showCitekeyTooltips !== false);
     document.body.toggleClass("sw-decorations", (_a = this.settings.showCitationDecorations) != null ? _a : true);
     this.applyCitationColors();
-    this.registerEvent(app2.metadataCache.on("changed", (0, import_obsidian38.debounce)(async (file) => {
+    this.registerEvent(app2.metadataCache.on("changed", (0, import_obsidian39.debounce)(async (file) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
-      const activeView = app2.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+      const activeView = app2.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
       if (activeView && file === activeView.file) {
         this.processReferences();
       }
     }, 100, true)));
-    this.registerEvent(app2.workspace.on("active-leaf-change", (0, import_obsidian38.debounce)(async (leaf) => {
+    this.registerEvent(app2.workspace.on("active-leaf-change", (0, import_obsidian39.debounce)(async (leaf) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       app2.workspace.iterateRootLeaves((rootLeaf) => {
         var _a2;
         if (rootLeaf === leaf) {
-          if (leaf.view instanceof import_obsidian38.MarkdownView) {
+          if (leaf.view instanceof import_obsidian39.MarkdownView) {
             this.processReferences();
           } else {
             (_a2 = this.view) == null ? void 0 : _a2.setNoContentMessage();
@@ -101556,27 +101636,27 @@ var ReferenceList = class extends import_obsidian38.Plugin {
         }
       });
     }, 100, true)));
-    this.registerEvent(app2.vault.on("rename", (0, import_obsidian38.debounce)(async (file, oldPath) => {
+    this.registerEvent(app2.vault.on("rename", (0, import_obsidian39.debounce)(async (file, oldPath) => {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       if (isBibliographyFile(file)) {
         await this.updateBibliographyFrontmatter(oldPath, file.path);
       }
       this.bibManager.removeFromCitedKeysIndex(oldPath);
-      if (file instanceof import_obsidian38.TFile) {
+      if (file instanceof import_obsidian39.TFile) {
         await this.bibManager.updateCitedKeysIndex(file);
         this.persistCitedKeysIndex();
       }
       this.persistRenderedCache();
-      const activeView = app2.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
-      if ((activeView == null ? void 0 : activeView.file) instanceof import_obsidian38.TFile) {
+      const activeView = app2.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
+      if ((activeView == null ? void 0 : activeView.file) instanceof import_obsidian39.TFile) {
         this.bibManager.fileCache.delete(activeView.file);
         this.processReferences();
       }
     }, 100, true)));
-    this.registerEvent(app2.vault.on("modify", (0, import_obsidian38.debounce)(async (file) => {
+    this.registerEvent(app2.vault.on("modify", (0, import_obsidian39.debounce)(async (file) => {
       var _a2;
-      if (!(file instanceof import_obsidian38.TFile))
+      if (!(file instanceof import_obsidian39.TFile))
         return;
       await this.bibManager.updateCitedKeysIndex(file);
       this.persistCitedKeysIndex();
@@ -101586,8 +101666,8 @@ var ReferenceList = class extends import_obsidian38.Plugin {
         this.processReferences();
       }
     }, 150, true)));
-    this.registerEvent(app2.vault.on("create", (0, import_obsidian38.debounce)(async (file) => {
-      if (!(file instanceof import_obsidian38.TFile))
+    this.registerEvent(app2.vault.on("create", (0, import_obsidian39.debounce)(async (file) => {
+      if (!(file instanceof import_obsidian39.TFile))
         return;
       await this.bibManager.updateCitedKeysIndex(file);
       this.persistCitedKeysIndex();
@@ -101603,7 +101683,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       await this.initPromise.promise;
       await this.bibManager.initPromise.promise;
       this.setStatusBarIdle();
-      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+      const activeView = this.app.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
       if (activeView == null ? void 0 : activeView.file) {
         this.bibManager.invalidateFile(activeView.file);
       }
@@ -101724,7 +101804,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       return;
     const res = await installZotlitTemplates(this);
     if (res.folderConfigured) {
-      new import_obsidian38.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER2}/`);
+      new import_obsidian39.Notice(`ScholarWeft: pointed ZotLit's \u201CTemplate folder\u201D at ${SW_ZOTLIT_FOLDER2}/`);
     }
   }
   onunload() {
@@ -101765,8 +101845,8 @@ var ReferenceList = class extends import_obsidian38.Plugin {
   }
   async updateBibliographyFrontmatter(oldPath, newPath) {
     var _a;
-    oldPath = (0, import_obsidian38.normalizePath)(oldPath);
-    newPath = (0, import_obsidian38.normalizePath)(newPath);
+    oldPath = (0, import_obsidian39.normalizePath)(oldPath);
+    newPath = (0, import_obsidian39.normalizePath)(newPath);
     for (const file of this.app.vault.getMarkdownFiles()) {
       const metadata = this.app.metadataCache.getFileCache(file);
       if (!((_a = metadata == null ? void 0 : metadata.frontmatter) == null ? void 0 : _a.bibliography))
@@ -101801,14 +101881,14 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       if (isOpen)
         return;
       const { settings } = this;
-      const menu = new import_obsidian38.Menu().addSections(["settings", "actions"]).addItem((item) => item.setSection("settings").setIcon("lucide-message-square").setTitle(t("Show citekey tooltips")).setChecked(!!settings.showCitekeyTooltips).onClick(() => {
+      const menu = new import_obsidian39.Menu().addSections(["settings", "actions"]).addItem((item) => item.setSection("settings").setIcon("lucide-message-square").setTitle(t("Show citekey tooltips")).setChecked(!!settings.showCitekeyTooltips).onClick(() => {
         this.settings.showCitekeyTooltips = !settings.showCitekeyTooltips;
         this.saveSettings();
       })).addItem((item) => item.setSection("settings").setIcon("lucide-at-sign").setTitle(t("Trigger reference search with [@ or [[@")).setChecked(!!settings.enableCiteKeyCompletion).onClick(() => {
         this.settings.enableCiteKeyCompletion = !settings.enableCiteKeyCompletion;
         this.saveSettings();
       })).addItem((item) => item.setSection("actions").setIcon("lucide-rotate-cw").setTitle(t("Refresh bibliography")).onClick(async () => {
-        const activeView = this.app.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+        const activeView = this.app.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
         if (activeView) {
           const file = activeView.file;
           if (this.bibManager.fileCache.has(file)) {
@@ -101840,7 +101920,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
   }
   setStatusBarLoading() {
     this.statusBarIcon.addClass("is-loading");
-    (0, import_obsidian38.setIcon)(this.statusBarIcon, "lucide-loader");
+    (0, import_obsidian39.setIcon)(this.statusBarIcon, "lucide-loader");
   }
   setStatusBarMessage(msg) {
     this.setStatusBarLoading();
@@ -101853,7 +101933,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
   }
   setStatusBarIdle() {
     this.statusBarIcon.removeClass("is-loading");
-    (0, import_obsidian38.setIcon)(this.statusBarIcon, "lucide-at-sign");
+    (0, import_obsidian39.setIcon)(this.statusBarIcon, "lucide-at-sign");
     this.statusBarIcon.setAttr("aria-label", t("ScholarWeft settings"));
     const el = this.statusBarText;
     if (el) {
@@ -101884,7 +101964,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;
     void this.ensureCitedKeysIndex();
-    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+    const activeView = this.app.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
     if (activeView) {
       this.processReferences();
     }
@@ -101914,26 +101994,26 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     var _a;
     const port = this.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
     if (!await isZoteroRunning(port)) {
-      new import_obsidian38.Notice("Zotero\u2019s picker isn\u2019t responding. Make sure Zotero is running with Better BibTeX installed (the picker needs it). If it is, another integration may be holding the picker \u2014 close any open Zotero citation dialog, or disable the other plugin (e.g. Zotero Integration), then try again.", 12e3);
+      new import_obsidian39.Notice("Zotero\u2019s picker isn\u2019t responding. Make sure Zotero is running with Better BibTeX installed (the picker needs it). If it is, another integration may be holding the picker \u2014 close any open Zotero citation dialog, or disable the other plugin (e.g. Zotero Integration), then try again.", 12e3);
       return;
     }
     const anchor = (_a = this.app.workspace.getActiveFile()) != null ? _a : this.app.vault.getMarkdownFiles()[0];
     if (!anchor) {
-      new import_obsidian38.Notice("Open a note first \u2014 the import needs a file to anchor links to.");
+      new import_obsidian39.Notice("Open a note first \u2014 the import needs a file to anchor links to.");
       return;
     }
-    const waiting = new import_obsidian38.Notice("Pick one or more items in Zotero\u2026", 0);
+    const waiting = new import_obsidian39.Notice("Pick one or more items in Zotero\u2026", 0);
     let picked;
     try {
       picked = await pickZoteroItems(port);
     } catch (e3) {
       waiting.hide();
-      new import_obsidian38.Notice(`Zotero picker: ${e3.message}`, 8e3);
+      new import_obsidian39.Notice(`Zotero picker: ${e3.message}`, 8e3);
       return;
     }
     waiting.hide();
     if (!picked.length) {
-      new import_obsidian38.Notice("No items selected.");
+      new import_obsidian39.Notice("No items selected.");
       return;
     }
     const citekeys = [];
@@ -101946,10 +102026,10 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       }
     }
     if (!citekeys.length) {
-      new import_obsidian38.Notice("The selected item(s) are not in the loaded Zotero library.");
+      new import_obsidian39.Notice("The selected item(s) are not in the loaded Zotero library.");
       return;
     }
-    const run = new import_obsidian38.Notice(`Importing ${citekeys.length} literature note(s)\u2026`, 0);
+    const run = new import_obsidian39.Notice(`Importing ${citekeys.length} literature note(s)\u2026`, 0);
     let imported = 0;
     for (const ck of citekeys) {
       try {
@@ -101960,7 +102040,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       }
     }
     run.hide();
-    new import_obsidian38.Notice(`Imported ${imported}/${citekeys.length} literature note(s).`, 6e3);
+    new import_obsidian39.Notice(`Imported ${imported}/${citekeys.length} literature note(s).`, 6e3);
   }
   findCitekeyByZoteroKey(zoteroKey) {
     if (!zoteroKey)
@@ -102022,7 +102102,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     if (!file)
       return;
     const ok = await this.updateLiteratureNote(file);
-    new import_obsidian38.Notice(ok ? `Updated ${file.basename}.` : `\u201C${file.basename}\u201D was not updated (no zotero-key, or its item is not in the loaded library).`, 8e3);
+    new import_obsidian39.Notice(ok ? `Updated ${file.basename}.` : `\u201C${file.basename}\u201D was not updated (no zotero-key, or its item is not in the loaded library).`, 8e3);
   }
   async updateAllLiteratureNotes() {
     const files = this.app.vault.getMarkdownFiles().filter((f3) => {
@@ -102031,10 +102111,10 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       return typeof stable === "string" && !!stable;
     });
     if (!files.length) {
-      new import_obsidian38.Notice("No literature notes with a \u201Czotero-key\u201D were found.");
+      new import_obsidian39.Notice("No literature notes with a \u201Czotero-key\u201D were found.");
       return;
     }
-    const progress = new import_obsidian38.Notice(`Updating literature notes\u2026 0/${files.length}`, 0);
+    const progress = new import_obsidian39.Notice(`Updating literature notes\u2026 0/${files.length}`, 0);
     let updated = 0;
     let skipped = 0;
     for (const file of files) {
@@ -102045,20 +102125,21 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       progress.setMessage(`Updating literature notes\u2026 ${updated + skipped}/${files.length}`);
     }
     progress.hide();
-    new import_obsidian38.Notice(`Updated ${updated} literature note(s)${skipped ? `, skipped ${skipped}` : ""}.`, 8e3);
+    new import_obsidian39.Notice(`Updated ${updated} literature note(s)${skipped ? `, skipped ${skipped}` : ""}.`, 8e3);
   }
   scheduleAutoUpdate(citekeys) {
     if (this.settings.autoUpdateNotes === false)
       return;
-    let added = false;
-    for (const k4 of citekeys) {
-      if (k4 && !this._pendingAutoUpdate.has(k4)) {
+    for (const k4 of citekeys)
+      if (k4)
         this._pendingAutoUpdate.add(k4);
-        added = true;
-      }
-    }
-    if (!added && this._autoUpdateTimer != null)
+    if (this.settings.autoUpdateNotes === void 0) {
+      void this.promptAutoUpdateConsent();
       return;
+    }
+    this.armAutoUpdate();
+  }
+  armAutoUpdate() {
     if (this._autoUpdateTimer != null)
       return;
     this._autoUpdateTimer = window.setTimeout(() => {
@@ -102066,7 +102147,29 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       void this.runAutoUpdate();
     }, 3e3);
   }
+  async promptAutoUpdateConsent() {
+    if (this._autoUpdatePrompting || this.settings.autoUpdateNotes !== void 0) {
+      return;
+    }
+    this._autoUpdatePrompting = true;
+    try {
+      const { AutoUpdateConsentModal: AutoUpdateConsentModal2 } = await Promise.resolve().then(() => (init_autoUpdateConsentModal(), autoUpdateConsentModal_exports));
+      const yes = await new Promise((resolve) => new AutoUpdateConsentModal2(this.app, resolve).open());
+      this.settings.autoUpdateNotes = yes;
+      await this.saveSettings();
+      if (yes) {
+        if (this._pendingAutoUpdate.size)
+          this.armAutoUpdate();
+      } else {
+        this._pendingAutoUpdate.clear();
+      }
+    } finally {
+      this._autoUpdatePrompting = false;
+    }
+  }
   async runAutoUpdate() {
+    if (this.settings.autoUpdateNotes !== true)
+      return;
     if (this._autoUpdateRunning)
       return;
     const pending = this._pendingAutoUpdate;
@@ -102082,20 +102185,13 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       this._autoUpdateRunning = false;
     }
     if (this._pendingAutoUpdate.size)
-      this.scheduleAutoUpdate([]);
+      this.armAutoUpdate();
   }
   async autoUpdateNotesForCitekeys(citekeys) {
-    if (this.settings.autoUpdateNotes === false)
-      return;
-    if (!this.settings.autoUpdateNotified) {
-      this.settings.autoUpdateNotified = true;
-      await this.saveSettings();
-      this.notifyAutoUpdate();
-    }
     const targets = await this.collectAutoUpdateFiles(citekeys);
     if (!targets.length)
       return;
-    const progress = new import_obsidian38.Notice(`Updating literature notes from Zotero\u2026 0/${targets.length}`, 0);
+    const progress = new import_obsidian39.Notice(`Updating literature notes from Zotero\u2026 0/${targets.length}`, 0);
     let updated = 0;
     let skipped = 0;
     for (const file of targets) {
@@ -102107,7 +102203,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     }
     progress.hide();
     if (updated) {
-      new import_obsidian38.Notice(`Zotero: updated ${updated} literature note${updated !== 1 ? "s" : ""}${skipped ? `, skipped ${skipped}` : ""}.`, 6e3);
+      new import_obsidian39.Notice(`Zotero: updated ${updated} literature note${updated !== 1 ? "s" : ""}${skipped ? `, skipped ${skipped}` : ""}.`, 6e3);
     }
   }
   async collectAutoUpdateFiles(citekeys) {
@@ -102141,26 +102237,6 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     }
     return out;
   }
-  notifyAutoUpdate() {
-    var _a;
-    const notice = new import_obsidian38.Notice("", 0);
-    const el = (_a = notice.noticeEl) != null ? _a : notice.containerEl;
-    if (!el) {
-      notice.hide();
-      return;
-    }
-    el.createEl("div", {
-      text: "ScholarWeft will now update a literature note automatically when its Zotero item changes."
-    });
-    const btn = el.createEl("button", { text: "Don't auto-update" });
-    btn.addEventListener("click", () => {
-      this.settings.autoUpdateNotes = false;
-      void this.saveSettings();
-      new import_obsidian38.Notice("Auto note-update turned off (Settings \u2192 ScholarWeft \u2192 Literature note import).");
-      notice.hide();
-    });
-    window.setTimeout(() => notice.hide(), 15e3);
-  }
   async getCitekeysForFile(file) {
     var _a, _b;
     const target = file != null ? file : this.app.workspace.getActiveFile();
@@ -102182,7 +102258,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     var _a, _b, _c, _d;
     const saved = (_a = await this.loadData()) != null ? _a : {};
     try {
-      const indexPath = (0, import_obsidian38.normalizePath)(`${this.cacheDir}/cited-keys.json`);
+      const indexPath = (0, import_obsidian39.normalizePath)(`${this.cacheDir}/cited-keys.json`);
       const cached = await this.app.vault.adapter.read(indexPath);
       const parsed = JSON.parse(cached);
       if (parsed && typeof parsed === "object" && !parsed.builtAt) {
@@ -102199,7 +102275,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     } catch (e3) {
     }
     try {
-      const migPath = (0, import_obsidian38.normalizePath)(`${this.cacheDir}/related-migrated.json`);
+      const migPath = (0, import_obsidian39.normalizePath)(`${this.cacheDir}/related-migrated.json`);
       this._relatedMigration = parseMigrationState(await this.app.vault.adapter.read(migPath));
     } catch (e3) {
       this._relatedMigration = parseMigrationState(null);
@@ -102237,7 +102313,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
   }
   suggestWantsFront() {
     var _a;
-    const view = this.app.workspace.getActiveViewOfType(import_obsidian38.MarkdownView);
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian39.MarkdownView);
     const editor = view == null ? void 0 : view.editor;
     if (!editor)
       return false;
@@ -102336,7 +102412,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     } catch (e3) {
       console.error("[sw:reconcile] planning failed", e3);
       if (interactive)
-        new import_obsidian38.Notice("Could not check for citekey changes.");
+        new import_obsidian39.Notice("Could not check for citekey changes.");
       return false;
     }
     const actionable = plan.renames.length > 0 || plan.derived.length > 0;
@@ -102346,7 +102422,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
           new CitekeyReconcileModal(this.app, plan, async () => {
           }).open();
         } else {
-          new import_obsidian38.Notice("All literature note citekeys are up to date.");
+          new import_obsidian39.Notice("All literature note citekeys are up to date.");
         }
       }
       return false;
@@ -102360,11 +102436,11 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       plan = await this.bibManager.planCitekeyReconcile();
     } catch (e3) {
       console.error("[sw:reconcile] planning failed", e3);
-      new import_obsidian38.Notice("Could not list citekey discrepancies.");
+      new import_obsidian39.Notice("Could not list citekey discrepancies.");
       return;
     }
     if (!plan.renames.length && !plan.derived.length && !plan.blocked.length && !plan.unresolved.length) {
-      new import_obsidian38.Notice("No citekey discrepancies found.");
+      new import_obsidian39.Notice("No citekey discrepancies found.");
       return;
     }
     new CitekeyReconcileModal(this.app, plan, () => this.applyReconcile(plan)).open();
@@ -102375,7 +102451,7 @@ var ReferenceList = class extends import_obsidian38.Plugin {
     if (this.settings.useOwnNoteTemplate === true) {
       for (const r3 of plan.renames) {
         const file = this.app.vault.getAbstractFileByPath(r3.newPath);
-        if (file instanceof import_obsidian38.TFile && await this.updateLiteratureNote(file, { confirm: false })) {
+        if (file instanceof import_obsidian39.TFile && await this.updateLiteratureNote(file, { confirm: false })) {
           refreshed++;
         }
       }
@@ -102390,12 +102466,12 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       msg += `
 Skipped ${res.skipped.length} name${res.skipped.length !== 1 ? "s" : ""} already in use.`;
     }
-    new import_obsidian38.Notice(msg + ".", 8e3);
+    new import_obsidian39.Notice(msg + ".", 8e3);
   }
   async showUnresolvedCitekeyDialog(file) {
     const fileCache = this.bibManager.fileCache.get(file);
     if (!fileCache || !fileCache.unresolvedKeys.size) {
-      new import_obsidian38.Notice("No unresolved citations in the current note.");
+      new import_obsidian39.Notice("No unresolved citations in the current note.");
       return;
     }
     if (await this.reviewCitekeyChanges(false))
@@ -102404,7 +102480,7 @@ Skipped ${res.skipped.length} name${res.skipped.length !== 1 ? "s" : ""} already
     }, false, [...fileCache.unresolvedKeys]).open();
   }
 };
-var BibSnapshotModal = class extends import_obsidian38.Modal {
+var BibSnapshotModal = class extends import_obsidian39.Modal {
   constructor(app2, plugin, file, entries) {
     super(app2);
     this.plugin = plugin;
@@ -102420,7 +102496,7 @@ var BibSnapshotModal = class extends import_obsidian38.Modal {
     });
     const folder = (_b = (_a = this.file.parent) == null ? void 0 : _a.path) != null ? _b : "";
     const stem = this.file.basename;
-    const defaultPath = (0, import_obsidian38.normalizePath)((folder ? folder + "/" : "") + stem + "-bibliography.bib");
+    const defaultPath = (0, import_obsidian39.normalizePath)((folder ? folder + "/" : "") + stem + "-bibliography.bib");
     const inputWrap = contentEl.createDiv({ cls: "sw-snapshot-input-wrap" });
     inputWrap.createEl("label", { text: t("Save as") });
     const input = inputWrap.createEl("input", {
@@ -102455,7 +102531,7 @@ var BibSnapshotModal = class extends import_obsidian38.Modal {
     var _a, _b;
     if (!rawPath)
       return;
-    const savePath = (0, import_obsidian38.normalizePath)(rawPath);
+    const savePath = (0, import_obsidian39.normalizePath)(rawPath);
     try {
       const dir = savePath.includes("/") ? savePath.substring(0, savePath.lastIndexOf("/")) : "";
       if (dir && !await this.app.vault.adapter.exists(dir)) {
@@ -102463,7 +102539,7 @@ var BibSnapshotModal = class extends import_obsidian38.Modal {
       }
       await this.app.vault.adapter.write(savePath, cslToBibTeX(this.entries));
       const noteDir = (_b = (_a = this.file.parent) == null ? void 0 : _a.path) != null ? _b : "";
-      const relPath = noteDir ? (0, import_obsidian38.normalizePath)(savePath).replace((0, import_obsidian38.normalizePath)(noteDir) + "/", "") : savePath;
+      const relPath = noteDir ? (0, import_obsidian39.normalizePath)(savePath).replace((0, import_obsidian39.normalizePath)(noteDir) + "/", "") : savePath;
       await this.app.fileManager.processFrontMatter(this.file, (fm) => {
         const existing = Array.isArray(fm.bibliography) ? fm.bibliography : fm.bibliography ? [fm.bibliography] : [];
         if (!existing.includes(relPath) && !existing.includes(savePath)) {
@@ -102471,11 +102547,11 @@ var BibSnapshotModal = class extends import_obsidian38.Modal {
         }
         fm.bibliography = existing.length === 1 ? existing[0] : existing;
       });
-      new import_obsidian38.Notice(`Bibliography saved to ${savePath}`);
+      new import_obsidian39.Notice(`Bibliography saved to ${savePath}`);
       this.plugin.bibManager.reinit(true);
       this.close();
     } catch (e3) {
-      new import_obsidian38.Notice(`Failed to save bibliography: ${e3.message}`);
+      new import_obsidian39.Notice(`Failed to save bibliography: ${e3.message}`);
     }
   }
   onClose() {
