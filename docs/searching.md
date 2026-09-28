@@ -14,11 +14,12 @@ extra fields rank *below* the `@` fields, so adding them widens the list without
 burying a title or author match.
 
 Type the level. **The popup opens as soon as you type `@`** — leading with the
-last search you used in this note (within the last five minutes), or, if there
-isn't one, the references you recently cited **here**. So you can pick straight
-away, and reuse a search to cite several related works without retyping it. One
-or two characters narrow to citekeys that start with them; three or more runs
-the full ranked search.
+last search you used in this note (within the last five minutes); otherwise the
+references you recently cited **in this note**, then references you recently
+cited **anywhere else** (so a fresh note still shows something). So you can pick
+straight away, and reuse a search to cite several related works without retyping
+it. One or two characters narrow to citekeys that start with them; three or more
+runs the full ranked search.
 
 A **space ends a bare `@` search**, so you can type a citation and keep writing.
 Use an **underscore for a space** inside a single token (`@social_theory` =

@@ -331,7 +331,14 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     const entries = Array.from(bib.bibCache.values());
     if (!entries.length) return { items: [], total: 0 };
     const base = query ? prefixMatches(entries, query) : entries;
-    const ordered = orderByRecency(base, getRecentKeys(bib.recentKeys, notePath));
+    // THIS note's recents first, then the global MRU, then Zotero dateAdded —
+    // concatenation is the tier order (first occurrence wins in the rank map),
+    // so a note with no history still shows something useful.
+    const recents = [
+      ...getRecentKeys(bib.recentKeys, notePath),
+      ...bib.globalRecentKeys,
+    ];
+    const ordered = orderByRecency(base, recents);
     return { items: ordered.slice(0, this.limit), total: ordered.length };
   }
 

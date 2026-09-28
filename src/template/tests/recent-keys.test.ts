@@ -117,6 +117,16 @@ describe('per-note recent keys', () => {
     expect(getRecentKeys(m, 'N0.md')).toEqual([]);
   });
 
+  it('orders note recents before global recents (concatenated tiers)', () => {
+    const entries = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    // note recents ['c'], global ['b'] → c, b, a
+    expect(orderByRecency(entries, ['c', 'b']).map((e) => e.id)).toEqual([
+      'c',
+      'b',
+      'a',
+    ]);
+  });
+
   it('no-ops without a note path', () => {
     expect(Object.keys(recordRecentKey({}, '', 'x'))).toEqual([]);
   });

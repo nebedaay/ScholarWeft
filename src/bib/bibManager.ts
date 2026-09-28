@@ -53,6 +53,7 @@ import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import {
   recordLastSearch,
   recordRecentKey,
+  touchRecentKey,
   type LastSearchMap,
   type RecentKeysMap,
 } from 'src/template/recent-keys';
@@ -585,6 +586,10 @@ export class BibManager {
    * `src/template/recent-keys.ts`.
    */
   recentKeys: RecentKeysMap = {};
+
+  /** MRU across ALL notes — the fallback for a note with no history of its own,
+   *  so a fresh note still shows something useful. */
+  globalRecentKeys: string[] = [];
 
   /** Per-note last query that produced a selected citation, so the 0-character
    *  popup can re-run THIS note's query (within the freshness window). Kept
@@ -2482,6 +2487,7 @@ export class BibManager {
     if (search.notePath) {
       if (citekey) {
         this.recentKeys = recordRecentKey(this.recentKeys, search.notePath, citekey);
+        this.globalRecentKeys = touchRecentKey(this.globalRecentKeys, citekey);
       }
       this.lastSearches = recordLastSearch(
         this.lastSearches,
@@ -2504,6 +2510,7 @@ export class BibManager {
         normalizePath(`${SW_CACHE_DIR}/recent-keys.json`),
         JSON.stringify({
           recentKeys: this.recentKeys,
+          globalRecentKeys: this.globalRecentKeys,
           lastSearches: this.lastSearches,
         })
       );
@@ -2531,6 +2538,18 @@ export class BibManager {
           }
         }
         this.recentKeys = out;
+      }
+      // Global MRU: an explicit list, migrated from the very first format
+      // (a bare `keys` array) when present.
+      const globalList = Array.isArray(data?.globalRecentKeys)
+        ? data.globalRecentKeys
+        : Array.isArray(data?.keys)
+          ? data.keys
+          : null;
+      if (globalList) {
+        this.globalRecentKeys = globalList.filter(
+          (k: unknown): k is string => typeof k === 'string' && !!k
+        );
       }
       const searches = data?.lastSearches;
       if (searches && typeof searches === 'object') {
