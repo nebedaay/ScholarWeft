@@ -15,6 +15,7 @@ import {
   afterOpenBracketIn,
   computeInsertion,
   insertionHint,
+  insertionKind,
 } from 'src/template/cite-insert';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
@@ -95,12 +96,9 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     });
 
     this.setInstructions([
-      {
-        command: Platform.isMacOS ? '⌘ ↵' : 'ctrl ↵',
-        // Updated per search to name the mark actually inserted (see
-        // renderCount), so `[[` users are told about `]]`.
-        purpose: 'wrap with brackets',
-      },
+      // Updated per search to name what Enter actually inserts (see
+      // renderCount): the closer inside a bracket, or the full citation form.
+      { command: '↵', purpose: 'insert [[@key]]' },
     ]);
   }
 
@@ -123,27 +121,44 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
             ? '1 result'
             : `${total} results`;
     this.setInstructions([
-      {
-        command: Platform.isMacOS ? '⌘ ↵' : 'ctrl ↵',
-        purpose: this._insertionHint,
-      },
+      // Enter performs the context-aware insertion; the hint names it.
+      { command: '↵', purpose: this._insertionHint },
+      ...(this._pandocHint
+        ? [
+            {
+              command: Platform.isMacOS ? '⌘ ↵' : 'ctrl ↵',
+              purpose: 'Pandoc citation',
+            },
+          ]
+        : []),
       // `command` renders first, so an empty one keeps the summary as the
       // whole right-hand phrase rather than splitting it across two spans.
       { command: '', purpose: summary },
     ]);
   }
 
-  /** Names the closing mark the current context will insert (`]` or `]]`). */
-  private _insertionHint = 'wrap with brackets';
+  /** Names what Enter inserts in the current context, for the footer. */
+  private _insertionHint = 'insert [[@key]]';
 
-  /** Record the closing mark for the current context, for the footer hint. */
+  /** Show the ⌘/Ctrl+Enter "Pandoc citation" hint? Only for a bare `@`. */
+  private _pandocHint = false;
+
+  /** Record the insertion hint for the current context, for the footer. */
   private setInsertionHint(context: EditorSuggestContext): void {
     const line = context.editor.getLine(context.start.line) ?? '';
     const beforeStart = line.substring(0, context.start.ch);
-    this._insertionHint = insertionHint({
-      beforeStart,
-      afterOpenBracket: afterOpenBracketIn(beforeStart),
-    });
+    const afterCursor = line.substring(context.end.ch);
+    const afterOpenBracket = afterOpenBracketIn(beforeStart);
+    const linked = this.plugin.settings.renderLinkCitations !== false;
+    this._insertionHint = insertionHint(
+      { beforeStart, afterCursor, afterOpenBracket },
+      { linked }
+    );
+    // The Pandoc escape hatch only changes the result for a bare `@` while
+    // linked citations are in use; elsewhere the closer is unambiguous.
+    this._pandocHint =
+      linked &&
+      insertionKind({ beforeStart, afterCursor, afterOpenBracket }) === 'bare';
   }
 
   async getSuggestions(
@@ -504,11 +519,15 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
     // Bracket-aware insertion, in one tested place (see cite-insert.ts): the
     // closing delimiter must match the opening one, or a `[[@key]` wikilink is
-    // silently broken.
+    // silently broken. A bare `@` inserts a linked citation when the "Process
+    // linked citations" setting is on; ⌘/Ctrl+Enter forces the Pandoc form.
     const { text: replaceStr } = computeInsertion(
       id,
       { beforeStart, afterCursor, charBefore, afterOpenBracket },
-      { wrap: !!(event.metaKey || event.ctrlKey) }
+      {
+        linked: this.plugin.settings.renderLinkCitations !== false,
+        forcePandoc: !!(event.metaKey || event.ctrlKey),
+      }
     );
 
     context.editor.replaceRange(replaceStr, context.start, context.end);

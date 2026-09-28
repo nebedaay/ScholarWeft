@@ -75,9 +75,10 @@ export default {
   'Validate Pandoc configuration': 'Validate Pandoc configuration',
   Validate: 'Validate',
   'Validation successful': 'Validation successful',
-  'Show citekey suggestions': 'Show citekey suggestions',
-  'When enabled, an autocomplete dialog will display when typing citation keys.':
-    'When enabled, an autocomplete dialog will display when typing citation keys.',
+  'Trigger reference search with [@ or [[@':
+    'Trigger reference search with [@ or [[@',
+  '@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.':
+    '@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.',
   'Pull bibliography from Zotero': 'Pull bibliography from Zotero',
   'When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.':
     'When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.',
@@ -236,6 +237,4 @@ export default {
 
   'This entry exists in both your .bib file and Zotero. Zotero data is shown.':
     'This entry exists in both your .bib file and Zotero. Zotero data is shown.',
-  'ZotLit detected — [@key completions are handled by ZotLit. This plugin still provides bare @key suggestions (outside brackets) and for .bib file entries.':
-    'ZotLit detected — [@key completions are handled by ZotLit. This plugin still provides bare @key suggestions (outside brackets) and for .bib file entries.',
 };

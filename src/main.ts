@@ -1157,7 +1157,7 @@ export default class ReferenceList extends Plugin {
           item
             .setSection('settings')
             .setIcon('lucide-at-sign')
-            .setTitle(t('Show citekey suggestions'))
+            .setTitle(t('Trigger reference search with [@ or [[@'))
             .setChecked(!!settings.enableCiteKeyCompletion)
             .onClick(() => {
               this.settings.enableCiteKeyCompletion =

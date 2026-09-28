@@ -351,11 +351,12 @@ Open **Settings → ScholarWeft**.
 
 ## Settings
 
-Settings live under **Settings → ScholarWeft**, in four pages:
+Settings live under **Settings → ScholarWeft**, in five pages:
 
 - **Bibliography** — where your sources come from. See [Bibliography](./bibliography.md) and [Zotero](./zotero.md).
-- **Citation and reference formatting** — how citations and the reference list look in Obsidian. See [Citations](./citations.md).
+- **Citation and reference searching and formatting** — how citations are found (the `@` / `@@` reference search) and how they and the reference list render inside Obsidian. See [Citations](./citations.md) and [Searching for References](./searching.md).
 - **Literature note import** — where literature notes live and how they are created. See [Literature Notes](./literature-notes.md).
 - **Document import/export and compilation** — tools, templates, and defaults for compiling/exporting. See [Document Import and Export](./import-export.md).
+- **Addons for displaying and linking notes** — optional add-ons (the Basic note template, and YAML property formatting).
 
 See **[Dependencies](./dependencies.md)** for exactly what needs what. The plugin detects what you have and greys out options that can't run, so you can explore safely.

@@ -68,6 +68,23 @@ work is findable by the person who compiled it.
   Obsidian regains focus, so a change made in Zotero should appear shortly after
   you switch back.
 
+## Inserting a citation
+
+Type `@` (or `@@`), find the work, then accept it:
+
+- **Enter** inserts a complete citation. From a bare `@` that is a **linked
+  citation** — `[[@citekey]]` — since linked citations are the plugin's default.
+  If you have turned **Process linked citations** off, it inserts a Pandoc
+  citation instead.
+- **⌘/Ctrl+Enter** forces the **Pandoc** form — `[@citekey]` — even while linked
+  citations are on.
+- If you opened a bracket yourself, the closing mark follows it: `[[@…`
+  completes with `]]`, and `[@…` completes with `]`. When you are adding to a
+  citation that is already open (`[@a; @…`, or a prefixed form like `[see @…`),
+  only the citekey is inserted, so you can keep going.
+
+The footer along the bottom of the popup names exactly what Enter will insert.
+
 ## Ranking
 
 Results are ordered by how meaningfully they match, not by a single score:

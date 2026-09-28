@@ -3,7 +3,7 @@ import { FuzzySuggestModal, Notice, Platform, PluginSettingTab, Setting, TFile, 
 import { t } from './lang/helpers';
 import { findPandoc } from './bib/pandoc';
 import { getBibPath } from './bib/helpers';
-import { getZotlitLiteratureFolder, isZotLitSuggestActive } from './zotlit';
+import { getZotlitLiteratureFolder } from './zotlit';
 import {
   SW_ZOTLIT_FOLDER,
   installZotlitTemplatesWithNotice,
@@ -305,7 +305,7 @@ type SettingsPage = 'home' | 'bibliography' | 'citations' | 'literature-notes' |
 
 const PAGE_TITLES: Record<Exclude<SettingsPage, 'home'>, string> = {
   bibliography: 'Bibliography',
-  citations: 'Citation and reference formatting',
+  citations: 'Citation and reference searching and formatting',
   'literature-notes': 'Literature note import',
   documents: 'Document import/export and compilation',
   addons: 'Addons for displaying and linking notes',
@@ -444,8 +444,8 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       },
       {
         page: 'citations',
-        name: t('Citation and reference formatting'),
-        desc: t('How Obsidian formats your citations and reference list.'),
+        name: t('Citation and reference searching and formatting'),
+        desc: t('How citations are found and rendered inside Obsidian.'),
       },
       {
         page: 'literature-notes',
@@ -646,14 +646,31 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     }
   }
 
-  // ── Citation and reference formatting ───────────────────────────────────────
+  // ── Citation and reference searching and formatting ─────────────────────────
 
   private renderCitations(containerEl: HTMLElement): void {
     renderDependencyNote(
       containerEl,
       [],
-      t('These settings control how citations render inside Obsidian. They need no external tools.')
+      t('These settings control how citations are found and rendered inside Obsidian. They need no external tools.')
     );
+
+    // Searching comes first: you find a reference before you see it rendered.
+    new Setting(containerEl)
+      .setName(t('Trigger reference search with [@ or [[@'))
+      .setDesc(
+        t(
+          '@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.'
+        )
+      )
+      .addToggle((text) =>
+        text
+          .setValue(!!this.plugin.settings.enableCiteKeyCompletion)
+          .onChange((value) => {
+            this.plugin.settings.enableCiteKeyCompletion = value;
+            this.plugin.saveSettings();
+          })
+      );
 
     const configuredStyle = this.plugin.settings.cslStyleURL;
     const defaultStyle =
@@ -848,27 +865,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             // PDF state lives in the rendered bibliography — refresh the
             // active view so buttons appear/disappear immediately.
             this.plugin.processReferences();
-          })
-      );
-
-    const zotlitActive = isZotLitSuggestActive(this.app);
-    new Setting(containerEl)
-      .setName(t('Show citekey suggestions'))
-      .setDesc(
-        zotlitActive
-          ? t(
-              'ZotLit detected — [@key completions are handled by ZotLit. This plugin still provides bare @key suggestions (outside brackets) and for .bib file entries.'
-            )
-          : t(
-              'When enabled, an autocomplete dialog will display when typing citation keys.'
-            )
-      )
-      .addToggle((text) =>
-        text
-          .setValue(!!this.plugin.settings.enableCiteKeyCompletion)
-          .onChange((value) => {
-            this.plugin.settings.enableCiteKeyCompletion = value;
-            this.plugin.saveSettings();
           })
       );
 
