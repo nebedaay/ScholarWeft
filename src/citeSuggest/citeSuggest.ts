@@ -22,9 +22,15 @@ import {
   DOUBLE_AT_PREFIX,
   MIN_SEARCH_CHARS,
   detectCitationTrigger,
+  normalizeQueryText,
   triggerQueryText,
 } from 'src/template/cite-trigger';
-import { orderByRecency, prefixMatches } from 'src/template/recent-keys';
+import {
+  getLastSearch,
+  getRecentKeys,
+  orderByRecency,
+  prefixMatches,
+} from 'src/template/recent-keys';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
@@ -160,7 +166,10 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     context: EditorSuggestContext
   ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
     const isDoubleAtMode = context.query.startsWith(DOUBLE_AT_PREFIX);
-    const searchQuery = context.query.slice(isDoubleAtMode ? 1 : 0).trim();
+    const rawQuery = context.query.slice(isDoubleAtMode ? 1 : 0).trim();
+    // An underscore stands in for a space in a single-token query, so
+    // `@social_theory` searches "social theory" without needing `@@`.
+    const searchQuery = normalizeQueryText(rawQuery);
 
     LOG(
       'getSuggestions query=',
@@ -283,18 +292,46 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
   /**
    * Suggestions for a short query (0, 1 or 2 characters), bypassing the ranked
-   * scorer: the most recently used references (0 characters) or citekeys that
-   * START with what was typed (1–2). Ordering — MRU, then Zotero `dateAdded`
-   * desc, then A–Z — lives in `recent-keys.ts`.
+   * scorer. 0 characters leads with THIS note's last query (if fresh) so a
+   * search can be reused to cite several works; otherwise the most recently
+   * used references. 1–2 characters show citekeys that START with them.
+   * Ordering — MRU, then Zotero `dateAdded` desc, then A–Z — is in
+   * `recent-keys.ts`.
    */
   private shortQuerySuggestions(query: string): {
     items: PartialCSLEntry[];
     total: number;
   } {
-    const entries = Array.from(this.plugin.bibManager.bibCache.values());
+    const bib = this.plugin.bibManager;
+    // Recents and the last query are scoped to the ACTIVE note: notes are about
+    // different things, so a shared history would be noise.
+    const notePath = this.plugin.app.workspace.getActiveFile()?.path ?? '';
+
+    // 0 characters: this note's last query, when it is fresh.
+    if (!query) {
+      const last = getLastSearch(bib.lastSearches, notePath, Date.now());
+      if (last) {
+        const rerun = normalizeQueryText(last.query);
+        if (rerun) {
+          const { entries, total } = bib.searchTier(
+            last.doubleAt ? 'abstract' : 'title',
+            rerun,
+            this.limit
+          );
+          if (entries.length) {
+            this._matchedTermsByKey = new Map(
+              entries.map((e) => [e.entry.id, e.terms])
+            );
+            return { items: entries.map((e) => e.entry), total };
+          }
+        }
+      }
+    }
+
+    const entries = Array.from(bib.bibCache.values());
     if (!entries.length) return { items: [], total: 0 };
     const base = query ? prefixMatches(entries, query) : entries;
-    const ordered = orderByRecency(base, this.plugin.bibManager.recentKeys);
+    const ordered = orderByRecency(base, getRecentKeys(bib.recentKeys, notePath));
     return { items: ordered.slice(0, this.limit), total: ordered.length };
   }
 
@@ -523,8 +560,14 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     if (!context) return;
 
     const id = suggestion.item.id;
-    // Remember the pick so the 0/1/2-character popup can lead with it.
-    this.plugin.bibManager.rememberRecentKey(id);
+    // Remember the pick, and (when it came from a query) the query itself, so
+    // the 0-character popup can re-run it in this note.
+    const doubleAt = context.query.startsWith(DOUBLE_AT_PREFIX);
+    this.plugin.bibManager.rememberSelection(id, {
+      query: context.query.slice(doubleAt ? 1 : 0).trim(),
+      doubleAt,
+      notePath: this.plugin.app.workspace.getActiveFile()?.path ?? '',
+    });
     const lineText = context.editor.getLine(context.start.line);
     const charBefore = lineText[context.start.ch - 1];
     const afterCursor = lineText.substring(context.end.ch);

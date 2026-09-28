@@ -2,6 +2,7 @@ import {
   DOUBLE_AT_PREFIX,
   detectCitationTrigger,
   isWordStartBefore,
+  normalizeQueryText,
   triggerQueryText,
 } from '../cite-trigger';
 
@@ -70,5 +71,14 @@ describe('detectCitationTrigger()', () => {
 
   it('does not trigger once a space ends the token', () => {
     expect(detectCitationTrigger('@key ')).toBeNull();
+  });
+});
+
+describe('normalizeQueryText()', () => {
+  it('turns underscores into word separators', () => {
+    expect(normalizeQueryText('social_theory')).toBe('social theory');
+    expect(normalizeQueryText('a__b')).toBe('a b');
+    expect(normalizeQueryText('plain')).toBe('plain');
+    expect(normalizeQueryText('  spaced  ')).toBe('spaced');
   });
 });

@@ -92,3 +92,13 @@ export function detectCitationTrigger(
 export function triggerQueryText(trigger: CitationTrigger): string {
   return (trigger.isDoubleAt ? trigger.query.slice(DOUBLE_AT_PREFIX.length) : trigger.query).trim();
 }
+
+/**
+ * Normalise a query for SEARCHING: an underscore stands in for a space, so a
+ * single unbroken token can express several words — `@social_theory` searches
+ * "social theory". Spaces themselves still END a bare `@` query, which is what
+ * lets you type a citation and keep writing prose.
+ */
+export function normalizeQueryText(query: string): string {
+  return query.replace(/_+/g, ' ').trim();
+}

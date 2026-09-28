@@ -50,7 +50,12 @@ import { cite } from 'src/parser/citeproc';
 import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
-import { touchRecentKey } from 'src/template/recent-keys';
+import {
+  recordLastSearch,
+  recordRecentKey,
+  type LastSearchMap,
+  type RecentKeysMap,
+} from 'src/template/recent-keys';
 import {
   derivedRenameFor,
   planCitekeyReconcile,
@@ -574,11 +579,17 @@ export class BibManager {
   engine: any;
 
   /**
-   * Citekeys in most-recently-used order (most recent first), persisted to
-   * `.scholar-weft/recent-keys.json`. Drives the 0/1/2-character autocomplete
-   * list and its ordering. See `src/template/recent-keys.ts`.
+   * Per-NOTE citekeys in most-recently-used order (most recent first),
+   * persisted to `.scholar-weft/recent-keys.json`. Notes are about different
+   * things, so the 0/1/2-character list is scoped to the active note. See
+   * `src/template/recent-keys.ts`.
    */
-  recentKeys: string[] = [];
+  recentKeys: RecentKeysMap = {};
+
+  /** Per-note last query that produced a selected citation, so the 0-character
+   *  popup can re-run THIS note's query (within the freshness window). Kept
+   *  per note, so tabbing away and querying elsewhere does not clobber it. */
+  lastSearches: LastSearchMap = {};
 
   /** True as soon as the Fuse index is built — gates autocomplete independently
    *  of the CSL engine so `@` suggestions are available before citeproc compiles
@@ -2459,16 +2470,30 @@ export class BibManager {
   }
 
   /**
-   * Record an inserted citekey as the most recent. Persisted fire-and-forget:
-   * insertions are user-paced, so a small write each time is fine.
+   * Record a selection: the citekey as most recent, and — when the selection
+   * came from a query — the query that produced it, so the 0-character popup
+   * can lead with those results again. Persisted fire-and-forget (selections
+   * are user-paced).
    */
-  rememberRecentKey(citekey: string): void {
-    if (!citekey) return;
-    this.recentKeys = touchRecentKey(this.recentKeys, citekey);
+  rememberSelection(
+    citekey: string,
+    search: { query: string; doubleAt: boolean; notePath: string }
+  ): void {
+    if (search.notePath) {
+      if (citekey) {
+        this.recentKeys = recordRecentKey(this.recentKeys, search.notePath, citekey);
+      }
+      this.lastSearches = recordLastSearch(
+        this.lastSearches,
+        search.notePath,
+        search,
+        Date.now()
+      );
+    }
     void this.saveRecentKeys();
   }
 
-  /** Persist the MRU list (`.scholar-weft/recent-keys.json`). */
+  /** Persist the per-note MRU lists + last queries (`.scholar-weft/recent-keys.json`). */
   async saveRecentKeys(): Promise<void> {
     try {
       const dir = normalizePath(SW_CACHE_DIR);
@@ -2477,24 +2502,51 @@ export class BibManager {
       }
       await app.vault.adapter.write(
         normalizePath(`${SW_CACHE_DIR}/recent-keys.json`),
-        JSON.stringify({ keys: this.recentKeys })
+        JSON.stringify({
+          recentKeys: this.recentKeys,
+          lastSearches: this.lastSearches,
+        })
       );
     } catch (e) {
       console.warn('[sw] saveRecentKeys: error', e);
     }
   }
 
-  /** Restore the MRU list (call once at startup). */
+  /** Restore the per-note MRU lists + last queries (call once at startup). */
   async loadRecentKeys(): Promise<void> {
     try {
       const raw = await app.vault.adapter.read(
         normalizePath(`${SW_CACHE_DIR}/recent-keys.json`)
       );
       const data = JSON.parse(raw);
-      if (Array.isArray(data?.keys)) {
-        this.recentKeys = data.keys.filter(
-          (k: unknown): k is string => typeof k === 'string' && !!k
-        );
+      const map = data?.recentKeys;
+      if (map && typeof map === 'object' && !Array.isArray(map)) {
+        const out: RecentKeysMap = {};
+        for (const [path, list] of Object.entries(map as Record<string, unknown>)) {
+          if (Array.isArray(list)) {
+            const keys = list.filter(
+              (k: unknown): k is string => typeof k === 'string' && !!k
+            );
+            if (keys.length) out[path] = keys;
+          }
+        }
+        this.recentKeys = out;
+      }
+      const searches = data?.lastSearches;
+      if (searches && typeof searches === 'object') {
+        const out: LastSearchMap = {};
+        for (const [path, entry] of Object.entries(
+          searches as Record<string, any>
+        )) {
+          if (entry && typeof entry.query === 'string' && entry.query) {
+            out[path] = {
+              query: entry.query,
+              doubleAt: !!entry.doubleAt,
+              at: typeof entry.at === 'number' ? entry.at : 0,
+            };
+          }
+        }
+        this.lastSearches = out;
       }
     } catch {
       // no persisted list yet — first run
