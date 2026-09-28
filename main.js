@@ -97296,6 +97296,7 @@ var BibManager = class {
     if (hash)
       this.dispatchedHashes.set(file.path, hash);
     app.workspace.getLeavesOfType("markdown").forEach((l4) => {
+      var _a, _b;
       const view = l4.view;
       if (view.file === file) {
         const previewMode = view.previewMode;
@@ -97314,8 +97315,9 @@ var BibManager = class {
         } else if (typeof view.onMarkdownFold === "function") {
           view.onMarkdownFold();
         }
+        const suggestOpen = ((_b = (_a = this.plugin).isCitationSuggestOpen) == null ? void 0 : _b.call(_a)) === true;
         const cm = view.editor.cm;
-        if (cm.dispatch) {
+        if (!suggestOpen && cm.dispatch) {
           cm.dispatch({
             effects: [setCiteKeyCache.of(result)]
           });
@@ -97769,8 +97771,6 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     this._pandocHint = false;
     this._matchedTermsByKey = new Map();
     this.lastSelect = null;
-    this.isRefreshing = false;
-    this.lastRefreshAt = 0;
     this.plugin = plugin;
     this.suggestEl.addClass("sw-suggest");
     this.scope.register(["Mod"], "Enter", (evt) => {
@@ -98057,6 +98057,9 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     const terms = item.id ? this._matchedTermsByKey.get(item.id) : void 0;
     return excerptsForResult(item, terms != null ? terms : [], { maxLines: 3 });
   }
+  isOpen() {
+    return !!this.context;
+  }
   selectSuggestion(suggestion, event) {
     var _a, _b;
     if (isLoadingSuggestion(suggestion))
@@ -98083,20 +98086,6 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     context.editor.replaceRange(replaceStr, context.start, context.end);
     this.lastSelect = { ch: context.start.ch + replaceStr.length, line: context.start.line };
     this.close();
-  }
-  async refreshZBib() {
-    if (this.isRefreshing)
-      return;
-    const now = Date.now();
-    if (now - this.lastRefreshAt < 3e4)
-      return;
-    this.lastRefreshAt = now;
-    this.isRefreshing = true;
-    try {
-      await this.plugin.bibManager.refreshGlobalZBib();
-    } finally {
-      this.isRefreshing = false;
-    }
   }
   async liveSearch(query, kind) {
     var _a, _b, _c;
@@ -98137,7 +98126,7 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     return out.slice(0, this.limit);
   }
   onTrigger(cursor, editor) {
-    const { enableCiteKeyCompletion, pullFromZotero, citeSearchMinChars } = this.plugin.settings;
+    const { enableCiteKeyCompletion, citeSearchMinChars } = this.plugin.settings;
     if (enableCiteKeyCompletion === false)
       return null;
     const { lastSelect } = this;
@@ -98164,8 +98153,6 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     }
     LOG("onTrigger: matched", trigger.isDoubleAt ? "@@" : "@", "query=", JSON.stringify(triggerQueryText(trigger)));
     this.lastSelect = null;
-    if (!this.context && pullFromZotero)
-      this.refreshZBib();
     return {
       start: { line: cursor.line, ch: trigger.atPos },
       end: cursor,
@@ -101882,6 +101869,10 @@ var ReferenceList = class extends import_obsidian38.Plugin {
       }
     }
     return true;
+  }
+  isCitationSuggestOpen() {
+    var _a, _b;
+    return ((_b = (_a = this.citeSuggest) == null ? void 0 : _a.isOpen) == null ? void 0 : _b.call(_a)) === true;
   }
   applyCitationColors() {
     const { decorationColorUnlinked, decorationColorLinked, decorationColorUnimported } = this.settings;

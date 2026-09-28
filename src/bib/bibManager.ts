@@ -3689,8 +3689,15 @@ export class BibManager {
           (view as any).onMarkdownFold();
         }
 
+        // Do NOT dispatch to CodeMirror while the citation popup is open: the
+        // background re-render (typing -> modify -> processReferences) fires a
+        // CM transaction ~150 ms after the last keystroke, and that transaction
+        // DISMISSES the popup — which is why a search appeared to "time out"
+        // while you were reading it. The dispatch is deferred to the next edit
+        // after the popup closes.
+        const suggestOpen = this.plugin.isCitationSuggestOpen?.() === true;
         const cm = (view.editor as any).cm as EditorView;
-        if (cm.dispatch) {
+        if (!suggestOpen && cm.dispatch) {
           cm.dispatch({
             effects: [setCiteKeyCache.of(result)],
           });

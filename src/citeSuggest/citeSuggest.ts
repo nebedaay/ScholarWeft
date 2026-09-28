@@ -610,6 +610,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
   private lastSelect: EditorPosition = null;
 
+  /** Is the popup currently open? Used by the background re-render to avoid
+   *  dispatching a CodeMirror transaction that would dismiss it. */
+  isOpen(): boolean {
+    return !!this.context;
+  }
+
   selectSuggestion(
     suggestion: Fuse.FuseResult<PartialCSLEntry>,
     event: KeyboardEvent | MouseEvent
@@ -653,27 +659,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     context.editor.replaceRange(replaceStr, context.start, context.end);
     this.lastSelect = { ch: context.start.ch + replaceStr.length, line: context.start.line };
     this.close();
-  }
-
-  private isRefreshing = false;
-  private lastRefreshAt = 0;
-
-  /** Refresh the Zotero bib + fuse, rate-limited to once per 30 s so typing
-   *  "@" repeatedly doesn't trigger a JSON-RPC round trip + full re-render
-   *  (refreshGlobalZBib clears fileCache and calls processReferences) on
-   *  every popup. The index is also refreshed at startup by the plugin, so
-   *  this only needs to catch mid-session Zotero edits. */
-  async refreshZBib() {
-    if (this.isRefreshing) return;
-    const now = Date.now();
-    if (now - this.lastRefreshAt < 30_000) return;
-    this.lastRefreshAt = now;
-    this.isRefreshing = true;
-    try {
-      await this.plugin.bibManager.refreshGlobalZBib();
-    } finally {
-      this.isRefreshing = false;
-    }
   }
 
   /**
@@ -739,7 +724,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   }
 
   onTrigger(cursor: EditorPosition, editor: Editor): EditorSuggestTriggerInfo {
-    const { enableCiteKeyCompletion, pullFromZotero, citeSearchMinChars } =
+    const { enableCiteKeyCompletion, citeSearchMinChars } =
       this.plugin.settings;
 
     if (enableCiteKeyCompletion === false) return null;
@@ -793,7 +778,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       JSON.stringify(triggerQueryText(trigger))
     );
     this.lastSelect = null;
-    if (!this.context && pullFromZotero) this.refreshZBib();
+    // Do NOT refresh the library here. `refreshGlobalZBib` does
+    // `fileCache.clear()` + `processReferences()` + a CodeMirror dispatch on the
+    // active editor, which DISMISSES the popup we are about to open — it looked
+    // like a ~1 s hard timeout and made Tab indent mid-cycle. The library is
+    // refreshed at startup and when Obsidian regains focus, which covers
+    // mid-session Zotero edits without disturbing an open search.
 
     return {
       start: { line: cursor.line, ch: trigger.atPos },

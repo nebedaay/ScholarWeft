@@ -1662,6 +1662,15 @@ export default class ReferenceList extends Plugin {
     return true;
   }
 
+  /**
+   * Is the citation autocomplete popup currently open? The background
+   * re-render (typing → modify → processReferences) uses this to avoid
+   * dispatching a CodeMirror transaction that would prematurely dismiss it.
+   */
+  isCitationSuggestOpen(): boolean {
+    return this.citeSuggest?.isOpen?.() === true;
+  }
+
   /** Apply the three decoration underline colors from settings as CSS custom
    *  properties on document.body, overriding the stylesheet defaults.
    *  Only fires when a value has been explicitly saved; unset keys leave the
