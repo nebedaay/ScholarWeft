@@ -18,11 +18,26 @@ None of this needs external tools — linked citations work without Pandoc or Zo
 | <code>[[@key&#124;-@]]</code>          | (Year)                         | `[-@key]` (suppress author) |
 | <code>[[@key&#124;see @, p. 6]]</code> | (see Author Year, p. 6)        | `[see @key, p. 6]`          |
 | <code>[[@key&#124;-@, p. 6]]</code>    | (Year, p. 6)                   | `[-@key, p. 6]`             |
-| `[ [[@a]]; [[@b]] ]`    | (Author A Year; Author B Year) | `[@a; @b]` (multi-work)     |
+| `[[@a]] [[@b]]`         | (Author A Year; Author B Year) | `[@a; @b]` (several works)  |
+| `[ [[@a]]; [[@b]] ]`    | (Author A Year; Author B Year) | `[@a; @b]` (several works)  |
 
 Inside an alias, `@` is a proxy for the link’s own citekey. The convert commands translate between linked and pandoc forms losslessly.
 
 See the [pandoc citation syntax](https://pandoc.org/demo/example33/8.20-citation-syntax.html#citation-syntax) for the underlying format.
+
+## Several works in one citation
+
+Writing citations next to each other — separated only by spaces or a single line break — renders them as **one** compound citation:
+
+    [[@a]] [[@b]]        → (Author A Year; Author B Year)
+
+This is the normal and simplest way to cite several works at once, and it is what pandoc's `[@a; @b]` means. A **blank line**, or any text between the citations, keeps them separate. A narrative citation (`[[@key|@ -]]`) is never combined with its neighbour.
+
+The older container form still works and is not deprecated:
+
+    [ [[@a]] [[@b]] ]    → the same compound citation
+
+It offers no advantage over simply placing the citations together, so new writing can use the plain contiguous form. (The `⟦…⟧` form is accepted too, for compatibility.)
 
 ## Inserting full references
 
@@ -34,14 +49,17 @@ abbreviation `ref`; both are case-insensitive):
 | -------------------------------------- | -------------------------------------- |
 | <code>[[@key&#124;reference]]</code>                  | the full entry for `@key`              |
 | <code>[[@key&#124;ref]]</code>                        | same                                   |
+| <code>[[@a&#124;reference]] [[@b&#124;reference]] [[@c&#124;reference]]</code> | the three entries |
 | <code>[ [[@a&#124;reference]] [[@b]] [[@c]] ]</code>  | the three entries, one below the other |
 | <code>⟦[[@a&#124;reference]]; [[@b]]⟧</code>          | the two entries, one below the other   |
 
-A container is a list of references when **any** member uses the `reference`/`ref`
-alias — a list is either all citations or all references, so only one member
+Give each entry the `reference`/`ref` alias and place them next to each other to
+build a list (they sit one below the other). Alternatively use a container,
+where a **single** `reference` marker on any member makes the whole list
+references — a list is either all citations or all references, so only one member
 needs the marker. Both container forms work exactly as they do for citations: the
 outer-bracket form (`[ … ]`, members separated by whitespace or `;`) and the
-`⟦…⟧` multi-work container (members separated by `;`). Text outside the `[[…]]`
+`⟦…⟧` form (members separated by `;`). Text outside the `[[…]]`
 links inside the container is discarded, and each entry renders as its own
 paragraph (a single `[[@key|reference]]` can also sit inside a paragraph).
 

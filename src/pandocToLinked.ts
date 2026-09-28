@@ -202,9 +202,11 @@ export function rewritePandocToLinked(
       return memberFor(a.key, a);
     }
 
-    // multi-work container: each member gets its own alias (prefix @@ suffix)
+    // Contiguous citations (the default compound form): space-separated
+    // wikilinks merge automatically, so no container is needed. Each member
+    // keeps its own alias (prefix @@ suffix).
     const members = parsed.aliases.map((a) => memberFor(a.key, a));
-    return `[ ${members.join('; ')} ]`;
+    return members.join(' ');
   });
 
   // 2. Bare @citekey in prose (not inside [[...]] or [@...] already)

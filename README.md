@@ -34,13 +34,13 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 
 ### Citations
 
-- **Linked citations** — `[[@smith1992|see @, p. 6]]` → (see Smith 1992, 6): real Obsidian wikilinks *and* publication-ready formatted citations. See [Linked Citations](./docs/linked-citations.md).
-- **Full references in the text** — `[[@key|reference]]`, or a container such as `[ [[@a|reference]] [[@b]] [[@c]] ]`, inserts the formatted bibliography entry (or a list of them) — for reading lists and syllabi. They render live in Obsidian and export as plain formatted text. See [Inserting full references](./docs/linked-citations.md#inserting-full-references).
+- **Linked citations** — `[[@smith1992|see @, p. 6]]` → (see Smith 1992, 6): real Obsidian wikilinks *and* publication-ready formatted citations. Cite several works by placing them together — `[[@a]] [[@b]]` → (Author A Year; Author B Year). See [Linked Citations](./docs/linked-citations.md).
+- **Full references in the text** — `[[@key|reference]]` (place several such links together for a list), or a container like `[ [[@a|reference]] [[@b]] [[@c]] ]`, inserts the formatted bibliography entry (or a list of them) — for reading lists and syllabi. They render live in Obsidian and export as plain formatted text. See [Inserting full references](./docs/linked-citations.md#inserting-full-references).
 - **Conventional pandoc citations** — `[@key]`, `[see @key, p. 25]` render too, and commands convert between formats losslessly.
 - **Live reference sidebar** — a searchable list of every citation in the current note, with copy and jump buttons.
 - **Insert bibliography at cursor** and **bibliography snapshot** (save a note's citations as a `.bib`, colour-coded by sync status).
 - **Search that finds the work, ranked by meaning** — `@` searches citekey, author and title; `@@` adds abstracts, publisher and containing work. Every word must be present, words may sit in different fields, word *beginnings* count (`soccri` → *soc*ial *cri*tique), and accents are ignored. Results are ordered by how meaningfully they match — an exact citekey, then author-with-title, then an exact title phrase, then title words, then the `@@` fields — so a title match is never buried by an abstract one. The popup shows the result count and, for `@@`, an excerpt of the abstract where your terms were found. See [Searching for References](./docs/searching.md).
-- **Smart bracket insertion** — `⌘↵` wraps the selection in `[@key]`, closing a wikilink with `]]` and a Pandoc citation with `]`.
+- **Quick insertion** — in the search popup, **Enter** inserts a linked citation (`[[@key]]`) and **⌘/Ctrl+Enter** a Pandoc one (`[@key]`); inside an open bracket only the closer you still need is added.
 - **Citation decoration and tooltips** — colour-coded status; hover for a formatted preview, literature-note link, and Zotero link.
 - **Mobile support** — tap citations in reading mode, long-press in the editor. See [Mobile](./docs/mobile.md).
 

@@ -107,10 +107,14 @@ function rewriteContainers(str: string): string {
       }
       // Only the FIRST member can be narrative (the plugin drops a mid-group
       // '-' flag); pandoc expresses that as `@first [rest…]`.
+      // Emit the members as a FLAT sequence of pandoc citations. The single
+      // compound-forming function (`mergeCompoundCitations`, below) then
+      // combines it — exactly as it combines genuinely adjacent citations — so
+      // containered and contiguous references take the SAME path.
       const merged = firstNarrative
         ? mergedParts[0] +
           (mergedParts.length > 1 ? ' [' + mergedParts.slice(1).join('; ') + ']' : '')
-        : '[' + mergedParts.join('; ') + ']';
+        : mergedParts.map((t) => `[${t}]`).join(' ');
       containers.push({ open, close, merged });
       scan = close + 1;
       continue;
@@ -180,20 +184,22 @@ export function convertCitationsInText(text: string): string {
   const outLines = lines.map((line) =>
     /\[\[@/.test(line) ? rewriteContainers(line) : line
   );
-  return mergeAdjacentPandocCitations(outLines.join('\n'));
+  return mergeCompoundCitations(outLines.join('\n'));
 }
 
 /**
- * Merge pandoc bracket citations that are ADJACENT — separated only by spaces/
- * tabs and at most ONE newline — into one multi-item citation, so
- * `[[@a]] [[@b]]` exports as `[@a; @b]` rather than `[@a] [@b]`. Mirrors the
- * parser's contiguous-citation rule (`getCitationSegments`).
+ * THE compound-forming step, shared by containered and contiguous references.
+ * `rewriteContainers` flattens container members into a plain sequence of pandoc
+ * citations, so both a former container (`[@a] [@b]`) and genuinely adjacent
+ * citations (`[[@a]] [[@b]]` → `[@a] [@b]`) arrive here identically and merge
+ * into ONE multi-item citation `[@a; $b]`.
  *
  * Only bracket groups whose content contains `@` are merged, so markdown links
  * (`[text](url)`) and prose brackets are never touched. A bare narrative `@a`
- * (no brackets) is not merged.
+ * (no brackets) is not merged. Separators allowed: spaces/tabs and at most ONE
+ * newline — matching the in-app parser's contiguous rule.
  */
-export function mergeAdjacentPandocCitations(text: string): string {
+export function mergeCompoundCitations(text: string): string {
   const ADJACENT =
     /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
   let prev: string;
@@ -204,6 +210,9 @@ export function mergeAdjacentPandocCitations(text: string): string {
   } while (out !== prev);
   return out;
 }
+
+/** @deprecated alias kept for callers/tests; use {@link mergeCompoundCitations}. */
+export const mergeAdjacentPandocCitations = mergeCompoundCitations;
 
 /**
  * Full-reference insertions (`[[@key|reference]]` / `[[@key|ref]]`, or a

@@ -134,10 +134,14 @@ function rewriteContainers(str) {
       }
       // Only the FIRST member can be narrative (the plugin drops a mid-group
       // '-' flag); pandoc expresses that as `@first [rest…]`.
+      // Emit the members as a FLAT sequence of pandoc citations; the single
+      // compound-forming function below combines it (and genuine adjacency)
+      // into one compound citation, so containered and contiguous references
+      // take the SAME path.
       const merged = firstNarrative
         ? mergedParts[0] +
           (mergedParts.length > 1 ? ' [' + mergedParts.slice(1).join('; ') + ']' : '')
-        : '[' + mergedParts.join('; ') + ']';
+        : mergedParts.map((t) => '[' + t + ']').join(' ');
       containers.push({ open, close, merged });
       scan = close + 1;
       continue;
@@ -225,9 +229,10 @@ function convert(input, output) {
   console.log(`Converted citations: ${input} → ${output}`);
 }
 
-// Merge pandoc bracket citations that are ADJACENT (spaces/tabs and at most one
-// newline apart) into one multi-item citation, so `[[@a]] [[@b]]` exports as
-// `[@a; @b]`. Mirrors src/convertCitations.ts and the parser rule.
+// THE compound-forming step for the CLI, shared by containered and contiguous
+// references (mirrors src/convertCitations.ts `mergeCompoundCitations`).
+// `rewriteContainers` flattens container members to a plain sequence, so both
+// arrive here as `[@a] [@b]` and merge into `[@a; @b]`.
 function mergeAdjacentPandocCitations(text) {
   const ADJACENT =
     /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
