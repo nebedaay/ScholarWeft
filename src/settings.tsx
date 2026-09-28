@@ -264,6 +264,10 @@ export interface ReferenceListSettings {
    *  (metadata, or annotations/attachments). `undefined` = not yet chosen (the
    *  user is asked before anything is modified); `true`/`false` = chosen. */
   autoUpdateNotes?: boolean;
+  /** Apply Zotero CITIKEY changes (renames) to notes automatically.
+   *  `undefined` = not yet chosen (asked on the first detected change);
+   *  `true`/`false` = chosen. */
+  autoUpdateCitekeys?: boolean;
   /**
    * When true, a newly created literature note gets the item's Zotero child
    * notes inserted automatically (into its managed "## Notes" section), so it
@@ -1278,30 +1282,50 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             })
         );
 
-      new Setting(containerEl)
-        .setName(t('Update literature notes automatically'))
-        .setDesc(
-          t(
-            'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.'
-          )
-        )
-        .then((setting) => {
-          const makeRadio = (label: string, value: boolean) => {
-            const wrap = setting.controlEl.createEl('label', {
-              cls: 'sw-auto-update-radio',
-            });
-            const input = wrap.createEl('input', { type: 'radio' });
-            input.name = 'sw-auto-update';
-            input.checked = this.plugin.settings.autoUpdateNotes === value;
-            input.addEventListener('change', () => {
-              this.plugin.settings.autoUpdateNotes = value;
-              this.plugin.saveSettings();
-            });
-            wrap.appendText(' ' + label);
-          };
-          makeRadio(t('Yes'), true);
-          makeRadio(t('No'), false);
-        });
+      const autoUpdateRadio = (
+        name: string,
+        desc: string,
+        get: () => boolean | undefined,
+        set: (v: boolean) => void
+      ) => {
+        new Setting(containerEl)
+          .setName(t(name))
+          .setDesc(t(desc))
+          .then((setting) => {
+            const makeRadio = (label: string, value: boolean) => {
+              const wrap = setting.controlEl.createEl('label', {
+                cls: 'sw-auto-update-radio',
+              });
+              const input = wrap.createEl('input', { type: 'radio' });
+              input.name = `sw-radio-${name}`;
+              input.checked = get() === value;
+              input.addEventListener('change', () => set(value));
+              wrap.appendText(' ' + label);
+            };
+            makeRadio(t('Yes'), true);
+            makeRadio(t('No'), false);
+          });
+      };
+
+      autoUpdateRadio(
+        'Update literature notes automatically',
+        'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.',
+        () => this.plugin.settings.autoUpdateNotes,
+        (v) => {
+          this.plugin.settings.autoUpdateNotes = v;
+          this.plugin.saveSettings();
+        }
+      );
+
+      autoUpdateRadio(
+        'Update citekeys automatically',
+        'When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Leave both unselected and you will be asked the first time it happens.',
+        () => this.plugin.settings.autoUpdateCitekeys,
+        (v) => {
+          this.plugin.settings.autoUpdateCitekeys = v;
+          this.plugin.saveSettings();
+        }
+      );
 
       new Setting(containerEl)
         .setName(t('Child-note heading level'))

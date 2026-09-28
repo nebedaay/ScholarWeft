@@ -110,8 +110,9 @@ export class CitekeyReconcileModal extends Modal {
     if (unresolved.length) {
       const heading = contentEl.createEl('p', {
         text:
-          `Not in the loaded Zotero library (${unresolved.length}) — the item ` +
-          `was deleted, or its library is not loaded right now:`,
+          `Not found in the loaded Zotero libraries (${unresolved.length}). ` +
+          `This usually means the item was deleted, or the library it lives in ` +
+          `is not currently enabled in ScholarWeft's settings:`,
       });
       heading.style.color = 'var(--text-warning, var(--text-error))';
       const ul = contentEl.createEl('ul', { cls: 'sw-unresolved-list' });

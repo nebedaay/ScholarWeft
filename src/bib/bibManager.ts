@@ -1509,11 +1509,19 @@ export class BibManager {
     const tagged = { ...entry, _source: 'zotero' as const };
 
     if (existing?._source === 'zotero') {
-      // Cross-group duplicate — keep whichever was modified more recently.
+      // Cross-group duplicate of the SAME citekey (e.g. the user copied an item
+      // to a shared library, and Better BibTeX gives both copies the same key).
+      // The PERSONAL library is the source of truth, so it wins over a group;
+      // otherwise keep whichever was modified more recently.
+      const existingIsMyLibrary = ((existing as { groupID?: number }).groupID ?? 1) === 1;
+      const incomingIsMyLibrary = ((tagged as { groupID?: number }).groupID ?? 1) === 1;
+      if (existingIsMyLibrary !== incomingIsMyLibrary) {
+        if (incomingIsMyLibrary) this.bibCache.set(entry.id, tagged);
+        return;
+      }
       if ((tagged._dateModified ?? '') > (existing._dateModified ?? '')) {
         this.bibCache.set(entry.id, tagged);
       }
-      // else keep existing; both from Zotero so no conflict with .bib
       return;
     }
 

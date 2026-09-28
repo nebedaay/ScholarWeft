@@ -2063,7 +2063,27 @@ export default class ReferenceList extends Plugin {
       return false;
     }
 
-    new CitekeyReconcileModal(this.app, plan, () => this.applyReconcile(plan)).open();
+    // Once the answer is YES, apply automatically — like note auto-update, so
+    // the modal is asked ONCE rather than every time a citekey changes.
+    if (this.settings.autoUpdateCitekeys === true) {
+      await this.applyReconcile(plan);
+      return true;
+    }
+    if (this.settings.autoUpdateCitekeys === false) {
+      return false;
+    }
+
+    // autoUpdateCitekeys is UNSET: ask before the first rename. A "Skip" here
+    // turns it off for good; dismissing leaves it unset so we ask again.
+    const { CitekeyConsentModal } = await import('./modals/citekeyConsentModal');
+    const answer = await new Promise<'yes' | 'no' | 'ask'>((resolve) =>
+      new CitekeyConsentModal(this.app, resolve).open()
+    );
+    if (answer === 'ask') return false;
+    this.settings.autoUpdateCitekeys = answer === 'yes';
+    await this.saveSettings();
+    if (answer === 'no') return false;
+    await this.applyReconcile(plan);
     return true;
   }
 
