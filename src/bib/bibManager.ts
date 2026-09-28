@@ -2318,7 +2318,9 @@ export class BibManager {
     const htmlStr = [metadata.bibstart];
 
     metadata.entry_ids?.forEach((e: string, i: number) => {
-      entries[i] = entries[i].replace(/>/, ` data-citekey="${e[0]}">`);
+      const entry = entries[i];
+      if (typeof entry !== 'string') return;
+      entries[i] = entry.replace(/>/, ` data-citekey="${e[0]}">`);
       citeBibMap.set(e[0], entries[i]);
     });
 

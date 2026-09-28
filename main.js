@@ -68547,11 +68547,9 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   }
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
   const { items: rawItems, version } = await fetchAllZoteroItemsNative(port, libraryType, libraryId, sinceVersion);
-  if (!(rawItems == null ? void 0 : rawItems.length))
-    return null;
   const modified = new Map();
   const newKeys = new Set();
-  for (const rawItem of rawItems) {
+  for (const rawItem of rawItems != null ? rawItems : []) {
     const cslItem = zoteroItemToCSL(rawItem, groupId);
     if (!(cslItem == null ? void 0 : cslItem.id))
       continue;
@@ -68579,16 +68577,26 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   for (const key of newKeys)
     list.push(modified.get(key));
   const trashed = await fetchTrashedItemKeysNative(port, groupId);
+  let pruned = 0;
   if (trashed.size) {
-    const kept = list.filter((item) => !(typeof item._zoteroKey === "string" && trashed.has(item._zoteroKey)));
-    list.length = 0;
-    list.push(...kept);
+    const kept = list.filter((item) => {
+      const gone = typeof item._zoteroKey === "string" && trashed.has(item._zoteroKey);
+      if (gone)
+        pruned++;
+      return !gone;
+    });
+    if (pruned) {
+      list.length = 0;
+      list.push(...kept);
+    }
     for (const [k4, v3] of [...modified.entries()]) {
       const zk = v3._zoteroKey;
       if (typeof zk === "string" && trashed.has(zk))
         modified.delete(k4);
     }
   }
+  if (!(rawItems == null ? void 0 : rawItems.length) && pruned === 0)
+    return null;
   await app.vault.adapter.write(cachePath, JSON.stringify({ items: list, version }));
   return { list: applyGroupID(list, groupId), modified };
 }
@@ -68626,8 +68634,8 @@ async function getItemJSONFromCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKey
           const href = (_b = (_a = c3.links) == null ? void 0 : _a.enclosure) == null ? void 0 : _b.href;
           const path2 = (_c = c3.data) == null ? void 0 : _c.path;
           const raw = href != null ? href : path2;
-          const clean = raw.replace(/^file:\/\//, "").split("?")[0];
-          return { path: decodeURIComponent(clean) };
+          const clean = typeof raw === "string" ? raw.replace(/^file:\/\//, "").split("?")[0] : "";
+          return { path: clean ? decodeURIComponent(clean) : "" };
         }) : [];
         results.push({ citekey: citeKey, citationKey: citeKey, select: selectUrl, attachments });
       } catch (e3) {
@@ -94736,6 +94744,8 @@ function decodeHtml(str3) {
   return txt.value;
 }
 function sanitize(val) {
+  if (typeof val !== "string")
+    return "";
   return decodeHtml(val.replace(/\[NO_PRINTED_FORM\] */g, ""));
 }
 function cite(engine, group, uncitedItemIDs) {
@@ -96325,7 +96335,10 @@ var BibManager = class {
     const entries = bib[1];
     const htmlStr = [metadata.bibstart];
     (_b = metadata.entry_ids) == null ? void 0 : _b.forEach((e3, i3) => {
-      entries[i3] = entries[i3].replace(/>/, ` data-citekey="${e3[0]}">`);
+      const entry = entries[i3];
+      if (typeof entry !== "string")
+        return;
+      entries[i3] = entry.replace(/>/, ` data-citekey="${e3[0]}">`);
       citeBibMap.set(e3[0], entries[i3]);
     });
     for (const entry of entries)

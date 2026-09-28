@@ -132,6 +132,7 @@ function decodeHtml(str: string) {
 }
 
 function sanitize(val: string) {
+  if (typeof val !== 'string') return '';
   return decodeHtml(val.replace(/\[NO_PRINTED_FORM\] */g, ''));
 }
 

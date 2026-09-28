@@ -681,12 +681,10 @@ export async function refreshZBibNative(
     sinceVersion
   );
 
-  if (!rawItems?.length) return null;
-
   const modified = new Map<string, PartialCSLEntry>();
   const newKeys = new Set<string>();
 
-  for (const rawItem of rawItems) {
+  for (const rawItem of rawItems ?? []) {
     const cslItem = _zoteroItemToCSL(rawItem, groupId);
     if (!cslItem?.id) continue;
     modified.set(cslItem.id, cslItem);
@@ -716,22 +714,31 @@ export async function refreshZBibNative(
   }
   for (const key of newKeys) list.push(modified.get(key)!);
 
-  // Drop items now in the Zotero TRASH. `/items` (full and delta) never returns
-  // them, so without this they stay in the cache (and the persisted file)
-  // forever after being trashed.
+  // Drop items now in the Zotero TRASH. This MUST run even when the delta is
+  // EMPTY: `/items` never returns trashed items, so a trashed item can never
+  // appear in `rawItems`. The early `return null` that used to sit above this
+  // is exactly why a trashed item lingered in the persisted file forever.
   const trashed = await fetchTrashedItemKeysNative(port, groupId);
+  let pruned = 0;
   if (trashed.size) {
-    const kept = list.filter(
-      (item) =>
-        !(typeof item._zoteroKey === 'string' && trashed.has(item._zoteroKey))
-    );
-    list.length = 0;
-    list.push(...kept);
+    const kept = list.filter((item) => {
+      const gone =
+        typeof item._zoteroKey === 'string' && trashed.has(item._zoteroKey);
+      if (gone) pruned++;
+      return !gone;
+    });
+    if (pruned) {
+      list.length = 0;
+      list.push(...kept);
+    }
     for (const [k, v] of [...modified.entries()]) {
       const zk = (v as any)._zoteroKey;
       if (typeof zk === 'string' && trashed.has(zk)) modified.delete(k);
     }
   }
+
+  // Nothing changed at all → let the caller keep the existing cache.
+  if (!rawItems?.length && pruned === 0) return null;
 
   await app.vault.adapter.write(
     cachePath,
@@ -796,8 +803,11 @@ export async function getItemJSONFromCiteKeysNative(
                 const path = c.data?.path as string | undefined;
                 // Normalize file:///... → plain filesystem path; strip query.
                 const raw = href ?? path;
-                const clean = raw.replace(/^file:\/\//, '').split('?')[0];
-                return { path: decodeURIComponent(clean) };
+                const clean =
+                  typeof raw === 'string'
+                    ? raw.replace(/^file:\/\//, '').split('?')[0]
+                    : '';
+                return { path: clean ? decodeURIComponent(clean) : '' };
               })
           : [];
 
