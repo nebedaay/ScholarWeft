@@ -110,8 +110,7 @@ function noteFolderForEntry(
 ): string {
   const groupID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : 1;
   if (groupID === 1) return literatureNoteFolder(plugin);
-  const name =
-    plugin.settings.zoteroGroups?.find((g) => g.id === groupID)?.name ?? null;
+  const name = plugin.bibManager?.libraryNameFor(groupID) ?? null;
   return literatureNoteFolderFor({
     base: literatureNoteFolder(plugin),
     groupID,

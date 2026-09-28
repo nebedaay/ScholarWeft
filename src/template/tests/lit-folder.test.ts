@@ -1,5 +1,7 @@
 import {
+  libraryDisplayName,
   literatureNoteFolderFor,
+  rememberLibraryName,
   sanitizeLibraryFolderName,
 } from '../lit-folder';
 
@@ -51,5 +53,40 @@ describe('literatureNoteFolderFor()', () => {
     expect(
       literatureNoteFolderFor({ base: 'Notes/', groupID: 7, groupName: 'G' })
     ).toBe('Notes/G');
+  });
+
+  it('falls back to Group N when no name is known', () => {
+    expect(literatureNoteFolderFor({ base: 'Notes', groupID: 888888 })).toBe(
+      'Notes/Group 888888'
+    );
+  });
+});
+
+describe('libraryDisplayName() / name cache', () => {
+  it('prefers the settings name and remembers it', () => {
+    rememberLibraryName(6667607, 'Andrea Lickacz readings');
+    expect(libraryDisplayName(6667607, 'Andrea Lickacz readings')).toBe(
+      'Andrea Lickacz readings'
+    );
+    // Available later even without a settings value.
+    expect(libraryDisplayName(6667607)).toBe('Andrea Lickacz readings');
+  });
+
+  it('uses the cached name when settings has none', () => {
+    rememberLibraryName(999, 'Shared Readings');
+    expect(libraryDisplayName(999, null)).toBe('Shared Readings');
+  });
+
+  it('returns empty for an unknown group (folder falls back to Group N)', () => {
+    expect(libraryDisplayName(123456, '')).toBe('');
+  });
+});
+
+describe('literatureNoteFolderFor() with the name cache', () => {
+  it('names the subfolder from the remembered library name', () => {
+    rememberLibraryName(6667607, 'Andrea Lickacz readings');
+    expect(literatureNoteFolderFor({ base: 'Notes', groupID: 6667607 })).toBe(
+      'Notes/Andrea Lickacz readings'
+    );
   });
 });

@@ -1715,8 +1715,7 @@ export default class ReferenceList extends Plugin {
       const target = literatureNoteFolderFor({
         base,
         groupID: gid,
-        groupName:
-          this.settings.zoteroGroups?.find((g) => g.id === gid)?.name ?? null,
+        groupName: this.bibManager.libraryNameFor(gid),
       });
       // Already in the right place (or below it)?
       if (f.path.startsWith(target + '/') || f.parent?.path === target) continue;
@@ -1763,8 +1762,7 @@ export default class ReferenceList extends Plugin {
         const folder = literatureNoteFolderFor({
           base,
           groupID: gid,
-          groupName:
-            this.settings.zoteroGroups?.find((g) => g.id === gid)?.name ?? null,
+          groupName: this.bibManager.libraryNameFor(gid),
         });
         try {
           if (!(await this.app.vault.adapter.exists(folder))) {

@@ -33,6 +33,30 @@ export function resolveLiteratureNoteFolder(opts: {
 /** Characters not allowed in a folder name, replaced with `-`. */
 const UNSAFE_FOLDER_CHARS = /[\\/:*?"<>|#^[\]]/g;
 
+/** Extra library names, remembered per group id so a folder name is stable even
+ *  when the group is momentarily absent from settings (e.g. disabled then
+ *  re-enabled). */
+const LIBRARY_NAME_CACHE = new Map<number, string>();
+
+/** Remember a group's display name for folder naming. */
+export function rememberLibraryName(groupID: number, name: string | null | undefined): void {
+  const n = (name ?? '').trim();
+  if (groupID && groupID !== 1 && n) LIBRARY_NAME_CACHE.set(groupID, n);
+}
+
+/** A group's display name: settings first, then the cache, then `Group N`. */
+export function libraryDisplayName(
+  groupID: number,
+  fromSettings?: string | null
+): string {
+  const fromSettingsTrimmed = (fromSettings ?? '').trim();
+  if (fromSettingsTrimmed) {
+    LIBRARY_NAME_CACHE.set(groupID, fromSettingsTrimmed);
+    return fromSettingsTrimmed;
+  }
+  return LIBRARY_NAME_CACHE.get(groupID) ?? '';
+}
+
 /** A library name usable as a folder component. */
 export function sanitizeLibraryFolderName(name: string, groupID: number): string {
   const cleaned = (name ?? '')
@@ -63,6 +87,7 @@ export function literatureNoteFolderFor(opts: {
   const base = (opts.base ?? '').replace(/\/+$/, '');
   const gid = opts.groupID ?? 1;
   if (gid === 1) return base;
-  const sub = sanitizeLibraryFolderName(opts.groupName ?? '', gid);
+  const name = libraryDisplayName(gid, opts.groupName);
+  const sub = sanitizeLibraryFolderName(name, gid);
   return base ? `${base}/${sub}` : sub;
 }

@@ -88754,17 +88754,33 @@ function resolveLiteratureNoteFolder(opts) {
   return zotlitFolder || settingsFolder || DEFAULT_LITERATURE_NOTE_FOLDER;
 }
 var UNSAFE_FOLDER_CHARS = /[\\/:*?"<>|#^[\]]/g;
+var LIBRARY_NAME_CACHE = new Map();
+function rememberLibraryName(groupID, name) {
+  const n2 = (name != null ? name : "").trim();
+  if (groupID && groupID !== 1 && n2)
+    LIBRARY_NAME_CACHE.set(groupID, n2);
+}
+function libraryDisplayName(groupID, fromSettings) {
+  var _a;
+  const fromSettingsTrimmed = (fromSettings != null ? fromSettings : "").trim();
+  if (fromSettingsTrimmed) {
+    LIBRARY_NAME_CACHE.set(groupID, fromSettingsTrimmed);
+    return fromSettingsTrimmed;
+  }
+  return (_a = LIBRARY_NAME_CACHE.get(groupID)) != null ? _a : "";
+}
 function sanitizeLibraryFolderName(name, groupID) {
   const cleaned = (name != null ? name : "").replace(UNSAFE_FOLDER_CHARS, "-").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 80).trim();
   return cleaned && /[\p{L}\p{N}]/u.test(cleaned) ? cleaned : `Group ${groupID}`;
 }
 function literatureNoteFolderFor(opts) {
-  var _a, _b, _c;
+  var _a, _b;
   const base = ((_a = opts.base) != null ? _a : "").replace(/\/+$/, "");
   const gid = (_b = opts.groupID) != null ? _b : 1;
   if (gid === 1)
     return base;
-  const sub = sanitizeLibraryFolderName((_c = opts.groupName) != null ? _c : "", gid);
+  const name = libraryDisplayName(gid, opts.groupName);
+  const sub = sanitizeLibraryFolderName(name, gid);
   return base ? `${base}/${sub}` : sub;
 }
 
@@ -91127,11 +91143,11 @@ function literatureNoteFolder(plugin) {
   });
 }
 function noteFolderForEntry(plugin, entry) {
-  var _a, _b, _c;
+  var _a, _b;
   const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
   if (groupID === 1)
     return literatureNoteFolder(plugin);
-  const name = (_c = (_b = (_a = plugin.settings.zoteroGroups) == null ? void 0 : _a.find((g4) => g4.id === groupID)) == null ? void 0 : _b.name) != null ? _c : null;
+  const name = (_b = (_a = plugin.bibManager) == null ? void 0 : _a.libraryNameFor(groupID)) != null ? _b : null;
   return literatureNoteFolderFor({
     base: literatureNoteFolder(plugin),
     groupID,
@@ -96143,15 +96159,18 @@ var BibManager = class {
     await this.loadGlobalZBib(true);
   }
   async loadGlobalZBib(fromCache) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     const { settings } = this.plugin;
+    for (const g4 of (_a = settings.zoteroGroups) != null ? _a : []) {
+      rememberLibraryName(g4.id, g4.name);
+    }
     debugLog("[sw:bib] loadGlobalZBib, fromCache=", fromCache, "zoteroGroups=", JSON.stringify(settings.zoteroGroups), "pullFromZotero=", settings.pullFromZotero);
-    if (!((_a = settings.zoteroGroups) == null ? void 0 : _a.length)) {
+    if (!((_b = settings.zoteroGroups) == null ? void 0 : _b.length)) {
       debugLog("[sw:bib] no zoteroGroups configured \u2014 skipping Zotero load");
       return { entries: 0, attempted: false, unreachable: false };
     }
     const adapter = this.getZoteroAdapter();
-    debugLog("[sw:bib] using adapter:", (_c = (_b = adapter.constructor) == null ? void 0 : _b.name) != null ? _c : typeof adapter);
+    debugLog("[sw:bib] using adapter:", (_d = (_c = adapter.constructor) == null ? void 0 : _c.name) != null ? _d : typeof adapter);
     let unreachable = false;
     try {
       unreachable = !await adapter.isRunning();
@@ -96164,8 +96183,8 @@ var BibManager = class {
       try {
         debugLog("[sw:bib] fetching group", group.id, group.name);
         const res = await adapter.getBib("", group.id, fromCache);
-        debugLog("[sw:bib] group", group.id, "returned", (_e = (_d = res.list) == null ? void 0 : _d.length) != null ? _e : "null", "entries");
-        if (!((_f = res.list) == null ? void 0 : _f.length))
+        debugLog("[sw:bib] group", group.id, "returned", (_f = (_e = res.list) == null ? void 0 : _e.length) != null ? _f : "null", "entries");
+        if (!((_g = res.list) == null ? void 0 : _g.length))
           continue;
         if (!fromCache) {
           group.lastUpdate = Date.now();
@@ -97295,12 +97314,21 @@ var BibManager = class {
     editor.focus();
   }
   resolveBaseNoteFolder() {
+    var _a;
     const { settings } = this.plugin;
+    for (const g4 of (_a = settings.zoteroGroups) != null ? _a : []) {
+      rememberLibraryName(g4.id, g4.name);
+    }
     return resolveLiteratureNoteFolder({
       useOwnNoteTemplate: settings.useOwnNoteTemplate,
       literatureNoteFolder: settings.literatureNoteFolder,
       zotlitFolder: getZotlitLiteratureFolder(app)
     });
+  }
+  libraryNameFor(groupID) {
+    var _a, _b;
+    const fromSettings = (_b = (_a = this.plugin.settings.zoteroGroups) == null ? void 0 : _a.find((g4) => g4.id === groupID)) == null ? void 0 : _b.name;
+    return libraryDisplayName(groupID, fromSettings) || null;
   }
   entryForStableKey(stable) {
     var _a;
@@ -102401,7 +102429,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     return out;
   }
   async offerGroupNoteMove() {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e;
     if (this.settings.groupNoteMoveOffered)
       return;
     const base = this.bibManager.resolveBaseNoteFolder();
@@ -102421,11 +102449,11 @@ var ReferenceList = class extends import_obsidian40.Plugin {
       const target = literatureNoteFolderFor({
         base,
         groupID: gid,
-        groupName: (_e = (_d = (_c = this.settings.zoteroGroups) == null ? void 0 : _c.find((g4) => g4.id === gid)) == null ? void 0 : _d.name) != null ? _e : null
+        groupName: this.bibManager.libraryNameFor(gid)
       });
-      if (f3.path.startsWith(target + "/") || ((_f = f3.parent) == null ? void 0 : _f.path) === target)
+      if (f3.path.startsWith(target + "/") || ((_c = f3.parent) == null ? void 0 : _c.path) === target)
         continue;
-      ((_g = byGroup.get(gid)) != null ? _g : byGroup.set(gid, []).get(gid)).push(f3);
+      ((_d = byGroup.get(gid)) != null ? _d : byGroup.set(gid, []).get(gid)).push(f3);
     }
     const total = [...byGroup.values()].reduce((n2, a3) => n2 + a3.length, 0);
     if (!total) {
@@ -102434,7 +102462,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
       return;
     }
     const notice = new import_obsidian40.Notice("", 0);
-    const el = (_h = notice.noticeEl) != null ? _h : notice.containerEl;
+    const el = (_e = notice.noticeEl) != null ? _e : notice.containerEl;
     if (!el)
       return;
     el.createEl("div", {
@@ -102449,7 +102477,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     });
   }
   async moveGroupNotes(byGroup) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b;
     const fm = this.app.fileManager;
     let moved = 0;
     let failed = 0;
@@ -102464,7 +102492,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         const folder = literatureNoteFolderFor({
           base,
           groupID: gid,
-          groupName: (_e = (_d = (_c = this.settings.zoteroGroups) == null ? void 0 : _c.find((g4) => g4.id === gid)) == null ? void 0 : _d.name) != null ? _e : null
+          groupName: this.bibManager.libraryNameFor(gid)
         });
         try {
           if (!await this.app.vault.adapter.exists(folder)) {

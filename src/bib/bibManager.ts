@@ -55,6 +55,11 @@ import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZote
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import {
+  literatureNoteFolderFor,
+  libraryDisplayName,
+  rememberLibraryName,
+} from 'src/template/lit-folder';
+import {
   collectChangedItemKeys,
   emptySyncState,
   stableKeyFor,
@@ -1418,6 +1423,11 @@ export class BibManager {
    */
   async loadGlobalZBib(fromCache?: boolean): Promise<ZoteroLoadOutcome> {
     const { settings } = this.plugin;
+    // Remember group names so a library folder keeps its name even if the group
+    // is later missing from settings (used by literatureNoteFolderFor).
+    for (const g of settings.zoteroGroups ?? []) {
+      rememberLibraryName(g.id, g.name);
+    }
     debugLog('[sw:bib] loadGlobalZBib, fromCache=', fromCache, 'zoteroGroups=', JSON.stringify(settings.zoteroGroups), 'pullFromZotero=', settings.pullFromZotero);
     if (!settings.zoteroGroups?.length) {
       debugLog('[sw:bib] no zoteroGroups configured — skipping Zotero load');
@@ -3095,11 +3105,22 @@ export class BibManager {
   /** The BASE literature-note folder (My Library's), without a library subfolder. */
   resolveBaseNoteFolder(): string {
     const { settings } = this.plugin;
+    for (const g of settings.zoteroGroups ?? []) {
+      rememberLibraryName(g.id, g.name);
+    }
     return resolveLiteratureNoteFolder({
       useOwnNoteTemplate: settings.useOwnNoteTemplate,
       literatureNoteFolder: settings.literatureNoteFolder,
       zotlitFolder: getZotlitLiteratureFolder(app),
     });
+  }
+
+  /** Display name for a group library: settings, else the cached name. */
+  libraryNameFor(groupID: number): string | null {
+    const fromSettings = this.plugin.settings.zoteroGroups?.find(
+      (g) => g.id === groupID
+    )?.name;
+    return libraryDisplayName(groupID, fromSettings) || null;
   }
 
   /**
