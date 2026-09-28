@@ -1436,7 +1436,10 @@ export default class ReferenceList extends Plugin {
     }
 
     try {
-      await this.bibManager.createLiteratureNote(citekey, file, { open: false });
+      await this.bibManager.createLiteratureNote(citekey, file, {
+        open: false,
+        stableKey: stable,
+      });
       return true;
     } catch (e) {
       console.warn('[sw:update] failed for', file.path, e);

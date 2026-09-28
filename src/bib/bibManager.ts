@@ -1508,6 +1508,16 @@ export class BibManager {
     const existing = this.bibCache.get(entry.id);
     const tagged = { ...entry, _source: 'zotero' as const };
 
+    // A library that is DISABLED must never contribute entries. The load paths
+    // clear bibCache, but a stale delta/priority fetch could still arrive for a
+    // group the user just turned off, and the fuse indexes are rebuilt from
+    // bibCache — so guard here too.
+    const gid = (tagged as { groupID?: number }).groupID ?? 1;
+    const enabled = new Set(
+      (this.plugin?.settings.zoteroGroups ?? []).map((g) => g.id)
+    );
+    if (enabled.size > 0 && !enabled.has(gid)) return;
+
     if (existing?._source === 'zotero') {
       // Cross-group duplicate of the SAME citekey (e.g. the user copied an item
       // to a shared library, and Better BibTeX gives both copies the same key).
@@ -3082,12 +3092,38 @@ export class BibManager {
     editor.focus();
   }
 
+  /**
+   * The cached entry for a SPECIFIC Zotero item, by its stable key — preferring
+   * the exact library copy. A duplicate citekey in another library must not
+   * decide what a note renders: the note refreshes from ITS item.
+   *
+   * Falls back to the citekey's `bibCache` entry when the item's own library is
+   * not loaded (the copy is shadowed or the library is disabled), so an update
+   * still works with one library enabled.
+   */
+  entryForStableKey(stable: string): PartialCSLEntry | null {
+    const m = /^(.*?)(?:g(\d+))?$/.exec(stable);
+    const key = m?.[1] ?? stable;
+    const groupID = m?.[2] ? Number(m[2]) : null;
+    for (const entry of this.bibCache.values()) {
+      const e = entry as { _zoteroKey?: string; groupID?: number };
+      if (e?._zoteroKey !== key) continue;
+      if (groupID != null && e.groupID !== groupID) continue;
+      return entry;
+    }
+    return null;
+  }
+
   async createLiteratureNote(
     citekey: string,
     sourceFile: TFile,
-    opts: { open?: boolean } = {}
+    opts: { open?: boolean; stableKey?: string } = {}
   ) {
-    const entry = this.bibCache.get(citekey) as any;
+    // Prefer the note's OWN item (by `zotero-key`) over the citekey slot, so a
+    // duplicate citekey in another library cannot decide the render.
+    const entry = (opts.stableKey
+      ? this.entryForStableKey(opts.stableKey)
+      : null) ?? (this.bibCache.get(citekey) as any);
 
     // Our own single-file template path, when the user selected it. Falls
     // through to the ZotLit/basic paths only if the template asset is missing.

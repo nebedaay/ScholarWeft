@@ -96172,7 +96172,7 @@ var BibManager = class {
     return { entries, attempted: true, unreachable: unreachable || failed };
   }
   mergeZoteroEntry(entry) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g;
     if (entry._zoteroKey) {
       const oldCitekey = this._zoteroKeyToCitekey.get(entry._zoteroKey);
       if (oldCitekey && oldCitekey !== entry.id) {
@@ -96184,15 +96184,19 @@ var BibManager = class {
     }
     const existing = this.bibCache.get(entry.id);
     const tagged = { ...entry, _source: "zotero" };
+    const gid = (_a = tagged.groupID) != null ? _a : 1;
+    const enabled = new Set(((_c = (_b = this.plugin) == null ? void 0 : _b.settings.zoteroGroups) != null ? _c : []).map((g4) => g4.id));
+    if (enabled.size > 0 && !enabled.has(gid))
+      return;
     if ((existing == null ? void 0 : existing._source) === "zotero") {
-      const existingIsMyLibrary = ((_a = existing.groupID) != null ? _a : 1) === 1;
-      const incomingIsMyLibrary = ((_b = tagged.groupID) != null ? _b : 1) === 1;
+      const existingIsMyLibrary = ((_d = existing.groupID) != null ? _d : 1) === 1;
+      const incomingIsMyLibrary = ((_e = tagged.groupID) != null ? _e : 1) === 1;
       if (existingIsMyLibrary !== incomingIsMyLibrary) {
         if (incomingIsMyLibrary)
           this.bibCache.set(entry.id, tagged);
         return;
       }
-      if (((_c = tagged._dateModified) != null ? _c : "") > ((_d = existing._dateModified) != null ? _d : "")) {
+      if (((_f = tagged._dateModified) != null ? _f : "") > ((_g = existing._dateModified) != null ? _g : "")) {
         this.bibCache.set(entry.id, tagged);
       }
       return;
@@ -97264,9 +97268,24 @@ var BibManager = class {
     editor.scrollIntoView({ from: pos, to: pos }, true);
     editor.focus();
   }
+  entryForStableKey(stable) {
+    var _a;
+    const m3 = /^(.*?)(?:g(\d+))?$/.exec(stable);
+    const key = (_a = m3 == null ? void 0 : m3[1]) != null ? _a : stable;
+    const groupID = (m3 == null ? void 0 : m3[2]) ? Number(m3[2]) : null;
+    for (const entry of this.bibCache.values()) {
+      const e3 = entry;
+      if ((e3 == null ? void 0 : e3._zoteroKey) !== key)
+        continue;
+      if (groupID != null && e3.groupID !== groupID)
+        continue;
+      return entry;
+    }
+    return null;
+  }
   async createLiteratureNote(citekey, sourceFile, opts = {}) {
-    var _a, _b, _c, _d, _e, _f;
-    const entry = this.bibCache.get(citekey);
+    var _a, _b, _c, _d, _e, _f, _g;
+    const entry = (_a = opts.stableKey ? this.entryForStableKey(opts.stableKey) : null) != null ? _a : this.bibCache.get(citekey);
     if (this.plugin.settings.useOwnNoteTemplate === true) {
       const ok = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
         open: opts.open !== false
@@ -97290,9 +97309,9 @@ var BibManager = class {
           return;
       }
     }
-    const title = (_a = entry == null ? void 0 : entry.title) != null ? _a : citekey;
-    const year = (_e = (_d = (_c = (_b = entry == null ? void 0 : entry.issued) == null ? void 0 : _b["date-parts"]) == null ? void 0 : _c[0]) == null ? void 0 : _d[0]) != null ? _e : "";
-    const authors = ((_f = entry == null ? void 0 : entry.author) != null ? _f : []).map((a3) => [a3.family, a3.given].filter(Boolean).join(", ") || a3.literal || "").filter(Boolean);
+    const title = (_b = entry == null ? void 0 : entry.title) != null ? _b : citekey;
+    const year = (_f = (_e = (_d = (_c = entry == null ? void 0 : entry.issued) == null ? void 0 : _c["date-parts"]) == null ? void 0 : _d[0]) == null ? void 0 : _e[0]) != null ? _f : "";
+    const authors = ((_g = entry == null ? void 0 : entry.author) != null ? _g : []).map((a3) => [a3.family, a3.given].filter(Boolean).join(", ") || a3.literal || "").filter(Boolean);
     const zoteroItemKey = entry == null ? void 0 : entry._zoteroKey;
     const groupId = entry == null ? void 0 : entry.groupID;
     let zoteroKeyField = null;
@@ -102144,7 +102163,10 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         return false;
     }
     try {
-      await this.bibManager.createLiteratureNote(citekey, file, { open: false });
+      await this.bibManager.createLiteratureNote(citekey, file, {
+        open: false,
+        stableKey: stable
+      });
       return true;
     } catch (e3) {
       console.warn("[sw:update] failed for", file.path, e3);
