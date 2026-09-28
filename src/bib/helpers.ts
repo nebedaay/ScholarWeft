@@ -577,7 +577,7 @@ export async function getZBibNative(
 
   await app.vault.adapter.write(
     cachePath,
-    JSON.stringify({ items: cslItems, version })
+    JSON.stringify({ items: cslItems, version, builtAt: Date.now() })
   );
 
   return { list: applyGroupID(cslItems, groupId), version };
@@ -619,6 +619,11 @@ export async function fetchTrashedItemKeysNative(
   }
   return out;
 }
+
+/** How long a persisted library cache may go before a full resync — the only
+ *  way a PERMANENTLY deleted item (in neither `/items` nor `/items/trash`) is
+ *  ever dropped. */
+const LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** CSL creator-list keys, used to detect a cache that predates `_creators`. */
 const CSL_CREATOR_KEYS = [
@@ -673,6 +678,15 @@ export async function refreshZBibNative(
     sinceVersion = 0;
   }
 
+  // Also force a periodic FULL re-fetch. A delta can never report a permanently
+  // deleted item (it is in neither `/items` nor `/items/trash`), so only a full
+  // rebuild drops it. A cache predating `builtAt` counts as stale.
+  const cacheBuiltAt = typeof cacheData.builtAt === 'number' ? cacheData.builtAt : 0;
+  if (list0.length && Date.now() - cacheBuiltAt > LIBRARY_RESYNC_MS) {
+    sinceVersion = 0;
+  }
+  const fullFetch = sinceVersion === 0;
+
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
   const { items: rawItems, version } = await fetchAllZoteroItemsNative(
     port,
@@ -699,12 +713,16 @@ export async function refreshZBibNative(
 
   const rawList = cacheData.items as CSLList;
 
-  // Drop stale entries: same Zotero item (_zoteroKey) but old citekey.
-  const list = rawList.filter((item) => {
-    if (!item._zoteroKey) return true; // legacy entries without key — keep
-    const newId = zoteroKeyToNewId.get(item._zoteroKey);
-    return !newId || newId === item.id;
-  });
+  // On a FULL fetch the list is rebuilt from scratch, so entries the library no
+  // longer has (permanently deleted) are dropped. Otherwise merge the delta,
+  // dropping only stale-citekey duplicates.
+  const list = fullFetch
+    ? ([] as CSLList)
+    : rawList.filter((item) => {
+        if (!item._zoteroKey) return true; // legacy entries without key — keep
+        const newId = zoteroKeyToNewId.get(item._zoteroKey);
+        return !newId || newId === item.id;
+      });
 
   for (let i = 0; i < list.length; i++) {
     if (modified.has(list[i].id)) {
@@ -742,7 +760,7 @@ export async function refreshZBibNative(
 
   await app.vault.adapter.write(
     cachePath,
-    JSON.stringify({ items: list, version })
+    JSON.stringify({ items: list, version, builtAt: Date.now() })
   );
 
   return { list: applyGroupID(list, groupId), modified };

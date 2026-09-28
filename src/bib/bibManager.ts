@@ -2068,7 +2068,9 @@ export class BibManager {
       const ids: string[][] = bib[0].entry_ids ?? [];
       bib[1].forEach((entry: string, i: number) => {
         const key = ids[i]?.[0];
-        if (key) out.set(key, cslEntryHtmlToMarkdown(entry));
+        if (!key) return;
+        const clean = entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${key}`);
+        out.set(key, cslEntryHtmlToMarkdown(clean));
       });
     }
     return out;
@@ -2318,13 +2320,20 @@ export class BibManager {
     const htmlStr = [metadata.bibstart];
 
     metadata.entry_ids?.forEach((e: string, i: number) => {
-      const entry = entries[i];
+      let entry = entries[i];
       // citeproc can list an entry id with no rendered entry for it (seen with
       // a completely contentless item), which left `entries[i]` undefined and
       // threw on `.replace`, aborting the WHOLE bibliography.
       if (typeof entry !== 'string') return;
-      entries[i] = entry.replace(/>/, ` data-citekey="${e[0]}">`);
-      citeBibMap.set(e[0], entries[i]);
+      entry = entry.replace(/>/, ` data-citekey="${e[0]}">`);
+      // A CSL style that produces nothing for an item (e.g. a contentless
+      // `interview`) makes citeproc emit "[CSL STYLE ERROR: reference with no
+      // printed form.]". Show the citekey instead of the alarming message.
+      if (entry.includes('CSL STYLE ERROR')) {
+        entry = entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${e[0]}`);
+      }
+      entries[i] = entry;
+      citeBibMap.set(e[0], entry);
     });
 
     for (const entry of entries) {

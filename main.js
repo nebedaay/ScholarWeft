@@ -68476,7 +68476,7 @@ async function getZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, loa
     if (cslItem)
       cslItems.push(cslItem);
   }
-  await app.vault.adapter.write(cachePath, JSON.stringify({ items: cslItems, version }));
+  await app.vault.adapter.write(cachePath, JSON.stringify({ items: cslItems, version, builtAt: Date.now() }));
   return { list: applyGroupID(cslItems, groupId), version };
 }
 async function fetchTrashedItemKeysNative(port = DEFAULT_ZOTERO_PORT, libraryID = 1) {
@@ -68505,6 +68505,7 @@ async function fetchTrashedItemKeysNative(port = DEFAULT_ZOTERO_PORT, libraryID 
   }
   return out;
 }
+var LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1e3;
 var CSL_CREATOR_KEYS = [
   "author",
   "editor",
@@ -68545,6 +68546,11 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   if (list0.length && (versionedCount < list0.length || creatorsMissing)) {
     sinceVersion = 0;
   }
+  const cacheBuiltAt = typeof cacheData.builtAt === "number" ? cacheData.builtAt : 0;
+  if (list0.length && Date.now() - cacheBuiltAt > LIBRARY_RESYNC_MS) {
+    sinceVersion = 0;
+  }
+  const fullFetch = sinceVersion === 0;
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
   const { items: rawItems, version } = await fetchAllZoteroItemsNative(port, libraryType, libraryId, sinceVersion);
   const modified = new Map();
@@ -68562,7 +68568,7 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
       zoteroKeyToNewId.set(entry._zoteroKey, id);
   }
   const rawList = cacheData.items;
-  const list = rawList.filter((item) => {
+  const list = fullFetch ? [] : rawList.filter((item) => {
     if (!item._zoteroKey)
       return true;
     const newId = zoteroKeyToNewId.get(item._zoteroKey);
@@ -68597,7 +68603,7 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   }
   if (!(rawItems == null ? void 0 : rawItems.length) && pruned === 0)
     return null;
-  await app.vault.adapter.write(cachePath, JSON.stringify({ items: list, version }));
+  await app.vault.adapter.write(cachePath, JSON.stringify({ items: list, version, builtAt: Date.now() }));
   return { list: applyGroupID(list, groupId), modified };
 }
 async function getItemJSONFromCiteKeysNative(port = DEFAULT_ZOTERO_PORT, citeKeys, libraryID) {
@@ -96187,8 +96193,10 @@ var BibManager = class {
       bib[1].forEach((entry, i3) => {
         var _a2;
         const key = (_a2 = ids[i3]) == null ? void 0 : _a2[0];
-        if (key)
-          out.set(key, cslEntryHtmlToMarkdown(entry));
+        if (!key)
+          return;
+        const clean = entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${key}`);
+        out.set(key, cslEntryHtmlToMarkdown(clean));
       });
     }
     return out;
@@ -96335,11 +96343,15 @@ var BibManager = class {
     const entries = bib[1];
     const htmlStr = [metadata.bibstart];
     (_b = metadata.entry_ids) == null ? void 0 : _b.forEach((e3, i3) => {
-      const entry = entries[i3];
+      let entry = entries[i3];
       if (typeof entry !== "string")
         return;
-      entries[i3] = entry.replace(/>/, ` data-citekey="${e3[0]}">`);
-      citeBibMap.set(e3[0], entries[i3]);
+      entry = entry.replace(/>/, ` data-citekey="${e3[0]}">`);
+      if (entry.includes("CSL STYLE ERROR")) {
+        entry = entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${e3[0]}`);
+      }
+      entries[i3] = entry;
+      citeBibMap.set(e3[0], entry);
     });
     for (const entry of entries) {
       if (typeof entry === "string")
