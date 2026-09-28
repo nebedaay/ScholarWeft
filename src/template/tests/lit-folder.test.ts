@@ -1,103 +1,55 @@
 import {
-  DEFAULT_LITERATURE_NOTE_FOLDER,
-  resolveLiteratureNoteFolder,
+  literatureNoteFolderFor,
+  sanitizeLibraryFolderName,
 } from '../lit-folder';
 
-describe('DEFAULT_LITERATURE_NOTE_FOLDER', () => {
-  it('is a generic name, not one user’s vault layout', () => {
-    expect(DEFAULT_LITERATURE_NOTE_FOLDER).toBe('Literature Notes');
-    expect(DEFAULT_LITERATURE_NOTE_FOLDER).not.toMatch(/^_/);
+describe('sanitizeLibraryFolderName()', () => {
+  it('keeps ordinary names', () => {
+    expect(sanitizeLibraryFolderName('Andrea Lickacz readings', 5)).toBe(
+      'Andrea Lickacz readings'
+    );
+  });
+
+  it('replaces filesystem-hostile characters', () => {
+    expect(sanitizeLibraryFolderName('A/B:C*D?', 5)).toBe('A-B-C-D-');
+    expect(sanitizeLibraryFolderName('[[x/y]]', 5)).toBe('--x-y--');
+  });
+
+  it('collapses whitespace and trims leading dots', () => {
+    expect(sanitizeLibraryFolderName('  spaced   name  ', 5)).toBe('spaced name');
+    expect(sanitizeLibraryFolderName('../etc', 5)).toBe('-etc');
+  });
+
+  it('falls back to Group N for an unusable name', () => {
+    expect(sanitizeLibraryFolderName('', 42)).toBe('Group 42');
+    expect(sanitizeLibraryFolderName('///', 42)).toBe('Group 42');
   });
 });
 
-describe('resolveLiteratureNoteFolder()', () => {
-  describe('ScholarWeft path (the default)', () => {
-    it('uses our own setting', () => {
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: true,
-          literatureNoteFolder: 'My Notes',
-          zotlitFolder: 'ZotLit Notes',
-        })
-      ).toBe('My Notes');
-    });
+describe('literatureNoteFolderFor()', () => {
+  const base = 'Literature Notes';
 
-    it('ignores ZotLit’s folder, so the two settings cannot fight', () => {
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: true,
-          literatureNoteFolder: '',
-          zotlitFolder: 'ZotLit Notes',
-        })
-      ).toBe('');
-    });
-
-    it('treats blank/whitespace as the vault root', () => {
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: true,
-          literatureNoteFolder: '   ',
-        })
-      ).toBe('');
-      expect(
-        resolveLiteratureNoteFolder({ useOwnNoteTemplate: true })
-      ).toBe('');
-    });
-
-    it('does not fall back to the default folder name when the user clears it', () => {
-      // Clearing the field is a real choice (vault root), not a missing value.
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: true,
-          literatureNoteFolder: '',
-        })
-      ).toBe('');
-    });
+  it('leaves My Library in the base folder', () => {
+    expect(literatureNoteFolderFor({ base })).toBe(base);
+    expect(literatureNoteFolderFor({ base, groupID: 1 })).toBe(base);
+    expect(literatureNoteFolderFor({ base, groupID: null })).toBe(base);
   });
 
-  describe('ZotLit path', () => {
-    it('prefers ZotLit’s own folder, so all notes stay in one place', () => {
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: false,
-          literatureNoteFolder: 'My Notes',
-          zotlitFolder: 'ZotLit Notes',
-        })
-      ).toBe('ZotLit Notes');
-    });
-
-    it('falls back to our setting when ZotLit has none', () => {
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: false,
-          literatureNoteFolder: 'My Notes',
-          zotlitFolder: '',
-        })
-      ).toBe('My Notes');
-    });
-
-    it('falls back to the default when neither is set', () => {
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: false,
-          zotlitFolder: '  ',
-        })
-      ).toBe(DEFAULT_LITERATURE_NOTE_FOLDER);
-    });
+  it('gives each group library its own subfolder', () => {
+    expect(
+      literatureNoteFolderFor({ base, groupID: 6667607, groupName: 'Readings' })
+    ).toBe('Literature Notes/Readings');
   });
 
-  describe('upgraded installs', () => {
-    it('no longer consults the retired useZotlitLiteratureFolder flag', () => {
-      // A 0.2.x install that pointed notes at ZotLit's folder now follows the
-      // path: on the own path the stored literatureNoteFolder wins, even
-      // though the old flag would have sent it to ZotLit.
-      expect(
-        resolveLiteratureNoteFolder({
-          useOwnNoteTemplate: true,
-          literatureNoteFolder: 'Literature Notes',
-          zotlitFolder: 'ZotLit Notes',
-        })
-      ).toBe('Literature Notes');
-    });
+  it('handles a blank base (vault root)', () => {
+    expect(
+      literatureNoteFolderFor({ base: '', groupID: 7, groupName: 'G' })
+    ).toBe('G');
+  });
+
+  it('trims a trailing slash on the base', () => {
+    expect(
+      literatureNoteFolderFor({ base: 'Notes/', groupID: 7, groupName: 'G' })
+    ).toBe('Notes/G');
   });
 });

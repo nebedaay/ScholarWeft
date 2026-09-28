@@ -3092,6 +3092,16 @@ export class BibManager {
     editor.focus();
   }
 
+  /** The BASE literature-note folder (My Library's), without a library subfolder. */
+  resolveBaseNoteFolder(): string {
+    const { settings } = this.plugin;
+    return resolveLiteratureNoteFolder({
+      useOwnNoteTemplate: settings.useOwnNoteTemplate,
+      literatureNoteFolder: settings.literatureNoteFolder,
+      zotlitFolder: getZotlitLiteratureFolder(app),
+    });
+  }
+
   /**
    * The cached entry for a SPECIFIC Zotero item, by its stable key — preferring
    * the exact library copy. A duplicate citekey in another library must not

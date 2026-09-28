@@ -88753,6 +88753,20 @@ function resolveLiteratureNoteFolder(opts) {
   const zotlitFolder = ((_b = opts.zotlitFolder) != null ? _b : "").trim();
   return zotlitFolder || settingsFolder || DEFAULT_LITERATURE_NOTE_FOLDER;
 }
+var UNSAFE_FOLDER_CHARS = /[\\/:*?"<>|#^[\]]/g;
+function sanitizeLibraryFolderName(name, groupID) {
+  const cleaned = (name != null ? name : "").replace(UNSAFE_FOLDER_CHARS, "-").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 80).trim();
+  return cleaned && /[\p{L}\p{N}]/u.test(cleaned) ? cleaned : `Group ${groupID}`;
+}
+function literatureNoteFolderFor(opts) {
+  var _a, _b, _c;
+  const base = ((_a = opts.base) != null ? _a : "").replace(/\/+$/, "");
+  const gid = (_b = opts.groupID) != null ? _b : 1;
+  if (gid === 1)
+    return base;
+  const sub = sanitizeLibraryFolderName((_c = opts.groupName) != null ? _c : "", gid);
+  return base ? `${base}/${sub}` : sub;
+}
 
 // src/template/note-template-io.ts
 var import_obsidian19 = __toModule(require("obsidian"));
@@ -91112,6 +91126,18 @@ function literatureNoteFolder(plugin) {
     zotlitFolder: getZotlitLiteratureFolder(plugin.app)
   });
 }
+function noteFolderForEntry(plugin, entry) {
+  var _a, _b, _c;
+  const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
+  if (groupID === 1)
+    return literatureNoteFolder(plugin);
+  const name = (_c = (_b = (_a = plugin.settings.zoteroGroups) == null ? void 0 : _a.find((g4) => g4.id === groupID)) == null ? void 0 : _b.name) != null ? _c : null;
+  return literatureNoteFolderFor({
+    base: literatureNoteFolder(plugin),
+    groupID,
+    groupName: name
+  });
+}
 async function fetchChildren(plugin, entry) {
   const key = entry == null ? void 0 : entry._zoteroKey;
   if (!key)
@@ -91252,7 +91278,7 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
   const children = await fetchChildren(plugin, entry);
   const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : null;
   const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
-  const folder = literatureNoteFolder(plugin);
+  const folder = noteFolderForEntry(plugin, entry);
   const images = await copyExcerptImages(plugin, citekey, children, groupID, dataDir);
   const imageVaultPath = (key) => {
     var _a2;
@@ -97268,6 +97294,14 @@ var BibManager = class {
     editor.scrollIntoView({ from: pos, to: pos }, true);
     editor.focus();
   }
+  resolveBaseNoteFolder() {
+    const { settings } = this.plugin;
+    return resolveLiteratureNoteFolder({
+      useOwnNoteTemplate: settings.useOwnNoteTemplate,
+      literatureNoteFolder: settings.literatureNoteFolder,
+      zotlitFolder: getZotlitLiteratureFolder(app)
+    });
+  }
   entryForStableKey(stable) {
     var _a;
     const m3 = /^(.*?)(?:g(\d+))?$/.exec(stable);
@@ -102070,6 +102104,9 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;
     void this.ensureCitedKeysIndex();
+    window.setTimeout(() => {
+      void this.offerGroupNoteMove();
+    }, 4e3);
     const activeView = this.app.workspace.getActiveViewOfType(import_obsidian40.MarkdownView);
     if (activeView) {
       this.processReferences();
@@ -102362,6 +102399,91 @@ var ReferenceList = class extends import_obsidian40.Plugin {
       out.push({ file: f3, citekey: ck });
     }
     return out;
+  }
+  async offerGroupNoteMove() {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    if (this.settings.groupNoteMoveOffered)
+      return;
+    const base = this.bibManager.resolveBaseNoteFolder();
+    if (!base && base !== "")
+      return;
+    const byGroup = new Map();
+    for (const f3 of this.app.vault.getMarkdownFiles()) {
+      const zk = (_b = (_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
+      if (typeof zk !== "string")
+        continue;
+      const m3 = /^.*?g(\d+)$/.exec(zk.trim());
+      if (!m3)
+        continue;
+      const gid = Number(m3[1]);
+      if (gid === 1)
+        continue;
+      const target = literatureNoteFolderFor({
+        base,
+        groupID: gid,
+        groupName: (_e = (_d = (_c = this.settings.zoteroGroups) == null ? void 0 : _c.find((g4) => g4.id === gid)) == null ? void 0 : _d.name) != null ? _e : null
+      });
+      if (f3.path.startsWith(target + "/") || ((_f = f3.parent) == null ? void 0 : _f.path) === target)
+        continue;
+      ((_g = byGroup.get(gid)) != null ? _g : byGroup.set(gid, []).get(gid)).push(f3);
+    }
+    const total = [...byGroup.values()].reduce((n2, a3) => n2 + a3.length, 0);
+    if (!total) {
+      this.settings.groupNoteMoveOffered = true;
+      await this.saveSettings();
+      return;
+    }
+    const notice = new import_obsidian40.Notice("", 0);
+    const el = (_h = notice.noticeEl) != null ? _h : notice.containerEl;
+    if (!el)
+      return;
+    el.createEl("div", {
+      text: `${total} literature note${total !== 1 ? "s" : ""} from a group library ${total !== 1 ? "are" : "is"} outside its library folder.`
+    });
+    const move = el.createEl("button", { text: "Move them", cls: "mod-cta" });
+    const dismiss = el.createEl("button", { text: "Not now" });
+    dismiss.addEventListener("click", () => notice.hide());
+    move.addEventListener("click", () => {
+      notice.hide();
+      void this.moveGroupNotes(byGroup);
+    });
+  }
+  async moveGroupNotes(byGroup) {
+    var _a, _b, _c, _d, _e;
+    const fm = this.app.fileManager;
+    let moved = 0;
+    let failed = 0;
+    for (const files of byGroup.values()) {
+      for (const f3 of files) {
+        const zk = (_b = (_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
+        const m3 = typeof zk === "string" ? /^.*?g(\d+)$/.exec(zk.trim()) : null;
+        if (!m3)
+          continue;
+        const gid = Number(m3[1]);
+        const base = this.bibManager.resolveBaseNoteFolder();
+        const folder = literatureNoteFolderFor({
+          base,
+          groupID: gid,
+          groupName: (_e = (_d = (_c = this.settings.zoteroGroups) == null ? void 0 : _c.find((g4) => g4.id === gid)) == null ? void 0 : _d.name) != null ? _e : null
+        });
+        try {
+          if (!await this.app.vault.adapter.exists(folder)) {
+            await this.app.vault.adapter.mkdir(folder);
+          }
+          const target = `${folder}/${f3.name}`;
+          if (target === f3.path)
+            continue;
+          await fm.renameFile(f3, target);
+          moved++;
+        } catch (e3) {
+          console.warn("[sw:move] failed to move", f3.path, e3);
+          failed++;
+        }
+      }
+    }
+    this.settings.groupNoteMoveOffered = true;
+    await this.saveSettings();
+    new import_obsidian40.Notice(`Moved ${moved} literature note${moved !== 1 ? "s" : ""}${failed ? `, ${failed} failed (see console)` : ""}.`, 8e3);
   }
   async getCitekeysForFile(file) {
     var _a, _b;

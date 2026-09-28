@@ -29,3 +29,40 @@ export function resolveLiteratureNoteFolder(opts: {
   const zotlitFolder = (opts.zotlitFolder ?? '').trim();
   return zotlitFolder || settingsFolder || DEFAULT_LITERATURE_NOTE_FOLDER;
 }
+
+/** Characters not allowed in a folder name, replaced with `-`. */
+const UNSAFE_FOLDER_CHARS = /[\\/:*?"<>|#^[\]]/g;
+
+/** A library name usable as a folder component. */
+export function sanitizeLibraryFolderName(name: string, groupID: number): string {
+  const cleaned = (name ?? '')
+    .replace(UNSAFE_FOLDER_CHARS, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+/, '')
+    .slice(0, 80)
+    .trim();
+  // Nothing usable once punctuation is stripped (e.g. `///`) — name it by group.
+  return cleaned && /[\p{L}\p{N}]/u.test(cleaned) ? cleaned : `Group ${groupID}`;
+}
+
+/**
+ * The literature-note folder for a specific Zotero library.
+ *
+ * **My Library (groupID 1 / null)** keeps the base folder — existing notes stay
+ * put. A **group library** gets its own auto-named subfolder beneath it, so two
+ * libraries' copies of the same work (which necessarily share a citekey) are
+ * separate, uniquely-named notes and each can be refreshed from its OWN item.
+ * Nothing is created until a note is actually imported.
+ */
+export function literatureNoteFolderFor(opts: {
+  base: string;
+  groupID?: number | null;
+  groupName?: string | null;
+}): string {
+  const base = (opts.base ?? '').replace(/\/+$/, '');
+  const gid = opts.groupID ?? 1;
+  if (gid === 1) return base;
+  const sub = sanitizeLibraryFolderName(opts.groupName ?? '', gid);
+  return base ? `${base}/${sub}` : sub;
+}

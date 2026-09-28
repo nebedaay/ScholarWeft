@@ -64,6 +64,11 @@ import {
   serializeMigrationState,
   type RelatedMigrationState,
 } from './template/related-migration';
+import {
+  DEFAULT_LITERATURE_NOTE_FOLDER,
+  literatureNoteFolderFor,
+  resolveLiteratureNoteFolder,
+} from './template/lit-folder';
 import { shouldRefreshOnRefocus } from './template/refocus';
 import {
   DEFAULT_MIN_CHARS,
@@ -1284,6 +1289,10 @@ export default class ReferenceList extends Plugin {
     // Rebuild the citation index on startup if the persisted one is missing,
     // empty, or stale — otherwise a failed load would silently shrink it.
     void this.ensureCitedKeysIndex();
+    // One-time offer to file existing group-library notes under their library.
+    window.setTimeout(() => {
+      void this.offerGroupNoteMove();
+    }, 4000);
 
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeView) {
@@ -1681,6 +1690,104 @@ export default class ReferenceList extends Plugin {
       out.push({ file: f, citekey: ck });
     }
     return out;
+  }
+
+  /**
+   * One-time offer to move existing group-library notes into their library's
+   * auto-named subfolder. Nothing moves without consent; files are moved with
+   * `fileManager.renameFile`, so Obsidian rewrites `[[…]]` links automatically.
+   */
+  async offerGroupNoteMove(): Promise<void> {
+    if (this.settings.groupNoteMoveOffered) return;
+    const base = this.bibManager.resolveBaseNoteFolder();
+    if (!base && base !== '') return;
+
+    const byGroup = new Map<number, TFile[]>();
+    for (const f of this.app.vault.getMarkdownFiles()) {
+      const zk = this.app.metadataCache.getFileCache(f)?.frontmatter?.[
+        'zotero-key'
+      ];
+      if (typeof zk !== 'string') continue;
+      const m = /^.*?g(\d+)$/.exec(zk.trim());
+      if (!m) continue;
+      const gid = Number(m[1]);
+      if (gid === 1) continue;
+      const target = literatureNoteFolderFor({
+        base,
+        groupID: gid,
+        groupName:
+          this.settings.zoteroGroups?.find((g) => g.id === gid)?.name ?? null,
+      });
+      // Already in the right place (or below it)?
+      if (f.path.startsWith(target + '/') || f.parent?.path === target) continue;
+      (byGroup.get(gid) ?? byGroup.set(gid, []).get(gid)!).push(f);
+    }
+
+    const total = [...byGroup.values()].reduce((n, a) => n + a.length, 0);
+    if (!total) {
+      this.settings.groupNoteMoveOffered = true;
+      await this.saveSettings();
+      return;
+    }
+
+    const notice = new Notice('', 0);
+    const el = (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ?? notice.containerEl;
+    if (!el) return;
+    el.createEl('div', {
+      text: `${total} literature note${total !== 1 ? 's' : ''} from a group library ${
+        total !== 1 ? 'are' : 'is'
+      } outside its library folder.`,
+    });
+    const move = el.createEl('button', { text: 'Move them', cls: 'mod-cta' });
+    const dismiss = el.createEl('button', { text: 'Not now' });
+    dismiss.addEventListener('click', () => notice.hide());
+    move.addEventListener('click', () => {
+      notice.hide();
+      void this.moveGroupNotes(byGroup);
+    });
+  }
+
+  private async moveGroupNotes(byGroup: Map<number, TFile[]>): Promise<void> {
+    const fm = this.app.fileManager;
+    let moved = 0;
+    let failed = 0;
+    for (const files of byGroup.values()) {
+      for (const f of files) {
+        const zk = this.app.metadataCache.getFileCache(f)?.frontmatter?.[
+          'zotero-key'
+        ];
+        const m = typeof zk === 'string' ? /^.*?g(\d+)$/.exec(zk.trim()) : null;
+        if (!m) continue;
+        const gid = Number(m[1]);
+        const base = this.bibManager.resolveBaseNoteFolder();
+        const folder = literatureNoteFolderFor({
+          base,
+          groupID: gid,
+          groupName:
+            this.settings.zoteroGroups?.find((g) => g.id === gid)?.name ?? null,
+        });
+        try {
+          if (!(await this.app.vault.adapter.exists(folder))) {
+            await this.app.vault.adapter.mkdir(folder);
+          }
+          const target = `${folder}/${f.name}`;
+          if (target === f.path) continue;
+          await fm.renameFile(f, target);
+          moved++;
+        } catch (e) {
+          console.warn('[sw:move] failed to move', f.path, e);
+          failed++;
+        }
+      }
+    }
+    this.settings.groupNoteMoveOffered = true;
+    await this.saveSettings();
+    new Notice(
+      `Moved ${moved} literature note${moved !== 1 ? 's' : ''}${
+        failed ? `, ${failed} failed (see console)` : ''
+      }.`,
+      8000
+    );
   }
 
   async getCitekeysForFile(file?: TFile) {

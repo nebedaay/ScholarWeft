@@ -264,6 +264,8 @@ export interface ReferenceListSettings {
    *  (metadata, or annotations/attachments). `undefined` = not yet chosen (the
    *  user is asked before anything is modified); `true`/`false` = chosen. */
   autoUpdateNotes?: boolean;
+  /** One-time group-note move offer. */
+  groupNoteMoveOffered?: boolean;
   /** Apply Zotero CITIKEY changes (renames) to notes automatically.
    *  `undefined` = not yet chosen (asked on the first detected change);
    *  `true`/`false` = chosen. */

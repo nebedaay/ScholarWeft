@@ -21,6 +21,7 @@ import type { NoteContextRelatedItem } from './template/context';
 import type { RawZoteroChildren } from './template/children';
 import {
   DEFAULT_LITERATURE_NOTE_FOLDER,
+  literatureNoteFolderFor,
   resolveLiteratureNoteFolder,
 } from './template/lit-folder';
 export { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
@@ -94,6 +95,27 @@ export function literatureNoteFolder(plugin: ReferenceList): string {
     useOwnNoteTemplate: plugin.settings.useOwnNoteTemplate,
     literatureNoteFolder: plugin.settings.literatureNoteFolder,
     zotlitFolder: getZotlitLiteratureFolder(plugin.app),
+  });
+}
+
+/**
+ * The folder a note for THIS item belongs in: the base folder for My Library,
+ * an auto-named per-library subfolder for a group library, so copies of the same
+ * work (which share a citekey) live as separate notes. Created lazily by the
+ * caller — only when a note is actually written.
+ */
+function noteFolderForEntry(
+  plugin: ReferenceList,
+  entry: CachedEntry | undefined
+): string {
+  const groupID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : 1;
+  if (groupID === 1) return literatureNoteFolder(plugin);
+  const name =
+    plugin.settings.zoteroGroups?.find((g) => g.id === groupID)?.name ?? null;
+  return literatureNoteFolderFor({
+    base: literatureNoteFolder(plugin),
+    groupID,
+    groupName: name,
   });
 }
 
@@ -325,7 +347,7 @@ export async function createOrUpdateOwnNote(
   const children = await fetchChildren(plugin, entry);
   const groupID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : null;
   const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
-  const folder = literatureNoteFolder(plugin);
+  const folder = noteFolderForEntry(plugin, entry);
 
   // Copy excerpt images into the vault first, so the render links them as
   // `![[…]]` (renderable, opens in Obsidian) and not `file://` cache paths.
