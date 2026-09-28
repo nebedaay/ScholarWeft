@@ -102192,18 +102192,35 @@ var ReferenceList = class extends import_obsidian39.Plugin {
     if (!targets.length)
       return;
     const progress = new import_obsidian39.Notice(`Updating literature notes from Zotero\u2026 0/${targets.length}`, 0);
-    let updated = 0;
+    const updatedKeys = [];
     let skipped = 0;
-    for (const file of targets) {
-      if (await this.updateLiteratureNote(file, { confirm: false }))
-        updated++;
-      else
+    for (const { file, citekey } of targets) {
+      if (await this.updateLiteratureNote(file, { confirm: false })) {
+        updatedKeys.push(citekey);
+      } else {
         skipped++;
-      progress.setMessage(`Updating literature notes from Zotero\u2026 ${updated + skipped}/${targets.length}`);
+      }
+      progress.setMessage(`Updating literature notes from Zotero\u2026 ${updatedKeys.length + skipped}/${targets.length}`);
     }
     progress.hide();
-    if (updated) {
-      new import_obsidian39.Notice(`Zotero: updated ${updated} literature note${updated !== 1 ? "s" : ""}${skipped ? `, skipped ${skipped}` : ""}.`, 6e3);
+    if (updatedKeys.length)
+      this.showAutoUpdateNotice(updatedKeys, skipped);
+  }
+  showAutoUpdateNotice(keys, skipped) {
+    var _a;
+    const notice = new import_obsidian39.Notice("", 8e3);
+    const el = (_a = notice.noticeEl) != null ? _a : notice.containerEl;
+    if (!el)
+      return;
+    el.createEl("div", {
+      text: `Updated ${keys.length} literature note${keys.length !== 1 ? "s" : ""}${skipped ? ` (skipped ${skipped})` : ""}:`
+    });
+    const MAX = 12;
+    for (const k4 of keys.slice(0, MAX)) {
+      el.createEl("div", { cls: "sw-auto-update-key", text: `@${k4}` });
+    }
+    if (keys.length > MAX) {
+      el.createEl("div", { text: `\u2026and ${keys.length - MAX} more.` });
     }
   }
   async collectAutoUpdateFiles(citekeys) {
@@ -102233,7 +102250,7 @@ var ReferenceList = class extends import_obsidian39.Plugin {
         }
       }
       seen.add(f3.path);
-      out.push(f3);
+      out.push({ file: f3, citekey: ck });
     }
     return out;
   }

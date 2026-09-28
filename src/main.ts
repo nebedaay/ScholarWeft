@@ -1610,30 +1610,49 @@ export default class ReferenceList extends Plugin {
       `Updating literature notes from Zotero… 0/${targets.length}`,
       0
     );
-    let updated = 0;
+    const updatedKeys: string[] = [];
     let skipped = 0;
-    for (const file of targets) {
-      if (await this.updateLiteratureNote(file, { confirm: false })) updated++;
-      else skipped++;
+    for (const { file, citekey } of targets) {
+      if (await this.updateLiteratureNote(file, { confirm: false })) {
+        updatedKeys.push(citekey);
+      } else {
+        skipped++;
+      }
       progress.setMessage(
-        `Updating literature notes from Zotero… ${updated + skipped}/${targets.length}`
+        `Updating literature notes from Zotero… ${updatedKeys.length + skipped}/${targets.length}`
       );
     }
     progress.hide();
-    if (updated) {
-      new Notice(
-        `Zotero: updated ${updated} literature note${updated !== 1 ? 's' : ''}${
-          skipped ? `, skipped ${skipped}` : ''
-        }.`,
-        6000
-      );
+    if (updatedKeys.length) this.showAutoUpdateNotice(updatedKeys, skipped);
+  }
+
+  /** "Updated N notes:" followed by the citekeys, so the reader sees WHAT changed. */
+  private showAutoUpdateNotice(keys: string[], skipped: number): void {
+    const notice = new Notice('', 8000);
+    const el =
+      (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ??
+      notice.containerEl;
+    if (!el) return;
+    el.createEl('div', {
+      text: `Updated ${keys.length} literature note${
+        keys.length !== 1 ? 's' : ''
+      }${skipped ? ` (skipped ${skipped})` : ''}:`,
+    });
+    const MAX = 12;
+    for (const k of keys.slice(0, MAX)) {
+      el.createEl('div', { cls: 'sw-auto-update-key', text: `@${k}` });
+    }
+    if (keys.length > MAX) {
+      el.createEl('div', { text: `…and ${keys.length - MAX} more.` });
     }
   }
 
   /** Literature-note files for `citekeys`, honouring the ZotLit setting. */
-  private async collectAutoUpdateFiles(citekeys: Set<string>): Promise<TFile[]> {
+  private async collectAutoUpdateFiles(
+    citekeys: Set<string>
+  ): Promise<Array<{ file: TFile; citekey: string }>> {
     const setting = this.settings.ownNoteZotLitHandling ?? 'ask';
-    const out: TFile[] = [];
+    const out: Array<{ file: TFile; citekey: string }> = [];
     const seen = new Set<string>();
     for (const f of this.app.vault.getMarkdownFiles()) {
       const fm = this.app.metadataCache.getFileCache(f)?.frontmatter;
@@ -1656,7 +1675,7 @@ export default class ReferenceList extends Plugin {
         }
       }
       seen.add(f.path);
-      out.push(f);
+      out.push({ file: f, citekey: ck });
     }
     return out;
   }
