@@ -102215,7 +102215,7 @@ var ReferenceList = class extends import_obsidian39.Plugin {
     el.createEl("div", {
       text: `Updated ${keys.length} literature note${keys.length !== 1 ? "s" : ""}${skipped ? ` (skipped ${skipped})` : ""}:`
     });
-    const MAX = 12;
+    const MAX = 20;
     for (const k4 of keys.slice(0, MAX)) {
       el.createEl("div", { cls: "sw-auto-update-key", text: `@${k4}` });
     }

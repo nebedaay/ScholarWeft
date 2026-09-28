@@ -1638,7 +1638,7 @@ export default class ReferenceList extends Plugin {
         keys.length !== 1 ? 's' : ''
       }${skipped ? ` (skipped ${skipped})` : ''}:`,
     });
-    const MAX = 12;
+    const MAX = 20;
     for (const k of keys.slice(0, MAX)) {
       el.createEl('div', { cls: 'sw-auto-update-key', text: `@${k}` });
     }
