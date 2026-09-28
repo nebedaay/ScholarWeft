@@ -32,6 +32,11 @@ describe('contiguous citations merge into one compound citation', () => {
     expect(cites('[[@a]] @b')).toEqual([['a'], ['b']]);
   });
 
+  it('does not merge the linked narrative form [[@a|@ -]]', () => {
+    expect(cites('[[@a|@ -]] [[@b]]')).toEqual([['a'], ['b']]);
+    expect(cites('[[@a]] [[@b|@ -]]')).toEqual([['a'], ['b']]);
+  });
+
   it('does not pull a reference insertion into a merged group', () => {
     expect(cites('[[@a]] [[@b|reference]]')).toEqual([['a'], ['b']]);
   });

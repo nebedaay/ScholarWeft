@@ -26234,10 +26234,17 @@ function getCitationSegments(str3, ignoreLinks = false, expandLinkAliases = fals
 function mergeAdjacentGroups(str3, groups) {
   if (groups.length < 2)
     return groups;
+  const isNarrative = (g4) => {
+    try {
+      return getCitations(g4).citations.some((c3) => c3.composite === true);
+    } catch (e3) {
+      return false;
+    }
+  };
   const out = [];
   for (const group of groups) {
     const prev = out[out.length - 1];
-    if (prev && !prev.reference && !group.reference && prev.length > 0 && group.length > 0 && prev[0].type === SegmentType.bracket && group[0].type === SegmentType.bracket) {
+    if (prev && !prev.reference && !group.reference && !isNarrative(prev) && !isNarrative(group) && prev.length > 0 && group.length > 0 && prev[0].type === SegmentType.bracket && group[0].type === SegmentType.bracket) {
       const prevLast = prev[prev.length - 1];
       const prevEnd = str3[prevLast.to] === "]" ? prevLast.to + 1 : prevLast.to;
       const sep = str3.slice(prevEnd, group[0].from);

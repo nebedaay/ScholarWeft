@@ -1004,6 +1004,15 @@ function mergeAdjacentGroups(
   groups: CitationSegments[]
 ): CitationSegments[] {
   if (groups.length < 2) return groups;
+  // A narrative (author-in-text) group — `[[@a|@ -]]` — is bracket-shaped but
+  // marked `composite`; like bare `@a`, it must NOT be combined.
+  const isNarrative = (g: CitationSegments): boolean => {
+    try {
+      return getCitations(g).citations.some((c) => c.composite === true);
+    } catch {
+      return false;
+    }
+  };
   const out: CitationSegments[] = [];
   for (const group of groups) {
     const prev = out[out.length - 1];
@@ -1011,6 +1020,8 @@ function mergeAdjacentGroups(
       prev &&
       !prev.reference &&
       !group.reference &&
+      !isNarrative(prev) &&
+      !isNarrative(group) &&
       prev.length > 0 &&
       group.length > 0 &&
       // Only BRACKET-style citations merge; a bare narrative `@a` does not.
