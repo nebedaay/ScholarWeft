@@ -1717,13 +1717,25 @@ export default class ReferenceList extends Plugin {
     // Notes needing a move, AND stale library folders to rename (created before
     // a group's name was known — e.g. a "Group 6667607" folder whose library is
     // now "Andrea Lickacz readings").
-    const { byGroup, staleFolders } = await this.planGroupNoteMove(base);
+    const { byGroup, staleFolders, diagnostic } = await this.planGroupNoteMove(base);
+    // Diagnostic: dump the actual decision so a failed scan can be diagnosed
+    // from the console rather than by guessing. Includes the child-folder list.
+    console.log('[sw:move] DIAGNOSTIC\n' + diagnostic);
+    try {
+      await this.app.vault.adapter.write('tmp/sw-move-diagnostic.txt', diagnostic);
+    } catch {
+      /* best effort */
+    }
     const total = [...byGroup.values()].reduce((n, a) => n + a.length, 0);
     const totalMoves = total + staleFolders.length;
     if (!totalMoves) {
       this.settings.groupNoteMoveOffered = true;
       await this.saveSettings();
-      if (force) new Notice('All literature notes are already in their library folders.');
+      if (force) {
+        new Notice(
+          'Nothing to file — see tmp/sw-move-diagnostic.txt (or the console).'
+        );
+      }
       return;
     }
 
@@ -1762,7 +1774,9 @@ export default class ReferenceList extends Plugin {
   private async planGroupNoteMove(base: string): Promise<{
     byGroup: Map<number, TFile[]>;
     staleFolders: Array<{ from: string; to: string }>;
+    diagnostic: string;
   }> {
+    const lines: string[] = [`base=${JSON.stringify(base)}`];
     const byGroup = new Map<number, TFile[]>();
     for (const f of this.app.vault.getMarkdownFiles()) {
       const zk =
@@ -1828,9 +1842,13 @@ export default class ReferenceList extends Plugin {
         // Do not steal a folder that IS another group's current target.
         return !otherTargets.has(p);
       });
-      console.log(
-        '[sw:move] group', gid, 'target=', target, 'oldFolder=', oldPath,
-        'prevName=', lastFolderName(gid)
+      lines.push(
+        `group ${gid}: target=${JSON.stringify(target)} ` +
+          `targetName=${JSON.stringify(targetName)} ` +
+          `prevName=${JSON.stringify(lastFolderName(gid) ?? null)} ` +
+          `oldFolder=${JSON.stringify(oldPath ?? null)} ` +
+          `childNames=${JSON.stringify([...childNames])} ` +
+          `nameFor=${JSON.stringify(this.bibManager.libraryNameFor(gid))}`
       );
       if (oldPath && oldPath !== target) {
         staleFolders.push({ from: oldPath, to: target });
@@ -1842,7 +1860,13 @@ export default class ReferenceList extends Plugin {
         rememberFolderName(gid, targetName);
       }
     }
-    return { byGroup, staleFolders };
+    lines.push(
+      `byGroup=${JSON.stringify(
+        [...byGroup.entries()].map(([g, fs]) => [g, fs.map((f) => f.path)])
+      )}`
+    );
+    lines.push(`staleFolders=${JSON.stringify(staleFolders)}`);
+    return { byGroup, staleFolders, diagnostic: lines.join('\n') };
   }
 
   /** Vault-relative paths of the immediate child FOLDERS of `folder`. */

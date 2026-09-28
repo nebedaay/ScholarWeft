@@ -102472,14 +102472,20 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     const base = this.bibManager.resolveBaseNoteFolder();
     if (base == null)
       return;
-    const { byGroup, staleFolders } = await this.planGroupNoteMove(base);
+    const { byGroup, staleFolders, diagnostic } = await this.planGroupNoteMove(base);
+    console.log("[sw:move] DIAGNOSTIC\n" + diagnostic);
+    try {
+      await this.app.vault.adapter.write("tmp/sw-move-diagnostic.txt", diagnostic);
+    } catch (e3) {
+    }
     const total = [...byGroup.values()].reduce((n2, a3) => n2 + a3.length, 0);
     const totalMoves = total + staleFolders.length;
     if (!totalMoves) {
       this.settings.groupNoteMoveOffered = true;
       await this.saveSettings();
-      if (force)
-        new import_obsidian40.Notice("All literature notes are already in their library folders.");
+      if (force) {
+        new import_obsidian40.Notice("Nothing to file \u2014 see tmp/sw-move-diagnostic.txt (or the console).");
+      }
       return;
     }
     const nameOf = (gid) => {
@@ -102503,7 +102509,8 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     });
   }
   async planGroupNoteMove(base) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    const lines = [`base=${JSON.stringify(base)}`];
     const byGroup = new Map();
     for (const f3 of this.app.vault.getMarkdownFiles()) {
       const zk = (_b = (_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
@@ -102561,7 +102568,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
           return false;
         return !otherTargets.has(p4);
       });
-      console.log("[sw:move] group", gid, "target=", target, "oldFolder=", oldPath, "prevName=", lastFolderName(gid));
+      lines.push(`group ${gid}: target=${JSON.stringify(target)} targetName=${JSON.stringify(targetName)} prevName=${JSON.stringify((_i = lastFolderName(gid)) != null ? _i : null)} oldFolder=${JSON.stringify(oldPath != null ? oldPath : null)} childNames=${JSON.stringify([...childNames])} nameFor=${JSON.stringify(this.bibManager.libraryNameFor(gid))}`);
       if (oldPath && oldPath !== target) {
         staleFolders.push({ from: oldPath, to: target });
       } else if (oldPath && oldPath === target) {
@@ -102570,7 +102577,9 @@ var ReferenceList = class extends import_obsidian40.Plugin {
         rememberFolderName(gid, targetName);
       }
     }
-    return { byGroup, staleFolders };
+    lines.push(`byGroup=${JSON.stringify([...byGroup.entries()].map(([g4, fs2]) => [g4, fs2.map((f3) => f3.path)]))}`);
+    lines.push(`staleFolders=${JSON.stringify(staleFolders)}`);
+    return { byGroup, staleFolders, diagnostic: lines.join("\n") };
   }
   async listChildFolders(folder) {
     var _a;
