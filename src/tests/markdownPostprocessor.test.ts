@@ -320,6 +320,41 @@ describe('reading-mode postprocessor anchor handling', () => {
     expect(spans[0].getAttribute('data-citekey')).toBe('a|b');
   });
 
+  it('merges adjacent linked citations [[@a]] [[@b]] into ONE span (no container)', () => {
+    // Reading mode Dom for `[[@a]] [[@b]]`: two anchors separated by a space.
+    const p = document.createElement('p');
+    p.innerHTML =
+      'text <a class="internal-link" data-href="@a" href="@a">@a</a> ' +
+      '<a class="internal-link" data-href="@b" href="@b">@b</a> more';
+    document.body.appendChild(p);
+
+    const plugin = makePlugin();
+    // The rendered citation's `data` must equal what the SHARED parser produces
+    // for the merged expression.
+    const merged = getCitationSegments('[[@a]] [[@b]]', false, true)[0];
+    plugin.bibManager.getCitationsForSection.mockReturnValue([
+      {
+        data: merged,
+        citations: [{ id: 'a' }, { id: 'b' }],
+        from: 0,
+        to: 0,
+        val: '(A; B)',
+      },
+    ]);
+
+    processCiteKeys(plugin)(p, {
+      sourcePath: 'test.md',
+      getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
+    } as any);
+
+    const spans = p.querySelectorAll('span.sw-citation');
+    expect(spans.length).toBe(1);
+    expect(p.querySelectorAll('a.internal-link').length).toBeLessThanOrEqual(1);
+    expect(p.textContent).not.toContain('@@');
+    expect(p.textContent).toContain('more');
+    p.remove();
+  });
+
   it('leaves bracket prose without 2+ citation links alone', () => {
     // A plain bracket like "[note]" must NOT be treated as a container.
     const p = document.createElement('p');

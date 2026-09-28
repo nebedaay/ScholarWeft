@@ -637,6 +637,63 @@ export function processCiteKeys(plugin: ReferenceList) {
       }
     }
 
+    // Adjacent LINKED citations: in reading mode `[[@a]] [[@b]]` is two <a>
+    // elements separated by whitespace, so the base walker (one anchor at a
+    // time) would render them separately. Merge such a run into ONE compound
+    // citation, exactly as the container pre-pass does. Pandoc `[@a] [@b]`
+    // needs no pre-pass — it is a single text node, which the parser now merges.
+    if (plugin.settings.renderLinkCitations) {
+    for (const anchor of Array.from(el.querySelectorAll('a'))) {
+      const a = anchor as HTMLAnchorElement;
+      if (!a.isConnected) continue;
+      if (!getLinkCiteKey(a)) continue;
+
+      const runAnchors: HTMLAnchorElement[] = [a];
+      const gaps: Node[] = [];
+      let cursor: Node = a;
+      for (;;) {
+        const n = cursor.nextSibling;
+        if (!n || n.nodeType !== Node.TEXT_NODE) break;
+        if (!/^\s*$/.test((n as Text).nodeValue ?? '')) break;
+        const after = n.nextSibling;
+        if (
+          after &&
+          after.nodeType === Node.ELEMENT_NODE &&
+          (after as Element).nodeName === 'A' &&
+          getLinkCiteKey(after as HTMLElement)
+        ) {
+          gaps.push(n);
+          runAnchors.push(after as HTMLAnchorElement);
+          cursor = after;
+          continue;
+        }
+        break;
+      }
+      if (runAnchors.length < 2) continue;
+
+      // Rebuild the source expression and let the SHARED parser merge it.
+      const expr = runAnchors
+        .map((an) => {
+          const k = getLinkCiteKey(an)!;
+          const text = (an.textContent ?? '').trim();
+          return text === '@' + k ? `[[@${k}]]` : `[[@${k}|${text}]]`;
+        })
+        .join(' ');
+      const groups = getCitationSegments(expr, false, true);
+      // A run that does NOT collapse to one group (narrative `[[@a|@ -]]`, a
+      // `|reference` member) must be left for the base walker.
+      if (groups.length !== 1) continue;
+      const rendered = findRendered(groups[0]);
+      if (!rendered) continue;
+
+      const parent = a.parentNode;
+      if (!parent) continue;
+      parent.insertBefore(buildCitationSpan(plugin, rendered, ctx), a);
+      for (const an of runAnchors) parent.removeChild(an);
+      for (const gap of gaps) parent.removeChild(gap);
+    }
+    }
+
     const walker = doc.createNodeIterator(el, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) {

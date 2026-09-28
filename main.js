@@ -27566,7 +27566,7 @@ function isCodeNode(node) {
 }
 function processCiteKeys(plugin) {
   return (el, ctx) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
     const toRemove = [];
     const doc = el.doc || el.ownerDocument || document;
     const sectionInfo = ctx.getSectionInfo(el);
@@ -27872,6 +27872,55 @@ function processCiteKeys(plugin) {
             }
           }
         }
+      }
+    }
+    if (plugin.settings.renderLinkCitations) {
+      for (const anchor of Array.from(el.querySelectorAll("a"))) {
+        const a3 = anchor;
+        if (!a3.isConnected)
+          continue;
+        if (!getLinkCiteKey(a3))
+          continue;
+        const runAnchors = [a3];
+        const gaps = [];
+        let cursor = a3;
+        for (; ; ) {
+          const n2 = cursor.nextSibling;
+          if (!n2 || n2.nodeType !== Node.TEXT_NODE)
+            break;
+          if (!/^\s*$/.test((_j = n2.nodeValue) != null ? _j : ""))
+            break;
+          const after = n2.nextSibling;
+          if (after && after.nodeType === Node.ELEMENT_NODE && after.nodeName === "A" && getLinkCiteKey(after)) {
+            gaps.push(n2);
+            runAnchors.push(after);
+            cursor = after;
+            continue;
+          }
+          break;
+        }
+        if (runAnchors.length < 2)
+          continue;
+        const expr = runAnchors.map((an2) => {
+          var _a2;
+          const k4 = getLinkCiteKey(an2);
+          const text = ((_a2 = an2.textContent) != null ? _a2 : "").trim();
+          return text === "@" + k4 ? `[[@${k4}]]` : `[[@${k4}|${text}]]`;
+        }).join(" ");
+        const groups = getCitationSegments(expr, false, true);
+        if (groups.length !== 1)
+          continue;
+        const rendered = findRendered(groups[0]);
+        if (!rendered)
+          continue;
+        const parent = a3.parentNode;
+        if (!parent)
+          continue;
+        parent.insertBefore(buildCitationSpan(plugin, rendered, ctx), a3);
+        for (const an2 of runAnchors)
+          parent.removeChild(an2);
+        for (const gap of gaps)
+          parent.removeChild(gap);
       }
     }
     const walker = doc.createNodeIterator(el, NodeFilter.SHOW_TEXT);
