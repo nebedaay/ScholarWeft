@@ -98419,8 +98419,20 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     const meta = getEntryMeta(item);
     if (meta)
       frag.createSpan({ text: meta, cls: "sw-suggest-meta" });
+    this.appendLibraryLine(frag, item);
     this.appendExcerpts(frag, excerpts);
     el.setText(frag);
+  }
+  appendLibraryLine(frag, item) {
+    var _a, _b, _c, _d;
+    const groupID = (_a = item.groupID) != null ? _a : 1;
+    if (groupID === 1)
+      return;
+    const name = (_d = (_c = (_b = this.plugin.settings.zoteroGroups) == null ? void 0 : _b.find((g4) => g4.id === groupID)) == null ? void 0 : _c.name) != null ? _d : `Group ${groupID}`;
+    frag.createDiv({
+      cls: "sw-suggest-library",
+      text: `From library: ${name}`
+    });
   }
   termsFor(item, suggestion) {
     var _a;

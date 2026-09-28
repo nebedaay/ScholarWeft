@@ -474,10 +474,28 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     const meta = getEntryMeta(item);
     if (meta) frag.createSpan({ text: meta, cls: 'sw-suggest-meta' });
 
+    // Which Zotero library this result is from, so a group-library reference
+    // cannot be mistaken for one of your own (they can share a citekey). Shown
+    // only for a NON-default library, below the result like an excerpt.
+    this.appendLibraryLine(frag, item);
+
     this.appendExcerpts(frag, excerpts);
 
     el.setText(frag);
 
+  }
+
+  /** The group-library name under a result, or nothing for My Library. */
+  private appendLibraryLine(frag: DocumentFragment, item: PartialCSLEntry): void {
+    const groupID = (item as { groupID?: number }).groupID ?? 1;
+    if (groupID === 1) return;
+    const name =
+      this.plugin.settings.zoteroGroups?.find((g) => g.id === groupID)?.name ??
+      `Group ${groupID}`;
+    frag.createDiv({
+      cls: 'sw-suggest-library',
+      text: `From library: ${name}`,
+    });
   }
 
   /**

@@ -953,6 +953,18 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   white-space: nowrap;
 }
 
+/* Which Zotero library a result comes from. Shown only for a NON-default
+   library, since a group reference can share a citekey with one of your own. */
+.sw-suggest-library {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-top: var(--size-4-1);
+}
+
 /* `@@@` excerpt: shows WHERE in the abstract a term was found, since the
    title and author may not explain the match. */
 .sw-suggest-excerpt {
