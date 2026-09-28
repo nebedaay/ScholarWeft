@@ -79,6 +79,13 @@ export default {
     'Trigger reference search with [@ or [[@',
   '@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.':
     '@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.',
+  'Characters after @ before searching': 'Characters after @ before searching',
+  'How many characters you type after @ or @@ before the search popup opens. 0 opens it immediately with your most recent references; 1 or 2 wait for that many characters. Raise it if the popup feels intrusive.':
+    'How many characters you type after @ or @@ before the search popup opens. 0 opens it immediately with your most recent references; 1 or 2 wait for that many characters. Raise it if the popup feels intrusive.',
+  '0 — open immediately with recent references':
+    '0 — open immediately with recent references',
+  '1 character': '1 character',
+  '2 characters': '2 characters',
   'Pull bibliography from Zotero': 'Pull bibliography from Zotero',
   'When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.':
     'When enabled, bibliography data will be pulled from Zotero rather than a bibliography file. The Better Bibtex plugin must be installed in Zotero.',

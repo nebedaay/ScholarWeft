@@ -13,8 +13,15 @@ ScholarWeft's search and autocomplete function is how you find a work to cite. K
 extra fields rank *below* the `@` fields, so adding them widens the list without
 burying a title or author match.
 
-Type the level, then your words; a **period closes the popup**, so search terms
-can include spaces.
+Type the level. **The popup opens as soon as you type `@`** — leading with your
+most recently used references — so you can pick straight away. One or two
+characters narrow to citekeys that start with them; three or more runs the full
+ranked search. A **period closes the popup**, so `@@` search terms can include
+spaces.
+
+If the popup feels intrusive, raise **Characters after @ before searching**
+(Settings → ScholarWeft → Citation and reference searching and formatting) to
+1 or 2 so it waits for that many characters. At 0 it opens immediately.
 
 - `@smith` — works by Smith, plus any citekey beginning `smith`.
 - `@social critique` — part of a title.

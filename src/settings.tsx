@@ -68,6 +68,7 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   showCitationDecorations: true,
   mobileClickAction: 'show',
   enableCiteKeyCompletion: true,
+  citeSearchMinChars: 0,
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
   createNotesWithZotLit: false,
@@ -176,6 +177,10 @@ export interface ReferenceListSettings {
   showCitationDecorations?: boolean;
   tooltipDelay: number;
   enableCiteKeyCompletion?: boolean;
+  /** How many characters must follow `@`/`@@` before the search popup opens.
+   *  0 (default) opens it immediately with the most recent references; 1 or 2
+   *  wait for that many characters. Shown only when reference search is on. */
+  citeSearchMinChars?: number;
   prioritizeCiteKeyCompletion?: boolean;
   renderCitations?: boolean;
   renderCitationsReadingMode?: boolean;
@@ -656,6 +661,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     );
 
     // Searching comes first: you find a reference before you see it rendered.
+    const searchEnabled = !!this.plugin.settings.enableCiteKeyCompletion;
     new Setting(containerEl)
       .setName(t('Trigger reference search with [@ or [[@'))
       .setDesc(
@@ -665,12 +671,37 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       )
       .addToggle((text) =>
         text
-          .setValue(!!this.plugin.settings.enableCiteKeyCompletion)
+          .setValue(searchEnabled)
           .onChange((value) => {
             this.plugin.settings.enableCiteKeyCompletion = value;
             this.plugin.saveSettings();
+            // Re-render so the dependent minimum-characters option appears or
+            // disappears with the toggle.
+            this.display();
           })
       );
+
+    // Only meaningful while search is on, so it is hidden with it.
+    if (searchEnabled) {
+      new Setting(containerEl)
+        .setName(t('Characters after @ before searching'))
+        .setDesc(
+          t(
+            'How many characters you type after @ or @@ before the search popup opens. 0 opens it immediately with your most recent references; 1 or 2 wait for that many characters. Raise it if the popup feels intrusive.'
+          )
+        )
+        .addDropdown((dropdown) =>
+          dropdown
+            .addOption('0', t('0 — open immediately with recent references'))
+            .addOption('1', t('1 character'))
+            .addOption('2', t('2 characters'))
+            .setValue(String(this.plugin.settings.citeSearchMinChars ?? 0))
+            .onChange((value) => {
+              this.plugin.settings.citeSearchMinChars = Number(value) || 0;
+              this.plugin.saveSettings();
+            })
+        );
+    }
 
     const configuredStyle = this.plugin.settings.cslStyleURL;
     const defaultStyle =

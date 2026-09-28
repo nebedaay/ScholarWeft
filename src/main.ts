@@ -64,6 +64,10 @@ import {
   type RelatedMigrationState,
 } from './template/related-migration';
 import { shouldRefreshOnRefocus } from './template/refocus';
+import {
+  DEFAULT_MIN_CHARS,
+  detectCitationTrigger,
+} from './template/cite-trigger';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
 import { insertZoteroNotesVaultWide } from './zoteroNotes';
 
@@ -288,6 +292,8 @@ export default class ReferenceList extends Plugin {
     // Restore the persisted Zotero select-link / PDF maps so cold starts
     // skip the per-citekey HTTP fetch entirely.
     await this.bibManager.loadZLinks();
+    // Restore the MRU list that drives the 0/1/2-character autocomplete.
+    await this.bibManager.loadRecentKeys();
     this.api = {
       version: API_VERSION,
       focusReferenceListView: () => this.initLeaf(),
@@ -1629,16 +1635,31 @@ export default class ReferenceList extends Plugin {
   }
 
   /** Does the current typing context need CiteSuggest at the front of the
-   *  EditorSuggest queue? [[@... always; [@... when prioritization is on. */
+   *  EditorSuggest queue? Yes for any citation trigger — `@`, `@@`, `[@`, `[[@`
+   *  — past the user's minimum-characters setting. Decided by the SAME detector
+   *  the trigger uses, so we never front a context we would refuse. A bare `@`
+   *  outside a bracket still yields to ZotLit when prioritization is off. */
   private suggestWantsFront(): boolean {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const editor = view?.editor;
     if (!editor) return false;
+    if (this.settings.enableCiteKeyCompletion === false) return false;
     const cursor = editor.getCursor();
     const line = editor.getLine(cursor.line).slice(0, cursor.ch);
-    if (/\[\[@/.test(line)) return true;
-    if (this.settings.prioritizeCiteKeyCompletion !== false && /\[@/.test(line)) return true;
-    return false;
+
+    const trigger = detectCitationTrigger(line, {
+      minChars: this.settings.citeSearchMinChars ?? DEFAULT_MIN_CHARS,
+    });
+    if (!trigger) return false;
+
+    if (!trigger.isDoubleAt) {
+      const beforeAt = line.substring(0, trigger.atPos);
+      const inBracketCite = beforeAt.lastIndexOf('[') > beforeAt.lastIndexOf(']');
+      if (!inBracketCite && this.settings.prioritizeCiteKeyCompletion === false) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Apply the three decoration underline colors from settings as CSS custom

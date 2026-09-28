@@ -17,6 +17,14 @@ import {
   insertionHint,
   insertionKind,
 } from 'src/template/cite-insert';
+import {
+  DEFAULT_MIN_CHARS,
+  DOUBLE_AT_PREFIX,
+  MIN_SEARCH_CHARS,
+  detectCitationTrigger,
+  triggerQueryText,
+} from 'src/template/cite-trigger';
+import { orderByRecency, prefixMatches } from 'src/template/recent-keys';
 import { PartialCSLEntry } from 'src/bib/types';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
@@ -63,19 +71,6 @@ function loadingSuggestion(): Fuse.FuseResult<PartialCSLEntry>[] {
 function isLoadingSuggestion(s: Fuse.FuseResult<PartialCSLEntry>): boolean {
   return (s as any)?.loading === true || s?.item?.id === LOADING_ITEM_ID;
 }
-
-// Single-@ trigger: matches @citekey (no spaces, no @@ prefix)
-const triggerRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]+)$/u;
-
-// Double-@ trigger: @@ followed by any text (spaces allowed) up to a period.
-// A period ends the trigger so normal sentence punctuation closes the popup.
-const doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
-
-// Sentinel prepended to the query when @@ mode is active. Encoding the mode
-// in the query string means it travels with the EditorSuggestContext and is
-// still correct when getSuggestions resolves asynchronously — no class-level
-// flag that a later onTrigger call could clobber mid-flight.
-const DOUBLE_AT_PREFIX = '\x00';
 
 export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>> {
   private plugin: ReferenceList;
@@ -191,8 +186,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     this._matchedTermsByKey = new Map();
     this.renderCount(0);
 
-    if (!searchQuery) return [];
-
     const { plugin } = this;
     const { bibManager } = plugin;
     // Do NOT bail out while the local index is still building. Previously this
@@ -231,38 +224,44 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       }
 
       LOG(`tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
-      if (!searchQuery) {
-        const docs = (fuse as any)?._docs as PartialCSLEntry[] | undefined;
-        return docs?.length
-          ? docs.slice(0, this.limit).map((item, refIndex) => ({ item, refIndex, score: 0 }))
-          : [];
-      }
 
-      // searchTier ranks by exact phrase, coverage, whole words and position —
-      // and does its own AND filtering. Nothing further to re-rank here.
-      const { entries, total } = bibManager.searchTier(
-        tier,
-        searchQuery,
-        this.limit
-      );
-      // The terms recorded are those of the interpretation that MATCHED each
-      // entry, not the raw query: an unbroken query like `islamwomenauthority`
-      // appears in no field, while the words it split into do. Used for BOTH the
-      // excerpt (`@@`) and for highlighting every field — so this must be
-      // recorded for BOTH tiers. Recording it for one only is why
-      // highlighting appeared to work solely on results with an abstract.
-      this._matchedTermsByKey = new Map(
-        entries.map((e) => [e.entry.id, e.terms])
-      );
-      // Show an honest count: "20 of 137" when the list is truncated, so a
-      // capped result does not read like "only 20 matched".
-      this.renderCount(entries.length, total);
-      if (entries.length > 0) {
-        return entries.map(({ entry }, refIndex) => ({
-          item: entry,
-          refIndex,
-          score: 0,
-        }));
+      // Below the scorer's minimum (MIN_SEARCH_CHARS) there is nothing to rank,
+      // so serve by RECENCY and citekey PREFIX instead: 0 characters shows the
+      // most recently used references; 1–2 show citekeys starting with them.
+      // See recent-keys.ts.
+      if (searchQuery.length < MIN_SEARCH_CHARS) {
+        const { items, total } = this.shortQuerySuggestions(searchQuery);
+        this.renderCount(items.length, total);
+        if (items.length) {
+          return items.map((item, refIndex) => ({ item, refIndex, score: 0 }));
+        }
+        // Nothing recent/prefix-matching: fall through to live/ZotLit/loading.
+      } else {
+        // searchTier ranks by exact phrase, coverage, whole words and position —
+        // and does its own AND filtering. Nothing further to re-rank here.
+        const { entries, total } = bibManager.searchTier(
+          tier,
+          searchQuery,
+          this.limit
+        );
+        // The terms recorded are those of the interpretation that MATCHED each
+        // entry, not the raw query: an unbroken query like `islamwomenauthority`
+        // appears in no field, while the words it split into do. Used for BOTH
+        // the excerpt (`@@`) and for highlighting every field — so this must be
+        // recorded for BOTH tiers.
+        this._matchedTermsByKey = new Map(
+          entries.map((e) => [e.entry.id, e.terms])
+        );
+        // Show an honest count: "20 of 137" when the list is truncated, so a
+        // capped result does not read like "only 20 matched".
+        this.renderCount(entries.length, total);
+        if (entries.length > 0) {
+          return entries.map(({ entry }, refIndex) => ({
+            item: entry,
+            refIndex,
+            score: 0,
+          }));
+        }
       }
 
       // Nothing in the index — try Zotero live, then ZotLit, then say
@@ -280,6 +279,23 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       if (zotlitResults.length) return zotlitResults;
       return indexReady ? [] : loadingSuggestion();
     }
+  }
+
+  /**
+   * Suggestions for a short query (0, 1 or 2 characters), bypassing the ranked
+   * scorer: the most recently used references (0 characters) or citekeys that
+   * START with what was typed (1–2). Ordering — MRU, then Zotero `dateAdded`
+   * desc, then A–Z — lives in `recent-keys.ts`.
+   */
+  private shortQuerySuggestions(query: string): {
+    items: PartialCSLEntry[];
+    total: number;
+  } {
+    const entries = Array.from(this.plugin.bibManager.bibCache.values());
+    if (!entries.length) return { items: [], total: 0 };
+    const base = query ? prefixMatches(entries, query) : entries;
+    const ordered = orderByRecency(base, this.plugin.bibManager.recentKeys);
+    return { items: ordered.slice(0, this.limit), total: ordered.length };
   }
 
   /**
@@ -507,6 +523,8 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     if (!context) return;
 
     const id = suggestion.item.id;
+    // Remember the pick so the 0/1/2-character popup can lead with it.
+    this.plugin.bibManager.rememberRecentKey(id);
     const lineText = context.editor.getLine(context.start.line);
     const charBefore = lineText[context.start.ch - 1];
     const afterCursor = lineText.substring(context.end.ch);
@@ -619,7 +637,8 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
   }
 
   onTrigger(cursor: EditorPosition, editor: Editor): EditorSuggestTriggerInfo {
-    const { enableCiteKeyCompletion, pullFromZotero } = this.plugin.settings;
+    const { enableCiteKeyCompletion, pullFromZotero, citeSearchMinChars } =
+      this.plugin.settings;
 
     if (enableCiteKeyCompletion === false) return null;
 
@@ -628,77 +647,56 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       return null; // suppress re-trigger right after a selection
     }
 
-    // Name the mark this context will insert, so the footer hint matches the
-    // trigger the user is in (`]]` inside a wikilink, `]` inside `[@…`).
-    this.setInsertionHint({ editor, start: cursor } as EditorSuggestContext);
+    // Name what Enter will insert here, so the footer hint matches the insertion
+    // (`]]` inside a wikilink, `]` inside `[@…`). `end` is the caret: the hint
+    // needs the text AFTER the caret to know whether a closer already exists.
+    this.setInsertionHint({
+      editor,
+      start: cursor,
+      end: cursor,
+    } as EditorSuggestContext);
 
     const line = (editor.getLine(cursor.line) || '').substring(0, cursor.ch);
 
-    // Check @@ before single-@ so it wins. Mode is encoded in the query string
-    // (DOUBLE_AT_PREFIX) so it travels with the context and stays correct when
-    // getSuggestions resolves after a later onTrigger has already fired.
-    const doubleMatch = line.match(doubleAtRE);
-    if (doubleMatch) {
-      LOG('onTrigger: @@ matched, query=', JSON.stringify(doubleMatch[3]));
-      this.lastSelect = null;
-      if (!this.context && pullFromZotero) this.refreshZBib();
-      return {
-        start: { line: cursor.line, ch: doubleMatch.index + doubleMatch[1].length },
-        end: cursor,
-        query: DOUBLE_AT_PREFIX + doubleMatch[3],
-      };
+    // ONE detector for `@` and `@@`, honouring the word-start boundary and the
+    // user's minimum-characters setting. Below the minimum it returns null, so
+    // `[[@` falls back to Obsidian's native link search for users who raised it.
+    //
+    //   [[@key / [@key / [-@key / [see @key — unambiguous citations
+    //   @key / @@text                          — full-library search
+    const trigger = detectCitationTrigger(line, {
+      minChars: citeSearchMinChars ?? DEFAULT_MIN_CHARS,
+    });
+    if (!trigger) return null;
+
+    // A bare `@`/`@@` outside any bracket yields to ZotLit's own suggester when
+    // the user has explicitly turned prioritization off. Bracketed forms are
+    // always claimed (Obsidian's native link search can't see unimported refs).
+    if (!trigger.isDoubleAt) {
+      const beforeAt = line.substring(0, trigger.atPos);
+      const inBracketCite = beforeAt.lastIndexOf('[') > beforeAt.lastIndexOf(']');
+      if (
+        !inBracketCite &&
+        this.plugin.settings.prioritizeCiteKeyCompletion === false &&
+        isZotLitSuggestActive(this.plugin.app)
+      ) {
+        return null;
+      }
     }
 
-    const match = line.match(triggerRE);
-    if (!match) return null;
-
-    // Position of the '@' character in the line.
-    const atPos = match.index + match[1].length;
-
-    // Detect any Pandoc bracket-citation context: an unclosed '[' exists before
-    // the '@' on the current line. This covers:
-    //   [[@key  — Obsidian-style double-bracket cite (Obsidian's native link
-    //              suggester would otherwise win; claim it unconditionally)
-    //   [@key   — Standard Pandoc citation
-    //   [-@key  — Pandoc suppress-author citation
-    //   [see @key, [cf. @key, … — Pandoc citations with a text prefix
-    // All of these are unambiguous citations; trigger regardless of the
-    // prioritizeCiteKeyCompletion setting (which only gates bare @key outside
-    // any bracket context, where yielding to another plugin makes sense).
-    const beforeAt = line.substring(0, atPos);
-    const inBracketCite = beforeAt.lastIndexOf('[') > beforeAt.lastIndexOf(']');
-
-    if (inBracketCite) {
-      LOG('onTrigger: bracket-cite matched, query=', match[3]);
-      this.lastSelect = null;
-      if (!this.context && pullFromZotero) this.refreshZBib();
-      return {
-        start: { line: cursor.line, ch: atPos },
-        end: cursor,
-        query: match[3],
-      };
-    }
-
-    // Plain "@key" outside any bracket. Only yield to ZotLit's own @ suggester
-    // when (a) ZotLit is actually installed and its suggester is active, AND
-    // (b) the user has explicitly turned off prioritizeCiteKeyCompletion.
-    // If ZotLit isn't present there's no reason to suppress completion here —
-    // the user would just get no suggestions at all for bare @key.
-    if (
-      this.plugin.settings.prioritizeCiteKeyCompletion === false &&
-      isZotLitSuggestActive(this.plugin.app)
-    ) {
-      return null;
-    }
-
-    LOG('onTrigger: single-@ matched, query=', match[3]);
+    LOG(
+      'onTrigger: matched',
+      trigger.isDoubleAt ? '@@' : '@',
+      'query=',
+      JSON.stringify(triggerQueryText(trigger))
+    );
     this.lastSelect = null;
     if (!this.context && pullFromZotero) this.refreshZBib();
 
     return {
-      start: { line: cursor.line, ch: atPos },
+      start: { line: cursor.line, ch: trigger.atPos },
       end: cursor,
-      query: match[3],
+      query: trigger.query,
     };
   }
 }

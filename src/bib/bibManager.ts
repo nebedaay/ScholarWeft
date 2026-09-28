@@ -50,6 +50,7 @@ import { cite } from 'src/parser/citeproc';
 import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
+import { touchRecentKey } from 'src/template/recent-keys';
 import {
   derivedRenameFor,
   planCitekeyReconcile,
@@ -571,6 +572,13 @@ export class BibManager {
   /** `@@` tier: adds abstract and venue, ranked below title/author/citekey. */
   fuseAbstract: Fuse<PartialCSLEntry>;
   engine: any;
+
+  /**
+   * Citekeys in most-recently-used order (most recent first), persisted to
+   * `.scholar-weft/recent-keys.json`. Drives the 0/1/2-character autocomplete
+   * list and its ordering. See `src/template/recent-keys.ts`.
+   */
+  recentKeys: string[] = [];
 
   /** True as soon as the Fuse index is built — gates autocomplete independently
    *  of the CSL engine so `@` suggestions are available before citeproc compiles
@@ -2447,6 +2455,49 @@ export class BibManager {
       }
     } catch {
       // no persisted links yet — first run populates them
+    }
+  }
+
+  /**
+   * Record an inserted citekey as the most recent. Persisted fire-and-forget:
+   * insertions are user-paced, so a small write each time is fine.
+   */
+  rememberRecentKey(citekey: string): void {
+    if (!citekey) return;
+    this.recentKeys = touchRecentKey(this.recentKeys, citekey);
+    void this.saveRecentKeys();
+  }
+
+  /** Persist the MRU list (`.scholar-weft/recent-keys.json`). */
+  async saveRecentKeys(): Promise<void> {
+    try {
+      const dir = normalizePath(SW_CACHE_DIR);
+      if (!(await app.vault.adapter.exists(dir))) {
+        await app.vault.adapter.mkdir(dir);
+      }
+      await app.vault.adapter.write(
+        normalizePath(`${SW_CACHE_DIR}/recent-keys.json`),
+        JSON.stringify({ keys: this.recentKeys })
+      );
+    } catch (e) {
+      console.warn('[sw] saveRecentKeys: error', e);
+    }
+  }
+
+  /** Restore the MRU list (call once at startup). */
+  async loadRecentKeys(): Promise<void> {
+    try {
+      const raw = await app.vault.adapter.read(
+        normalizePath(`${SW_CACHE_DIR}/recent-keys.json`)
+      );
+      const data = JSON.parse(raw);
+      if (Array.isArray(data?.keys)) {
+        this.recentKeys = data.keys.filter(
+          (k: unknown): k is string => typeof k === 'string' && !!k
+        );
+      }
+    } catch {
+      // no persisted list yet — first run
     }
   }
 
