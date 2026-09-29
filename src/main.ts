@@ -1550,15 +1550,20 @@ export default class ReferenceList extends Plugin {
       return;
     }
 
-    const progress = new Notice(`Updating literature notes… 0/${files.length}`, 0);
+    const progress = new Notice(
+      `Updating literature notes… 0/${files.length} (you can keep working)`,
+      0
+    );
     let updated = 0;
     let skipped = 0;
     for (const file of files) {
       if (await this.updateLiteratureNote(file)) updated++;
       else skipped++;
       progress.setMessage(
-        `Updating literature notes… ${updated + skipped}/${files.length}`
+        `Updating literature notes… ${updated + skipped}/${files.length} (you can keep working)`
       );
+      // Yield so typing/scrolling stays responsive during a long pass.
+      await new Promise((r) => setTimeout(r, 0));
     }
     progress.hide();
     new Notice(

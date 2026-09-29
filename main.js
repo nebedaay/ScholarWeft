@@ -102513,7 +102513,7 @@ var ReferenceList = class extends import_obsidian41.Plugin {
       new import_obsidian41.Notice("No literature notes with a \u201Czotero-key\u201D were found.");
       return;
     }
-    const progress = new import_obsidian41.Notice(`Updating literature notes\u2026 0/${files.length}`, 0);
+    const progress = new import_obsidian41.Notice(`Updating literature notes\u2026 0/${files.length} (you can keep working)`, 0);
     let updated = 0;
     let skipped = 0;
     for (const file of files) {
@@ -102521,7 +102521,8 @@ var ReferenceList = class extends import_obsidian41.Plugin {
         updated++;
       else
         skipped++;
-      progress.setMessage(`Updating literature notes\u2026 ${updated + skipped}/${files.length}`);
+      progress.setMessage(`Updating literature notes\u2026 ${updated + skipped}/${files.length} (you can keep working)`);
+      await new Promise((r3) => setTimeout(r3, 0));
     }
     progress.hide();
     new import_obsidian41.Notice(`Updated ${updated} literature note(s)${skipped ? `, skipped ${skipped}` : ""}.`, 8e3);
