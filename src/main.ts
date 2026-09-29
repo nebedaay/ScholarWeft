@@ -518,13 +518,10 @@ export default class ReferenceList extends Plugin {
       },
     });
 
-    this.addCommand({
-      id: 'update-all-literature-notes',
-      name: t('Update all literature notes in the vault'),
-      callback: async () => {
-        await this.updateAllLiteratureNotes();
-      },
-    });
+    // NOTE: "Update all literature notes in the vault" is deliberately NOT a
+    // command — it is a button on the Literature note import settings page, so
+    // the command list stays focused on per-note actions. Users with auto-update
+    // on rarely need it at all.
 
     this.addCommand({
       id: 'insert-bibliography',
@@ -1556,12 +1553,23 @@ export default class ReferenceList extends Plugin {
     );
   }
 
+  /** The active note must exist and carry a `zotero-key` to be updateable. */
+  private activeNoteIsLiteratureNote(): boolean {
+    const file = this.app.workspace.getActiveFile();
+    const stable =
+      file &&
+      this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
+    return typeof stable === 'string' && !!stable;
+  }
+
   /**
-   * "Update all literature notes in the vault" — a middle ground between
-   * updating one note and importing every Zotero item: re-render every note
-   * that carries a `zotero-key`.
+   * Re-render EVERY literature note (a vault-wide maintenance action). Exposed
+   * for the button on the Literature note import settings page — deliberately
+   * NOT a command, to keep the command list focused on per-note actions. With
+   * auto-update on it is rarely needed; unchanged items are served from the
+   * children cache, so it is fast when nothing changed.
    */
-  private async updateAllLiteratureNotes(): Promise<void> {
+  async updateAllLiteratureNotes(): Promise<void> {
     const files = this.app.vault.getMarkdownFiles().filter((f) => {
       const stable =
         this.app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'];

@@ -24,7 +24,7 @@ See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 | Create literature notes for citations lacking notes (current note) | Current note | Uses ScholarWeft's own template (or ZotLit when you select it) |
 | Create literature notes for citations lacking notes (vault) | Vault | For every note |
 | Update this literature note | Current note | Re-render the active note from its item (needs a `zotero-key`) |
-| Update all literature notes in the vault | Vault | Re-render every note that has a `zotero-key` |
+| Update this literature note | Current note | Re-render the note from its Zotero item (only the managed fields and annotations region change) |
 | Insert Zotero notes into literature notes (vault) | Vault | Copy a source's Zotero child notes into its literature note. ZotLit-only: listed only while ZotLit is the import path — see [Literature Notes](./literature-notes.md) |
 | Review and update citekeys from Zotero | Vault | Match notes to items by `zotero-key` and rename those whose citekey changed (also offered automatically after a Zotero refresh) |
 | List citekey discrepancies | Vault | Report-only: pending renames, notes whose new name is taken, and notes whose `zotero-key` is not in the loaded library (each linked) |

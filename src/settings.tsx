@@ -1149,6 +1149,28 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
     const useOwn = this.plugin.settings.useOwnNoteTemplate === true;
 
+    // Vault-wide maintenance: re-render every literature note. A BUTTON here
+    // rather than a command, so the command list stays focused on per-note
+    // actions. Rarely needed with auto-update on; fast when nothing changed,
+    // since unchanged items come from the fetched-children cache.
+    new Setting(containerEl)
+      .setName(t('Update all literature notes'))
+      .setDesc(
+        t(
+          'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.'
+        )
+      )
+      .addButton((btn) =>
+        btn.setButtonText(t('Update all notes')).onClick(async () => {
+          btn.setDisabled(true);
+          try {
+            await this.plugin.updateAllLiteratureNotes();
+          } finally {
+            btn.setDisabled(false);
+          }
+        })
+      );
+
     new Setting(containerEl)
       .setName(t('Import literature notes with ScholarWeft'))
       .setDesc(

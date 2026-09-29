@@ -260,7 +260,7 @@ If a note was created by ZotLit, ScholarWeft **asks before converting it**, so t
 
 - **Import literature notes from Zotero…** opens Zotero's own item picker so you can select one or more references and create or refresh their notes. It needs **Better BibTeX**, and Zotero shows one picker at a time.
 - **Update this literature note** re-renders the active note from its item (the note must carry a `zotero-key`).
-- **Update all literature notes in the vault** re-renders every note that has a `zotero-key` — the middle ground between updating a single note and importing every Zotero item.
+- **Update all literature notes** (a button on the **Literature note import** settings page) re-renders every note that has a `zotero-key` — the middle ground between updating a single note and importing every Zotero item. Unchanged items are not re-fetched (the fetched-children cache), so it is quick when nothing has changed, and it is rarely needed when auto-update is on.
 
 All three honour the own-template setting and are non-destructive: only the managed fields and region change. Updating a ZotLit note is subject to the conversion prompt above.
 

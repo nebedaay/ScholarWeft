@@ -230,6 +230,10 @@ export default {
   'Update citekeys automatically': 'Update citekeys automatically',
   'Update notes when the template changes':
     'Update notes when the template changes',
+  'Update all literature notes': 'Update all literature notes',
+  'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.':
+    'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.',
+  'Update all notes': 'Update all notes',
   'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.':
     'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.',
   'When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Leave both unselected and you will be asked the first time it happens.':
