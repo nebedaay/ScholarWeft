@@ -40,6 +40,7 @@
 <% add_property('year', item.date ? `[[${item.date.year}]]` : null); -%>
 <% add_property('issue', item.issue); -%>
 <% add_property('volume', item.volume); -%>
+<% add_property('pages', item.pages); -%>
 <% add_property('publication', item.containerTitle ? wikilink(item.containerTitle) : null); -%>
 <% add_property('place', item.place); -%>
 <% add_property('publisher', item.publisher ? wikilink(item.publisher) : null); -%>

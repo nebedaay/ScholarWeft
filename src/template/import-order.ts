@@ -15,6 +15,8 @@ export interface SortableEntry {
   title?: string | null;
   author?: Array<{ family?: string; literal?: string; given?: string }> | null;
   issued?: { 'date-parts'?: Array<Array<number>> } | null;
+  /** CSL `authority` (court / issuing body) — stands in for an author. */
+  authority?: string | null;
   /** Zotero's ISO `dateAdded`, retained on the cache as `_dateAdded`. */
   _dateAdded?: unknown;
 }
@@ -27,11 +29,19 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-/** The first author's family name (or the whole literal for a corporate name). */
+/**
+ * The name to sort an entry under. The first creator's family name (or the whole
+ * literal for a corporate name) — and, when there is no creator, the CSL
+ * `authority`. A legal case has no author, so its COURT takes that place and
+ * cases sort among authors by court, which is how they read in a bibliography.
+ */
 function authorKey(entry: SortableEntry): string {
   const first = entry.author?.[0];
-  if (!first) return '';
-  return text(first.family) || text(first.literal) || text(first.given);
+  if (first) {
+    const name = text(first.family) || text(first.literal) || text(first.given);
+    if (name) return name;
+  }
+  return text(entry.authority);
 }
 
 function titleKey(entry: SortableEntry): string {

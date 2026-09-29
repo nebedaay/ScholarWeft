@@ -426,6 +426,7 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(caseOut).toContain('number: 70-18');
     expect(caseOut).toContain('publication: "[[U.S.]]"');
     expect(caseOut).toContain('volume: "410"');
+    expect(caseOut).toContain('pages: "113"');
     // A field with no value is omitted, not written empty.
     expect(caseOut).not.toContain('genre:');
     expect(caseOut).not.toContain('medium:');

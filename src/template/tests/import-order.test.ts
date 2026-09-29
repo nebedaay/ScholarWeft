@@ -43,6 +43,19 @@ describe('sortImportEntries()', () => {
     expect(ids(sortImportEntries(list, 'author', 'asc'))).toEqual(['w', 'x']);
   });
 
+  it('sorts a case by its court when it has no creator', () => {
+    const list = [
+      e('zed', { author: [{ family: 'Zed' }] }),
+      e('beta', { title: 'Beta v. State', authority: 'Beta Court' }),
+      e('alpha', { title: 'Alpha v. State', authority: 'Alpha Court' }),
+    ];
+    expect(ids(sortImportEntries(list, 'author', 'asc'))).toEqual([
+      'alpha',
+      'beta',
+      'zed',
+    ]);
+  });
+
   it('date added sorts oldest→newest ascending, newest first descending', () => {
     const list = [
       e('old', { _dateAdded: '2020-01-01T00:00:00Z' }),
