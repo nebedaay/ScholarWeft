@@ -66,15 +66,17 @@ describe('sortImportEntries()', () => {
     expect(ids(sortImportEntries(list, 'dateAdded', 'desc'))).toEqual(['new', 'mid', 'old']);
   });
 
-  it('puts entries with no author AND no title last, in either direction', () => {
+  it('puts works with no author AFTER authored ones, stubs last', () => {
     const list = [
       e('stub', {}),
       e('real', { author: [{ family: 'Zed' }], title: 'Z' }),
       e('titled', { title: 'A' }),
     ];
+    // The title-only work is NOT first (that was the bug: '' sorts before 'Z'),
+    // and the title-less stub is last of all — in either direction.
     expect(ids(sortImportEntries(list, 'author', 'asc'))).toEqual([
-      'titled',
       'real',
+      'titled',
       'stub',
     ]);
     expect(ids(sortImportEntries(list, 'author', 'desc'))).toEqual([
@@ -82,6 +84,24 @@ describe('sortImportEntries()', () => {
       'titled',
       'stub',
     ]);
+  });
+
+  it('orders the no-author group by title', () => {
+    const list = [
+      e('b', { title: 'Beta' }),
+      e('a', { title: 'Alpha' }),
+      e('none', {}),
+    ];
+    expect(ids(sortImportEntries(list, 'author', 'asc'))).toEqual(['a', 'b', 'none']);
+    expect(ids(sortImportEntries(list, 'author', 'desc'))).toEqual(['b', 'a', 'none']);
+  });
+
+  it('sorts an edited volume under its editor', () => {
+    const list = [
+      e('zed', { author: [{ family: 'Zed' }] }),
+      e('ed', { editor: [{ family: 'Alpha' }], title: 'An Edited Volume' }),
+    ];
+    expect(ids(sortImportEntries(list, 'author', 'asc'))).toEqual(['ed', 'zed']);
   });
 
   it('puts entries with no date added last', () => {

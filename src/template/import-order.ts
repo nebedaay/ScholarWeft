@@ -14,6 +14,7 @@ export interface SortableEntry {
   id: string;
   title?: string | null;
   author?: Array<{ family?: string; literal?: string; given?: string }> | null;
+  editor?: Array<{ family?: string; literal?: string; given?: string }> | null;
   issued?: { 'date-parts'?: Array<Array<number>> } | null;
   /** CSL `authority` (court / issuing body) — stands in for an author. */
   authority?: string | null;
@@ -29,19 +30,28 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function firstCreatorName(
+  list: SortableEntry['author'] | undefined
+): string {
+  const first = list?.[0];
+  if (!first) return '';
+  return text(first.family) || text(first.literal) || text(first.given);
+}
+
 /**
- * The name to sort an entry under. The first creator's family name (or the whole
- * literal for a corporate name) — and, when there is no creator, the CSL
- * `authority`. A legal case has no author, so its COURT takes that place and
- * cases sort among authors by court, which is how they read in a bibliography.
+ * The name to sort an entry under: the first AUTHOR, else the first EDITOR
+ * (an edited volume belongs under its editor in a bibliography), else the CSL
+ * `authority` (a legal case's COURT — cases sort among authors by court).
+ *
+ * Empty when the work has no creator at all, which is what {@link authorRank}
+ * pushes to the end rather than letting `''` lead the list.
  */
 function authorKey(entry: SortableEntry): string {
-  const first = entry.author?.[0];
-  if (first) {
-    const name = text(first.family) || text(first.literal) || text(first.given);
-    if (name) return name;
-  }
-  return text(entry.authority);
+  return (
+    firstCreatorName(entry.author) ||
+    firstCreatorName(entry.editor) ||
+    text(entry.authority)
+  );
 }
 
 function titleKey(entry: SortableEntry): string {
@@ -77,9 +87,17 @@ function compareDateAdded(a: SortableEntry, b: SortableEntry): number {
   );
 }
 
-/** An entry with neither an author nor a title — a bare Zotero stub. */
-function isBlank(entry: SortableEntry): boolean {
-  return !authorKey(entry) && !titleKey(entry);
+/**
+ * Where an entry belongs relative to the primary key, independent of direction:
+ *   0 — has an author key (author / editor / court)
+ *   1 — no author key, but a title (sort within the group by title)
+ *   2 — neither (a bare `zoteroitemN` stub — always last)
+ * Author-less works would otherwise LEAD the list, because `''` sorts before
+ * `A…`. A budget/title-only work belongs after the authored ones, not before.
+ */
+function authorRank(entry: SortableEntry): number {
+  if (authorKey(entry)) return 0;
+  return titleKey(entry) ? 1 : 2;
 }
 
 /**
@@ -89,9 +107,9 @@ function isBlank(entry: SortableEntry): boolean {
  * (a search) or chosen an order (browsing). It exists as a mode so the dialogue
  * can offer "Ranked search" without a special case.
  *
- * Entries with NOTHING to sort on (no author/title, or no date added) always
- * come LAST, whichever direction — so a library's bare `zoteroitemN` stubs do
- * not lead the list.
+ * Works with no author key sort AFTER authored ones (in either direction), and
+ * within that group by title; bare title-less stubs come last of all. Entries
+ * with no date added likewise come last in date order.
  *
  * Returns a new array; the input is not mutated.
  */
@@ -104,11 +122,12 @@ export function sortImportEntries<T extends SortableEntry>(
   if (mode === 'relevance') return out;
   const cmp = mode === 'author' ? compareAuthor : compareDateAdded;
   const flip = dir === 'desc' ? -1 : 1;
-  const blank = mode === 'author' ? isBlank : (x: T) => !dateAddedOf(x);
+  const rank =
+    mode === 'author' ? authorRank : (x: T) => (dateAddedOf(x) ? 0 : 1);
   out.sort((a, b) => {
-    const ab = blank(a) ? 1 : 0;
-    const bb = blank(b) ? 1 : 0;
-    if (ab !== bb) return ab - bb; // blanks last, independent of direction
+    const ar = rank(a);
+    const br = rank(b);
+    if (ar !== br) return ar - br; // rank is direction-INDEPENDENT
     return flip * cmp(a, b);
   });
   return out;

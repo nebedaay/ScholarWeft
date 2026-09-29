@@ -21403,15 +21403,14 @@ var init_import_filters = __esm({
 function text(value) {
   return typeof value === "string" ? value : "";
 }
+function firstCreatorName(list) {
+  const first = list == null ? void 0 : list[0];
+  if (!first)
+    return "";
+  return text(first.family) || text(first.literal) || text(first.given);
+}
 function authorKey(entry) {
-  var _a;
-  const first = (_a = entry.author) == null ? void 0 : _a[0];
-  if (first) {
-    const name = text(first.family) || text(first.literal) || text(first.given);
-    if (name)
-      return name;
-  }
-  return text(entry.authority);
+  return firstCreatorName(entry.author) || firstCreatorName(entry.editor) || text(entry.authority);
 }
 function titleKey(entry) {
   return text(entry.title);
@@ -21430,8 +21429,10 @@ function compareAuthor(a3, b3) {
 function compareDateAdded(a3, b3) {
   return collator.compare(dateAddedOf(a3), dateAddedOf(b3)) || collator.compare(authorKey(a3), authorKey(b3)) || collator.compare(titleKey(a3), titleKey(b3));
 }
-function isBlank2(entry) {
-  return !authorKey(entry) && !titleKey(entry);
+function authorRank(entry) {
+  if (authorKey(entry))
+    return 0;
+  return titleKey(entry) ? 1 : 2;
 }
 function sortImportEntries(entries, mode, dir = "asc") {
   const out = entries.slice();
@@ -21439,12 +21440,12 @@ function sortImportEntries(entries, mode, dir = "asc") {
     return out;
   const cmp = mode === "author" ? compareAuthor : compareDateAdded;
   const flip = dir === "desc" ? -1 : 1;
-  const blank = mode === "author" ? isBlank2 : (x4) => !dateAddedOf(x4);
+  const rank = mode === "author" ? authorRank : (x4) => dateAddedOf(x4) ? 0 : 1;
   out.sort((a3, b3) => {
-    const ab = blank(a3) ? 1 : 0;
-    const bb = blank(b3) ? 1 : 0;
-    if (ab !== bb)
-      return ab - bb;
+    const ar = rank(a3);
+    const br = rank(b3);
+    if (ar !== br)
+      return ar - br;
     return flip * cmp(a3, b3);
   });
   return out;
