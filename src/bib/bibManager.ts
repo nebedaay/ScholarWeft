@@ -15,6 +15,7 @@ import {
   fetchChildDeltaNative,
   fetchItemParentNative,
   fetchLibraryVersionNative,
+  fetchLibraryChildRowsNative,
   DEFAULT_ZOTERO_PORT,
 } from './helpers';
 import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
@@ -76,6 +77,7 @@ import {
   emptyChildrenCache,
   type ChildrenCacheData,
 } from 'src/template/children-cache';
+import { buildChildPresence } from 'src/template/child-presence';
 import {
   recordQuery,
   recordRecentKey,
@@ -2805,6 +2807,40 @@ export class BibManager {
       h = Math.imul(h, 0x01000193);
     }
     return (h >>> 0).toString(16);
+  }
+
+  /** Do we have a library-wide child-presence index? */
+  presenceReady = false;
+
+  /**
+   * Build the child-presence index (one pass per child type) so the import
+   * dialogue's has-notes / PDF / annotations filters are accurate library-wide.
+   * Native API only.
+   */
+  async buildChildPresenceIndex(): Promise<void> {
+    const { settings } = this.plugin;
+    if (settings.useNativeZoteroAPI === false) return;
+    const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
+    const presence: Record<
+      string,
+      import('src/template/child-presence').ChildPresence
+    > = { ...(this.syncState.presence ?? {}) };
+    for (const group of settings.zoteroGroups ?? []) {
+      const rows = await fetchLibraryChildRowsNative(port, group.id);
+      if (!rows) continue;
+      const attToItem = new Map<string, string>();
+      for (const a of rows.attachments) attToItem.set(a.itemKey, a.parentItem);
+      const built = buildChildPresence({
+        attachments: rows.attachments,
+        annotations: rows.annotations,
+        notes: rows.notes,
+        attachmentToItem: attToItem,
+      });
+      for (const [k, v] of Object.entries(built)) presence[k] = v;
+    }
+    this.syncState = { ...this.syncState, presence };
+    this.presenceReady = true;
+    await this.saveSyncState();
   }
 
   /** Load the fetched-children cache (once at startup). */

@@ -227,8 +227,13 @@ export default {
   'Add literature notes (search and filter)':
     'Add literature notes (search and filter)',
   'Add literature notes': 'Add literature notes',
-  'Search by citekey, author, title, abstract…':
-    'Search by citekey, author, title, abstract…',
+  'Search abstracts': 'Search abstracts',
+  'Search abstract, publication, publisher, and containing work too':
+    'Search abstract, publication, publisher, and containing work too',
+  'Search by citekey, author, title…':
+    'Search by citekey, author, title…',
+  'Search citekey, author, title, abstract, publication…':
+    'Search citekey, author, title, abstract, publication…',
   'Items with Zotero notes': 'Items with Zotero notes',
   'Items with a PDF or snapshot': 'Items with a PDF or snapshot',
   'Items with annotations': 'Items with annotations',

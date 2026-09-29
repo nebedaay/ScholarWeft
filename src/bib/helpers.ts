@@ -1340,3 +1340,43 @@ export async function searchZoteroBBT(
 
   return out.slice(0, limit);
 }
+
+/**
+ * Library-wide child rows for the presence index: every attachment (with its
+ * top-level parent + contentType), every annotation (with its ATTACHMENT
+ * parent), and every child note (with its top-level parent). One pass each —
+ * NOT one request per item.
+ */
+export async function fetchLibraryChildRowsNative(
+  port: string,
+  libraryID: number
+): Promise<{
+  attachments: Array<{ itemKey: string; parentItem: string; contentType: string | null }>;
+  annotations: Array<{ parentItem: string }>;
+  notes: Array<{ parentItem: string }>;
+} | null> {
+  if (!(await isZoteroRunningNative(port))) return null;
+  try {
+    const att = await fetchItemsSinceNative(port, libraryID, 'attachment', 0);
+    const ann = await fetchItemsSinceNative(port, libraryID, 'annotation', 0);
+    const note = await fetchItemsSinceNative(port, libraryID, 'note', 0);
+    const parentOf = (it: any): string => String(it?.data?.parentItem ?? '');
+    return {
+      attachments: att.items
+        .map((it) => ({
+          itemKey: String(it?.key ?? it?.data?.key ?? ''),
+          parentItem: parentOf(it),
+          contentType: (it?.data?.contentType ?? null) as string | null,
+        }))
+        .filter((r) => r.itemKey && r.parentItem),
+      annotations: ann.items
+        .map((it) => ({ parentItem: parentOf(it) }))
+        .filter((r) => r.parentItem),
+      notes: note.items
+        .map((it) => ({ parentItem: parentOf(it) }))
+        .filter((r) => r.parentItem),
+    };
+  } catch {
+    return null;
+  }
+}

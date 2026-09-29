@@ -1,10 +1,9 @@
-import { App, Modal, Notice, Setting, TFile } from 'obsidian';
+import { App, Modal, Notice, TFile } from 'obsidian';
 
 import type ReferenceList from '../main';
 import { t } from '../lang/helpers';
 import type { PartialCSLEntry } from '../bib/types';
 import {
-  countPassing,
   defaultFilters,
   flagsFromChildren,
   passesImportFilters,
@@ -13,6 +12,10 @@ import {
 } from '../template/import-filters';
 import { readChildren } from '../template/children-cache';
 import type { RawZoteroChildren } from '../template/children';
+import {
+  excerptForResult,
+  findTermSpans,
+} from '../template/search-excerpt';
 
 /**
  * Native "Add literature notes" dialogue.
@@ -21,9 +24,8 @@ import type { RawZoteroChildren } from '../template/children';
  * that one opens Zotero's own dialog; this one searches and filters WITHIN
  * Obsidian. Both stay available under distinct names.
  *
- * It searches the loaded library (ranked, paged), narrows with checkboxes, and
- * creates/refreshes literature notes for the checked references. Filters use
- * CACHED flags — nothing is fetched just to decide membership.
+ * Search behaviour mirrors the editor popup: `@` (title/author) by default, or
+ * `@@` (adds abstract + publication) when "Search abstracts" is checked.
  */
 
 /** Rows rendered per batch; more load on scroll (Obsidian has no virtual list). */
@@ -32,13 +34,16 @@ const PAGE = 100;
 export class AddLiteratureNotesModal extends Modal {
   private plugin: ReferenceList;
   private query = '';
+  private searchAbstract = false;
   private filters: ImportFilters = defaultFilters();
   private selected = new Set<string>();
   private listEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private searchInput!: HTMLInputElement;
+  private confirmBtn: HTMLButtonElement | null = null;
   private rendered = 0;
   private matches: PartialCSLEntry[] = [];
+  private termsByKey = new Map<string, string[]>();
   private litNotes = new Set<string>();
 
   constructor(app: App, plugin: ReferenceList) {
@@ -53,46 +58,82 @@ export class AddLiteratureNotesModal extends Modal {
 
     contentEl.createEl('h3', { text: t('Add literature notes') });
 
-    // Search box at the top.
-    this.searchInput = contentEl.createEl('input', {
+    // Search box + the abstract toggle (the `@@` tier).
+    const searchRow = contentEl.createDiv({ cls: 'sw-add-notes__searchrow' });
+    this.searchInput = searchRow.createEl('input', {
       cls: 'sw-add-notes__search',
       attr: {
         type: 'search',
-        placeholder: t('Search by citekey, author, title, abstract…'),
+        placeholder: t('Search by citekey, author, title…'),
       },
     });
     this.searchInput.addEventListener('input', () => {
       this.query = this.searchInput.value;
       this.refresh();
     });
+    const absLabel = searchRow.createEl('label', { cls: 'sw-add-notes__abstract' });
+    const absBox = absLabel.createEl('input', { type: 'checkbox' });
+    absBox.checked = this.searchAbstract;
+    absBox.addEventListener('change', () => {
+      this.searchAbstract = absBox.checked;
+      this.searchInput.placeholder = absBox.checked
+        ? t('Search citekey, author, title, abstract, publication…')
+        : t('Search by citekey, author, title…');
+      this.refresh();
+    });
+    absLabel.appendText(' ' + t('Search abstracts'));
 
     // Filters (left column) + list (right).
     const body = contentEl.createDiv({ cls: 'sw-add-notes__body' });
     const side = body.createDiv({ cls: 'sw-add-notes__filters' });
     this.renderFilters(side);
-    const main = body.createDiv({ cls: 'sw-add-notes__list' });
-    this.listEl = main.createDiv({ cls: 'sw-add-notes__rows' });
-    // Scroll = load more.
+    const main = body.createDiv({ cls: 'sw-add-notes__pane' });
+    this.listEl = main.createDiv({ cls: 'sw-add-notes__list' });
     main.addEventListener('scroll', () => {
       if (main.scrollTop + main.clientHeight >= main.scrollHeight - 200) {
         this.renderMore();
       }
     });
-    this.statusEl = main.createDiv({ cls: 'sw-add-notes__status' });
+    // Fixed footer row INSIDE the pane: status left, actions right. Stays put
+    // regardless of how long the list is.
+    const footer = main.createDiv({ cls: 'sw-add-notes__footer' });
+    this.statusEl = footer.createDiv({ cls: 'sw-add-notes__status' });
+    const actions = footer.createDiv({ cls: 'sw-add-notes__actions' });
+    const selectAll = actions.createEl('button', { text: t('Select all shown') });
+    selectAll.addEventListener('click', () => {
+      for (const e of this.matches) this.selected.add(e.id);
+      this.redrawSelection();
+      this.updateStatus();
+    });
+    const clear = actions.createEl('button', { text: t('Clear') });
+    clear.addEventListener('click', () => {
+      this.selected.clear();
+      this.redrawSelection();
+      this.updateStatus();
+    });
+    this.confirmBtn = actions.createEl('button', {
+      text: t('Add notes'),
+      cls: 'mod-cta',
+    });
+    this.confirmBtn.addEventListener('click', () => void this.createSelected());
 
-    // Keyboard: Enter in the box refreshes (already bound); focus it.
     this.searchInput.focus();
-
     this.buildLitNoteIndex();
     this.refresh();
+    // Build the library-wide presence index in the background (first open only),
+    // then re-run the filters so the has-notes/PDF/annotations boxes are usable.
+    if (!this.plugin.bibManager.presenceReady) {
+      void this.plugin.bibManager
+        .buildChildPresenceIndex()
+        .then(() => {
+          if (this.containerEl.isConnected) this.refresh();
+        })
+        .catch((e) => console.warn('[sw:add-notes] presence index failed', e));
+    }
   }
 
   private renderFilters(side: HTMLElement): void {
-    const mk = (
-      label: string,
-      key: keyof ImportFilters,
-      desc?: string
-    ) => {
+    const mk = (label: string, key: keyof ImportFilters) => {
       const row = side.createEl('label', { cls: 'sw-add-notes__filter' });
       const input = row.createEl('input', { type: 'checkbox' });
       input.checked = this.filters[key];
@@ -101,7 +142,6 @@ export class AddLiteratureNotesModal extends Modal {
         this.refresh();
       });
       row.appendText(' ' + label);
-      if (desc) row.createEl('small', { text: desc, cls: 'sw-add-notes__hint' });
     };
     mk(t('Items with Zotero notes'), 'hasNotes');
     mk(t('Items with a PDF or snapshot'), 'hasAttachment');
@@ -123,30 +163,38 @@ export class AddLiteratureNotesModal extends Modal {
     }
   }
 
+  private stableKeyFor(entry: PartialCSLEntry): string {
+    if (typeof entry._zoteroKey !== 'string') return '';
+    const gid = entry.groupID && entry.groupID !== 1 ? entry.groupID : null;
+    return gid ? `${entry._zoteroKey}g${gid}` : entry._zoteroKey;
+  }
+
   private flagsFor(entry: PartialCSLEntry): ImportItemFlags {
-    const stable =
-      typeof entry._zoteroKey === 'string'
-        ? entry.groupID && entry.groupID !== 1
-          ? `${entry._zoteroKey}g${entry.groupID}`
-          : entry._zoteroKey
-        : '';
+    const stable = this.stableKeyFor(entry);
     const children = stable
       ? readChildren<RawZoteroChildren>(this.plugin.bibManager.childrenCache, stable)
       : null;
     return flagsFromChildren(children, this.litNotes.has(entry.id));
   }
 
-  /** Re-run the search + filters and re-render the first page. */
   private refresh(): void {
     const q = this.query.trim();
-    const limit = 100000; // score the whole library; we page for DISPLAY only
-    const { entries } = q
-      ? this.plugin.bibManager.searchTier('abstract', q, limit)
-      : { entries: Array.from(this.plugin.bibManager.bibCache.values()).map((entry) => ({ entry, terms: [] as string[] })) };
-    const all = entries
-      .map((e: { entry: PartialCSLEntry }) => e.entry)
-      .filter((e: PartialCSLEntry) => passesImportFilters(this.flagsFor(e), this.filters));
-    this.matches = all;
+    if (q) {
+      const { entries } = this.plugin.bibManager.searchTier(
+        this.searchAbstract ? 'abstract' : 'title',
+        q,
+        100000
+      );
+      this.matches = entries
+        .map((e) => e.entry)
+        .filter((e) => passesImportFilters(this.flagsFor(e), this.filters));
+      this.termsByKey = new Map(entries.map((e) => [e.entry.id, e.terms]));
+    } else {
+      this.matches = Array.from(this.plugin.bibManager.bibCache.values()).filter(
+        (e) => passesImportFilters(this.flagsFor(e), this.filters)
+      );
+      this.termsByKey = new Map();
+    }
     this.rendered = 0;
     this.listEl.empty();
     this.renderMore();
@@ -157,42 +205,111 @@ export class AddLiteratureNotesModal extends Modal {
     const slice = this.matches.slice(this.rendered, this.rendered + PAGE);
     for (const entry of slice) this.renderRow(entry);
     this.rendered += slice.length;
-    if (this.rendered < this.matches.length) {
-      this.listEl.createDiv({ cls: 'sw-add-notes__more', text: t('Scroll for more…') });
-    }
   }
 
+  /** Rich row: citekey, creators, title, the rendered reference, an excerpt. */
   private renderRow(entry: PartialCSLEntry): void {
     const row = this.listEl.createDiv({ cls: 'sw-add-notes__row' });
-    const check = row.createEl('input', { type: 'checkbox' });
-    check.checked = this.selected.has(entry.id);
-    check.addEventListener('click', (e) => e.stopPropagation());
-    check.addEventListener('change', () => {
-      if (check.checked) this.selected.add(entry.id);
-      else this.selected.delete(entry.id);
-      this.updateStatus();
-    });
+    row.toggleClass('is-selected', this.selected.has(entry.id));
+    row.dataset.citekey = entry.id;
 
     const info = row.createDiv({ cls: 'sw-add-notes__info' });
-    info.createDiv({ cls: 'sw-add-notes__title', text: entry.title ?? entry.id });
-    const meta = info.createDiv({ cls: 'sw-add-notes__meta' });
-    meta.createSpan({ text: `@${entry.id}` });
+    const head = info.createDiv({ cls: 'sw-add-notes__head' });
+    head.createSpan({ cls: 'sw-add-notes__citekey', text: `@${entry.id}` });
+    const creators = this.creatorText(entry);
+    if (creators) head.createSpan({ cls: 'sw-add-notes__authors', text: creators });
     if (entry.groupID && entry.groupID !== 1) {
       const name =
         this.plugin.settings.zoteroGroups?.find(
           (g: { id: number; name: string }) => g.id === entry.groupID
         )?.name ?? `Group ${entry.groupID}`;
-      meta.createSpan({ cls: 'sw-add-notes__library', text: ` · ${name}` });
+      head.createSpan({ cls: 'sw-add-notes__library', text: `· ${name}` });
     }
-    const flags = this.flagsFor(entry);
-    if (flags.hasLitNote) {
-      meta.createSpan({ cls: 'sw-add-notes__has-note', text: ` · ${t('has a note')}` });
+    if (this.litNotes.has(entry.id)) {
+      head.createSpan({ cls: 'sw-add-notes__has-note', text: `· ${t('has a note')}` });
+    }
+
+    // The rendered reference — the same thing the popup tooltip shows.
+    const bib = this.plugin.bibManager.getBibForCiteKey(
+      this.sourceFile(),
+      entry.id
+    ) as HTMLElement | null;
+    if (bib) {
+      const ref = info.createDiv({ cls: 'sw-add-notes__ref' });
+      ref.setText(bib.textContent ?? '');
+    } else if (entry.title) {
+      info.createDiv({ cls: 'sw-add-notes__title', text: entry.title });
+    }
+
+    // An abstract excerpt around the matched terms, when searching.
+    const terms = this.termsByKey.get(entry.id) ?? [];
+    const excerpt = excerptForResult(
+      entry as { abstract?: string | null },
+      terms
+    );
+    if (excerpt) {
+      const line = info.createDiv({ cls: 'sw-add-notes__excerpt' });
+      this.appendHighlighted(line, excerpt.text, excerpt.matches);
     }
 
     row.addEventListener('click', () => {
-      check.checked = !check.checked;
-      check.dispatchEvent(new Event('change'));
+      if (this.selected.has(entry.id)) this.selected.delete(entry.id);
+      else this.selected.add(entry.id);
+      row.toggleClass('is-selected', this.selected.has(entry.id));
+      this.updateStatus();
     });
+  }
+
+  private appendHighlighted(
+    el: HTMLElement,
+    text: string,
+    matches: Array<{ start: number; length: number }>
+  ): void {
+    let at = 0;
+    for (const m of matches) {
+      if (m.length <= 0 || m.start < at || m.start + m.length > text.length) continue;
+      if (m.start > at) el.appendText(text.slice(at, m.start));
+      el.append(
+        createEl('strong', {
+          cls: 'sw-suggest-match',
+          text: text.slice(m.start, m.start + m.length),
+        })
+      );
+      at = m.start + m.length;
+    }
+    if (at < text.length) el.appendText(text.slice(at));
+  }
+
+  private creatorText(entry: PartialCSLEntry): string {
+    const lists = [entry.author, entry.editor];
+    const parts: string[] = [];
+    for (const list of lists) {
+      for (const n of list ?? []) {
+        const name =
+          (n as { literal?: string }).literal ??
+          [(n as { given?: string }).given, (n as { family?: string }).family]
+            .filter(Boolean)
+            .join(' ');
+        if (name) parts.push(name);
+      }
+    }
+    return parts.join('; ');
+  }
+
+  private sourceFile(): TFile {
+    return (
+      this.app.workspace.getActiveFile() ??
+      (this.app.vault.getRoot() as unknown as TFile)
+    );
+  }
+
+  private redrawSelection(): void {
+    for (const row of Array.from(
+      this.listEl.querySelectorAll('.sw-add-notes__row')
+    ) as HTMLElement[]) {
+      const key = row.dataset.citekey;
+      row.toggleClass('is-selected', !!key && this.selected.has(key));
+    }
   }
 
   private updateStatus(): void {
@@ -202,48 +319,9 @@ export class AddLiteratureNotesModal extends Modal {
       `${total} ${total === 1 ? t('reference') : t('references')}` +
         (n ? ` · ${n} ${t('selected')}` : '')
     );
-    this.updateButtons();
-  }
-
-  private footerEl: HTMLElement | null = null;
-  private updateButtons(): void {
-    if (!this.footerEl) {
-      this.footerEl = this.contentEl.createDiv({ cls: 'sw-add-notes__footer' });
-
-      const selectAll = this.footerEl.createEl('button', { text: t('Select all shown') });
-      selectAll.addEventListener('click', () => {
-        for (const e of this.matches) this.selected.add(e.id);
-        this.redrawChecks();
-        this.updateStatus();
-      });
-      const clear = this.footerEl.createEl('button', { text: t('Clear') });
-      clear.addEventListener('click', () => {
-        this.selected.clear();
-        this.redrawChecks();
-        this.updateStatus();
-      });
-
-      const cancel = this.footerEl.createEl('button', { text: t('Close') });
-      cancel.addEventListener('click', () => this.close());
-
-      const confirm = this.footerEl.createEl('button', {
-        text: t('Add notes'),
-        cls: 'mod-cta',
-      });
-      confirm.addEventListener('click', () => void this.createSelected());
-    }
-    const confirm = this.footerEl.querySelector('.mod-cta') as HTMLButtonElement;
-    if (confirm) confirm.setText(`${t('Add notes')} (${this.selected.size})`);
-  }
-
-  private redrawChecks(): void {
-    const checks = this.listEl.querySelectorAll(
-      'input[type=checkbox]'
-    ) as NodeListOf<HTMLInputElement>;
-    let i = 0;
-    for (const entry of this.matches.slice(0, this.rendered)) {
-      if (checks[i]) checks[i].checked = this.selected.has(entry.id);
-      i++;
+    if (this.confirmBtn) {
+      this.confirmBtn.setText(`${t('Add notes')} (${n})`);
+      this.confirmBtn.toggleClass('is-disabled', n === 0);
     }
   }
 
@@ -251,9 +329,7 @@ export class AddLiteratureNotesModal extends Modal {
     if (!this.selected.size) return;
     const citekeys = [...this.selected];
     this.close();
-    const source =
-      this.app.workspace.getActiveFile() ??
-      (this.app.vault.getRoot() as unknown as TFile);
+    const source = this.sourceFile();
     const progress = new Notice(`Creating literature notes… 0/${citekeys.length}`, 0);
     let created = 0;
     for (const ck of citekeys) {

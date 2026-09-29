@@ -27,10 +27,17 @@ export interface SyncState {
   /** groupId → the library folder name last used, so a Zotero rename of the
    *  library can be detected and offered as a folder rename. */
   libraryFolders?: Record<string, string>;
+  /**
+   * item key → a compact child-presence signature, so the import dialogue's
+   * has-notes / has-attachment / has-annotations filters are accurate
+   * LIBRARY-WIDE without fetching an item's children. One pass over the child
+   * deltas fills it; a `_version` guards staleness.
+   */
+  presence?: Record<string, import('./child-presence').ChildPresence>;
 }
 
 export function emptySyncState(): SyncState {
-  return { versions: {}, attachments: {}, libraryFolders: {} };
+  return { versions: {}, attachments: {}, libraryFolders: {}, presence: {} };
 }
 
 /**

@@ -1764,18 +1764,28 @@ Annotation callouts
 
 /* ── "Add literature notes" dialogue ───────────────────────────────────────── */
 .sw-add-notes-modal {
-  /* A little larger than the default prompt, for a searchable list. */
-  width: min(820px, 92vw);
-  height: min(680px, 90vh);
+  width: min(860px, 92vw);
+  height: min(700px, 90vh);
 }
 .sw-add-notes {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
-.sw-add-notes__search {
-  width: 100%;
+.sw-add-notes__searchrow {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-3);
   margin-bottom: var(--size-4-2);
+}
+.sw-add-notes__search {
+  flex: 1 1 auto;
+}
+.sw-add-notes__abstract {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
 }
 .sw-add-notes__body {
   display: flex;
@@ -1784,7 +1794,7 @@ Annotation callouts
   min-height: 0;
 }
 .sw-add-notes__filters {
-  flex: 0 0 200px;
+  flex: 0 0 190px;
   display: flex;
   flex-direction: column;
   gap: var(--size-4-2);
@@ -1795,9 +1805,13 @@ Annotation callouts
   font-size: var(--font-ui-small);
   cursor: pointer;
 }
-.sw-add-notes__hint {
-  display: block;
-  color: var(--text-faint);
+/* The list pane and its fixed footer: the footer sits at the pane's bottom, not
+   at the end of the (scrollable) list. */
+.sw-add-notes__pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .sw-add-notes__list {
   flex: 1 1 auto;
@@ -1808,42 +1822,62 @@ Annotation callouts
   padding: var(--size-4-1);
 }
 .sw-add-notes__row {
-  display: flex;
-  gap: var(--size-4-2);
-  align-items: flex-start;
-  padding: var(--size-4-1) var(--size-4-2);
+  padding: var(--size-4-2);
   border-radius: var(--radius-s);
   cursor: pointer;
 }
 .sw-add-notes__row:hover {
   background: var(--background-modifier-hover);
 }
-.sw-add-notes__info {
-  min-width: 0;
+/* Selection uses Obsidian's own active-hover modifier colour, so it matches the
+   theme (same token the data explorer uses for its selected item). */
+.sw-add-notes__row.is-selected {
+  background: var(--background-modifier-active-hover);
 }
-.sw-add-notes__title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sw-add-notes__meta {
+.sw-add-notes__head {
+  display: flex;
+  gap: var(--size-4-2);
+  align-items: baseline;
   font-size: var(--font-ui-smaller);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sw-add-notes__citekey {
+  color: var(--link-color);
+  font-family: var(--font-monospace);
+}
+.sw-add-notes__authors {
   color: var(--text-muted);
 }
 .sw-add-notes__library,
 .sw-add-notes__has-note {
   color: var(--text-faint);
 }
-.sw-add-notes__more,
-.sw-add-notes__status {
-  padding: var(--size-4-2);
-  color: var(--text-faint);
+.sw-add-notes__ref,
+.sw-add-notes__title {
+  font-size: var(--font-ui-small);
+  margin-top: 2px;
+}
+.sw-add-notes__excerpt {
   font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 2px;
 }
 .sw-add-notes__footer {
   flex: 0 0 auto;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--size-4-2);
-  margin-top: var(--size-4-3);
+  padding-top: var(--size-4-2);
+}
+.sw-add-notes__status {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+.sw-add-notes__actions {
+  display: flex;
+  gap: var(--size-4-2);
 }

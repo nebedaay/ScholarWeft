@@ -235,7 +235,10 @@ var init_en = __esm({
       "File literature notes into their library folders": "File literature notes into their library folders",
       "Add literature notes (search and filter)": "Add literature notes (search and filter)",
       "Add literature notes": "Add literature notes",
-      "Search by citekey, author, title, abstract\u2026": "Search by citekey, author, title, abstract\u2026",
+      "Search abstracts": "Search abstracts",
+      "Search abstract, publication, publisher, and containing work too": "Search abstract, publication, publisher, and containing work too",
+      "Search by citekey, author, title\u2026": "Search by citekey, author, title\u2026",
+      "Search citekey, author, title, abstract, publication\u2026": "Search citekey, author, title, abstract, publication\u2026",
       "Items with Zotero notes": "Items with Zotero notes",
       "Items with a PDF or snapshot": "Items with a PDF or snapshot",
       "Items with annotations": "Items with annotations",
@@ -21029,6 +21032,205 @@ var require_citeproc_commonjs = __commonJS({
   }
 });
 
+// src/template/search-excerpt.ts
+function excerptsForResult(item, queryTerms3, opts = {}) {
+  if (queryTerms3.length === 0)
+    return [];
+  return buildExcerpts(item.abstract, queryTerms3, opts);
+}
+function excerptForResult(item, queryTerms3) {
+  var _a;
+  return (_a = excerptsForResult(item, queryTerms3)[0]) != null ? _a : null;
+}
+function tokens(text) {
+  const out = [];
+  const re = /\S+/g;
+  let m3;
+  while ((m3 = re.exec(text)) !== null)
+    out.push({ word: m3[0], start: m3.index });
+  return out;
+}
+function norm3(s3) {
+  return s3.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+function normaliseWithMap(text) {
+  let out = "";
+  const map = [];
+  for (let i3 = 0; i3 < text.length; i3++) {
+    const ch = text[i3];
+    const n2 = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    for (let k4 = 0; k4 < n2.length; k4++) {
+      out += n2[k4];
+      map.push(i3);
+    }
+  }
+  return { text: out, map };
+}
+function findTermIn(text, term, from) {
+  const needle = norm3(term);
+  if (!needle)
+    return null;
+  const source = text.slice(from);
+  const { text: normalised, map } = normaliseWithMap(source);
+  const at = normalised.indexOf(needle);
+  if (at === -1)
+    return null;
+  const lastIndex = Math.min(at + needle.length - 1, map.length - 1);
+  const start = from + map[at];
+  let end = from + map[lastIndex] + 1;
+  while (end < text.length && /[\u0300-\u036f]/.test(text[end]))
+    end++;
+  if (end <= start)
+    return null;
+  return { start, length: end - start };
+}
+function findTermSpans(text, terms) {
+  if (!text || terms.length === 0)
+    return [];
+  const found = [];
+  for (const term of terms) {
+    if (!term)
+      continue;
+    let from = 0;
+    for (; ; ) {
+      const hit = findTermIn(text, term, from);
+      if (!hit)
+        break;
+      found.push(hit);
+      from = hit.start + Math.max(hit.length, 1);
+    }
+  }
+  const sorted = found.filter((s3) => s3.length > 0 && s3.start + s3.length <= text.length).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
+  const out = [];
+  for (const s3 of sorted) {
+    const prev = out[out.length - 1];
+    if (prev && s3.start < prev.start + prev.length)
+      continue;
+    if (prev && s3.start === prev.start)
+      continue;
+    out.push(s3);
+  }
+  return out;
+}
+function buildExcerpts(text, terms, opts = {}) {
+  var _a, _b, _c;
+  if (!text)
+    return [];
+  const maxLines = (_a = opts.maxLines) != null ? _a : 2;
+  const width = (_b = opts.width) != null ? _b : EXCERPT_WIDTH;
+  const context = (_c = opts.contextWords) != null ? _c : CONTEXT_WORDS;
+  const words2 = tokens(text);
+  if (words2.length === 0)
+    return [];
+  const spans = [];
+  for (const term of terms) {
+    if (!term)
+      continue;
+    const hit = findTermIn(text, term, 0);
+    if (!hit)
+      continue;
+    const first = words2.findIndex((w4) => w4.start >= hit.start);
+    if (first === -1)
+      continue;
+    const end = hit.start + hit.length;
+    let last = first;
+    while (last + 1 < words2.length && words2[last + 1].start < end)
+      last++;
+    spans.push({ from: first, to: last });
+  }
+  if (spans.length === 0)
+    return [];
+  const candidates = [];
+  for (let i3 = 0; i3 < spans.length; i3++) {
+    candidates.push({ from: spans[i3].from, to: spans[i3].to, terms: [i3] });
+  }
+  for (let i3 = 0; i3 < spans.length; i3++) {
+    for (let j4 = i3 + 1; j4 < spans.length; j4++) {
+      const group = spans.slice(i3, j4 + 1);
+      candidates.push({
+        from: Math.min(...group.map((s3) => s3.from)),
+        to: Math.max(...group.map((s3) => s3.to)),
+        terms: group.map((_3, k4) => i3 + k4)
+      });
+    }
+  }
+  const widthOf = (c3) => words2.slice(Math.max(0, c3.from - context), Math.min(words2.length - 1, c3.to + context) + 1).map((w4) => w4.word).join(" ").length;
+  const hardWidth = Math.round(width * 1.6);
+  const ranked = candidates.filter((c3) => widthOf(c3) <= hardWidth).sort((a3, b3) => b3.terms.length - a3.terms.length || a3.to - a3.from - (b3.to - b3.from) || a3.from - b3.from);
+  const chosen = [];
+  const covered = new Set();
+  while (chosen.length < maxLines && covered.size < spans.length) {
+    const best = ranked.find((c3) => c3.terms.some((t4) => !covered.has(t4)));
+    if (!best)
+      break;
+    chosen.push({
+      from: Math.max(0, best.from - context),
+      to: Math.min(words2.length - 1, best.to + context)
+    });
+    for (const t4 of best.terms)
+      covered.add(t4);
+  }
+  for (let i3 = 0; i3 < spans.length && chosen.length < maxLines; i3++) {
+    if (covered.has(i3))
+      continue;
+    chosen.push({
+      from: Math.max(0, spans[i3].from - context),
+      to: Math.min(words2.length - 1, spans[i3].to + context)
+    });
+    covered.add(i3);
+  }
+  const merged2 = chosen.sort((a3, b3) => a3.from - b3.from);
+  return merged2.slice(0, maxLines).map((span) => {
+    let from = span.from;
+    let to = span.to;
+    const keepsAllTerms = () => spans.every((s3) => s3.to < from || s3.from > to || s3.from >= from && s3.to <= to);
+    let joined = words2.slice(from, to + 1).map((w4) => w4.word).join(" ");
+    while (joined.length > width && to - from > 1) {
+      const mid = Math.floor((from + to) / 2);
+      const tryFrom = mid - from > to - mid ? from + 1 : from;
+      const tryTo = tryFrom === from ? to - 1 : to;
+      const candidateFrom = tryFrom;
+      const candidateTo = tryTo;
+      const before = { from, to };
+      from = candidateFrom;
+      to = candidateTo;
+      if (!keepsAllTerms()) {
+        from = before.from;
+        to = before.to;
+        break;
+      }
+      joined = words2.slice(from, to + 1).map((w4) => w4.word).join(" ");
+    }
+    const prefix = from > 0 ? "\u2026 " : "";
+    const suffix = to < words2.length - 1 ? " \u2026" : "";
+    const body = joined;
+    const matches = terms.map((t4) => findTermIn(body, t4, 0)).filter((m3) => !!m3).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
+    const deduped = [];
+    for (const m3 of matches) {
+      const prev = deduped[deduped.length - 1];
+      if (prev && prev.start === m3.start)
+        continue;
+      if (prev && m3.start < prev.start + prev.length)
+        continue;
+      deduped.push(m3);
+    }
+    return {
+      text: `${prefix}${body}${suffix}`,
+      matches: deduped.map((m3) => ({
+        start: m3.start + prefix.length,
+        length: m3.length
+      }))
+    };
+  });
+}
+var EXCERPT_WIDTH, CONTEXT_WORDS;
+var init_search_excerpt = __esm({
+  "src/template/search-excerpt.ts"() {
+    EXCERPT_WIDTH = 90;
+    CONTEXT_WORDS = 6;
+  }
+});
+
 // src/template/note-format.ts
 function detectNoteFormat(source, hasZoteroKey) {
   if (source.includes(SW_MANAGED_OPEN) || source.includes(SW_MANAGED_CLOSE)) {
@@ -21071,13 +21273,13 @@ function defaultFilters() {
 function flagsFromChildren(children, hasLitNote) {
   var _a, _b, _c, _d, _e;
   const attachments = (_a = children == null ? void 0 : children.attachments) != null ? _a : [];
-  const isPdfOrSnapshot = (ct) => {
+  const isPdfOrSnapshot2 = (ct) => {
     const t4 = (ct != null ? ct : "").toLowerCase();
     return t4 === "application/pdf" || t4 === "text/html";
   };
   return {
     hasNotes: ((_c = (_b = children == null ? void 0 : children.notes) == null ? void 0 : _b.length) != null ? _c : 0) > 0,
-    hasAttachment: attachments.some((a3) => isPdfOrSnapshot(a3 == null ? void 0 : a3.contentType)),
+    hasAttachment: attachments.some((a3) => isPdfOrSnapshot2(a3 == null ? void 0 : a3.contentType)),
     hasAnnotations: ((_e = (_d = children == null ? void 0 : children.annotations) == null ? void 0 : _d.length) != null ? _e : 0) > 0,
     hasLitNote
   };
@@ -21110,17 +21312,20 @@ var init_addLiteratureNotesModal = __esm({
     init_helpers();
     init_import_filters();
     init_children_cache();
+    init_search_excerpt();
     PAGE = 100;
     AddLiteratureNotesModal = class extends import_obsidian37.Modal {
       constructor(app2, plugin) {
         super(app2);
         this.query = "";
+        this.searchAbstract = false;
         this.filters = defaultFilters();
         this.selected = new Set();
+        this.confirmBtn = null;
         this.rendered = 0;
         this.matches = [];
+        this.termsByKey = new Map();
         this.litNotes = new Set();
-        this.footerEl = null;
         this.plugin = plugin;
       }
       onOpen() {
@@ -21129,34 +21334,70 @@ var init_addLiteratureNotesModal = __esm({
         if (modalEl)
           modalEl.addClass("sw-add-notes-modal");
         contentEl.createEl("h3", { text: t("Add literature notes") });
-        this.searchInput = contentEl.createEl("input", {
+        const searchRow = contentEl.createDiv({ cls: "sw-add-notes__searchrow" });
+        this.searchInput = searchRow.createEl("input", {
           cls: "sw-add-notes__search",
           attr: {
             type: "search",
-            placeholder: t("Search by citekey, author, title, abstract\u2026")
+            placeholder: t("Search by citekey, author, title\u2026")
           }
         });
         this.searchInput.addEventListener("input", () => {
           this.query = this.searchInput.value;
           this.refresh();
         });
+        const absLabel = searchRow.createEl("label", { cls: "sw-add-notes__abstract" });
+        const absBox = absLabel.createEl("input", { type: "checkbox" });
+        absBox.checked = this.searchAbstract;
+        absBox.addEventListener("change", () => {
+          this.searchAbstract = absBox.checked;
+          this.searchInput.placeholder = absBox.checked ? t("Search citekey, author, title, abstract, publication\u2026") : t("Search by citekey, author, title\u2026");
+          this.refresh();
+        });
+        absLabel.appendText(" " + t("Search abstracts"));
         const body = contentEl.createDiv({ cls: "sw-add-notes__body" });
         const side = body.createDiv({ cls: "sw-add-notes__filters" });
         this.renderFilters(side);
-        const main = body.createDiv({ cls: "sw-add-notes__list" });
-        this.listEl = main.createDiv({ cls: "sw-add-notes__rows" });
+        const main = body.createDiv({ cls: "sw-add-notes__pane" });
+        this.listEl = main.createDiv({ cls: "sw-add-notes__list" });
         main.addEventListener("scroll", () => {
           if (main.scrollTop + main.clientHeight >= main.scrollHeight - 200) {
             this.renderMore();
           }
         });
-        this.statusEl = main.createDiv({ cls: "sw-add-notes__status" });
+        const footer = main.createDiv({ cls: "sw-add-notes__footer" });
+        this.statusEl = footer.createDiv({ cls: "sw-add-notes__status" });
+        const actions = footer.createDiv({ cls: "sw-add-notes__actions" });
+        const selectAll = actions.createEl("button", { text: t("Select all shown") });
+        selectAll.addEventListener("click", () => {
+          for (const e3 of this.matches)
+            this.selected.add(e3.id);
+          this.redrawSelection();
+          this.updateStatus();
+        });
+        const clear = actions.createEl("button", { text: t("Clear") });
+        clear.addEventListener("click", () => {
+          this.selected.clear();
+          this.redrawSelection();
+          this.updateStatus();
+        });
+        this.confirmBtn = actions.createEl("button", {
+          text: t("Add notes"),
+          cls: "mod-cta"
+        });
+        this.confirmBtn.addEventListener("click", () => void this.createSelected());
         this.searchInput.focus();
         this.buildLitNoteIndex();
         this.refresh();
+        if (!this.plugin.bibManager.presenceReady) {
+          void this.plugin.bibManager.buildChildPresenceIndex().then(() => {
+            if (this.containerEl.isConnected)
+              this.refresh();
+          }).catch((e3) => console.warn("[sw:add-notes] presence index failed", e3));
+        }
       }
       renderFilters(side) {
-        const mk = (label, key, desc) => {
+        const mk = (label, key) => {
           const row = side.createEl("label", { cls: "sw-add-notes__filter" });
           const input = row.createEl("input", { type: "checkbox" });
           input.checked = this.filters[key];
@@ -21165,8 +21406,6 @@ var init_addLiteratureNotesModal = __esm({
             this.refresh();
           });
           row.appendText(" " + label);
-          if (desc)
-            row.createEl("small", { text: desc, cls: "sw-add-notes__hint" });
         };
         mk(t("Items with Zotero notes"), "hasNotes");
         mk(t("Items with a PDF or snapshot"), "hasAttachment");
@@ -21182,17 +21421,27 @@ var init_addLiteratureNotesModal = __esm({
             this.litNotes.add(ck);
         }
       }
+      stableKeyFor(entry) {
+        if (typeof entry._zoteroKey !== "string")
+          return "";
+        const gid = entry.groupID && entry.groupID !== 1 ? entry.groupID : null;
+        return gid ? `${entry._zoteroKey}g${gid}` : entry._zoteroKey;
+      }
       flagsFor(entry) {
-        const stable = typeof entry._zoteroKey === "string" ? entry.groupID && entry.groupID !== 1 ? `${entry._zoteroKey}g${entry.groupID}` : entry._zoteroKey : "";
+        const stable = this.stableKeyFor(entry);
         const children = stable ? readChildren(this.plugin.bibManager.childrenCache, stable) : null;
         return flagsFromChildren(children, this.litNotes.has(entry.id));
       }
       refresh() {
         const q4 = this.query.trim();
-        const limit = 1e5;
-        const { entries } = q4 ? this.plugin.bibManager.searchTier("abstract", q4, limit) : { entries: Array.from(this.plugin.bibManager.bibCache.values()).map((entry) => ({ entry, terms: [] })) };
-        const all = entries.map((e3) => e3.entry).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
-        this.matches = all;
+        if (q4) {
+          const { entries } = this.plugin.bibManager.searchTier(this.searchAbstract ? "abstract" : "title", q4, 1e5);
+          this.matches = entries.map((e3) => e3.entry).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
+          this.termsByKey = new Map(entries.map((e3) => [e3.entry.id, e3.terms]));
+        } else {
+          this.matches = Array.from(this.plugin.bibManager.bibCache.values()).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
+          this.termsByKey = new Map();
+        }
         this.rendered = 0;
         this.listEl.empty();
         this.renderMore();
@@ -21203,90 +21452,101 @@ var init_addLiteratureNotesModal = __esm({
         for (const entry of slice)
           this.renderRow(entry);
         this.rendered += slice.length;
-        if (this.rendered < this.matches.length) {
-          this.listEl.createDiv({ cls: "sw-add-notes__more", text: t("Scroll for more\u2026") });
-        }
       }
       renderRow(entry) {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         const row = this.listEl.createDiv({ cls: "sw-add-notes__row" });
-        const check = row.createEl("input", { type: "checkbox" });
-        check.checked = this.selected.has(entry.id);
-        check.addEventListener("click", (e3) => e3.stopPropagation());
-        check.addEventListener("change", () => {
-          if (check.checked)
-            this.selected.add(entry.id);
-          else
-            this.selected.delete(entry.id);
-          this.updateStatus();
-        });
+        row.toggleClass("is-selected", this.selected.has(entry.id));
+        row.dataset.citekey = entry.id;
         const info = row.createDiv({ cls: "sw-add-notes__info" });
-        info.createDiv({ cls: "sw-add-notes__title", text: (_a = entry.title) != null ? _a : entry.id });
-        const meta = info.createDiv({ cls: "sw-add-notes__meta" });
-        meta.createSpan({ text: `@${entry.id}` });
+        const head = info.createDiv({ cls: "sw-add-notes__head" });
+        head.createSpan({ cls: "sw-add-notes__citekey", text: `@${entry.id}` });
+        const creators = this.creatorText(entry);
+        if (creators)
+          head.createSpan({ cls: "sw-add-notes__authors", text: creators });
         if (entry.groupID && entry.groupID !== 1) {
-          const name = (_d = (_c = (_b = this.plugin.settings.zoteroGroups) == null ? void 0 : _b.find((g4) => g4.id === entry.groupID)) == null ? void 0 : _c.name) != null ? _d : `Group ${entry.groupID}`;
-          meta.createSpan({ cls: "sw-add-notes__library", text: ` \xB7 ${name}` });
+          const name = (_c = (_b = (_a = this.plugin.settings.zoteroGroups) == null ? void 0 : _a.find((g4) => g4.id === entry.groupID)) == null ? void 0 : _b.name) != null ? _c : `Group ${entry.groupID}`;
+          head.createSpan({ cls: "sw-add-notes__library", text: `\xB7 ${name}` });
         }
-        const flags = this.flagsFor(entry);
-        if (flags.hasLitNote) {
-          meta.createSpan({ cls: "sw-add-notes__has-note", text: ` \xB7 ${t("has a note")}` });
+        if (this.litNotes.has(entry.id)) {
+          head.createSpan({ cls: "sw-add-notes__has-note", text: `\xB7 ${t("has a note")}` });
+        }
+        const bib = this.plugin.bibManager.getBibForCiteKey(this.sourceFile(), entry.id);
+        if (bib) {
+          const ref = info.createDiv({ cls: "sw-add-notes__ref" });
+          ref.setText((_d = bib.textContent) != null ? _d : "");
+        } else if (entry.title) {
+          info.createDiv({ cls: "sw-add-notes__title", text: entry.title });
+        }
+        const terms = (_e = this.termsByKey.get(entry.id)) != null ? _e : [];
+        const excerpt = excerptForResult(entry, terms);
+        if (excerpt) {
+          const line = info.createDiv({ cls: "sw-add-notes__excerpt" });
+          this.appendHighlighted(line, excerpt.text, excerpt.matches);
         }
         row.addEventListener("click", () => {
-          check.checked = !check.checked;
-          check.dispatchEvent(new Event("change"));
+          if (this.selected.has(entry.id))
+            this.selected.delete(entry.id);
+          else
+            this.selected.add(entry.id);
+          row.toggleClass("is-selected", this.selected.has(entry.id));
+          this.updateStatus();
         });
+      }
+      appendHighlighted(el, text, matches) {
+        let at = 0;
+        for (const m3 of matches) {
+          if (m3.length <= 0 || m3.start < at || m3.start + m3.length > text.length)
+            continue;
+          if (m3.start > at)
+            el.appendText(text.slice(at, m3.start));
+          el.append(createEl("strong", {
+            cls: "sw-suggest-match",
+            text: text.slice(m3.start, m3.start + m3.length)
+          }));
+          at = m3.start + m3.length;
+        }
+        if (at < text.length)
+          el.appendText(text.slice(at));
+      }
+      creatorText(entry) {
+        var _a;
+        const lists = [entry.author, entry.editor];
+        const parts = [];
+        for (const list of lists) {
+          for (const n2 of list != null ? list : []) {
+            const name = (_a = n2.literal) != null ? _a : [n2.given, n2.family].filter(Boolean).join(" ");
+            if (name)
+              parts.push(name);
+          }
+        }
+        return parts.join("; ");
+      }
+      sourceFile() {
+        var _a;
+        return (_a = this.app.workspace.getActiveFile()) != null ? _a : this.app.vault.getRoot();
+      }
+      redrawSelection() {
+        for (const row of Array.from(this.listEl.querySelectorAll(".sw-add-notes__row"))) {
+          const key = row.dataset.citekey;
+          row.toggleClass("is-selected", !!key && this.selected.has(key));
+        }
       }
       updateStatus() {
         const total = this.matches.length;
         const n2 = this.selected.size;
         this.statusEl.setText(`${total} ${total === 1 ? t("reference") : t("references")}` + (n2 ? ` \xB7 ${n2} ${t("selected")}` : ""));
-        this.updateButtons();
-      }
-      updateButtons() {
-        if (!this.footerEl) {
-          this.footerEl = this.contentEl.createDiv({ cls: "sw-add-notes__footer" });
-          const selectAll = this.footerEl.createEl("button", { text: t("Select all shown") });
-          selectAll.addEventListener("click", () => {
-            for (const e3 of this.matches)
-              this.selected.add(e3.id);
-            this.redrawChecks();
-            this.updateStatus();
-          });
-          const clear = this.footerEl.createEl("button", { text: t("Clear") });
-          clear.addEventListener("click", () => {
-            this.selected.clear();
-            this.redrawChecks();
-            this.updateStatus();
-          });
-          const cancel = this.footerEl.createEl("button", { text: t("Close") });
-          cancel.addEventListener("click", () => this.close());
-          const confirm2 = this.footerEl.createEl("button", {
-            text: t("Add notes"),
-            cls: "mod-cta"
-          });
-          confirm2.addEventListener("click", () => void this.createSelected());
-        }
-        const confirm = this.footerEl.querySelector(".mod-cta");
-        if (confirm)
-          confirm.setText(`${t("Add notes")} (${this.selected.size})`);
-      }
-      redrawChecks() {
-        const checks = this.listEl.querySelectorAll("input[type=checkbox]");
-        let i3 = 0;
-        for (const entry of this.matches.slice(0, this.rendered)) {
-          if (checks[i3])
-            checks[i3].checked = this.selected.has(entry.id);
-          i3++;
+        if (this.confirmBtn) {
+          this.confirmBtn.setText(`${t("Add notes")} (${n2})`);
+          this.confirmBtn.toggleClass("is-disabled", n2 === 0);
         }
       }
       async createSelected() {
-        var _a;
         if (!this.selected.size)
           return;
         const citekeys = [...this.selected];
         this.close();
-        const source = (_a = this.app.workspace.getActiveFile()) != null ? _a : this.app.vault.getRoot();
+        const source = this.sourceFile();
         const progress = new import_obsidian37.Notice(`Creating literature notes\u2026 0/${citekeys.length}`, 0);
         let created = 0;
         for (const ck of citekeys) {
@@ -69532,6 +69792,33 @@ async function searchZoteroBBT(port = DEFAULT_ZOTERO_PORT, conditions, groupIds 
   }
   return out.slice(0, limit);
 }
+async function fetchLibraryChildRowsNative(port, libraryID) {
+  if (!await isZoteroRunningNative(port))
+    return null;
+  try {
+    const att = await fetchItemsSinceNative(port, libraryID, "attachment", 0);
+    const ann = await fetchItemsSinceNative(port, libraryID, "annotation", 0);
+    const note = await fetchItemsSinceNative(port, libraryID, "note", 0);
+    const parentOf = (it) => {
+      var _a, _b;
+      return String((_b = (_a = it == null ? void 0 : it.data) == null ? void 0 : _a.parentItem) != null ? _b : "");
+    };
+    return {
+      attachments: att.items.map((it) => {
+        var _a, _b, _c, _d, _e;
+        return {
+          itemKey: String((_c = (_b = it == null ? void 0 : it.key) != null ? _b : (_a = it == null ? void 0 : it.data) == null ? void 0 : _a.key) != null ? _c : ""),
+          parentItem: parentOf(it),
+          contentType: (_e = (_d = it == null ? void 0 : it.data) == null ? void 0 : _d.contentType) != null ? _e : null
+        };
+      }).filter((r3) => r3.itemKey && r3.parentItem),
+      annotations: ann.items.map((it) => ({ parentItem: parentOf(it) })).filter((r3) => r3.parentItem),
+      notes: note.items.map((it) => ({ parentItem: parentOf(it) })).filter((r3) => r3.parentItem)
+    };
+  } catch (e3) {
+    return null;
+  }
+}
 
 // src/zotlitTemplates.ts
 var import_obsidian8 = __toModule(require("obsidian"));
@@ -95622,7 +95909,7 @@ function cite(engine, group, uncitedItemIDs) {
 
 // src/template/zotero-sync.ts
 function emptySyncState() {
-  return { versions: {}, attachments: {}, libraryFolders: {} };
+  return { versions: {}, attachments: {}, libraryFolders: {}, presence: {} };
 }
 async function collectChangedItemKeys(state, attachments, annotations, lookupParent) {
   const map = { ...state.attachments };
@@ -95699,6 +95986,33 @@ function isNoteStale(timeline, updatedMs) {
 
 // src/bib/bibManager.ts
 init_children_cache();
+
+// src/template/child-presence.ts
+function isPdfOrSnapshot(contentType) {
+  const t4 = (contentType != null ? contentType : "").toLowerCase();
+  return t4 === "application/pdf" || t4 === "text/html";
+}
+function buildChildPresence(input) {
+  const out = {};
+  const ensure = (key) => {
+    var _a;
+    return (_a = out[key]) != null ? _a : out[key] = {};
+  };
+  for (const a3 of input.attachments) {
+    if (a3.parentItem && isPdfOrSnapshot(a3.contentType))
+      ensure(a3.parentItem).a = 1;
+  }
+  for (const n2 of input.notes) {
+    if (n2.parentItem)
+      ensure(n2.parentItem).n = 1;
+  }
+  for (const an2 of input.annotations) {
+    const item = input.attachmentToItem.get(an2.parentItem);
+    if (item)
+      ensure(item).an = 1;
+  }
+  return out;
+}
 
 // src/template/recent-keys.ts
 var RECENT_KEYS_LIMIT = 200;
@@ -96161,6 +96475,7 @@ var BibManager = class {
     this.watchedBibPaths = new Set();
     this.globalWatchedBibPaths = new Set();
     this.scopedWatchedBibPaths = new Map();
+    this.presenceReady = false;
     this._childrenCacheTimer = null;
     this.warming = false;
     this.warmingSkipPDFs = false;
@@ -97574,6 +97889,33 @@ var BibManager = class {
     }
     return (h3 >>> 0).toString(16);
   }
+  async buildChildPresenceIndex() {
+    var _a, _b, _c;
+    const { settings } = this.plugin;
+    if (settings.useNativeZoteroAPI === false)
+      return;
+    const port = (_a = settings.zoteroPort) != null ? _a : DEFAULT_ZOTERO_PORT;
+    const presence = { ...(_b = this.syncState.presence) != null ? _b : {} };
+    for (const group of (_c = settings.zoteroGroups) != null ? _c : []) {
+      const rows = await fetchLibraryChildRowsNative(port, group.id);
+      if (!rows)
+        continue;
+      const attToItem = new Map();
+      for (const a3 of rows.attachments)
+        attToItem.set(a3.itemKey, a3.parentItem);
+      const built = buildChildPresence({
+        attachments: rows.attachments,
+        annotations: rows.annotations,
+        notes: rows.notes,
+        attachmentToItem: attToItem
+      });
+      for (const [k4, v3] of Object.entries(built))
+        presence[k4] = v3;
+    }
+    this.syncState = { ...this.syncState, presence };
+    this.presenceReady = true;
+    await this.saveSyncState();
+  }
   async loadChildrenCache() {
     try {
       const raw = await app.vault.adapter.read((0, import_obsidian28.normalizePath)(`${SW_CACHE_DIR}/children-cache.json`));
@@ -98505,196 +98847,7 @@ var BibManager = class {
 
 // src/citeSuggest/citeSuggest.ts
 var import_obsidian29 = __toModule(require("obsidian"));
-
-// src/template/search-excerpt.ts
-var EXCERPT_WIDTH = 90;
-var CONTEXT_WORDS = 6;
-function excerptsForResult(item, queryTerms3, opts = {}) {
-  if (queryTerms3.length === 0)
-    return [];
-  return buildExcerpts(item.abstract, queryTerms3, opts);
-}
-function tokens(text) {
-  const out = [];
-  const re = /\S+/g;
-  let m3;
-  while ((m3 = re.exec(text)) !== null)
-    out.push({ word: m3[0], start: m3.index });
-  return out;
-}
-function norm3(s3) {
-  return s3.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-}
-function normaliseWithMap(text) {
-  let out = "";
-  const map = [];
-  for (let i3 = 0; i3 < text.length; i3++) {
-    const ch = text[i3];
-    const n2 = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    for (let k4 = 0; k4 < n2.length; k4++) {
-      out += n2[k4];
-      map.push(i3);
-    }
-  }
-  return { text: out, map };
-}
-function findTermIn(text, term, from) {
-  const needle = norm3(term);
-  if (!needle)
-    return null;
-  const source = text.slice(from);
-  const { text: normalised, map } = normaliseWithMap(source);
-  const at = normalised.indexOf(needle);
-  if (at === -1)
-    return null;
-  const lastIndex = Math.min(at + needle.length - 1, map.length - 1);
-  const start = from + map[at];
-  let end = from + map[lastIndex] + 1;
-  while (end < text.length && /[\u0300-\u036f]/.test(text[end]))
-    end++;
-  if (end <= start)
-    return null;
-  return { start, length: end - start };
-}
-function findTermSpans(text, terms) {
-  if (!text || terms.length === 0)
-    return [];
-  const found = [];
-  for (const term of terms) {
-    if (!term)
-      continue;
-    let from = 0;
-    for (; ; ) {
-      const hit = findTermIn(text, term, from);
-      if (!hit)
-        break;
-      found.push(hit);
-      from = hit.start + Math.max(hit.length, 1);
-    }
-  }
-  const sorted = found.filter((s3) => s3.length > 0 && s3.start + s3.length <= text.length).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
-  const out = [];
-  for (const s3 of sorted) {
-    const prev = out[out.length - 1];
-    if (prev && s3.start < prev.start + prev.length)
-      continue;
-    if (prev && s3.start === prev.start)
-      continue;
-    out.push(s3);
-  }
-  return out;
-}
-function buildExcerpts(text, terms, opts = {}) {
-  var _a, _b, _c;
-  if (!text)
-    return [];
-  const maxLines = (_a = opts.maxLines) != null ? _a : 2;
-  const width = (_b = opts.width) != null ? _b : EXCERPT_WIDTH;
-  const context = (_c = opts.contextWords) != null ? _c : CONTEXT_WORDS;
-  const words2 = tokens(text);
-  if (words2.length === 0)
-    return [];
-  const spans = [];
-  for (const term of terms) {
-    if (!term)
-      continue;
-    const hit = findTermIn(text, term, 0);
-    if (!hit)
-      continue;
-    const first = words2.findIndex((w4) => w4.start >= hit.start);
-    if (first === -1)
-      continue;
-    const end = hit.start + hit.length;
-    let last = first;
-    while (last + 1 < words2.length && words2[last + 1].start < end)
-      last++;
-    spans.push({ from: first, to: last });
-  }
-  if (spans.length === 0)
-    return [];
-  const candidates = [];
-  for (let i3 = 0; i3 < spans.length; i3++) {
-    candidates.push({ from: spans[i3].from, to: spans[i3].to, terms: [i3] });
-  }
-  for (let i3 = 0; i3 < spans.length; i3++) {
-    for (let j4 = i3 + 1; j4 < spans.length; j4++) {
-      const group = spans.slice(i3, j4 + 1);
-      candidates.push({
-        from: Math.min(...group.map((s3) => s3.from)),
-        to: Math.max(...group.map((s3) => s3.to)),
-        terms: group.map((_3, k4) => i3 + k4)
-      });
-    }
-  }
-  const widthOf = (c3) => words2.slice(Math.max(0, c3.from - context), Math.min(words2.length - 1, c3.to + context) + 1).map((w4) => w4.word).join(" ").length;
-  const hardWidth = Math.round(width * 1.6);
-  const ranked = candidates.filter((c3) => widthOf(c3) <= hardWidth).sort((a3, b3) => b3.terms.length - a3.terms.length || a3.to - a3.from - (b3.to - b3.from) || a3.from - b3.from);
-  const chosen = [];
-  const covered = new Set();
-  while (chosen.length < maxLines && covered.size < spans.length) {
-    const best = ranked.find((c3) => c3.terms.some((t4) => !covered.has(t4)));
-    if (!best)
-      break;
-    chosen.push({
-      from: Math.max(0, best.from - context),
-      to: Math.min(words2.length - 1, best.to + context)
-    });
-    for (const t4 of best.terms)
-      covered.add(t4);
-  }
-  for (let i3 = 0; i3 < spans.length && chosen.length < maxLines; i3++) {
-    if (covered.has(i3))
-      continue;
-    chosen.push({
-      from: Math.max(0, spans[i3].from - context),
-      to: Math.min(words2.length - 1, spans[i3].to + context)
-    });
-    covered.add(i3);
-  }
-  const merged2 = chosen.sort((a3, b3) => a3.from - b3.from);
-  return merged2.slice(0, maxLines).map((span) => {
-    let from = span.from;
-    let to = span.to;
-    const keepsAllTerms = () => spans.every((s3) => s3.to < from || s3.from > to || s3.from >= from && s3.to <= to);
-    let joined = words2.slice(from, to + 1).map((w4) => w4.word).join(" ");
-    while (joined.length > width && to - from > 1) {
-      const mid = Math.floor((from + to) / 2);
-      const tryFrom = mid - from > to - mid ? from + 1 : from;
-      const tryTo = tryFrom === from ? to - 1 : to;
-      const candidateFrom = tryFrom;
-      const candidateTo = tryTo;
-      const before = { from, to };
-      from = candidateFrom;
-      to = candidateTo;
-      if (!keepsAllTerms()) {
-        from = before.from;
-        to = before.to;
-        break;
-      }
-      joined = words2.slice(from, to + 1).map((w4) => w4.word).join(" ");
-    }
-    const prefix = from > 0 ? "\u2026 " : "";
-    const suffix = to < words2.length - 1 ? " \u2026" : "";
-    const body = joined;
-    const matches = terms.map((t4) => findTermIn(body, t4, 0)).filter((m3) => !!m3).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
-    const deduped = [];
-    for (const m3 of matches) {
-      const prev = deduped[deduped.length - 1];
-      if (prev && prev.start === m3.start)
-        continue;
-      if (prev && m3.start < prev.start + prev.length)
-        continue;
-      deduped.push(m3);
-    }
-    return {
-      text: `${prefix}${body}${suffix}`,
-      matches: deduped.map((m3) => ({
-        start: m3.start + prefix.length,
-        length: m3.length
-      }))
-    };
-  });
-}
+init_search_excerpt();
 
 // src/template/cite-insert.ts
 function insideUnclosedWikilink(beforeStart, afterCursor = "") {
