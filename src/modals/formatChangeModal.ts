@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 
 import { noteFormatLabel, type NoteFormat } from '../template/note-format';
+import { setModalTitle } from './modalTitle';
 
 /**
  * Shown before an update that may change a note's formatting.
@@ -41,7 +42,7 @@ export class FormatChangeModal extends Modal {
       ? "ZotLit's format"
       : "ScholarWeft's format";
 
-    contentEl.createEl('h2', { text: 'This note will be reformatted' });
+    setModalTitle(this, 'This Note Will Be Reformatted');
     contentEl.createEl('p', {
       text:
         `“${this.noteName}” is in ${noteFormatLabel(this.noteFormat)}, but ` +

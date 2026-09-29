@@ -1772,6 +1772,12 @@ Annotation callouts
   flex-direction: column;
   height: 100%;
 }
+/* Modal titles use Obsidian's standard top-bar element (`Modal.titleEl`); this
+   only nudges the weight so it reads as a heading. The app supplies the font,
+   centering and spacing. */
+.sw-modal-title {
+  font-weight: var(--font-semibold);
+}
 .sw-add-notes__searchrow {
   display: flex;
   align-items: center;
@@ -1843,6 +1849,15 @@ Annotation callouts
   position: sticky;
   top: 0;
   background: var(--background-secondary);
+  cursor: pointer;
+}
+.sw-add-notes__library-heading:hover {
+  background: var(--background-modifier-hover);
+}
+.sw-add-notes__col-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 var(--size-4-1);
 }
 .sw-add-notes__col-item {
   font-size: var(--font-ui-smaller);
@@ -1856,9 +1871,21 @@ Annotation callouts
 .sw-add-notes__col-item:hover {
   background: var(--background-modifier-hover);
 }
+/* A collection that is ON carries the SAME highlight as a selected search
+   result (Obsidian's active-hover modifier, the token the data explorer and the
+   result rows use). Turning one off clears the highlight and greys the label —
+   no strikethrough, which reads as "deleted". */
+.sw-add-notes__col-item:not(.is-off),
+.sw-add-notes__library-heading:not(.is-off) {
+  background: var(--background-modifier-active-hover);
+}
 .sw-add-notes__col-item.is-off {
   color: var(--text-faint);
-  text-decoration: line-through;
+  background: transparent;
+}
+.sw-add-notes__library-heading.is-off {
+  color: var(--text-faint);
+  background: var(--background-secondary);
 }
 .sw-add-notes__collection-empty {
   padding: var(--size-4-1) var(--size-4-2);

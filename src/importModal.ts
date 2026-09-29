@@ -7,6 +7,7 @@ import { probeTools } from './tools';
 import type { ToolProbe } from './tools';
 import { DEPENDENCIES, renderDependencyNote } from './dependencies';
 import type { DepKey } from './dependencies';
+import { setModalTitle } from './modals/modalTitle';
 
 declare const require: (id: string) => any;
 
@@ -167,7 +168,7 @@ export class ImportModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('sw-import-modal');
-    contentEl.createEl('h3', { text: 'Import document' });
+    setModalTitle(this, 'Import Document');
     contentEl.createEl('p', {
       text: 'Import a Word (.docx) or LibreOffice (.odt) file with Zotero citation fields into your vault as a Markdown note. Requires Zotero to be running.',
       cls: 'sw-export-modal-note',

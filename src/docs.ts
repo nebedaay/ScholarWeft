@@ -6,6 +6,7 @@
  */
 import { App, Component, MarkdownRenderer, Modal } from 'obsidian';
 import { BUNDLED_ASSETS } from 'bundled:assets';
+import { setModalTitle } from './modals/modalTitle';
 
 export const GITHUB_DOCS_BASE =
   'https://github.com/nebedaay/ScholarWeft/blob/main/docs/';
@@ -113,7 +114,7 @@ export class DocsModal extends Modal {
     this.modalEl.addClass('sw-docs-modal');
     const { contentEl } = this;
     contentEl.addClass('sw-docs-modal');
-    contentEl.createEl('h3', { text: 'ScholarWeft documentation' });
+    setModalTitle(this, 'ScholarWeft Documentation');
     const wrap = contentEl.createDiv({ cls: 'sw-docs-wrap' });
     const nav = wrap.createDiv({ cls: 'sw-docs-nav' });
     this.body = wrap.createDiv({ cls: 'sw-docs-body' });

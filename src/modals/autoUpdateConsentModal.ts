@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 
 import { t } from '../lang/helpers';
+import { setModalTitle } from './modalTitle';
 
 /**
  * First-run consent for automatic literature-note updates. Shown the first time
@@ -16,9 +17,7 @@ export class AutoUpdateConsentModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.createEl('h3', {
-      text: t('Update literature notes automatically?'),
-    });
+    setModalTitle(this, t('Update Literature Notes Automatically?'));
     contentEl.createEl('p', {
       text: t(
         'ScholarWeft can update a literature note automatically whenever its Zotero item changes — its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.'

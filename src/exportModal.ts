@@ -6,6 +6,7 @@ import { probeTools } from './tools';
 import type { ToolProbe } from './tools';
 import { DEPENDENCIES, renderDependencyNote } from './dependencies';
 import type { DepKey } from './dependencies';
+import { setModalTitle } from './modals/modalTitle';
 import {
   listZoteroInstalledStyles,
   resolveZoteroStylePath,
@@ -182,7 +183,7 @@ class ZoteroWarningModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl('h3', { text: 'Zotero is not running' });
+    setModalTitle(this, 'Zotero Is Not Running');
     const n = this.needCount;
     const message = this.liveFields
       ? 'This export creates live Zotero citation fields, so it needs Zotero ' +
@@ -281,7 +282,7 @@ export class ExportModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('sw-export-modal');
-    contentEl.createEl('h3', { text: 'Compile / export document' });
+    setModalTitle(this, 'Compile / Export Document');
 
     const adapter = this.plugin.app.vault.adapter as any;
     const vaultBase: string =

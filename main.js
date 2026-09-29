@@ -235,6 +235,12 @@ var init_en = __esm({
       "File literature notes into their library folders": "File literature notes into their library folders",
       "Add literature notes (search and filter)": "Add literature notes (search and filter)",
       "Add literature notes": "Add literature notes",
+      "Add Literature Notes from Zotero": "Add Literature Notes from Zotero",
+      "Save Bibliography Snapshot": "Save Bibliography Snapshot",
+      "Update Literature Notes Automatically?": "Update Literature Notes Automatically?",
+      "The Note Template Has Changed": "The Note Template Has Changed",
+      "Citekey Changes Detected": "Citekey Changes Detected",
+      "A New-Note Template Rule Already Exists": "A New-Note Template Rule Already Exists",
       "Search abstracts": "Search abstracts",
       "Search abstract, publication, publisher, and containing work too": "Search abstract, publication, publisher, and containing work too",
       "Search by citekey, author, title\u2026": "Search by citekey, author, title\u2026",
@@ -254,6 +260,7 @@ var init_en = __esm({
       "Show items with": "Show items with",
       "Show item types": "Show item types",
       All: "All",
+      None: "None",
       "No literature note": "No literature note",
       "Zotero notes": "Zotero notes",
       "PDF/snapshot": "PDF/snapshot",
@@ -1584,6 +1591,16 @@ var require_moo = __commonJS({
   }
 });
 
+// src/modals/modalTitle.ts
+function setModalTitle(modal, title) {
+  modal.titleEl.setText(title);
+  modal.titleEl.addClass("sw-modal-title");
+}
+var init_modalTitle = __esm({
+  "src/modals/modalTitle.ts"() {
+  }
+});
+
 // src/template/children-cache.ts
 function emptyChildrenCache() {
   return {};
@@ -1628,6 +1645,7 @@ var import_obsidian21, ZotLitConvertModal;
 var init_zotlitConvertModal = __esm({
   "src/modals/zotlitConvertModal.ts"() {
     import_obsidian21 = __toModule(require("obsidian"));
+    init_modalTitle();
     ZotLitConvertModal = class extends import_obsidian21.Modal {
       constructor(app2, noteName, onChoose) {
         super(app2);
@@ -1638,7 +1656,7 @@ var init_zotlitConvertModal = __esm({
       onOpen() {
         const { contentEl } = this;
         contentEl.empty();
-        contentEl.createEl("h2", { text: "This note was made by ZotLit" });
+        setModalTitle(this, "This Note Was Made by ZotLit");
         contentEl.createEl("p", {
           text: `\u201C${this.noteName}\u201D has a ZotLit-managed area. Convert it to ScholarWeft's format (frontmatter plus a %%sw-managed%% annotations region), or leave ZotLit's area as it is? Converting applies to other ZotLit notes you update; leaving only affects this one.`
         });
@@ -21564,6 +21582,7 @@ var init_addLiteratureNotesModal = __esm({
     init_collections();
     init_search_excerpt();
     init_highlight();
+    init_modalTitle();
     PAGE = 100;
     TYPE_GROUP_LABELS = {
       book: "Books",
@@ -21592,6 +21611,7 @@ var init_addLiteratureNotesModal = __esm({
         this.termsByKey = new Map();
         this.litNotes = new Set();
         this.collectionsEl = null;
+        this.collectionListEl = null;
         this.renderedRefs = new Map();
         this.plugin = plugin;
       }
@@ -21605,7 +21625,7 @@ var init_addLiteratureNotesModal = __esm({
         this.searchAbstract = saved.searchAbstract === true;
         this.sortMode = saved.sortMode === "author" || saved.sortMode === "dateAdded" ? saved.sortMode : "relevance";
         this.sortDir = saved.sortDir === "desc" ? "desc" : "asc";
-        contentEl.createEl("h3", { text: t("Add literature notes") });
+        setModalTitle(this, t("Add Literature Notes from Zotero"));
         const searchRow = contentEl.createDiv({ cls: "sw-add-notes__searchrow" });
         this.searchInput = searchRow.createEl("input", {
           cls: "sw-add-notes__search",
@@ -21814,26 +21834,46 @@ var init_addLiteratureNotesModal = __esm({
         return btn;
       }
       renderCollections() {
-        var _a, _b, _c;
-        const list = this.collectionsEl;
-        if (!list)
+        var _a, _b, _c, _d, _e;
+        const wrap = this.collectionsEl;
+        if (!wrap)
           return;
-        const scroll = list.scrollTop;
-        list.empty();
+        const scroll = (_b = (_a = this.collectionListEl) == null ? void 0 : _a.scrollTop) != null ? _b : 0;
+        wrap.empty();
         const nodes = this.plugin.bibManager.collectionNodes;
         const off = new Set(this.filters.excludeCollections);
-        for (const group of (_a = this.plugin.settings.zoteroGroups) != null ? _a : []) {
+        const allTokens = nodes.map((n2) => collectionToken(n2.groupID, n2.key));
+        const bar = wrap.createDiv({ cls: "sw-add-notes__col-toolbar" });
+        const allBtn = bar.createEl("button", {
+          cls: "sw-add-notes__toggle",
+          text: t("All")
+        });
+        allBtn.toggleClass("is-on", off.size === 0);
+        allBtn.addEventListener("click", () => this.setCollections(allTokens, true));
+        const noneBtn = bar.createEl("button", {
+          cls: "sw-add-notes__toggle",
+          text: t("None")
+        });
+        noneBtn.toggleClass("is-on", allTokens.length > 0 && allTokens.every((tk) => off.has(tk)));
+        noneBtn.addEventListener("click", () => this.setCollections(allTokens, false));
+        const list = wrap.createDiv({ cls: "sw-add-notes__collection-list" });
+        this.collectionListEl = list;
+        for (const group of (_c = this.plugin.settings.zoteroGroups) != null ? _c : []) {
           const inGroup = nodes.filter((n2) => n2.groupID === group.id);
           if (!inGroup.length)
             continue;
-          list.createDiv({
+          const groupTokens = inGroup.map((n2) => collectionToken(n2.groupID, n2.key));
+          const groupOff = groupTokens.length > 0 && groupTokens.every((tk) => off.has(tk));
+          const heading = list.createDiv({
             cls: "sw-add-notes__library-heading",
             text: group.name || `Group ${group.id}`
           });
+          heading.toggleClass("is-off", groupOff);
+          heading.addEventListener("click", () => this.setCollections(groupTokens, groupOff));
           const byParent = new Map();
           for (const n2 of inGroup) {
-            const parent = (_b = n2.parentKey) != null ? _b : "";
-            const arr = (_c = byParent.get(parent)) != null ? _c : [];
+            const parent = (_d = n2.parentKey) != null ? _d : "";
+            const arr = (_e = byParent.get(parent)) != null ? _e : [];
             arr.push(n2);
             byParent.set(parent, arr);
           }
@@ -21861,8 +21901,7 @@ var init_addLiteratureNotesModal = __esm({
         }
         list.scrollTop = scroll;
       }
-      toggleCollection(node, turnOn) {
-        const tokens2 = descendantTokens(this.plugin.bibManager.collectionNodes, node.groupID, node.key);
+      setCollections(tokens2, turnOn) {
         const set = new Set(this.filters.excludeCollections);
         for (const t4 of tokens2) {
           if (turnOn)
@@ -21873,6 +21912,9 @@ var init_addLiteratureNotesModal = __esm({
         this.filters = { ...this.filters, excludeCollections: [...set] };
         this.renderCollections();
         this.refresh();
+      }
+      toggleCollection(node, turnOn) {
+        this.setCollections(descendantTokens(this.plugin.bibManager.collectionNodes, node.groupID, node.key), turnOn);
       }
       buildLitNoteIndex() {
         var _a;
@@ -22067,6 +22109,7 @@ var init_formatChangeModal = __esm({
   "src/modals/formatChangeModal.ts"() {
     import_obsidian38 = __toModule(require("obsidian"));
     init_note_format();
+    init_modalTitle();
     FormatChangeModal = class extends import_obsidian38.Modal {
       constructor(app2, opts) {
         super(app2);
@@ -22080,7 +22123,7 @@ var init_formatChangeModal = __esm({
         const { contentEl } = this;
         contentEl.empty();
         const target = this.importingWithZotLit ? "ZotLit's format" : "ScholarWeft's format";
-        contentEl.createEl("h2", { text: "This note will be reformatted" });
+        setModalTitle(this, "This Note Will Be Reformatted");
         contentEl.createEl("p", {
           text: `\u201C${this.noteName}\u201D is in ${noteFormatLabel(this.noteFormat)}, but your import setting updates notes with ${target}. Updating it may change how the note is structured \u2014 including its managed annotations region. Your own writing outside that region is kept either way.`
         });
@@ -22113,6 +22156,7 @@ var init_autoUpdateConsentModal = __esm({
   "src/modals/autoUpdateConsentModal.ts"() {
     import_obsidian39 = __toModule(require("obsidian"));
     init_helpers();
+    init_modalTitle();
     AutoUpdateConsentModal = class extends import_obsidian39.Modal {
       constructor(app2, onChoose) {
         super(app2);
@@ -22121,9 +22165,7 @@ var init_autoUpdateConsentModal = __esm({
       }
       onOpen() {
         const { contentEl } = this;
-        contentEl.createEl("h3", {
-          text: t("Update literature notes automatically?")
-        });
+        setModalTitle(this, t("Update Literature Notes Automatically?"));
         contentEl.createEl("p", {
           text: t("ScholarWeft can update a literature note automatically whenever its Zotero item changes \u2014 its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.")
         });
@@ -22157,6 +22199,7 @@ var init_templateUpdateConsentModal = __esm({
   "src/modals/templateUpdateConsentModal.ts"() {
     import_obsidian40 = __toModule(require("obsidian"));
     init_helpers();
+    init_modalTitle();
     TemplateUpdateConsentModal = class extends import_obsidian40.Modal {
       constructor(app2, count, onChoose) {
         super(app2);
@@ -22167,7 +22210,7 @@ var init_templateUpdateConsentModal = __esm({
       onOpen() {
         const { contentEl } = this;
         const estimate = Math.max(1, Math.ceil(this.count / 90));
-        contentEl.createEl("h3", { text: t("The note template has changed") });
+        setModalTitle(this, t("The Note Template Has Changed"));
         contentEl.createEl("p", {
           text: `${this.count} literature note${this.count !== 1 ? "s were" : " was"} rendered with an older template. Updating ${this.count !== 1 ? "them" : "it"} takes about ${estimate} minute${estimate !== 1 ? "s" : ""}.`
         });
@@ -22204,6 +22247,7 @@ var init_citekeyConsentModal = __esm({
   "src/modals/citekeyConsentModal.ts"() {
     import_obsidian41 = __toModule(require("obsidian"));
     init_helpers();
+    init_modalTitle();
     CitekeyConsentModal = class extends import_obsidian41.Modal {
       constructor(app2, onChoose) {
         super(app2);
@@ -22212,7 +22256,7 @@ var init_citekeyConsentModal = __esm({
       }
       onOpen() {
         const { contentEl } = this;
-        contentEl.createEl("h3", { text: t("Citekey changes detected") });
+        setModalTitle(this, t("Citekey Changes Detected"));
         contentEl.createEl("p", {
           text: t("Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?")
         });
@@ -87530,6 +87574,7 @@ var import_obsidian10 = __toModule(require("obsidian"));
 // src/modals/templaterRuleModal.ts
 var import_obsidian9 = __toModule(require("obsidian"));
 init_helpers();
+init_modalTitle();
 var TemplaterRuleModal = class extends import_obsidian9.Modal {
   constructor(app2, existing, ours, decide) {
     super(app2);
@@ -87547,9 +87592,7 @@ var TemplaterRuleModal = class extends import_obsidian9.Modal {
   }
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl("h3", {
-      text: t("A new-note template rule already exists")
-    });
+    setModalTitle(this, t("A New-Note Template Rule Already Exists"));
     contentEl.createEl("p", {
       text: t(`You already have a rule to apply "${this.existing}" to new notes in "/". What should ScholarWeft do?`)
     });
@@ -89328,6 +89371,7 @@ var ZoteroStylePicker = class extends import_obsidian15.FuzzySuggestModal {
 
 // src/docs.ts
 var import_obsidian16 = __toModule(require("obsidian"));
+init_modalTitle();
 var GITHUB_DOCS_BASE = "https://github.com/nebedaay/ScholarWeft/blob/main/docs/";
 var DOC_ORDER = [
   ["setup.md", "Setup"],
@@ -89399,7 +89443,7 @@ var DocsModal = class extends import_obsidian16.Modal {
     this.modalEl.addClass("sw-docs-modal");
     const { contentEl } = this;
     contentEl.addClass("sw-docs-modal");
-    contentEl.createEl("h3", { text: "ScholarWeft documentation" });
+    setModalTitle(this, "ScholarWeft Documentation");
     const wrap = contentEl.createDiv({ cls: "sw-docs-wrap" });
     const nav = wrap.createDiv({ cls: "sw-docs-nav" });
     this.body = wrap.createDiv({ cls: "sw-docs-body" });
@@ -100426,6 +100470,7 @@ async function runDocumentCompiler(plugin, file, opts) {
 }
 
 // src/exportModal.ts
+init_modalTitle();
 function listTemplates(dir, format2) {
   try {
     const fs2 = require("fs");
@@ -100453,7 +100498,7 @@ var ZoteroWarningModal = class extends import_obsidian30.Modal {
   }
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl("h3", { text: "Zotero is not running" });
+    setModalTitle(this, "Zotero Is Not Running");
     const n2 = this.needCount;
     const message = this.liveFields ? "This export creates live Zotero citation fields, so it needs Zotero while exporting. Start Zotero and try again, or proceed \u2014 the citations are then written out as static plain text instead." : `${n2} citation${n2 === 1 ? "" : "s"} in this document can't be resolved from your bibliography files and need Zotero. Start Zotero and try again, or proceed.`;
     contentEl.createEl("p", { text: message });
@@ -100501,7 +100546,7 @@ var ExportModal = class extends import_obsidian30.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("sw-export-modal");
-    contentEl.createEl("h3", { text: "Compile / export document" });
+    setModalTitle(this, "Compile / Export Document");
     const adapter = this.plugin.app.vault.adapter;
     const vaultBase = typeof (adapter == null ? void 0 : adapter.getBasePath) === "function" ? adapter.getBasePath() : "";
     const noteFolder = vaultBase && this.file.parent && this.file.parent.path !== "/" ? `${vaultBase}/${this.file.parent.path}` : vaultBase;
@@ -101778,6 +101823,7 @@ Skipped ${report.skipped.length} (unresolved/unparseable \u2014 see console)` : 
 }
 
 // src/importModal.ts
+init_modalTitle();
 var LAST_DIR_KEY = "scholar-weft:import-last-dir";
 var LAST_OUTDIR_KEY = "scholar-weft:import-outdir";
 var IMPORT_HISTORY_KEY = "scholar-weft:import-history";
@@ -101891,7 +101937,7 @@ var ImportModal = class extends import_obsidian32.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("sw-import-modal");
-    contentEl.createEl("h3", { text: "Import document" });
+    setModalTitle(this, "Import Document");
     contentEl.createEl("p", {
       text: "Import a Word (.docx) or LibreOffice (.odt) file with Zotero citation fields into your vault as a Markdown note. Requires Zotero to be running.",
       cls: "sw-export-modal-note"
@@ -102154,8 +102200,12 @@ ${e3}`, 8e3);
   }
 };
 
+// src/main.ts
+init_modalTitle();
+
 // src/modals/citekeyRenameModal.ts
 var import_obsidian33 = __toModule(require("obsidian"));
+init_modalTitle();
 var CitekeyRenameModal = class extends import_obsidian33.Modal {
   constructor(app2, plan, onConfirm, showLitNotesOption = true, alsoUnresolved = []) {
     super(app2);
@@ -102169,7 +102219,7 @@ var CitekeyRenameModal = class extends import_obsidian33.Modal {
     contentEl.empty();
     const hasFixable = this.plan.size > 0;
     const hasUnfixable = this.alsoUnresolved.length > 0;
-    contentEl.createEl("h2", { text: "Unresolved citations" });
+    setModalTitle(this, "Unresolved Citations");
     if (hasFixable) {
       let totalOccurrences = 0;
       const uniqueRenames = new Map();
@@ -102285,6 +102335,7 @@ var CitekeyRenameModal = class extends import_obsidian33.Modal {
 
 // src/modals/citekeyReconcileModal.ts
 var import_obsidian34 = __toModule(require("obsidian"));
+init_modalTitle();
 var CitekeyReconcileModal = class extends import_obsidian34.Modal {
   constructor(app2, plan, onConfirm) {
     super(app2);
@@ -102307,9 +102358,7 @@ var CitekeyReconcileModal = class extends import_obsidian34.Modal {
     contentEl.empty();
     const { renames, derived, blocked, unresolved } = this.plan;
     const actionable = renames.length > 0 || derived.length > 0;
-    contentEl.createEl("h2", {
-      text: actionable ? "Citekey changes detected" : "Citekey discrepancies"
-    });
+    setModalTitle(this, actionable ? "Citekey Changes Detected" : "Citekey Discrepancies");
     if (actionable) {
       contentEl.createEl("p", {
         text: `Zotero has a new citekey for ${renames.length} reference${renames.length !== 1 ? "s" : ""}. ScholarWeft will update the matching literature note${renames.length !== 1 ? "s" : ""}` + (derived.length ? ` and ${derived.length} associated file${derived.length !== 1 ? "s" : ""}` : "") + `, and update citations across the vault.`
@@ -102402,6 +102451,7 @@ var CitekeyReconcileModal = class extends import_obsidian34.Modal {
 
 // src/modals/conflictModal.ts
 var import_obsidian35 = __toModule(require("obsidian"));
+init_modalTitle();
 var ConflictModal = class extends import_obsidian35.Modal {
   constructor(app2, conflicts, onResolve) {
     super(app2);
@@ -102412,7 +102462,7 @@ var ConflictModal = class extends import_obsidian35.Modal {
     const { contentEl } = this;
     contentEl.empty();
     const names = this.conflicts.map((c3) => `\u201C${c3.name}\u201D`).join(", ");
-    contentEl.createEl("h2", { text: "Another reference-list plugin is enabled" });
+    setModalTitle(this, "Another Reference-List Plugin Is Enabled");
     contentEl.createEl("p", {
       text: `${names} also ${this.conflicts.length > 1 ? "provide" : "provides"} a reference list. ScholarWeft has its own, so with ${this.conflicts.length > 1 ? "them" : "it"} enabled you'll see more than one. Disable ${this.conflicts.length > 1 ? "them" : "it"}, or keep both and stop this prompt.`
     });
@@ -104360,7 +104410,7 @@ var BibSnapshotModal = class extends import_obsidian42.Modal {
   onOpen() {
     var _a, _b;
     const { contentEl } = this;
-    contentEl.createEl("h3", { text: t("Save bibliography snapshot") });
+    setModalTitle(this, t("Save Bibliography Snapshot"));
     contentEl.createEl("p", {
       text: `${this.entries.length} entries will be saved as a .bib file. The file path will be added to this note's frontmatter "bibliography" key.`
     });

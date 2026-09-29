@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 
 import { t } from '../lang/helpers';
+import { setModalTitle } from './modalTitle';
 
 /**
  * First-run consent for AUTOMATIC citekey updating (renaming a literature note
@@ -21,7 +22,7 @@ export class CitekeyConsentModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.createEl('h3', { text: t('Citekey changes detected') });
+    setModalTitle(this, t('Citekey Changes Detected'));
     contentEl.createEl('p', {
       text: t(
         'Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?'

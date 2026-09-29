@@ -227,6 +227,14 @@ export default {
   'Add literature notes (search and filter)':
     'Add literature notes (search and filter)',
   'Add literature notes': 'Add literature notes',
+  'Add Literature Notes from Zotero': 'Add Literature Notes from Zotero',
+  'Save Bibliography Snapshot': 'Save Bibliography Snapshot',
+  'Update Literature Notes Automatically?':
+    'Update Literature Notes Automatically?',
+  'The Note Template Has Changed': 'The Note Template Has Changed',
+  'Citekey Changes Detected': 'Citekey Changes Detected',
+  'A New-Note Template Rule Already Exists':
+    'A New-Note Template Rule Already Exists',
   'Search abstracts': 'Search abstracts',
   'Search abstract, publication, publisher, and containing work too':
     'Search abstract, publication, publisher, and containing work too',
@@ -249,6 +257,7 @@ export default {
   'Show items with': 'Show items with',
   'Show item types': 'Show item types',
   All: 'All',
+  None: 'None',
   'No literature note': 'No literature note',
   'Zotero notes': 'Zotero notes',
   'PDF/snapshot': 'PDF/snapshot',

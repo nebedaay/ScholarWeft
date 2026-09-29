@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 
 import type { ZotLitChoice } from '../template/note-lookup';
+import { setModalTitle } from './modalTitle';
 
 /**
  * Shown when our own template is about to render a note that ZotLit created.
@@ -27,7 +28,7 @@ export class ZotLitConvertModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h2', { text: 'This note was made by ZotLit' });
+    setModalTitle(this, 'This Note Was Made by ZotLit');
     contentEl.createEl('p', {
       text:
         `“${this.noteName}” has a ZotLit-managed area. Convert it to ` +

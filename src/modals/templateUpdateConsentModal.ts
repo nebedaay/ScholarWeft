@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 
 import { t } from '../lang/helpers';
+import { setModalTitle } from './modalTitle';
 
 /**
  * First-run consent for updating notes when the TEMPLATE changes. Shown BEFORE
@@ -22,7 +23,7 @@ export class TemplateUpdateConsentModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     const estimate = Math.max(1, Math.ceil(this.count / 90)); // ~90 notes/min
-    contentEl.createEl('h3', { text: t('The note template has changed') });
+    setModalTitle(this, t('The Note Template Has Changed'));
     contentEl.createEl('p', {
       text:
         `${this.count} literature note${this.count !== 1 ? 's were' : ' was'} ` +

@@ -23,6 +23,7 @@ import { collectionToken, collectionTokens, descendantTokens } from '../template
 import type { CollectionNode } from '../template/collections';
 import { excerptForResult } from '../template/search-excerpt';
 import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
+import { setModalTitle } from './modalTitle';
 
 /**
  * Native "Add literature notes" dialogue.
@@ -88,6 +89,7 @@ export class AddLiteratureNotesModal extends Modal {
   private termsByKey = new Map<string, string[]>();
   private litNotes = new Set<string>();
   private collectionsEl: HTMLElement | null = null;
+  private collectionListEl: HTMLElement | null = null;
 
   constructor(app: App, plugin: ReferenceList) {
     super(app);
@@ -112,8 +114,7 @@ export class AddLiteratureNotesModal extends Modal {
         : 'relevance';
     this.sortDir = saved.sortDir === 'desc' ? 'desc' : 'asc';
 
-    contentEl.createEl('h3', { text: t('Add literature notes') });
-
+    setModalTitle(this, t('Add Literature Notes from Zotero'));
     // Search box + the abstract toggle (the `@@` tier).
     const searchRow = contentEl.createDiv({ cls: 'sw-add-notes__searchrow' });
     this.searchInput = searchRow.createEl('input', {
@@ -377,22 +378,55 @@ export class AddLiteratureNotesModal extends Modal {
    * switches its whole subtree off.
    */
   private renderCollections(): void {
-    const list = this.collectionsEl;
-    if (!list) return;
-    const scroll = list.scrollTop;
-    list.empty();
+    const wrap = this.collectionsEl;
+    if (!wrap) return;
+    const scroll = this.collectionListEl?.scrollTop ?? 0;
+    wrap.empty();
 
     const nodes = this.plugin.bibManager.collectionNodes;
     const off = new Set(this.filters.excludeCollections);
+    const allTokens = nodes.map((n) => collectionToken(n.groupID, n.key));
+
+    // All / None, so a single library (or one collection) can be isolated
+    // without switching every other collection off by hand.
+    const bar = wrap.createDiv({ cls: 'sw-add-notes__col-toolbar' });
+    const allBtn = bar.createEl('button', {
+      cls: 'sw-add-notes__toggle',
+      text: t('All'),
+    });
+    allBtn.toggleClass('is-on', off.size === 0);
+    allBtn.addEventListener('click', () => this.setCollections(allTokens, true));
+    const noneBtn = bar.createEl('button', {
+      cls: 'sw-add-notes__toggle',
+      text: t('None'),
+    });
+    noneBtn.toggleClass(
+      'is-on',
+      allTokens.length > 0 && allTokens.every((tk) => off.has(tk))
+    );
+    noneBtn.addEventListener('click', () => this.setCollections(allTokens, false));
+
+    const list = wrap.createDiv({ cls: 'sw-add-notes__collection-list' });
+    this.collectionListEl = list;
 
     for (const group of this.plugin.settings.zoteroGroups ?? []) {
       const inGroup = nodes.filter((n) => n.groupID === group.id);
       if (!inGroup.length) continue;
+      const groupTokens = inGroup.map((n) => collectionToken(n.groupID, n.key));
+      const groupOff =
+        groupTokens.length > 0 && groupTokens.every((tk) => off.has(tk));
 
-      list.createDiv({
+      // The heading toggles the WHOLE library, so one library can be turned off
+      // (and another isolated) in a single click.
+      const heading = list.createDiv({
         cls: 'sw-add-notes__library-heading',
         text: group.name || `Group ${group.id}`,
       });
+      heading.toggleClass('is-off', groupOff);
+      heading.addEventListener('click', () =>
+        this.setCollections(groupTokens, groupOff)
+      );
+
       const byParent = new Map<string, typeof inGroup>();
       for (const n of inGroup) {
         const parent = n.parentKey ?? '';
@@ -409,7 +443,9 @@ export class AddLiteratureNotesModal extends Modal {
           });
           row.style.paddingLeft = `${10 + depth * 12}px`;
           row.toggleClass('is-off', off.has(token));
-          row.addEventListener('click', () => this.toggleCollection(node, off.has(token)));
+          row.addEventListener('click', () =>
+            this.toggleCollection(node, off.has(token))
+          );
           renderLevel(node.key, depth + 1);
         }
       };
@@ -425,13 +461,8 @@ export class AddLiteratureNotesModal extends Modal {
     list.scrollTop = scroll;
   }
 
-  /** Turn a collection's whole subtree on/off and re-apply the filters. */
-  private toggleCollection(node: CollectionNode, turnOn: boolean): void {
-    const tokens = descendantTokens(
-      this.plugin.bibManager.collectionNodes,
-      node.groupID,
-      node.key
-    );
+  /** Turn a set of collection tokens on/off at once. */
+  private setCollections(tokens: readonly string[], turnOn: boolean): void {
     const set = new Set(this.filters.excludeCollections);
     for (const t of tokens) {
       if (turnOn) set.delete(t);
@@ -440,6 +471,18 @@ export class AddLiteratureNotesModal extends Modal {
     this.filters = { ...this.filters, excludeCollections: [...set] };
     this.renderCollections();
     this.refresh();
+  }
+
+  /** Turn a collection's whole subtree on/off and re-apply the filters. */
+  private toggleCollection(node: CollectionNode, turnOn: boolean): void {
+    this.setCollections(
+      descendantTokens(
+        this.plugin.bibManager.collectionNodes,
+        node.groupID,
+        node.key
+      ),
+      turnOn
+    );
   }
 
   /** Vault-wide literature-note existence, by citekey (one scan, cached). */

@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from 'obsidian';
+import { setModalTitle } from './modalTitle';
 
 /** A plugin that also provides a reference-list sidebar. */
 export interface ConflictingPlugin {
@@ -31,7 +32,7 @@ export class ConflictModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     const names = this.conflicts.map((c) => `“${c.name}”`).join(', ');
-    contentEl.createEl('h2', { text: 'Another reference-list plugin is enabled' });
+    setModalTitle(this, 'Another Reference-List Plugin Is Enabled');
     contentEl.createEl('p', {
       text:
         `${names} also ${this.conflicts.length > 1 ? 'provide' : 'provides'} a reference ` +

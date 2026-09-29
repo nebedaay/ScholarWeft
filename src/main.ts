@@ -44,6 +44,7 @@ import { BibManager, getScopedSettings } from './bib/bibManager';
 import { CiteSuggest } from './citeSuggest/citeSuggest';
 import { ExportModal } from './exportModal';
 import { ImportModal } from './importModal';
+import { setModalTitle } from './modals/modalTitle';
 import { CitekeyRenameModal } from './modals/citekeyRenameModal';
 import { CitekeyReconcileModal } from './modals/citekeyReconcileModal';
 import type { CitekeyReconcilePlan } from './template/note-lookup';
@@ -2765,7 +2766,7 @@ class BibSnapshotModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl('h3', { text: t('Save bibliography snapshot') });
+    setModalTitle(this, t('Save Bibliography Snapshot'));
     contentEl.createEl('p', {
       text: `${this.entries.length} entries will be saved as a .bib file. The file path will be added to this note's frontmatter "bibliography" key.`,
     });

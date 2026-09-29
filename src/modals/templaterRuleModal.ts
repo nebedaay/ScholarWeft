@@ -1,5 +1,6 @@
 import { App, Modal, Setting } from 'obsidian';
 import { t } from '../lang/helpers';
+import { setModalTitle } from './modalTitle';
 
 /**
  * Asked when a Templater "Folder templates" rule for the vault root already
@@ -27,9 +28,7 @@ export class TemplaterRuleModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.createEl('h3', {
-      text: t('A new-note template rule already exists'),
-    });
+    setModalTitle(this, t('A New-Note Template Rule Already Exists'));
     contentEl.createEl('p', {
       text: t(
         `You already have a rule to apply "${this.existing}" to new notes in "/". What should ScholarWeft do?`

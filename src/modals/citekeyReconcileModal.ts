@@ -1,5 +1,6 @@
 import { App, Modal } from 'obsidian';
 import type { CitekeyReconcilePlan } from '../template/note-lookup';
+import { setModalTitle } from './modalTitle';
 
 /**
  * Report + confirmation for a Zotero citekey reconcile pass.
@@ -44,9 +45,10 @@ export class CitekeyReconcileModal extends Modal {
     const { renames, derived, blocked, unresolved } = this.plan;
     const actionable = renames.length > 0 || derived.length > 0;
 
-    contentEl.createEl('h2', {
-      text: actionable ? 'Citekey changes detected' : 'Citekey discrepancies',
-    });
+    setModalTitle(
+      this,
+      actionable ? 'Citekey Changes Detected' : 'Citekey Discrepancies'
+    );
 
     if (actionable) {
       contentEl.createEl('p', {

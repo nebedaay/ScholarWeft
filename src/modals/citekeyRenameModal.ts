@@ -1,4 +1,5 @@
 import { App, Modal, TFile } from 'obsidian';
+import { setModalTitle } from './modalTitle';
 
 /** A single citekey change found in one file. */
 export interface CitekeyChange {
@@ -55,7 +56,7 @@ export class CitekeyRenameModal extends Modal {
     const hasUnfixable = this.alsoUnresolved.length > 0;
 
     // ── Title ────────────────────────────────────────────────────────────────
-    contentEl.createEl('h2', { text: 'Unresolved citations' });
+    setModalTitle(this, 'Unresolved Citations');
 
     // ── Fixable section ───────────────────────────────────────────────────────
     if (hasFixable) {
