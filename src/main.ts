@@ -1299,7 +1299,10 @@ export default class ReferenceList extends Plugin {
     // Rebuild the citation index on startup if the persisted one is missing,
     // empty, or stale — otherwise a failed load would silently shrink it.
     void this.ensureCitedKeysIndex();
-    // One-time offer to file existing group-library notes under their library.
+    // File any group-library notes under their library folder. Runs after the
+    // library is loaded (below), and again after every refresh — not a one-shot
+    // startup timer, which could fire before groups were known and then record
+    // itself as done.
     window.setTimeout(() => {
       void this.offerGroupNoteMove();
     }, 4000);
@@ -1729,11 +1732,22 @@ export default class ReferenceList extends Plugin {
     const total = [...byGroup.values()].reduce((n, a) => n + a.length, 0);
     const totalMoves = total + staleFolders.length;
     if (!totalMoves) {
-      this.settings.groupNoteMoveOffered = true;
-      await this.saveSettings();
+      // Record ONLY when the library was actually loaded (a group name is known
+      // for every configured group). Otherwise a scan that ran before groups
+      // were known would mark itself done and never run again.
+      const groups = this.settings.zoteroGroups ?? [];
+      const namesKnown =
+        groups.length === 0 ||
+        groups.every((g) => g.id === 1 || !!this.bibManager.libraryNameFor(g.id));
+      if (namesKnown) {
+        this.settings.groupNoteMoveOffered = true;
+        await this.saveSettings();
+      }
       if (force) {
         new Notice(
-          'Nothing to file — see tmp/sw-move-diagnostic.txt (or the console).'
+          namesKnown
+            ? 'All literature notes are already in their library folders.'
+            : 'Group libraries not loaded yet — try again after Zotero loads.'
         );
       }
       return;

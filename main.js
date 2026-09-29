@@ -96372,6 +96372,11 @@ var BibManager = class {
           console.warn("[sw] auto-update scan failed:", e3);
         }
       }
+      try {
+        await this.plugin.offerGroupNoteMove();
+      } catch (e3) {
+        console.warn("[sw] group-note filing failed:", e3);
+      }
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
       this.fileCache.clear();
@@ -102466,7 +102471,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     return out;
   }
   async offerGroupNoteMove(force = false) {
-    var _a;
+    var _a, _b;
     if (this.settings.groupNoteMoveOffered && !force)
       return;
     const base = this.bibManager.resolveBaseNoteFolder();
@@ -102481,10 +102486,14 @@ var ReferenceList = class extends import_obsidian40.Plugin {
     const total = [...byGroup.values()].reduce((n2, a3) => n2 + a3.length, 0);
     const totalMoves = total + staleFolders.length;
     if (!totalMoves) {
-      this.settings.groupNoteMoveOffered = true;
-      await this.saveSettings();
+      const groups = (_a = this.settings.zoteroGroups) != null ? _a : [];
+      const namesKnown = groups.length === 0 || groups.every((g4) => g4.id === 1 || !!this.bibManager.libraryNameFor(g4.id));
+      if (namesKnown) {
+        this.settings.groupNoteMoveOffered = true;
+        await this.saveSettings();
+      }
       if (force) {
-        new import_obsidian40.Notice("Nothing to file \u2014 see tmp/sw-move-diagnostic.txt (or the console).");
+        new import_obsidian40.Notice(namesKnown ? "All literature notes are already in their library folders." : "Group libraries not loaded yet \u2014 try again after Zotero loads.");
       }
       return;
     }
@@ -102493,7 +102502,7 @@ var ReferenceList = class extends import_obsidian40.Plugin {
       return (_a2 = this.bibManager.libraryNameFor(gid)) != null ? _a2 : `Group ${gid}`;
     };
     const notice = new import_obsidian40.Notice("", 0);
-    const el = (_a = notice.noticeEl) != null ? _a : notice.containerEl;
+    const el = (_b = notice.noticeEl) != null ? _b : notice.containerEl;
     if (!el)
       return;
     el.createEl("div", {

@@ -1683,6 +1683,15 @@ export class BibManager {
         }
       }
 
+      // File group-library notes under their library folder. Cheap (a folder
+      // listing + a metadata scan) and idempotent, so running it each refresh
+      // means a library RENAME in Zotero is picked up without a manual command.
+      try {
+        await this.plugin.offerGroupNoteMove();
+      } catch (e) {
+        console.warn('[sw] group-note filing failed:', e);
+      }
+
       this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
       this.fileCache.clear();
