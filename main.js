@@ -89448,6 +89448,36 @@ function planCitekeyReconcile(notes, resolveCitekey) {
   return { renames, unresolved };
 }
 
+// src/template/children-cache.ts
+var CHILDREN_CACHE_LIMIT = 1500;
+function emptyChildrenCache() {
+  return {};
+}
+function childrenCacheHit(cache2, stableKey, version) {
+  const entry = cache2 == null ? void 0 : cache2[stableKey];
+  return !!entry && entry.version === version;
+}
+function readChildren(cache2, stableKey) {
+  const entry = cache2 == null ? void 0 : cache2[stableKey];
+  return entry ? entry.children : null;
+}
+function writeChildren(cache2, stableKey, version, children, at, limit = CHILDREN_CACHE_LIMIT) {
+  const next = {
+    ...cache2 != null ? cache2 : {},
+    [stableKey]: { version, at, children }
+  };
+  const keys = Object.keys(next);
+  if (keys.length > limit) {
+    const oldest = keys.sort((a3, b3) => {
+      var _a, _b;
+      return ((_a = next[a3].at) != null ? _a : 0) - ((_b = next[b3].at) != null ? _b : 0);
+    }).slice(0, keys.length - limit);
+    for (const k4 of oldest)
+      delete next[k4];
+  }
+  return next;
+}
+
 // src/template/annotations.ts
 var CONTINUATION = /^\+\s*/;
 var CONTINUATION_SEPARATOR = " ... ";
@@ -91257,12 +91287,21 @@ function noteFolderForEntry(plugin, entry) {
     rememberFolderName(groupID, folderName);
   return folder;
 }
-async function fetchChildren(plugin, entry) {
+async function fetchChildren(plugin, entry, opts = {}) {
+  var _a;
   const key = entry == null ? void 0 : entry._zoteroKey;
   if (!key)
     return EMPTY_CHILDREN;
   const libraryID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : 1;
   const port = plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
+  const stable = indexedKeyFor(key, (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : null);
+  const version = typeof (entry == null ? void 0 : entry._version) === "number" ? entry._version : 0;
+  const cache2 = (_a = plugin.bibManager) == null ? void 0 : _a.childrenCache;
+  if (cache2 && !opts.skipCache && childrenCacheHit(cache2, stable, version)) {
+    const cached = readChildren(cache2, stable);
+    if (cached)
+      return cached;
+  }
   try {
     const [children, relatedKeys, liveTags] = await Promise.all([
       fetchItemChildrenNative(port, key, libraryID),
@@ -91270,15 +91309,20 @@ async function fetchChildren(plugin, entry) {
       fetchItemTagsNative(port, key, libraryID)
     ]);
     const base = liveTags === null ? children != null ? children : EMPTY_CHILDREN : { ...children != null ? children : EMPTY_CHILDREN, liveTags };
-    if (!relatedKeys.length)
-      return base;
-    const citekeys = await citekeysForItemKeys(port, relatedKeys, libraryID);
-    const relatedItems = relatedKeys.map((k4) => {
-      var _a;
-      const citationKey = (_a = citekeys.get(k4)) != null ? _a : null;
-      return { key: k4, citationKey, title: null };
-    });
-    return { ...base, relatedItems: relatedItems.filter((r3) => r3.citationKey) };
+    const result = relatedKeys.length ? await (async () => {
+      const citekeys = await citekeysForItemKeys(port, relatedKeys, libraryID);
+      const relatedItems = relatedKeys.map((k4) => {
+        var _a2;
+        const citationKey = (_a2 = citekeys.get(k4)) != null ? _a2 : null;
+        return { key: k4, citationKey, title: null };
+      });
+      return { ...base, relatedItems: relatedItems.filter((r3) => r3.citationKey) };
+    })() : base;
+    if (cache2) {
+      plugin.bibManager.childrenCache = writeChildren(cache2, stable, version, result, Date.now());
+      plugin.bibManager.scheduleChildrenCacheSave();
+    }
+    return result;
   } catch (e3) {
     console.warn("[sw:import] child fetch failed; importing metadata only", e3);
     return EMPTY_CHILDREN;
@@ -91394,7 +91438,9 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
   const templateSource = await readTemplate(plugin);
   if (!templateSource)
     return false;
-  const children = await fetchChildren(plugin, entry);
+  const children = await fetchChildren(plugin, entry, {
+    skipCache: opts.skipChildCache === true
+  });
   const groupID = (entry == null ? void 0 : entry.groupID) && entry.groupID !== 1 ? entry.groupID : null;
   const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
   const folder = noteFolderForEntry(plugin, entry);
@@ -95800,6 +95846,7 @@ var BibManager = class {
     this.recentKeys = {};
     this.globalRecentKeys = [];
     this.syncState = emptySyncState();
+    this.childrenCache = emptyChildrenCache();
     this.templateTimeline = { entries: [] };
     this.queryHistory = {};
     this.globalQueryHistory = [];
@@ -95828,6 +95875,7 @@ var BibManager = class {
     this.watchedBibPaths = new Set();
     this.globalWatchedBibPaths = new Set();
     this.scopedWatchedBibPaths = new Map();
+    this._childrenCacheTimer = null;
     this.warming = false;
     this.warmingSkipPDFs = false;
     this.warmingSkipLRU = false;
@@ -97240,6 +97288,34 @@ var BibManager = class {
     }
     return (h3 >>> 0).toString(16);
   }
+  async loadChildrenCache() {
+    try {
+      const raw = await app.vault.adapter.read((0, import_obsidian28.normalizePath)(`${SW_CACHE_DIR}/children-cache.json`));
+      const data = JSON.parse(raw);
+      if (data && typeof data === "object")
+        this.childrenCache = data;
+    } catch (e3) {
+    }
+  }
+  async saveChildrenCache() {
+    try {
+      const dir = (0, import_obsidian28.normalizePath)(SW_CACHE_DIR);
+      if (!await app.vault.adapter.exists(dir)) {
+        await app.vault.adapter.mkdir(dir);
+      }
+      await app.vault.adapter.write((0, import_obsidian28.normalizePath)(`${SW_CACHE_DIR}/children-cache.json`), JSON.stringify(this.childrenCache));
+    } catch (e3) {
+      console.warn("[sw] saveChildrenCache failed:", e3);
+    }
+  }
+  scheduleChildrenCacheSave() {
+    if (this._childrenCacheTimer != null)
+      return;
+    this._childrenCacheTimer = window.setTimeout(() => {
+      this._childrenCacheTimer = null;
+      void this.saveChildrenCache();
+    }, 2500);
+  }
   async loadTemplateHistory() {
     try {
       const raw = await app.vault.adapter.read((0, import_obsidian28.normalizePath)(`${SW_CACHE_DIR}/template-history.json`));
@@ -97553,7 +97629,8 @@ var BibManager = class {
     const entry = (_a = opts.stableKey ? this.entryForStableKey(opts.stableKey) : null) != null ? _a : this.bibCache.get(citekey);
     if (this.plugin.settings.useOwnNoteTemplate === true) {
       const ok = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
-        open: opts.open !== false
+        open: opts.open !== false,
+        skipChildCache: opts.skipChildCache === true
       });
       if (ok)
         return;
@@ -101673,6 +101750,7 @@ var ReferenceList = class extends import_obsidian41.Plugin {
     await this.bibManager.loadZLinks();
     await this.bibManager.loadRecentKeys();
     await this.bibManager.loadSyncState();
+    await this.bibManager.loadChildrenCache();
     await this.bibManager.loadTemplateHistory();
     this.api = {
       version: API_VERSION,
@@ -102470,7 +102548,8 @@ var ReferenceList = class extends import_obsidian41.Plugin {
     try {
       await this.bibManager.createLiteratureNote(citekey, file, {
         open: false,
-        stableKey: stable
+        stableKey: stable,
+        skipChildCache: (opts == null ? void 0 : opts.skipChildCache) === true
       });
       return { ok: true };
     } catch (e3) {
@@ -102605,7 +102684,10 @@ var ReferenceList = class extends import_obsidian41.Plugin {
     const updatedKeys = [];
     let skipped = 0;
     for (const { file, citekey } of targets) {
-      if (await this.updateLiteratureNote(file, { confirm: false })) {
+      if (await this.updateLiteratureNote(file, {
+        confirm: false,
+        skipChildCache: true
+      })) {
         updatedKeys.push(citekey);
       } else {
         skipped++;

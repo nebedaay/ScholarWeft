@@ -43,6 +43,11 @@ import {
   zotLitChoice,
   type ZotLitHandling,
 } from './template/note-lookup';
+import {
+  childrenCacheHit,
+  readChildren,
+  writeChildren,
+} from './template/children-cache';
 import { renderNote } from './template/render';
 import { getZotlitLiteratureFolder } from './zotlit';
 
@@ -134,12 +139,26 @@ function noteFolderForEntry(
  */
 export async function fetchChildren(
   plugin: ReferenceList,
-  entry: CachedEntry | undefined
+  entry: CachedEntry | undefined,
+  opts: { skipCache?: boolean } = {}
 ): Promise<RawZoteroChildren> {
   const key = entry?._zoteroKey;
   if (!key) return EMPTY_CHILDREN;
   const libraryID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : 1;
   const port = plugin.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
+
+  // USE WHAT WE HAVE: an item's children cannot have changed while its
+  // `_version` is unchanged, so do NOT re-fetch them. This is what makes a
+  // template-only update (or any re-render) pure CPU instead of three Zotero
+  // round trips per note. `skipCache` forces a fetch (a Zotero-driven update).
+  const stable = indexedKeyFor(key, entry?.groupID && entry.groupID !== 1 ? entry.groupID : null);
+  const version = typeof entry?._version === 'number' ? entry._version : 0;
+  const cache = plugin.bibManager?.childrenCache;
+  if (cache && !opts.skipCache && childrenCacheHit(cache, stable, version)) {
+    const cached = readChildren<RawZoteroChildren>(cache, stable);
+    if (cached) return cached;
+  }
+
   try {
     const [children, relatedKeys, liveTags] = await Promise.all([
       fetchItemChildrenNative(port, key, libraryID),
@@ -148,16 +167,30 @@ export async function fetchChildren(
     ]);
     const base: RawZoteroChildren =
       liveTags === null ? (children ?? EMPTY_CHILDREN) : { ...(children ?? EMPTY_CHILDREN), liveTags };
-    if (!relatedKeys.length) return base;
-
-    const citekeys = await citekeysForItemKeys(port, relatedKeys, libraryID);
-    const relatedItems: NoteContextRelatedItem[] = relatedKeys.map((k) => {
-      const citationKey = citekeys.get(k) ?? null;
-      // A related item with no citekey can't be linked; keep it out of the list
-      // rather than emitting a broken `[[@]]`.
-      return { key: k, citationKey, title: null as string | null };
-    });
-    return { ...base, relatedItems: relatedItems.filter((r) => r.citationKey) };
+    const result: RawZoteroChildren = relatedKeys.length
+      ? await (async () => {
+          const citekeys = await citekeysForItemKeys(port, relatedKeys, libraryID);
+          const relatedItems: NoteContextRelatedItem[] = relatedKeys.map((k) => {
+            const citationKey = citekeys.get(k) ?? null;
+            // A related item with no citekey can't be linked; keep it out of the
+            // list rather than emitting a broken `[[@]]`.
+            return { key: k, citationKey, title: null as string | null };
+          });
+          return { ...base, relatedItems: relatedItems.filter((r) => r.citationKey) };
+        })()
+      : base;
+    // Remember it so the NEXT render of this unchanged item fetches nothing.
+    if (cache) {
+      plugin.bibManager.childrenCache = writeChildren(
+        cache,
+        stable,
+        version,
+        result,
+        Date.now()
+      );
+      plugin.bibManager.scheduleChildrenCacheSave();
+    }
+    return result;
   } catch (e) {
     console.warn('[sw:import] child fetch failed; importing metadata only', e);
     return EMPTY_CHILDREN;
@@ -343,13 +376,20 @@ export async function createOrUpdateOwnNote(
   citekey: string,
   entry: CachedEntry | undefined,
   sourceFile: TFile,
-  opts: { open?: boolean } = {}
+  opts: { open?: boolean; skipChildCache?: boolean } = {}
 ): Promise<boolean> {
   const app = plugin.app;
   const templateSource = await readTemplate(plugin);
   if (!templateSource) return false;
 
-  const children = await fetchChildren(plugin, entry);
+  // PRINCIPLE — use what we already have. Children are re-fetched ONLY when the
+  // item's `_version` changed (a cache miss); a template update or any re-render
+  // of an unchanged item fetches NOTHING. A caller that KNOWS the item changed
+  // (a Zotero-driven update) sets `skipChildCache` to force a fetch even if the
+  // version somehow matches.
+  const children = await fetchChildren(plugin, entry, {
+    skipCache: opts.skipChildCache === true,
+  });
   const groupID = entry?.groupID && entry.groupID !== 1 ? entry.groupID : null;
   const dataDir = resolveZoteroDataDir(plugin.settings.zoteroDataDir);
   const folder = noteFolderForEntry(plugin, entry);

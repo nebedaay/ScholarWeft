@@ -309,6 +309,8 @@ export default class ReferenceList extends Plugin {
     await this.bibManager.loadRecentKeys();
     // Restore the Zotero child-delta watermark for auto note-update.
     await this.bibManager.loadSyncState();
+    // Restore the fetched-children cache (skip re-fetching unchanged items).
+    await this.bibManager.loadChildrenCache();
     // Restore the template-hash timeline.
     await this.bibManager.loadTemplateHistory();
     this.api = {
@@ -1472,7 +1474,7 @@ export default class ReferenceList extends Plugin {
    */
   async updateLiteratureNoteResult(
     file: TFile,
-    opts?: { confirm?: boolean }
+    opts?: { confirm?: boolean; skipChildCache?: boolean }
   ): Promise<UpdateResult> {
     const stable =
       this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
@@ -1493,6 +1495,7 @@ export default class ReferenceList extends Plugin {
       await this.bibManager.createLiteratureNote(citekey, file, {
         open: false,
         stableKey: stable,
+        skipChildCache: opts?.skipChildCache === true,
       });
       return { ok: true };
     } catch (e) {
@@ -1502,7 +1505,10 @@ export default class ReferenceList extends Plugin {
   }
 
   /** Boolean convenience wrapper around {@link updateLiteratureNoteResult}. */
-  async updateLiteratureNote(file: TFile, opts?: { confirm?: boolean }): Promise<boolean> {
+  async updateLiteratureNote(
+    file: TFile,
+    opts?: { confirm?: boolean; skipChildCache?: boolean }
+  ): Promise<boolean> {
     return (await this.updateLiteratureNoteResult(file, opts)).ok;
   }
 
@@ -1681,7 +1687,14 @@ export default class ReferenceList extends Plugin {
     const updatedKeys: string[] = [];
     let skipped = 0;
     for (const { file, citekey } of targets) {
-      if (await this.updateLiteratureNote(file, { confirm: false })) {
+      // Zotero told us this item CHANGED, so fetch its children even if the
+      // cached snapshot's version happens to match.
+      if (
+        await this.updateLiteratureNote(file, {
+          confirm: false,
+          skipChildCache: true,
+        })
+      ) {
         updatedKeys.push(citekey);
       } else {
         skipped++;

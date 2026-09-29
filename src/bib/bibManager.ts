@@ -73,6 +73,10 @@ import {
   type TemplateTimeline,
 } from 'src/template/template-history';
 import {
+  emptyChildrenCache,
+  type ChildrenCacheData,
+} from 'src/template/children-cache';
+import {
   recordQuery,
   recordRecentKey,
   reconcileKeys,
@@ -619,6 +623,10 @@ export class BibManager {
   /** Zotero child-delta watermark + attachment→item map for auto note-update.
    *  Persisted to `.scholar-weft/sync-state.json`. */
   syncState: SyncState = emptySyncState();
+
+  /** Fetched children per item key + `_version` (`.scholar-weft/children-cache.json`),
+   *  so re-rendering an UNCHANGED item never re-fetches attachments/annotations. */
+  childrenCache: ChildrenCacheData = emptyChildrenCache();
 
   /** Template-hash timeline (`.scholar-weft/template-history.json`). */
   templateTimeline: TemplateTimeline = { entries: [] };
@@ -2798,6 +2806,46 @@ export class BibManager {
     return (h >>> 0).toString(16);
   }
 
+  /** Load the fetched-children cache (once at startup). */
+  async loadChildrenCache(): Promise<void> {
+    try {
+      const raw = await app.vault.adapter.read(
+        normalizePath(`${SW_CACHE_DIR}/children-cache.json`)
+      );
+      const data = JSON.parse(raw);
+      if (data && typeof data === 'object') this.childrenCache = data;
+    } catch {
+      /* first run */
+    }
+  }
+
+  /** Persist the fetched-children cache (debounced by the caller). */
+  async saveChildrenCache(): Promise<void> {
+    try {
+      const dir = normalizePath(SW_CACHE_DIR);
+      if (!(await app.vault.adapter.exists(dir))) {
+        await app.vault.adapter.mkdir(dir);
+      }
+      await app.vault.adapter.write(
+        normalizePath(`${SW_CACHE_DIR}/children-cache.json`),
+        JSON.stringify(this.childrenCache)
+      );
+    } catch (e) {
+      console.warn('[sw] saveChildrenCache failed:', e);
+    }
+  }
+
+  private _childrenCacheTimer: number | null = null;
+
+  /** Debounced persist of the fetched-children cache. */
+  scheduleChildrenCacheSave(): void {
+    if (this._childrenCacheTimer != null) return;
+    this._childrenCacheTimer = window.setTimeout(() => {
+      this._childrenCacheTimer = null;
+      void this.saveChildrenCache();
+    }, 2500);
+  }
+
   /** Load the template timeline (once at startup). */
   async loadTemplateHistory(): Promise<void> {
     try {
@@ -3252,7 +3300,7 @@ export class BibManager {
   async createLiteratureNote(
     citekey: string,
     sourceFile: TFile,
-    opts: { open?: boolean; stableKey?: string } = {}
+    opts: { open?: boolean; stableKey?: string; skipChildCache?: boolean } = {}
   ) {
     // Prefer the note's OWN item (by `zotero-key`) over the citekey slot, so a
     // duplicate citekey in another library cannot decide the render.
@@ -3265,6 +3313,7 @@ export class BibManager {
     if (this.plugin.settings.useOwnNoteTemplate === true) {
       const ok = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
         open: opts.open !== false,
+        skipChildCache: opts.skipChildCache === true,
       });
       if (ok) return;
       console.warn('[sw:import] own note template unavailable; using the fallback path');
