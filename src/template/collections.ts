@@ -41,6 +41,30 @@ export function collectionTokens(
 }
 
 /**
+ * The token of a whole LIBRARY. A library is a top-level node like a collection
+ * — every item in it is a member — so switching it off hides its uncategorised
+ * items as well as (via propagation) everything in its collections.
+ */
+export function libraryToken(groupID: number): string {
+  return `lib:${groupID}`;
+}
+
+/**
+ * The tokens that govern whether an item is visible: the collections it is
+ * DIRECTLY in, or — when it is in none — its library. Zotero's
+ * `data.collections` lists direct membership only, so an item's home is its
+ * deepest collection; the library node owns the items that have no collection.
+ * An item shows when at least one of these tokens is ON.
+ */
+export function membershipTokens(
+  groupID: number,
+  keys: readonly string[] | null | undefined
+): string[] {
+  const cols = collectionTokens(groupID, keys);
+  return cols.length ? cols : [libraryToken(groupID)];
+}
+
+/**
  * Build the display nodes from a library's raw collections: each gets its full
  * "Parent > Child" path and depth, sorted by path. A missing parent (or a
  * parent cycle) just truncates the path rather than looping.

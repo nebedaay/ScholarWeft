@@ -21081,6 +21081,13 @@ function collectionTokens(groupID, keys) {
     return [];
   return keys.filter((k4) => typeof k4 === "string" && !!k4).map((k4) => collectionToken(groupID, k4));
 }
+function libraryToken(groupID) {
+  return `lib:${groupID}`;
+}
+function membershipTokens(groupID, keys) {
+  const cols = collectionTokens(groupID, keys);
+  return cols.length ? cols : [libraryToken(groupID)];
+}
 function buildCollectionNodes(raw, groupID) {
   const byKey = new Map();
   for (const c3 of raw)
@@ -21842,7 +21849,11 @@ var init_addLiteratureNotesModal = __esm({
         wrap.empty();
         const nodes = this.plugin.bibManager.collectionNodes;
         const off = new Set(this.filters.excludeCollections);
-        const allTokens = nodes.map((n2) => collectionToken(n2.groupID, n2.key));
+        const groups = (_c = this.plugin.settings.zoteroGroups) != null ? _c : [];
+        const allTokens = [
+          ...groups.map((g4) => libraryToken(g4.id)),
+          ...nodes.map((n2) => collectionToken(n2.groupID, n2.key))
+        ];
         const bar = wrap.createDiv({ cls: "sw-add-notes__col-toolbar" });
         const allBtn = bar.createEl("button", {
           cls: "sw-add-notes__toggle",
@@ -21858,12 +21869,14 @@ var init_addLiteratureNotesModal = __esm({
         noneBtn.addEventListener("click", () => this.setCollections(allTokens, false));
         const list = wrap.createDiv({ cls: "sw-add-notes__collection-list" });
         this.collectionListEl = list;
-        for (const group of (_c = this.plugin.settings.zoteroGroups) != null ? _c : []) {
+        for (const group of groups) {
           const inGroup = nodes.filter((n2) => n2.groupID === group.id);
-          if (!inGroup.length)
-            continue;
-          const groupTokens = inGroup.map((n2) => collectionToken(n2.groupID, n2.key));
-          const groupOff = groupTokens.length > 0 && groupTokens.every((tk) => off.has(tk));
+          const libToken = libraryToken(group.id);
+          const groupTokens = [
+            libToken,
+            ...inGroup.map((n2) => collectionToken(n2.groupID, n2.key))
+          ];
+          const groupOff = off.has(libToken);
           const heading = list.createDiv({
             cls: "sw-add-notes__library-heading",
             text: group.name || `Group ${group.id}`
@@ -21935,7 +21948,7 @@ var init_addLiteratureNotesModal = __esm({
         const stable = this.stableKeyFor(entry);
         const children = stable ? readChildren(this.plugin.bibManager.childrenCache, stable) : null;
         const groupID = entry.groupID && entry.groupID !== 1 ? entry.groupID : 1;
-        const collections = collectionTokens(groupID, entry._collections);
+        const collections = membershipTokens(groupID, entry._collections);
         return flagsFromChildren(children, this.litNotes.has(entry.id), entry.type, collections);
       }
       orderMatches(entries, searching) {

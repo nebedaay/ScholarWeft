@@ -3,6 +3,8 @@ import {
   collectionToken,
   collectionTokens,
   descendantTokens,
+  libraryToken,
+  membershipTokens,
 } from '../collections';
 
 describe('buildCollectionNodes()', () => {
@@ -82,6 +84,18 @@ describe('collectionTokens()', () => {
     expect(collectionTokens(1, undefined)).toEqual([]);
     expect(collectionTokens(1, null)).toEqual([]);
     expect(collectionTokens(1, ['', 'x'])).toEqual(['1:x']);
+  });
+});
+
+describe('membershipTokens()', () => {
+  it('uses the library as the home for an item in NO collection', () => {
+    expect(libraryToken(2)).toBe('lib:2');
+    expect(membershipTokens(1, [])).toEqual(['lib:1']);
+    expect(membershipTokens(1, undefined)).toEqual(['lib:1']);
+  });
+
+  it('uses the direct collections when it is in one or more', () => {
+    expect(membershipTokens(1, ['aa', 'bb'])).toEqual(['1:aa', '1:bb']);
   });
 });
 

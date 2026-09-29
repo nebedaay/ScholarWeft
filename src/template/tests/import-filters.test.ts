@@ -98,9 +98,18 @@ describe('passesImportFilters()', () => {
     expect(passesImportFilters(flags({ collections: ['1:aa', '1:bb'] }), f)).toBe(true);
   });
 
-  it('leaves items in no collection alone (nothing to switch off)', () => {
-    const f: ImportFilters = { ...base, excludeCollections: ['1:aa', '1:bb'] };
-    expect(passesImportFilters(flags({ collections: [] }), f)).toBe(true);
+  it('an uncategorised item follows its LIBRARY node', () => {
+    // With no collection, the library is its membership token.
+    expect(passesImportFilters(flags({ collections: ['lib:1'] }), base)).toBe(true);
+    const libOff: ImportFilters = { ...base, excludeCollections: ['lib:1'] };
+    expect(passesImportFilters(flags({ collections: ['lib:1'] }), libOff)).toBe(false);
+  });
+
+  it('switching a library off does not hide its collection items', () => {
+    // Library off + collection on → the collection's items are shown (this is
+    // what lets one collection be isolated inside a switched-off library).
+    const isolate: ImportFilters = { ...base, excludeCollections: ['lib:1'] };
+    expect(passesImportFilters(flags({ collections: ['1:aa'] }), isolate)).toBe(true);
   });
 
   it('scopes excluded collections to their library', () => {

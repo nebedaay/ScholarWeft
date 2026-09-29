@@ -19,7 +19,12 @@ import {
 } from '../template/import-order';
 import { readChildren } from '../template/children-cache';
 import type { RawZoteroChildren } from '../template/children';
-import { collectionToken, collectionTokens, descendantTokens } from '../template/collections';
+import {
+  collectionToken,
+  descendantTokens,
+  libraryToken,
+  membershipTokens,
+} from '../template/collections';
 import type { CollectionNode } from '../template/collections';
 import { excerptForResult } from '../template/search-excerpt';
 import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
@@ -385,7 +390,12 @@ export class AddLiteratureNotesModal extends Modal {
 
     const nodes = this.plugin.bibManager.collectionNodes;
     const off = new Set(this.filters.excludeCollections);
-    const allTokens = nodes.map((n) => collectionToken(n.groupID, n.key));
+    const groups = this.plugin.settings.zoteroGroups ?? [];
+    // Every node that can be switched: each library plus every collection.
+    const allTokens = [
+      ...groups.map((g) => libraryToken(g.id)),
+      ...nodes.map((n) => collectionToken(n.groupID, n.key)),
+    ];
 
     // All / None, so a single library (or one collection) can be isolated
     // without switching every other collection off by hand.
@@ -409,15 +419,17 @@ export class AddLiteratureNotesModal extends Modal {
     const list = wrap.createDiv({ cls: 'sw-add-notes__collection-list' });
     this.collectionListEl = list;
 
-    for (const group of this.plugin.settings.zoteroGroups ?? []) {
+    for (const group of groups) {
       const inGroup = nodes.filter((n) => n.groupID === group.id);
-      if (!inGroup.length) continue;
-      const groupTokens = inGroup.map((n) => collectionToken(n.groupID, n.key));
-      const groupOff =
-        groupTokens.length > 0 && groupTokens.every((tk) => off.has(tk));
+      const libToken = libraryToken(group.id);
+      // A library's node hides its uncategorised items too, so it owns the
+      // library token as well as every collection token.
+      const groupTokens = [
+        libToken,
+        ...inGroup.map((n) => collectionToken(n.groupID, n.key)),
+      ];
+      const groupOff = off.has(libToken);
 
-      // The heading toggles the WHOLE library, so one library can be turned off
-      // (and another isolated) in a single click.
       const heading = list.createDiv({
         cls: 'sw-add-notes__library-heading',
         text: group.name || `Group ${group.id}`,
@@ -511,7 +523,7 @@ export class AddLiteratureNotesModal extends Modal {
       ? readChildren<RawZoteroChildren>(this.plugin.bibManager.childrenCache, stable)
       : null;
     const groupID = entry.groupID && entry.groupID !== 1 ? entry.groupID : 1;
-    const collections = collectionTokens(
+    const collections = membershipTokens(
       groupID,
       (entry as { _collections?: string[] })._collections
     );
