@@ -107,6 +107,20 @@ export const normalizeDiacritics = (s: string): string =>
   s.normalize('NFD').replace(/\p{Mn}/gu, '');
 
 /**
+ * A copy of a CSL entry with its external-link fields removed. citeproc renders
+ * whatever variables a style asks for, so the only way to omit a URL/DOI is to
+ * not offer them (a style's group or condition on the variable then renders
+ * nothing). Used for search-result references, where a clickable URL is noise.
+ * Non-mutating, so the shared `bibCache` keeps its fields for every consumer.
+ */
+export function stripUrlFields(entry: PartialCSLEntry): PartialCSLEntry {
+  const copy = { ...entry } as Record<string, unknown>;
+  delete copy.URL;
+  delete copy.DOI;
+  return copy as unknown as PartialCSLEntry;
+}
+
+/**
  * Convert a CSL bibliography entry's HTML (as citeproc emits it) to inline
  * markdown for the export pipeline. Emphasis is preserved (`<i>`/`<em>` →
  * `*…*`, `<b>`/`<strong>` → `**…**`); every other tag (links, spans, columns,
@@ -2142,7 +2156,7 @@ export class BibManager {
    */
   async renderEntries(
     keys: string[],
-    opts: { style?: string; lang?: string } = {}
+    opts: { style?: string; lang?: string; suppressUrls?: boolean } = {}
   ): Promise<Map<string, string>> {
     const out = new Map<string, string>();
     const resolved = [...new Set(keys)].filter((k) => this.bibCache.has(k));
@@ -2151,10 +2165,30 @@ export class BibManager {
     await this.plugin.initPromise.promise;
     await this.initPromise.promise;
 
-    const style = this.resolveRenderStyle(
-      opts.style ?? this.plugin.settings.cslStylePath ?? this.plugin.settings.cslStyleURL
-    );
     const lang = opts.lang ?? this.plugin.settings.cslLang ?? 'en-US';
+    const requestedStyle =
+      opts.style ?? this.plugin.settings.cslStylePath ?? this.plugin.settings.cslStyleURL;
+    let style = this.resolveRenderStyle(requestedStyle);
+    if (!this.styleCache.has(style)) {
+      // A bare style name resolves to a FILE PATH that was never loaded under
+      // that key (`buildEngine` reads XML from `styleCache`), which would throw
+      // and silently fall back to the global engine — losing any per-call
+      // options. Prefer the key the global engine was actually built with.
+      const keyedStyle =
+        this.plugin.settings.cslStylePath ||
+        this.plugin.settings.cslStyleURL ||
+        DEFAULT_CSL_STYLE;
+      if (this.styleCache.has(keyedStyle)) style = keyedStyle;
+    }
+
+    // citeproc has no "omit URL" switch (only `wrap_url_and_doi`, which makes
+    // links clickable). Suppressing them means NOT offering the `URL`/`DOI`
+    // variables to this throwaway engine — a style's group/condition then
+    // renders nothing for them. Only the copy handed to the engine is stripped;
+    // the shared bibCache keeps its fields for every other consumer.
+    const bibSource = opts.suppressUrls
+      ? new Map(resolved.map((k) => [k, stripUrlFields(this.bibCache.get(k)!)] as const))
+      : this.bibCache;
 
     let engine: any;
     try {
@@ -2163,7 +2197,7 @@ export class BibManager {
         this.langCache,
         style,
         this.styleCache,
-        this.bibCache
+        bibSource
       );
     } catch {
       engine = this.engine;
@@ -2188,18 +2222,35 @@ export class BibManager {
   }
 
   /**
-   * The formatted entry for `key`, in the style a NOTE renders with (its scoped
-   * style/language when given, else the global one). Context-free: use this for
-   * any UI that shows an arbitrary library item rather than a note's own
-   * citations (the import dialogue).
+   * The formatted entries for `keys` as DOM elements, for any UI that shows
+   * arbitrary library items rather than a note's own citations (the import
+   * dialogue).
+   *
+   * This returns the SAME citeproc HTML the sidebar and in-body references
+   * render — only the `csl-entry` node, without the sidebar's wrapper/button
+   * row — so emphasis (an italicised title), small caps, links and every other
+   * CSL rule render exactly as they do elsewhere. Context-free: the items need
+   * not be cited in any note. Bulk, like `renderReferenceMarkdown`: one
+   * throwaway engine renders the whole batch.
+   *
+   * `suppressUrls` drops the URL/DOI fields for this batch (search-result rows
+   * have no use for a click-through link).
    */
-  async renderEntryForDisplay(
-    key: string,
-    opts: { style?: string; lang?: string } = {}
-  ): Promise<string> {
-    const map = await this.renderEntries([key], opts);
-    const html = map.get(key);
-    return html ? cslEntryHtmlToMarkdown(html).trim() : '';
+  async renderEntryElements(
+    keys: string[],
+    opts: { style?: string; lang?: string; suppressUrls?: boolean } = {}
+  ): Promise<Map<string, HTMLElement>> {
+    const entries = await this.renderEntries(keys, opts);
+    const out = new Map<string, HTMLElement>();
+    for (const [key, html] of entries) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const el = (doc.body.querySelector('.csl-entry') ??
+        doc.body.firstElementChild) as HTMLElement | null;
+      if (!el) continue;
+      el.dataset.citekey = key;
+      out.set(key, el);
+    }
+    return out;
   }
 
   getBibForCiteKey(file: TFile, key: string) {

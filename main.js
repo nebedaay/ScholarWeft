@@ -243,6 +243,19 @@ var init_en = __esm({
       "Items with a PDF or snapshot": "Items with a PDF or snapshot",
       "Items with annotations": "Items with annotations",
       "Items without a literature note": "Items without a literature note",
+      "Item types": "Item types",
+      Books: "Books",
+      Articles: "Articles",
+      "Book sections": "Book sections",
+      "Newspaper/magazine articles": "Newspaper/magazine articles",
+      "Web pages": "Web pages",
+      Other: "Other",
+      "Order by": "Order by",
+      "Ranked search": "Ranked search",
+      "Author, title, year": "Author, title, year",
+      "Date added": "Date added",
+      Ascending: "Ascending",
+      Descending: "Descending",
       "Select all shown": "Select all shown",
       Clear: "Clear",
       "Add notes": "Add notes",
@@ -1449,39 +1462,39 @@ var require_moo = __commonJS({
           return this._token(error, buffer.slice(index, buffer.length), index);
         }
         var group = this._getGroup(match2);
-        var text = match2[0];
+        var text2 = match2[0];
         if (error.fallback && match2.index !== index) {
           this.queuedGroup = group;
-          this.queuedText = text;
+          this.queuedText = text2;
           return this._token(error, buffer.slice(index, match2.index), index);
         }
-        return this._token(group, text, index);
+        return this._token(group, text2, index);
       };
-      Lexer.prototype._token = function(group, text, offset) {
+      Lexer.prototype._token = function(group, text2, offset) {
         var lineBreaks = 0;
         if (group.lineBreaks) {
           var matchNL = /\n/g;
           var nl = 1;
-          if (text === "\n") {
+          if (text2 === "\n") {
             lineBreaks = 1;
           } else {
-            while (matchNL.exec(text)) {
+            while (matchNL.exec(text2)) {
               lineBreaks++;
               nl = matchNL.lastIndex;
             }
           }
         }
         var token = {
-          type: typeof group.type === "function" && group.type(text) || group.defaultType,
-          value: typeof group.value === "function" ? group.value(text) : text,
-          text,
+          type: typeof group.type === "function" && group.type(text2) || group.defaultType,
+          value: typeof group.value === "function" ? group.value(text2) : text2,
+          text: text2,
           toString: tokenToString,
           offset,
           lineBreaks,
           line: this.line,
           col: this.col
         };
-        var size = text.length;
+        var size = text2.length;
         this.index += size;
         this.line += lineBreaks;
         if (lineBreaks !== 0) {
@@ -1518,11 +1531,11 @@ var require_moo = __commonJS({
       }
       Lexer.prototype.formatError = function(token, message) {
         if (token == null) {
-          var text = this.buffer.slice(this.index);
+          var text2 = this.buffer.slice(this.index);
           var token = {
-            text,
+            text: text2,
             offset: this.index,
-            lineBreaks: text.indexOf("\n") === -1 ? 0 : 1,
+            lineBreaks: text2.indexOf("\n") === -1 ? 0 : 1,
             line: this.line,
             col: this.col
           };
@@ -4078,7 +4091,7 @@ var require_citeproc_commonjs = __commonJS({
       return xml;
     };
     CSL2.XmlDOM.prototype.getStyleId = function(myxml, styleName) {
-      var text = "";
+      var text2 = "";
       var tagName = "id";
       if (styleName) {
         tagName = "title";
@@ -4088,15 +4101,15 @@ var require_citeproc_commonjs = __commonJS({
         node = node.item(0);
       }
       if (node) {
-        text = node.textContent;
+        text2 = node.textContent;
       }
-      if (!text) {
-        text = node.innerText;
+      if (!text2) {
+        text2 = node.innerText;
       }
-      if (!text) {
-        text = node.innerHTML;
+      if (!text2) {
+        text2 = node.innerHTML;
       }
-      return text;
+      return text2;
     };
     CSL2.XmlDOM.prototype.children = function(myxml) {
       var children, pos, len, ret;
@@ -19001,11 +19014,11 @@ var require_citeproc_commonjs = __commonJS({
     CSL2.Output.Formats = function() {
     };
     CSL2.Output.Formats.prototype.html = {
-      "text_escape": function(text) {
-        if (!text) {
-          text = "";
+      "text_escape": function(text2) {
+        if (!text2) {
+          text2 = "";
         }
-        return text.replace(/&/g, "&#38;").replace(/</g, "&#60;").replace(/>/g, "&#62;").replace(/\s\s/g, "\xA0 ").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
+        return text2.replace(/&/g, "&#38;").replace(/</g, "&#60;").replace(/>/g, "&#62;").replace(/\s\s/g, "\xA0 ").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
           return "<sup>" + CSL2.SUPERSCRIPTS[aChar] + "</sup>";
         });
       },
@@ -19098,11 +19111,11 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL2.Output.Formats.prototype.text = {
-      "text_escape": function(text) {
-        if (!text) {
-          text = "";
+      "text_escape": function(text2) {
+        if (!text2) {
+          text2 = "";
         }
-        return text;
+        return text2;
       },
       "bibstart": "",
       "bibend": "",
@@ -19164,11 +19177,11 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL2.Output.Formats.prototype.rtf = {
-      "text_escape": function(text) {
-        if (!text) {
-          text = "";
+      "text_escape": function(text2) {
+        if (!text2) {
+          text2 = "";
         }
-        return text.replace(/([\\{}])/g, "\\$1").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
+        return text2.replace(/([\\{}])/g, "\\$1").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
           return "\\super " + CSL2.SUPERSCRIPTS[aChar] + "\\nosupersub{}";
         }).replace(/[\u007F-\uFFFF]/g, function(aChar) {
           return "\\uc0\\u" + aChar.charCodeAt(0).toString() + "{}";
@@ -19247,11 +19260,11 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL2.Output.Formats.prototype.asciidoc = {
-      "text_escape": function(text) {
-        if (!text) {
-          text = "";
+      "text_escape": function(text2) {
+        if (!text2) {
+          text2 = "";
         }
-        return text.replace("*", "pass:[*]", "g").replace("_", "pass:[_]", "g").replace("#", "pass:[#]", "g").replace("^", "pass:[^]", "g").replace("~", "pass:[~]", "g").replace("[[", "pass:[[[]", "g").replace("  ", "&#160; ", "g").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
+        return text2.replace("*", "pass:[*]", "g").replace("_", "pass:[_]", "g").replace("#", "pass:[#]", "g").replace("^", "pass:[^]", "g").replace("~", "pass:[~]", "g").replace("[[", "pass:[[[]", "g").replace("  ", "&#160; ", "g").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
           return "^" + CSL2.SUPERSCRIPTS[aChar] + "^";
         });
       },
@@ -19334,11 +19347,11 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL2.Output.Formats.prototype.fo = {
-      "text_escape": function(text) {
-        if (!text) {
-          text = "";
+      "text_escape": function(text2) {
+        if (!text2) {
+          text2 = "";
         }
-        return text.replace(/&/g, "&#38;").replace(/</g, "&#60;").replace(/>/g, "&#62;").replace("  ", "&#160; ", "g").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
+        return text2.replace(/&/g, "&#38;").replace(/</g, "&#60;").replace(/>/g, "&#62;").replace("  ", "&#160; ", "g").replace(CSL2.SUPERSCRIPTS_REGEXP, function(aChar) {
           return '<fo:inline vertical-align="super">' + CSL2.SUPERSCRIPTS[aChar] + "</fo:inline>";
         });
       },
@@ -19430,11 +19443,11 @@ var require_citeproc_commonjs = __commonJS({
       }
     };
     CSL2.Output.Formats.prototype.latex = {
-      "text_escape": function(text) {
-        if (!text) {
-          text = "";
+      "text_escape": function(text2) {
+        if (!text2) {
+          text2 = "";
         }
-        return text;
+        return text2;
       },
       "bibstart": "\\begin{thebibliography}{4}",
       "bibend": "\\end{thebibliography}",
@@ -21042,22 +21055,22 @@ function excerptForResult(item, queryTerms3) {
   var _a;
   return (_a = excerptsForResult(item, queryTerms3)[0]) != null ? _a : null;
 }
-function tokens(text) {
+function tokens(text2) {
   const out = [];
   const re = /\S+/g;
   let m3;
-  while ((m3 = re.exec(text)) !== null)
+  while ((m3 = re.exec(text2)) !== null)
     out.push({ word: m3[0], start: m3.index });
   return out;
 }
 function norm3(s3) {
   return s3.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
-function normaliseWithMap(text) {
+function normaliseWithMap(text2) {
   let out = "";
   const map = [];
-  for (let i3 = 0; i3 < text.length; i3++) {
-    const ch = text[i3];
+  for (let i3 = 0; i3 < text2.length; i3++) {
+    const ch = text2[i3];
     const n2 = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     for (let k4 = 0; k4 < n2.length; k4++) {
       out += n2[k4];
@@ -21066,11 +21079,11 @@ function normaliseWithMap(text) {
   }
   return { text: out, map };
 }
-function findTermIn(text, term, from) {
+function findTermIn(text2, term, from) {
   const needle = norm3(term);
   if (!needle)
     return null;
-  const source = text.slice(from);
+  const source = text2.slice(from);
   const { text: normalised, map } = normaliseWithMap(source);
   const at = normalised.indexOf(needle);
   if (at === -1)
@@ -21078,14 +21091,14 @@ function findTermIn(text, term, from) {
   const lastIndex = Math.min(at + needle.length - 1, map.length - 1);
   const start = from + map[at];
   let end = from + map[lastIndex] + 1;
-  while (end < text.length && /[\u0300-\u036f]/.test(text[end]))
+  while (end < text2.length && /[\u0300-\u036f]/.test(text2[end]))
     end++;
   if (end <= start)
     return null;
   return { start, length: end - start };
 }
-function findTermSpans(text, terms) {
-  if (!text || terms.length === 0)
+function findTermSpans(text2, terms) {
+  if (!text2 || terms.length === 0)
     return [];
   const found = [];
   for (const term of terms) {
@@ -21093,14 +21106,14 @@ function findTermSpans(text, terms) {
       continue;
     let from = 0;
     for (; ; ) {
-      const hit = findTermIn(text, term, from);
+      const hit = findTermIn(text2, term, from);
       if (!hit)
         break;
       found.push(hit);
       from = hit.start + Math.max(hit.length, 1);
     }
   }
-  const sorted = found.filter((s3) => s3.length > 0 && s3.start + s3.length <= text.length).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
+  const sorted = found.filter((s3) => s3.length > 0 && s3.start + s3.length <= text2.length).sort((a3, b3) => a3.start - b3.start || b3.length - a3.length);
   const out = [];
   for (const s3 of sorted) {
     const prev = out[out.length - 1];
@@ -21112,21 +21125,21 @@ function findTermSpans(text, terms) {
   }
   return out;
 }
-function buildExcerpts(text, terms, opts = {}) {
+function buildExcerpts(text2, terms, opts = {}) {
   var _a, _b, _c;
-  if (!text)
+  if (!text2)
     return [];
   const maxLines = (_a = opts.maxLines) != null ? _a : 2;
   const width = (_b = opts.width) != null ? _b : EXCERPT_WIDTH;
   const context = (_c = opts.contextWords) != null ? _c : CONTEXT_WORDS;
-  const words2 = tokens(text);
+  const words2 = tokens(text2);
   if (words2.length === 0)
     return [];
   const spans = [];
   for (const term of terms) {
     if (!term)
       continue;
-    const hit = findTermIn(text, term, 0);
+    const hit = findTermIn(text2, term, 0);
     if (!hit)
       continue;
     const first = words2.findIndex((w4) => w4.start >= hit.start);
@@ -21231,6 +21244,66 @@ var init_search_excerpt = __esm({
   }
 });
 
+// src/template/highlight.ts
+function matchEl(doc, text2) {
+  const strong = doc.createElement("strong");
+  strong.className = MATCH_CLASS;
+  strong.textContent = text2;
+  return strong;
+}
+function appendHighlighted(el, text2, terms) {
+  const spans = findTermSpans(text2, terms);
+  if (spans.length === 0) {
+    el.append(text2);
+    return;
+  }
+  const doc = el.ownerDocument;
+  let at = 0;
+  for (const s3 of spans) {
+    if (s3.start > at)
+      el.append(text2.slice(at, s3.start));
+    el.append(matchEl(doc, text2.slice(s3.start, s3.start + s3.length)));
+    at = s3.start + s3.length;
+  }
+  if (at < text2.length)
+    el.append(text2.slice(at));
+}
+function highlightMatchesIn(root, terms) {
+  var _a;
+  if (terms.length === 0)
+    return;
+  const doc = root.ownerDocument;
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  let node;
+  while (node = walker.nextNode())
+    textNodes.push(node);
+  for (const textNode of textNodes) {
+    const text2 = (_a = textNode.textContent) != null ? _a : "";
+    const spans = findTermSpans(text2, terms);
+    if (spans.length === 0)
+      continue;
+    const frag = doc.createDocumentFragment();
+    let at = 0;
+    for (const s3 of spans) {
+      if (s3.start > at)
+        frag.append(text2.slice(at, s3.start));
+      frag.append(matchEl(doc, text2.slice(s3.start, s3.start + s3.length)));
+      at = s3.start + s3.length;
+    }
+    if (at < text2.length)
+      frag.append(text2.slice(at));
+    textNode.replaceWith(frag);
+  }
+}
+var MATCH_CLASS;
+var init_highlight = __esm({
+  "src/template/highlight.ts"() {
+    init_search_excerpt();
+    MATCH_CLASS = "sw-suggest-match";
+  }
+});
+
 // src/template/note-format.ts
 function detectNoteFormat(source, hasZoteroKey) {
   if (source.includes(SW_MANAGED_OPEN) || source.includes(SW_MANAGED_CLOSE)) {
@@ -21262,15 +21335,20 @@ var init_note_format = __esm({
 });
 
 // src/template/import-filters.ts
+function typeGroupOf(type) {
+  var _a;
+  return (_a = CSL_TYPE_TO_GROUP[type != null ? type : ""]) != null ? _a : "other";
+}
 function defaultFilters() {
   return {
     hasNotes: false,
     hasAttachment: false,
     hasAnnotations: false,
-    withoutLitNote: true
+    withoutLitNote: true,
+    types: []
   };
 }
-function flagsFromChildren(children, hasLitNote) {
+function flagsFromChildren(children, hasLitNote, type) {
   var _a, _b, _c, _d, _e;
   const attachments = (_a = children == null ? void 0 : children.attachments) != null ? _a : [];
   const isPdfOrSnapshot2 = (ct) => {
@@ -21281,7 +21359,8 @@ function flagsFromChildren(children, hasLitNote) {
     hasNotes: ((_c = (_b = children == null ? void 0 : children.notes) == null ? void 0 : _b.length) != null ? _c : 0) > 0,
     hasAttachment: attachments.some((a3) => isPdfOrSnapshot2(a3 == null ? void 0 : a3.contentType)),
     hasAnnotations: ((_e = (_d = children == null ? void 0 : children.annotations) == null ? void 0 : _d.length) != null ? _e : 0) > 0,
-    hasLitNote
+    hasLitNote,
+    typeGroup: typeGroupOf(type)
   };
 }
 function passesImportFilters(flags, filters) {
@@ -21293,10 +21372,84 @@ function passesImportFilters(flags, filters) {
     return false;
   if (filters.withoutLitNote && flags.hasLitNote)
     return false;
+  if (filters.types.length && !filters.types.includes(flags.typeGroup)) {
+    return false;
+  }
   return true;
 }
+var IMPORT_TYPE_GROUPS, CSL_TYPE_TO_GROUP;
 var init_import_filters = __esm({
   "src/template/import-filters.ts"() {
+    IMPORT_TYPE_GROUPS = [
+      "book",
+      "article",
+      "chapter",
+      "news",
+      "webpage",
+      "other"
+    ];
+    CSL_TYPE_TO_GROUP = {
+      book: "book",
+      "article-journal": "article",
+      chapter: "chapter",
+      "article-newspaper": "news",
+      "article-magazine": "news",
+      webpage: "webpage"
+    };
+  }
+});
+
+// src/template/import-order.ts
+function text(value) {
+  return typeof value === "string" ? value : "";
+}
+function authorKey(entry) {
+  var _a;
+  const first = (_a = entry.author) == null ? void 0 : _a[0];
+  if (!first)
+    return "";
+  return text(first.family) || text(first.literal) || text(first.given);
+}
+function titleKey(entry) {
+  return text(entry.title);
+}
+function yearOf(entry) {
+  var _a, _b, _c;
+  const y3 = (_c = (_b = (_a = entry.issued) == null ? void 0 : _a["date-parts"]) == null ? void 0 : _b[0]) == null ? void 0 : _c[0];
+  return typeof y3 === "number" ? y3 : 0;
+}
+function dateAddedOf(entry) {
+  return text(entry._dateAdded);
+}
+function compareAuthor(a3, b3) {
+  return collator.compare(authorKey(a3), authorKey(b3)) || collator.compare(titleKey(a3), titleKey(b3)) || yearOf(a3) - yearOf(b3) || collator.compare(dateAddedOf(a3), dateAddedOf(b3));
+}
+function compareDateAdded(a3, b3) {
+  return collator.compare(dateAddedOf(a3), dateAddedOf(b3)) || collator.compare(authorKey(a3), authorKey(b3)) || collator.compare(titleKey(a3), titleKey(b3));
+}
+function isBlank2(entry) {
+  return !authorKey(entry) && !titleKey(entry);
+}
+function sortImportEntries(entries, mode, dir = "asc") {
+  const out = entries.slice();
+  if (mode === "relevance")
+    return out;
+  const cmp = mode === "author" ? compareAuthor : compareDateAdded;
+  const flip = dir === "desc" ? -1 : 1;
+  const blank = mode === "author" ? isBlank2 : (x4) => !dateAddedOf(x4);
+  out.sort((a3, b3) => {
+    const ab = blank(a3) ? 1 : 0;
+    const bb = blank(b3) ? 1 : 0;
+    if (ab !== bb)
+      return ab - bb;
+    return flip * cmp(a3, b3);
+  });
+  return out;
+}
+var collator;
+var init_import_order = __esm({
+  "src/template/import-order.ts"() {
+    collator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
   }
 });
 
@@ -21305,22 +21458,45 @@ var addLiteratureNotesModal_exports = {};
 __export(addLiteratureNotesModal_exports, {
   AddLiteratureNotesModal: () => AddLiteratureNotesModal
 });
-var import_obsidian37, PAGE, AddLiteratureNotesModal;
+function loadLastSearch() {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_SEARCH_KEY) || "{}");
+  } catch (e3) {
+    return {};
+  }
+}
+var import_obsidian37, PAGE, TYPE_GROUP_LABELS, LAST_SEARCH_KEY, DEFAULT_PLACEHOLDER, ABSTRACT_PLACEHOLDER, AddLiteratureNotesModal;
 var init_addLiteratureNotesModal = __esm({
   "src/modals/addLiteratureNotesModal.ts"() {
     import_obsidian37 = __toModule(require("obsidian"));
     init_helpers();
     init_import_filters();
+    init_import_order();
     init_children_cache();
     init_search_excerpt();
+    init_highlight();
     PAGE = 100;
+    TYPE_GROUP_LABELS = {
+      book: "Books",
+      article: "Articles",
+      chapter: "Book sections",
+      news: "Newspaper/magazine articles",
+      webpage: "Web pages",
+      other: "Other"
+    };
+    LAST_SEARCH_KEY = "scholar-weft:add-notes-search";
+    DEFAULT_PLACEHOLDER = "Search by citekey, author, title\u2026";
+    ABSTRACT_PLACEHOLDER = "Search citekey, author, title, abstract, publication\u2026";
     AddLiteratureNotesModal = class extends import_obsidian37.Modal {
       constructor(app2, plugin) {
         super(app2);
         this.query = "";
         this.searchAbstract = false;
         this.filters = defaultFilters();
+        this.sortMode = "relevance";
+        this.sortDir = "asc";
         this.selected = new Set();
+        this.dirSelect = null;
         this.confirmBtn = null;
         this.rendered = 0;
         this.matches = [];
@@ -21334,17 +21510,24 @@ var init_addLiteratureNotesModal = __esm({
         contentEl.addClass("sw-add-notes");
         if (modalEl)
           modalEl.addClass("sw-add-notes-modal");
+        const saved = loadLastSearch();
+        this.query = typeof saved.query === "string" ? saved.query : "";
+        this.searchAbstract = saved.searchAbstract === true;
+        this.sortMode = saved.sortMode === "author" || saved.sortMode === "dateAdded" ? saved.sortMode : "relevance";
+        this.sortDir = saved.sortDir === "desc" ? "desc" : "asc";
         contentEl.createEl("h3", { text: t("Add literature notes") });
         const searchRow = contentEl.createDiv({ cls: "sw-add-notes__searchrow" });
         this.searchInput = searchRow.createEl("input", {
           cls: "sw-add-notes__search",
           attr: {
             type: "search",
-            placeholder: t("Search by citekey, author, title\u2026")
+            placeholder: t(this.searchAbstract ? ABSTRACT_PLACEHOLDER : DEFAULT_PLACEHOLDER)
           }
         });
+        this.searchInput.value = this.query;
         this.searchInput.addEventListener("input", () => {
           this.query = this.searchInput.value;
+          this.persistSearch();
           this.refresh();
         });
         const absLabel = searchRow.createEl("label", { cls: "sw-add-notes__abstract" });
@@ -21352,10 +21535,51 @@ var init_addLiteratureNotesModal = __esm({
         absBox.checked = this.searchAbstract;
         absBox.addEventListener("change", () => {
           this.searchAbstract = absBox.checked;
-          this.searchInput.placeholder = absBox.checked ? t("Search citekey, author, title, abstract, publication\u2026") : t("Search by citekey, author, title\u2026");
+          this.searchInput.placeholder = t(absBox.checked ? ABSTRACT_PLACEHOLDER : DEFAULT_PLACEHOLDER);
+          this.persistSearch();
           this.refresh();
         });
         absLabel.appendText(" " + t("Search abstracts"));
+        const orderRow = contentEl.createDiv({ cls: "sw-add-notes__order" });
+        orderRow.createSpan({ cls: "sw-add-notes__order-label", text: t("Order by") });
+        const modeSelect = orderRow.createEl("select", { cls: "dropdown" });
+        const modeOptions = [
+          ["relevance", t("Ranked search")],
+          ["author", t("Author, title, year")],
+          ["dateAdded", t("Date added")]
+        ];
+        for (const [value, label] of modeOptions) {
+          modeSelect.createEl("option", { text: label, value });
+        }
+        modeSelect.value = this.sortMode;
+        this.dirSelect = orderRow.createEl("select", { cls: "dropdown" });
+        const dirOptions = [
+          ["asc", t("Ascending")],
+          ["desc", t("Descending")]
+        ];
+        for (const [value, label] of dirOptions) {
+          this.dirSelect.createEl("option", { text: label, value });
+        }
+        this.dirSelect.value = this.sortDir;
+        this.dirSelect.disabled = this.sortMode === "relevance";
+        modeSelect.addEventListener("change", () => {
+          this.sortMode = modeSelect.value;
+          if (this.sortMode === "dateAdded")
+            this.sortDir = "desc";
+          else if (this.sortMode === "author")
+            this.sortDir = "asc";
+          if (this.dirSelect) {
+            this.dirSelect.value = this.sortDir;
+            this.dirSelect.disabled = this.sortMode === "relevance";
+          }
+          this.persistSearch();
+          this.refresh();
+        });
+        this.dirSelect.addEventListener("change", () => {
+          this.sortDir = this.dirSelect.value;
+          this.persistSearch();
+          this.refresh();
+        });
         const body = contentEl.createDiv({ cls: "sw-add-notes__body" });
         const side = body.createDiv({ cls: "sw-add-notes__filters" });
         this.renderFilters(side);
@@ -21388,6 +21612,8 @@ var init_addLiteratureNotesModal = __esm({
         });
         this.confirmBtn.addEventListener("click", () => void this.createSelected());
         this.searchInput.focus();
+        if (this.query)
+          this.searchInput.select();
         this.buildLitNoteIndex();
         this.refresh();
         if (!this.plugin.bibManager.presenceReady) {
@@ -21395,6 +21621,24 @@ var init_addLiteratureNotesModal = __esm({
             if (this.containerEl.isConnected)
               this.refresh();
           }).catch((e3) => console.warn("[sw:add-notes] presence index failed", e3));
+        }
+        if (!this.plugin.bibManager.fuseReady) {
+          void this.plugin.bibManager.initPromise.promise.then(() => {
+            if (this.containerEl.isConnected)
+              this.refresh();
+          }).catch(() => {
+          });
+        }
+      }
+      persistSearch() {
+        try {
+          localStorage.setItem(LAST_SEARCH_KEY, JSON.stringify({
+            query: this.query,
+            searchAbstract: this.searchAbstract,
+            sortMode: this.sortMode,
+            sortDir: this.sortDir
+          }));
+        } catch (e3) {
         }
       }
       renderFilters(side) {
@@ -21412,6 +21656,22 @@ var init_addLiteratureNotesModal = __esm({
         mk(t("Items with a PDF or snapshot"), "hasAttachment");
         mk(t("Items with annotations"), "hasAnnotations");
         mk(t("Items without a literature note"), "withoutLitNote");
+        side.createDiv({ cls: "sw-add-notes__filter-group", text: t("Item types") });
+        for (const group of IMPORT_TYPE_GROUPS) {
+          const row = side.createEl("label", { cls: "sw-add-notes__filter" });
+          const input = row.createEl("input", { type: "checkbox" });
+          input.checked = this.filters.types.includes(group);
+          input.addEventListener("change", () => {
+            const types = new Set(this.filters.types);
+            if (input.checked)
+              types.add(group);
+            else
+              types.delete(group);
+            this.filters = { ...this.filters, types: [...types] };
+            this.refresh();
+          });
+          row.appendText(" " + t(TYPE_GROUP_LABELS[group]));
+        }
       }
       buildLitNoteIndex() {
         var _a;
@@ -21431,18 +21691,27 @@ var init_addLiteratureNotesModal = __esm({
       flagsFor(entry) {
         const stable = this.stableKeyFor(entry);
         const children = stable ? readChildren(this.plugin.bibManager.childrenCache, stable) : null;
-        return flagsFromChildren(children, this.litNotes.has(entry.id));
+        return flagsFromChildren(children, this.litNotes.has(entry.id), entry.type);
+      }
+      orderMatches(entries, searching) {
+        if (this.sortMode === "relevance") {
+          return searching ? entries : sortImportEntries(entries, "author", "asc");
+        }
+        return sortImportEntries(entries, this.sortMode, this.sortDir);
       }
       refresh() {
         const q4 = this.query.trim();
+        const searching = !!q4;
+        let filtered;
         if (q4) {
           const { entries } = this.plugin.bibManager.searchTier(this.searchAbstract ? "abstract" : "title", q4, 1e5);
-          this.matches = entries.map((e3) => e3.entry).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
+          filtered = entries.map((e3) => e3.entry).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
           this.termsByKey = new Map(entries.map((e3) => [e3.entry.id, e3.terms]));
         } else {
-          this.matches = Array.from(this.plugin.bibManager.bibCache.values()).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
+          filtered = Array.from(this.plugin.bibManager.bibCache.values()).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
           this.termsByKey = new Map();
         }
+        this.matches = this.orderMatches(filtered, searching);
         this.rendered = 0;
         this.listEl.empty();
         this.renderMore();
@@ -21455,7 +21724,7 @@ var init_addLiteratureNotesModal = __esm({
         this.rendered += slice.length;
         const unrendered = slice.map((e3) => e3.id).filter((id) => !this.renderedRefs.has(id));
         if (unrendered.length) {
-          void this.plugin.bibManager.renderReferenceMarkdown(unrendered).then((map) => {
+          void this.plugin.bibManager.renderEntryElements(unrendered, { suppressUrls: true }).then((map) => {
             for (const [k4, v3] of map)
               this.renderedRefs.set(k4, v3);
             if (this.containerEl.isConnected)
@@ -21464,41 +21733,58 @@ var init_addLiteratureNotesModal = __esm({
         }
       }
       fillReferences() {
+        var _a;
         for (const row of Array.from(this.listEl.querySelectorAll(".sw-add-notes__row"))) {
           const key = row.dataset.citekey;
           if (!key)
             continue;
+          const entry = this.renderedRefs.get(key);
+          if (!entry)
+            continue;
           const refEl = row.querySelector(".sw-add-notes__ref");
-          const text = this.renderedRefs.get(key);
-          if (refEl && text)
-            refEl.setText(text);
+          if (!refEl)
+            continue;
+          const clone = entry.cloneNode(true);
+          highlightMatchesIn(clone, (_a = this.termsByKey.get(key)) != null ? _a : []);
+          refEl.empty();
+          refEl.append(clone);
         }
       }
       renderRow(entry) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e;
         const row = this.listEl.createDiv({ cls: "sw-add-notes__row" });
         row.toggleClass("is-selected", this.selected.has(entry.id));
         row.dataset.citekey = entry.id;
+        const terms = (_a = this.termsByKey.get(entry.id)) != null ? _a : [];
         const info = row.createDiv({ cls: "sw-add-notes__info" });
         const head = info.createDiv({ cls: "sw-add-notes__head" });
-        head.createSpan({ cls: "sw-add-notes__citekey", text: `@${entry.id}` });
+        const citekey = head.createSpan({ cls: "sw-add-notes__citekey" });
+        appendHighlighted(citekey, `@${entry.id}`, terms);
         const creators = this.creatorText(entry);
-        if (creators)
-          head.createSpan({ cls: "sw-add-notes__authors", text: creators });
+        if (creators) {
+          const authors = head.createSpan({ cls: "sw-add-notes__authors" });
+          appendHighlighted(authors, creators, terms);
+        }
         if (entry.groupID && entry.groupID !== 1) {
-          const name = (_c = (_b = (_a = this.plugin.settings.zoteroGroups) == null ? void 0 : _a.find((g4) => g4.id === entry.groupID)) == null ? void 0 : _b.name) != null ? _c : `Group ${entry.groupID}`;
+          const name = (_d = (_c = (_b = this.plugin.settings.zoteroGroups) == null ? void 0 : _b.find((g4) => g4.id === entry.groupID)) == null ? void 0 : _c.name) != null ? _d : `Group ${entry.groupID}`;
           head.createSpan({ cls: "sw-add-notes__library", text: `\xB7 ${name}` });
         }
         if (this.litNotes.has(entry.id)) {
           head.createSpan({ cls: "sw-add-notes__has-note", text: `\xB7 ${t("has a note")}` });
         }
         const ref = info.createDiv({ cls: "sw-add-notes__ref" });
-        ref.setText((_e = (_d = this.renderedRefs.get(entry.id)) != null ? _d : entry.title) != null ? _e : "");
-        const terms = (_f = this.termsByKey.get(entry.id)) != null ? _f : [];
+        const rendered = this.renderedRefs.get(entry.id);
+        if (rendered) {
+          const clone = rendered.cloneNode(true);
+          highlightMatchesIn(clone, terms);
+          ref.append(clone);
+        } else {
+          appendHighlighted(ref, (_e = entry.title) != null ? _e : "", terms);
+        }
         const excerpt = excerptForResult(entry, terms);
         if (excerpt) {
           const line = info.createDiv({ cls: "sw-add-notes__excerpt" });
-          this.appendHighlighted(line, excerpt.text, excerpt.matches);
+          appendHighlighted(line, excerpt.text, terms);
         }
         row.addEventListener("click", () => {
           if (this.selected.has(entry.id))
@@ -21508,22 +21794,6 @@ var init_addLiteratureNotesModal = __esm({
           row.toggleClass("is-selected", this.selected.has(entry.id));
           this.updateStatus();
         });
-      }
-      appendHighlighted(el, text, matches) {
-        let at = 0;
-        for (const m3 of matches) {
-          if (m3.length <= 0 || m3.start < at || m3.start + m3.length > text.length)
-            continue;
-          if (m3.start > at)
-            el.appendText(text.slice(at, m3.start));
-          el.append(createEl("strong", {
-            cls: "sw-suggest-match",
-            text: text.slice(m3.start, m3.start + m3.length)
-          }));
-          at = m3.start + m3.length;
-        }
-        if (at < text.length)
-          el.appendText(text.slice(at));
       }
       creatorText(entry) {
         var _a;
@@ -26448,12 +26718,12 @@ var locatorToTerm = {
 };
 
 // src/parser/code-mask.ts
-function maskCodeRegions(text) {
-  if (!text || text.indexOf("`") === -1 && text.indexOf("~~~") === -1) {
-    return text;
+function maskCodeRegions(text2) {
+  if (!text2 || text2.indexOf("`") === -1 && text2.indexOf("~~~") === -1) {
+    return text2;
   }
-  const chars = text.split("");
-  const n2 = text.length;
+  const chars = text2.split("");
+  const n2 = text2.length;
   const blank = (from, to) => {
     const end = Math.min(to, n2);
     for (let k4 = from; k4 < end; k4++)
@@ -26461,20 +26731,20 @@ function maskCodeRegions(text) {
   };
   let i3 = 0;
   while (i3 < n2) {
-    const atLineStart = i3 === 0 || text[i3 - 1] === "\n";
+    const atLineStart = i3 === 0 || text2[i3 - 1] === "\n";
     if (atLineStart) {
-      const fence = fenceEnd(text, i3);
+      const fence = fenceEnd(text2, i3);
       if (fence !== null) {
         blank(i3, fence);
         i3 = fence;
         continue;
       }
     }
-    if (text[i3] === "`") {
+    if (text2[i3] === "`") {
       let run = 0;
-      while (i3 + run < n2 && text[i3 + run] === "`")
+      while (i3 + run < n2 && text2[i3 + run] === "`")
         run++;
-      const close2 = findBacktickRun(text, i3 + run, run);
+      const close2 = findBacktickRun(text2, i3 + run, run);
       if (close2 !== -1) {
         const end = close2 + run;
         blank(i3, end);
@@ -26488,50 +26758,50 @@ function maskCodeRegions(text) {
   }
   return chars.join("");
 }
-function fenceEnd(text, at) {
+function fenceEnd(text2, at) {
   let j4 = at;
-  while (j4 < text.length && (text[j4] === " " || text[j4] === "	"))
+  while (j4 < text2.length && (text2[j4] === " " || text2[j4] === "	"))
     j4++;
-  const ch = text[j4];
+  const ch = text2[j4];
   if (ch !== "`" && ch !== "~")
     return null;
   let markers = 0;
-  while (text[j4 + markers] === ch)
+  while (text2[j4 + markers] === ch)
     markers++;
   if (markers < 3)
     return null;
-  let pos = text.indexOf("\n", j4);
-  pos = pos === -1 ? text.length : pos + 1;
-  while (pos < text.length) {
+  let pos = text2.indexOf("\n", j4);
+  pos = pos === -1 ? text2.length : pos + 1;
+  while (pos < text2.length) {
     let k4 = pos;
-    while (k4 < text.length && (text[k4] === " " || text[k4] === "	"))
+    while (k4 < text2.length && (text2[k4] === " " || text2[k4] === "	"))
       k4++;
-    if (text[k4] === ch) {
+    if (text2[k4] === ch) {
       let run = 0;
-      while (text[k4 + run] === ch)
+      while (text2[k4 + run] === ch)
         run++;
       if (run >= markers) {
         let e3 = k4 + run;
-        while (e3 < text.length && (text[e3] === " " || text[e3] === "	"))
+        while (e3 < text2.length && (text2[e3] === " " || text2[e3] === "	"))
           e3++;
-        if (e3 >= text.length || text[e3] === "\n") {
-          return e3 < text.length ? e3 + 1 : text.length;
+        if (e3 >= text2.length || text2[e3] === "\n") {
+          return e3 < text2.length ? e3 + 1 : text2.length;
         }
       }
     }
-    const next = text.indexOf("\n", pos);
+    const next = text2.indexOf("\n", pos);
     if (next === -1)
       break;
     pos = next + 1;
   }
-  return text.length;
+  return text2.length;
 }
-function findBacktickRun(text, from, runLen) {
+function findBacktickRun(text2, from, runLen) {
   let j4 = from;
-  while (j4 < text.length) {
-    if (text[j4] === "`") {
+  while (j4 < text2.length) {
+    if (text2[j4] === "`") {
       let run = 0;
-      while (text[j4 + run] === "`")
+      while (text2[j4 + run] === "`")
         run++;
       if (run === runLen)
         return j4;
@@ -26544,10 +26814,10 @@ function findBacktickRun(text, from, runLen) {
 }
 
 // src/parser/compound.ts
-function mergeCompoundCitations(text) {
+function mergeCompoundCitations(text2) {
   const ADJACENT = /\[([^\]\n]*@[^\]\n]*)\]([ \t]*\n?[ \t]*)\[([^\]\n]*@[^\]\n]*)\]/g;
   let prev;
-  let out = text;
+  let out = text2;
   do {
     prev = out;
     out = out.replace(ADJACENT, "[$1; $3]");
@@ -27180,8 +27450,8 @@ function mergeAdjacentGroups(str3, groups) {
 function getCitationSegmentsRaw(str3, ignoreLinks = false, expandLinkAliases = false, linkCiteKey) {
   str3 = maskCodeRegions(str3);
   if (expandLinkAliases && !ignoreLinks) {
-    const { text, map, referenceRanges } = transformLinkAliases(str3, linkCiteKey);
-    const groups = getCitationSegmentsRaw(text, ignoreLinks);
+    const { text: text2, map, referenceRanges } = transformLinkAliases(str3, linkCiteKey);
+    const groups = getCitationSegmentsRaw(text2, ignoreLinks);
     if (!groups.length)
       return groups;
     return groups.map((group) => {
@@ -28656,8 +28926,8 @@ function processCiteKeys(plugin) {
         const expr = runAnchors.map((an2) => {
           var _a2;
           const k4 = getLinkCiteKey(an2);
-          const text = ((_a2 = an2.textContent) != null ? _a2 : "").trim();
-          return text === "@" + k4 ? `[[@${k4}]]` : `[[@${k4}|${text}]]`;
+          const text2 = ((_a2 = an2.textContent) != null ? _a2 : "").trim();
+          return text2 === "@" + k4 ? `[[@${k4}]]` : `[[@${k4}|${text2}]]`;
         }).join(" ");
         const groups = getCitationSegments(expr, false, true);
         if (groups.length !== 1)
@@ -28790,8 +29060,8 @@ function processCiteKeys(plugin) {
       const p4 = span.closest("p");
       if (!p4 || p4 === el)
         return;
-      const text = ((_a2 = span.textContent) != null ? _a2 : "").trim();
-      if (!text || ((_b2 = p4.textContent) != null ? _b2 : "").trim() !== text)
+      const text2 = ((_a2 = span.textContent) != null ? _a2 : "").trim();
+      if (!text2 || ((_b2 = p4.textContent) != null ? _b2 : "").trim() !== text2)
         return;
       if (Array.from(p4.children).some((c3) => {
         var _a3;
@@ -28886,27 +29156,27 @@ var SW_CACHE_DIR_LEGACY = ".pandoc";
 async function copyElToClipboard(el) {
   var _a, _b, _c;
   const html = el.outerHTML;
-  const text = (_b = (_a = el.innerText) != null ? _a : el.textContent) != null ? _b : "";
+  const text2 = (_b = (_a = el.innerText) != null ? _a : el.textContent) != null ? _b : "";
   if (typeof ClipboardItem !== "undefined" && ((_c = navigator.clipboard) == null ? void 0 : _c.write)) {
     try {
       await navigator.clipboard.write([
         new ClipboardItem({
           "text/html": new Blob([html], { type: "text/html" }),
-          "text/plain": new Blob([text], { type: "text/plain" })
+          "text/plain": new Blob([text2], { type: "text/plain" })
         })
       ]);
       return;
     } catch (e3) {
     }
   }
-  await copyTextToClipboard(text);
+  await copyTextToClipboard(text2);
 }
-async function copyTextToClipboard(text) {
+async function copyTextToClipboard(text2) {
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(text2);
   } catch (e3) {
     const ta = document.createElement("textarea");
-    ta.value = text;
+    ta.value = text2;
     ta.style.position = "fixed";
     ta.style.opacity = "0";
     document.body.appendChild(ta);
@@ -29595,7 +29865,7 @@ var latex_default = function() {
       return createNode("group", { content: x4.flatMap((x22) => x22) });
     }
     function peg$f50(g4) {
-      return text().slice(1, -1);
+      return text2().slice(1, -1);
     }
     function peg$f51(env, env_comment, end_env) {
       return compare_env(env, end_env);
@@ -29704,7 +29974,7 @@ var latex_default = function() {
         throw new Error(`Can't start parsing from rule "` + options.startRule + '".');
       peg$startRuleFunction = peg$startRuleFunctions[options.startRule];
     }
-    function text() {
+    function text2() {
       return input.substring(peg$savedPos, peg$currPos);
     }
     function location() {
@@ -29716,10 +29986,10 @@ var latex_default = function() {
         return "";
       return String.fromCodePoint(cp);
     }
-    function peg$literalExpectation(text2, ignoreCase) {
+    function peg$literalExpectation(text22, ignoreCase) {
       return {
         type: "literal",
-        text: text2,
+        text: text22,
         ignoreCase
       };
     }
@@ -67411,10 +67681,10 @@ function latexMode(node) {
   return node._renderInfo.mode;
 }
 function latex2unicode(tex, node) {
-  const text = table4[tex];
-  if (typeof text === "string")
-    return text;
-  return text && text[latexMode(node)];
+  const text2 = table4[tex];
+  if (typeof text2 === "string")
+    return text2;
+  return text2 && text2[latexMode(node)];
 }
 var open = {};
 var close = {};
@@ -67787,10 +68057,10 @@ var BibTeXParser = class {
     }
     return tex;
   }
-  wrap(text, tag, wrap = true) {
-    if (!text || !wrap)
-      return text || "";
-    return `${tag}${text}/${tag}`;
+  wrap(text2, tag, wrap = true) {
+    if (!text2 || !wrap)
+      return text2 || "";
+    return `${tag}${text2}/${tag}`;
   }
   registercommand(node) {
     const types = (nodes) => nodes.map((n2) => n2.type).join(".");
@@ -67809,17 +68079,17 @@ var BibTeXParser = class {
     this.newcommands[namearg[0].content] = node.args[1];
     return "";
   }
-  subp(text, mode) {
+  subp(text2, mode) {
     const macro = { sub: "_", sup: "^" }[mode];
     let subp = "";
-    for (let char of text) {
+    for (let char of text2) {
       const mapped = table4[`${macro}{${char}}`];
       switch (typeof mapped) {
         case "string":
           subp += mapped;
           break;
         case "undefined":
-          return `${mode}${text}/${mode}`;
+          return `${mode}${text2}/${mode}`;
         default:
           subp += mapped.math;
       }
@@ -67828,9 +68098,9 @@ var BibTeXParser = class {
   }
   macro(node, context) {
     var _a, _b, _c, _d, _e, _f, _g;
-    const text = latex2unicode(printRaw(node), node);
-    if (text)
-      return text;
+    const text2 = latex2unicode(printRaw(node), node);
+    if (text2)
+      return text2;
     let url;
     let label;
     let arg;
@@ -68807,7 +69077,7 @@ var CREATOR_TYPE_TO_CSL_ROLE = {
   castMember: "performer"
 };
 function zoteroItemToCSL(item, groupId) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n2, _o, _p;
   const data = item.data;
   if (!(data == null ? void 0 : data.citationKey))
     return null;
@@ -68818,9 +69088,10 @@ function zoteroItemToCSL(item, groupId) {
     type: ZOTERO_TYPE_TO_CSL[data.itemType] || "document",
     groupID: groupId
   };
-  if (data.title)
-    csl.title = data.title;
-  if ((_a = data.creators) == null ? void 0 : _a.length) {
+  const title = (_a = data.title) != null ? _a : data.caseName;
+  if (title)
+    csl.title = title;
+  if ((_b = data.creators) == null ? void 0 : _b.length) {
     const byRole = {};
     for (const creator of data.creators) {
       const role = CREATOR_TYPE_TO_CSL_ROLE[creator.creatorType] || "author";
@@ -68831,19 +69102,22 @@ function zoteroItemToCSL(item, groupId) {
     for (const [role, names] of Object.entries(byRole))
       csl[role] = names;
   }
-  if (data.date)
-    csl.issued = parseZoteroDate(data.date);
-  const containerTitle = (_i = (_h = (_g = (_f = (_e = (_d = (_c = (_b = data.publicationTitle) != null ? _b : data.bookTitle) != null ? _c : data.encyclopediaTitle) != null ? _d : data.dictionaryTitle) != null ? _e : data.blogTitle) != null ? _f : data.websiteTitle) != null ? _g : data.forumTitle) != null ? _h : data.proceedingsTitle) != null ? _i : data.programTitle;
+  const date = (_c = data.date) != null ? _c : data.dateDecided;
+  if (date)
+    csl.issued = parseZoteroDate(date);
+  const containerTitle = (_l = (_k = (_j = (_i = (_h = (_g = (_f = (_e = (_d = data.publicationTitle) != null ? _d : data.bookTitle) != null ? _e : data.encyclopediaTitle) != null ? _f : data.dictionaryTitle) != null ? _g : data.blogTitle) != null ? _h : data.websiteTitle) != null ? _i : data.forumTitle) != null ? _j : data.proceedingsTitle) != null ? _k : data.programTitle) != null ? _l : data.reporter;
   if (containerTitle)
     csl["container-title"] = containerTitle;
   if (data.journalAbbreviation)
     csl["container-title-short"] = data.journalAbbreviation;
-  if (data.volume)
-    csl.volume = data.volume;
+  const volume = (_m = data.volume) != null ? _m : data.reporterVolume;
+  if (volume)
+    csl.volume = volume;
   if (data.issue)
     csl.issue = data.issue;
-  if (data.pages)
-    csl.page = data.pages;
+  const page = (_n2 = data.pages) != null ? _n2 : data.firstPage;
+  if (page)
+    csl.page = page;
   if (data.numberOfVolumes)
     csl["number-of-volumes"] = data.numberOfVolumes;
   if (data.numberOfPages)
@@ -68880,8 +69154,12 @@ function zoteroItemToCSL(item, groupId) {
     csl.number = data.reportNumber;
   if (data.patentNumber)
     csl.number = data.patentNumber;
+  if (data.docketNumber)
+    csl.number = data.docketNumber;
   if (data.country)
     csl.jurisdiction = data.country;
+  if (data.court)
+    csl.authority = data.court;
   if (data.applicationNumber)
     csl["call-number"] = data.applicationNumber;
   if (data.series)
@@ -68898,14 +69176,14 @@ function zoteroItemToCSL(item, groupId) {
     csl["title-short"] = data.shortTitle;
   if (data.extra)
     csl._extra = data.extra;
-  if ((_j = data.tags) == null ? void 0 : _j.length) {
+  if ((_o = data.tags) == null ? void 0 : _o.length) {
     const tags = data.tags.map((t4) => t4 == null ? void 0 : t4.tag).filter((t4) => typeof t4 === "string" && !!t4);
     if (tags.length)
       csl._tags = tags;
   }
   if (data.dateAdded)
     csl._dateAdded = data.dateAdded;
-  if ((_k = data.creators) == null ? void 0 : _k.length) {
+  if ((_p = data.creators) == null ? void 0 : _p.length) {
     const creators = data.creators.filter((c3) => c3 && typeof c3 === "object").map((c3) => {
       const out = { role: c3.creatorType || "author" };
       if (c3.name)
@@ -89124,9 +89402,9 @@ function escapeOutsideCode(line) {
     return (_b = (_a = code != null ? code : wikilink) != null ? _a : mdlink) != null ? _b : `\\${char}`;
   });
 }
-function escapeMarkdown(text) {
+function escapeMarkdown(text2) {
   let inFence = false;
-  return text.split("\n").map((line) => {
+  return text2.split("\n").map((line) => {
     if (FENCE_RE.test(line)) {
       inFence = !inFence;
       return line;
@@ -89175,21 +89453,21 @@ function htmlFieldToMarkdown(html) {
 var NOTE_TITLE_MAX_LENGTH = 100;
 var NON_TITLE_BLOCK_RE = /^(?:#{1,6}\s|```|~~~|>|\s*[-*+]\s|\s*\d+[.)]\s|\|)/;
 function promoteShortFirstLine(markdown, level, maxLength = NOTE_TITLE_MAX_LENGTH) {
-  const text = markdown != null ? markdown : "";
-  if (!text.trim())
-    return text;
-  const blank = text.search(/\n[ \t]*\n/);
-  const firstEnd = blank === -1 ? text.length : blank;
-  const first = text.slice(0, firstEnd);
+  const text2 = markdown != null ? markdown : "";
+  if (!text2.trim())
+    return text2;
+  const blank = text2.search(/\n[ \t]*\n/);
+  const firstEnd = blank === -1 ? text2.length : blank;
+  const first = text2.slice(0, firstEnd);
   if (first.includes("\n"))
-    return text;
+    return text2;
   const line = first.trim();
   if (!line || line.length > maxLength)
-    return text;
+    return text2;
   if (NON_TITLE_BLOCK_RE.test(line))
-    return text;
+    return text2;
   const l4 = Math.min(6, Math.max(1, Math.floor(level) || 3));
-  return `${"#".repeat(l4)} ${line}${text.slice(firstEnd)}`;
+  return `${"#".repeat(l4)} ${line}${text2.slice(firstEnd)}`;
 }
 function noteHtmlToMarkdown(html, opts = {}) {
   var _a;
@@ -89502,9 +89780,9 @@ async function readTemplate(plugin) {
   if (custom) {
     const path2 = (0, import_obsidian19.normalizePath)(custom);
     try {
-      const text = await plugin.app.vault.adapter.read(path2);
-      if (text.trim())
-        return text;
+      const text2 = await plugin.app.vault.adapter.read(path2);
+      if (text2.trim())
+        return text2;
       console.warn("[sw:import] custom note template is empty at", path2);
     } catch (e3) {
       console.warn("[sw:import] custom note template not found at", path2, e3);
@@ -89800,13 +90078,13 @@ function num(v3) {
   const n2 = typeof v3 === "number" ? v3 : Number(v3);
   return Number.isFinite(n2) ? Math.trunc(n2) : null;
 }
-function standaloneYear(text) {
-  const m3 = /(?:^|[^\d])([12]\d{3})(?:[^\d]|$)/.exec(text);
+function standaloneYear(text2) {
+  const m3 = /(?:^|[^\d])([12]\d{3})(?:[^\d]|$)/.exec(text2);
   return m3 ? Number(m3[1]) : null;
 }
-function withToString(date, text) {
+function withToString(date, text2) {
   Object.defineProperty(date, "toString", {
-    value: () => text,
+    value: () => text2,
     enumerable: false,
     configurable: true
   });
@@ -89816,11 +90094,11 @@ function toContextDate(issued) {
   if (issued == null)
     return null;
   if (typeof issued === "string") {
-    const text = issued.trim();
-    if (!text)
+    const text2 = issued.trim();
+    if (!text2)
       return null;
-    const year2 = standaloneYear(text);
-    return year2 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: year2, month: null, day: null, raw: text }, String(year2));
+    const year2 = standaloneYear(text2);
+    return year2 == null ? withToString({ kind: "text", value: null, text: text2, year: null, month: null, day: null, raw: text2 }, text2) : withToString({ kind: "year", value: null, year: year2, month: null, day: null, raw: text2 }, String(year2));
   }
   const obj = issued;
   const raw = typeof obj.raw === "string" ? obj.raw : typeof obj.literal === "string" ? obj.literal : "";
@@ -89830,11 +90108,11 @@ function toContextDate(issued) {
   const month = num(arr[1]);
   const day = num(arr[2]);
   if (year == null) {
-    const text = raw.trim();
-    if (!text)
+    const text2 = raw.trim();
+    if (!text2)
       return null;
-    const y3 = standaloneYear(text);
-    return y3 == null ? withToString({ kind: "text", value: null, text, year: null, month: null, day: null, raw: text }, text) : withToString({ kind: "year", value: null, year: y3, month: null, day: null, raw: text }, String(y3));
+    const y3 = standaloneYear(text2);
+    return y3 == null ? withToString({ kind: "text", value: null, text: text2, year: null, month: null, day: null, raw: text2 }, text2) : withToString({ kind: "year", value: null, year: y3, month: null, day: null, raw: text2 }, String(y3));
   }
   const rawOut = raw || String(year);
   if (month != null && day != null) {
@@ -91410,11 +91688,11 @@ var YamlBuilder = class {
   fieldSpecs() {
     return this.specs.map((s3) => ({ ...s3, lines: [...s3.lines] }));
   }
-  addRaw(text) {
+  addRaw(text2) {
     this.assertOpen("add_raw_yaml");
-    if (typeof text !== "string")
+    if (typeof text2 !== "string")
       return;
-    const body = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+    const body = text2.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
     if (body)
       this.lines.push(...body.split("\n"));
   }
@@ -91486,8 +91764,8 @@ var NoteHelpers = class {
   addProperty(ctx, key, value, opts) {
     this.stateOf(ctx).yaml.add(key, value, opts);
   }
-  addRawYAML(ctx, text) {
-    this.stateOf(ctx).yaml.addRaw(text);
+  addRawYAML(ctx, text2) {
+    this.stateOf(ctx).yaml.addRaw(text2);
   }
   endYAML(ctx) {
     return this.stateOf(ctx).yaml.end();
@@ -91604,12 +91882,12 @@ var NoteHelpers = class {
   mdHtml(_ctx, html) {
     return htmlFieldToMarkdown(html);
   }
-  heading(_ctx, level, text) {
+  heading(_ctx, level, text2) {
     const l4 = Math.min(6, Math.max(1, Math.floor(level) || 1));
-    return `${"#".repeat(l4)} ${text != null ? text : ""}`.trimEnd();
+    return `${"#".repeat(l4)} ${text2 != null ? text2 : ""}`.trimEnd();
   }
-  escapeMd(_ctx, text) {
-    return escapeMarkdown(text != null ? text : "");
+  escapeMd(_ctx, text2) {
+    return escapeMarkdown(text2 != null ? text2 : "");
   }
   importDate(ctx) {
     return this.stateOf(ctx).importDate;
@@ -92456,21 +92734,21 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
       const setting = new import_obsidian23.Setting(containerEl);
       setting.setClass("sw-bib-path-entry");
       let inputEl;
-      setting.addText((text) => {
-        inputEl = text.inputEl;
-        text.setPlaceholder("references.bib").setValue(bibPath).onChange((value) => {
+      setting.addText((text2) => {
+        inputEl = text2.inputEl;
+        text2.setPlaceholder("references.bib").setValue(bibPath).onChange((value) => {
           this.plugin.settings.bibliographyPaths[index] = value;
           this.plugin.saveSettings(() => this.plugin.bibManager.reinit(true));
         });
-        new BibFileSuggest(this.app, text.inputEl);
-        text.inputEl.addEventListener("blur", async () => {
-          const raw = text.inputEl.value.trim();
+        new BibFileSuggest(this.app, text2.inputEl);
+        text2.inputEl.addEventListener("blur", async () => {
+          const raw = text2.inputEl.value.trim();
           if (!raw)
             return;
           try {
             const resolved = await getBibPath(raw);
             if (resolved !== raw) {
-              text.setValue(resolved);
+              text2.setValue(resolved);
               this.plugin.settings.bibliographyPaths[index] = resolved;
               this.plugin.saveSettings();
             }
@@ -92525,9 +92803,9 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
       plugin: this.plugin
     }), containerEl.createDiv("setting-item sw-setting-item-wrapper"));
     if (import_obsidian23.Platform.isDesktop) {
-      new import_obsidian23.Setting(containerEl).setName(t("Zotero data folder")).setDesc(t(`Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note's "csl" frontmatter and to list styles for export.`)).addText((text) => {
+      new import_obsidian23.Setting(containerEl).setName(t("Zotero data folder")).setDesc(t(`Folder where Zotero keeps installed styles (its data directory, or the "styles" folder itself). Leave blank to auto-detect (~/Zotero). Used to resolve a bare style name in a note's "csl" frontmatter and to list styles for export.`)).addText((text2) => {
         var _a;
-        return text.setPlaceholder("~/Zotero").setValue((_a = this.plugin.settings.zoteroDataDir) != null ? _a : "").onChange((value) => {
+        return text2.setPlaceholder("~/Zotero").setValue((_a = this.plugin.settings.zoteroDataDir) != null ? _a : "").onChange((value) => {
           this.plugin.settings.zoteroDataDir = value.trim();
           this.plugin.saveSettings(() => this.plugin.bibManager.reinit(false));
         });
@@ -92538,7 +92816,7 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
     var _a;
     renderDependencyNote(containerEl, [], t("These settings control how citations are found and rendered inside Obsidian. They need no external tools."));
     const searchEnabled = !!this.plugin.settings.enableCiteKeyCompletion;
-    new import_obsidian23.Setting(containerEl).setName(t("Trigger reference search with [@ or [[@")).setDesc(t("@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.")).addToggle((text) => text.setValue(searchEnabled).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Trigger reference search with [@ or [[@")).setDesc(t("@ searches citekeys, authors, and titles. @@ searches all of the above plus abstract, publication, publisher, and containing book title.")).addToggle((text2) => text2.setValue(searchEnabled).onChange((value) => {
       this.plugin.settings.enableCiteKeyCompletion = value;
       this.plugin.saveSettings();
       this.display();
@@ -92568,10 +92846,10 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
     })), containerEl.createDiv("sw-setting-item setting-item"));
     new import_obsidian23.Setting(containerEl).setName(t("Custom citation style")).setDesc(t('Path to a CSL file (vault-relative or absolute). Overrides the style selected above. Can be overridden per-note via the "csl" or "citation-style" frontmatter key \u2014 a bare Zotero style name, a path, or a URL.')).then((setting) => {
       let pathText;
-      setting.addText((text) => {
+      setting.addText((text2) => {
         var _a2;
-        pathText = text;
-        text.setValue((_a2 = this.plugin.settings.cslStylePath) != null ? _a2 : "").onChange((value) => {
+        pathText = text2;
+        text2.setValue((_a2 = this.plugin.settings.cslStylePath) != null ? _a2 : "").onChange((value) => {
           this.plugin.settings.cslStylePath = value;
           this.plugin.saveSettings(() => this.plugin.bibManager.reinit(false));
         });
@@ -92610,28 +92888,28 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
         }
       }
     })), containerEl.createDiv("sw-setting-item setting-item"));
-    new import_obsidian23.Setting(containerEl).setName(t("Process linked citations")).setDesc(t("Recognize [[@key]] and [[@key|see @, p. 6]] linked citations: include them in the reference list and render them as formatted inline citations in live preview. The @ placeholder inside an alias expands to the link's own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. On by default \u2014 this is the plugin's core feature.")).addToggle((text) => text.setValue(this.plugin.settings.renderLinkCitations !== false).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Process linked citations")).setDesc(t("Recognize [[@key]] and [[@key|see @, p. 6]] linked citations: include them in the reference list and render them as formatted inline citations in live preview. The @ placeholder inside an alias expands to the link's own citekey. Aliases without a citekey (e.g. [[@key|Just a label]]) are left untouched. On by default \u2014 this is the plugin's core feature.")).addToggle((text2) => text2.setValue(this.plugin.settings.renderLinkCitations !== false).onChange((value) => {
       this.plugin.settings.renderLinkCitations = value;
       this.plugin.settings.formatLinkAliases = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian23.Setting(containerEl).setName(t("Render live preview inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in live preview mode.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitations).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Render live preview inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in live preview mode.")).addToggle((text2) => text2.setValue(!!this.plugin.settings.renderCitations).onChange((value) => {
       this.plugin.settings.renderCitations = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian23.Setting(containerEl).setName(t("Render reading mode inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in reading mode.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitationsReadingMode).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Render reading mode inline citations")).setDesc(t("Convert [@pandoc] citations to formatted inline citations in reading mode.")).addToggle((text2) => text2.setValue(!!this.plugin.settings.renderCitationsReadingMode).onChange((value) => {
       this.plugin.settings.renderCitationsReadingMode = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian23.Setting(containerEl).setName(t("Link citations to literature notes")).setDesc(t("Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.")).addToggle((text) => text.setValue(!!this.plugin.settings.renderCitationsAsLinks).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Link citations to literature notes")).setDesc(t("Make rendered [@citekey] citations clickable links to their literature note. Only applies when a note with the matching citekey name exists \u2014 dead-link citations are not linked.")).addToggle((text2) => text2.setValue(!!this.plugin.settings.renderCitationsAsLinks).onChange((value) => {
       this.plugin.settings.renderCitationsAsLinks = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian23.Setting(containerEl).setName(t("Hide links in references")).setDesc(t("Replace links with link icons to save space.")).addToggle((text) => text.setValue(!!this.plugin.settings.hideLinks).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Hide links in references")).setDesc(t("Replace links with link icons to save space.")).addToggle((text2) => text2.setValue(!!this.plugin.settings.hideLinks).onChange((value) => {
       this.plugin.settings.hideLinks = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian23.Setting(containerEl).setName(t("Show PDF links in references")).setDesc(t('Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.')).addToggle((text) => text.setValue(!!this.plugin.settings.showPdfLinks).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Show PDF links in references")).setDesc(t('Add per-entry PDF-open icons to the bibliography and use PDFs as the tooltip link fallback. Off by default: "Open in Zotero" already reveals every attachment, and fetching the PDF list costs a per-citekey Zotero request.')).addToggle((text2) => text2.setValue(!!this.plugin.settings.showPdfLinks).onChange((value) => {
       this.plugin.settings.showPdfLinks = value;
       this.plugin.saveSettings();
       this.plugin.processReferences();
@@ -92737,7 +93015,7 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
       addRow("[[", "@sanchez2001|@, no note", "]]", "sw-prev-unimported", "(Sanchez 2001, no note)");
       addRow("[[", "@nothing1899", "]]", "sw-prev-unresolved-key", "@nothing1899", "sw-prev-unresolved-val");
     }
-    new import_obsidian23.Setting(containerEl).setName(t("Show citekey tooltips")).setDesc(t("Hovering over a citekey opens a tooltip showing the formatted citation, an abstract preview, and buttons to open the item in Zotero, open its PDF, and create or navigate to its literature note.")).addToggle((text) => text.setValue(!!this.plugin.settings.showCitekeyTooltips).onChange((value) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Show citekey tooltips")).setDesc(t("Hovering over a citekey opens a tooltip showing the formatted citation, an abstract preview, and buttons to open the item in Zotero, open its PDF, and create or navigate to its literature note.")).addToggle((text2) => text2.setValue(!!this.plugin.settings.showCitekeyTooltips).onChange((value) => {
       this.plugin.settings.showCitekeyTooltips = value;
       this.plugin.saveSettings();
     }));
@@ -92781,13 +93059,13 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
       this.display();
     }));
     if (useOwn) {
-      new import_obsidian23.Setting(containerEl).setName(t("Literature notes folder")).setDesc(t("Vault folder where literature notes are created (relative to the vault root). Leave blank to create them at the vault root.")).addText((text) => {
+      new import_obsidian23.Setting(containerEl).setName(t("Literature notes folder")).setDesc(t("Vault folder where literature notes are created (relative to the vault root). Leave blank to create them at the vault root.")).addText((text2) => {
         var _a;
-        text.setPlaceholder(DEFAULT_LITERATURE_NOTE_FOLDER).setValue((_a = this.plugin.settings.literatureNoteFolder) != null ? _a : "").onChange((value) => {
+        text2.setPlaceholder(DEFAULT_LITERATURE_NOTE_FOLDER).setValue((_a = this.plugin.settings.literatureNoteFolder) != null ? _a : "").onChange((value) => {
           this.plugin.settings.literatureNoteFolder = value;
           this.plugin.saveSettings();
         });
-        new FolderSuggest(this.app, text.inputEl);
+        new FolderSuggest(this.app, text2.inputEl);
       });
       const useDefaultTemplate = this.plugin.settings.useDefaultNoteTemplate !== false;
       new import_obsidian23.Setting(containerEl).setName(t("Use the default template")).setDesc(t("Render notes with ScholarWeft's bundled literature-note template. Turn this off to render with a template of your own instead.")).addToggle((toggle) => toggle.setValue(useDefaultTemplate).onChange((value) => {
@@ -92796,13 +93074,13 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
         this.display();
       }));
       if (!useDefaultTemplate) {
-        new import_obsidian23.Setting(containerEl).setName(t("Template file")).setDesc(t("Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.")).addText((text) => {
+        new import_obsidian23.Setting(containerEl).setName(t("Template file")).setDesc(t("Vault file that renders your literature notes. Pick a copy of the default template, or your own .eta.md file.")).addText((text2) => {
           var _a;
-          text.setPlaceholder("Templates/sw-note.eta.md").setValue((_a = this.plugin.settings.noteTemplatePath) != null ? _a : "").onChange((value) => {
+          text2.setPlaceholder("Templates/sw-note.eta.md").setValue((_a = this.plugin.settings.noteTemplatePath) != null ? _a : "").onChange((value) => {
             this.plugin.settings.noteTemplatePath = value.trim();
             this.plugin.saveSettings();
           });
-          new NoteTemplateSuggest(this.app, text.inputEl);
+          new NoteTemplateSuggest(this.app, text2.inputEl);
         }).addButton((button) => button.setButtonText(t("Browse\u2026")).onClick(() => {
           new NoteTemplatePickerModal((path2) => {
             this.plugin.settings.noteTemplatePath = path2;
@@ -92816,9 +93094,9 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
           void this.copyTemplateToFolder(folder);
         }).open();
       }));
-      new import_obsidian23.Setting(containerEl).setName(t("Excerpt-image folder")).setDesc(t("Vault folder that annotation excerpt images are copied into (relative to the vault root; default Attachments). Obsidian cannot display Zotero's file:// cache paths, so images are copied in and linked as ![[\u2026]].")).addText((text) => {
+      new import_obsidian23.Setting(containerEl).setName(t("Excerpt-image folder")).setDesc(t("Vault folder that annotation excerpt images are copied into (relative to the vault root; default Attachments). Obsidian cannot display Zotero's file:// cache paths, so images are copied in and linked as ![[\u2026]].")).addText((text2) => {
         var _a;
-        return text.setPlaceholder("Attachments").setValue((_a = this.plugin.settings.ownNoteImageFolder) != null ? _a : "").onChange((value) => {
+        return text2.setPlaceholder("Attachments").setValue((_a = this.plugin.settings.ownNoteImageFolder) != null ? _a : "").onChange((value) => {
           this.plugin.settings.ownNoteImageFolder = value.trim();
           this.plugin.saveSettings();
         });
@@ -93107,10 +93385,10 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
     if (import_obsidian23.Platform.isDesktop) {
       new import_obsidian23.Setting(containerEl).setName(t("Path to Pandoc (optional)")).setDesc(t("Absolute path to the Pandoc executable. Used for document import/export, and (when set) to convert .bib/.yaml files instead of the built-in parser. Leave blank to use the built-in parser for .bib files (works on all platforms).")).then((setting) => {
         let inputEl;
-        setting.addText((text) => {
+        setting.addText((text2) => {
           var _a;
-          inputEl = text.inputEl;
-          text.setPlaceholder("/usr/local/bin/pandoc").setValue((_a = this.plugin.settings.pathToPandoc) != null ? _a : "").onChange((value) => {
+          inputEl = text2.inputEl;
+          text2.setPlaceholder("/usr/local/bin/pandoc").setValue((_a = this.plugin.settings.pathToPandoc) != null ? _a : "").onChange((value) => {
             this.plugin.settings.pathToPandoc = value;
             this.plugin.saveSettings();
             invalidateToolProbe();
@@ -93133,10 +93411,10 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
     if (import_obsidian23.Platform.isDesktop) {
       new import_obsidian23.Setting(containerEl).setName(t("Path to Python 3 (for Document Compiler)")).setDesc(t('Absolute path to the python3 interpreter used by "Compile and export a book, article, or other document" and "Import a Word or ODT document". It must have the lxml and python-docx packages. Leave blank to auto-detect (python3 on PATH, then common install locations).')).then((setting) => {
         let inputEl;
-        setting.addText((text) => {
+        setting.addText((text2) => {
           var _a;
-          inputEl = text.inputEl;
-          text.setPlaceholder("/usr/local/bin/python3").setValue((_a = this.plugin.settings.pathToPython) != null ? _a : "").onChange((value) => {
+          inputEl = text2.inputEl;
+          text2.setPlaceholder("/usr/local/bin/python3").setValue((_a = this.plugin.settings.pathToPython) != null ? _a : "").onChange((value) => {
             this.plugin.settings.pathToPython = value;
             this.plugin.saveSettings();
             invalidateToolProbe();
@@ -93144,36 +93422,36 @@ var ReferenceListSettingsTab = class extends import_obsidian23.PluginSettingTab 
         });
       });
       new import_obsidian23.Setting(containerEl).setName(t("Export templates directory (optional)")).setDesc(t("Directory of your export templates (.docx, .odt, .tex). Vault-relative (e.g. Export Templates) or absolute. Leave blank to use <vault>/Export Templates/, then the templates bundled with the plugin.")).then((setting) => {
-        setting.addText((text) => {
+        setting.addText((text2) => {
           var _a;
-          return text.setPlaceholder("Export Templates").setValue((_a = this.plugin.settings.exportTemplatesDir) != null ? _a : "").onChange((value) => {
+          return text2.setPlaceholder("Export Templates").setValue((_a = this.plugin.settings.exportTemplatesDir) != null ? _a : "").onChange((value) => {
             this.plugin.settings.exportTemplatesDir = value;
             this.plugin.saveSettings();
           });
         });
       });
       new import_obsidian23.Setting(containerEl).setName(t("Default document language")).setDesc(t("Language used when a note has no `lang` property (BCP-47, e.g. en-US, de-DE, ar). It sets the LaTeX hyphenation/main language and the document language for DOCX/ODT. Set `lang:` in a note to override it.")).then((setting) => {
-        setting.addText((text) => {
+        setting.addText((text2) => {
           var _a;
-          return text.setPlaceholder("en-US").setValue((_a = this.plugin.settings.exportLanguage) != null ? _a : "").onChange((value) => {
+          return text2.setPlaceholder("en-US").setValue((_a = this.plugin.settings.exportLanguage) != null ? _a : "").onChange((value) => {
             this.plugin.settings.exportLanguage = value;
             this.plugin.saveSettings();
           });
         });
       });
       new import_obsidian23.Setting(containerEl).setName(t("Default output folder for compiled/exported documents (optional)")).setDesc(t(`Vault-relative folder where "Compile and export a book, article, or other document" puts the compiled markdown and the exported file. Leave blank to use the source file's own folder. Can be changed per-export in the modal.`)).then((setting) => {
-        setting.addText((text) => {
+        setting.addText((text2) => {
           var _a;
-          return text.setPlaceholder("Export Compiled").setValue((_a = this.plugin.settings.defaultOutputDir) != null ? _a : "").onChange((value) => {
+          return text2.setPlaceholder("Export Compiled").setValue((_a = this.plugin.settings.defaultOutputDir) != null ? _a : "").onChange((value) => {
             this.plugin.settings.defaultOutputDir = value;
             this.plugin.saveSettings();
           });
         });
       });
     }
-    new import_obsidian23.Setting(containerEl).setName(t("Default author name (optional)")).setDesc(t("Used as the document author when the note has no `author:` frontmatter property. Leave blank to omit the author field in exported documents.")).addText((text) => {
+    new import_obsidian23.Setting(containerEl).setName(t("Default author name (optional)")).setDesc(t("Used as the document author when the note has no `author:` frontmatter property. Leave blank to omit the author field in exported documents.")).addText((text2) => {
       var _a;
-      return text.setPlaceholder("First Last").setValue((_a = this.plugin.settings.defaultAuthor) != null ? _a : "").onChange((value) => {
+      return text2.setPlaceholder("First Last").setValue((_a = this.plugin.settings.defaultAuthor) != null ? _a : "").onChange((value) => {
         this.plugin.settings.defaultAuthor = value;
         this.plugin.saveSettings();
       });
@@ -93928,10 +94206,10 @@ var DataExplorerView = class extends import_obsidian26.ItemView {
       });
     }
   }
-  setPreview(text, isError = false) {
+  setPreview(text2, isError = false) {
     this.previewEl.empty();
     this.previewEl.toggleClass("is-error", isError);
-    this.previewEl.createEl("pre", { text });
+    this.previewEl.createEl("pre", { text: text2 });
   }
   async renderPreview() {
     var _a, _b, _c, _d, _e;
@@ -94391,7 +94669,7 @@ function convertMaskToIndices(matchmask = [], minMatchCharLength = Config.minMat
   return indices;
 }
 var MAX_BITS = 32;
-function search2(text, pattern, patternAlphabet, {
+function search2(text2, pattern, patternAlphabet, {
   location = Config.location,
   distance = Config.distance,
   threshold = Config.threshold,
@@ -94404,14 +94682,14 @@ function search2(text, pattern, patternAlphabet, {
     throw new Error(PATTERN_LENGTH_TOO_LARGE(MAX_BITS));
   }
   const patternLen = pattern.length;
-  const textLen = text.length;
+  const textLen = text2.length;
   const expectedLocation = Math.max(0, Math.min(location, textLen));
   let currentThreshold = threshold;
   let bestLocation = expectedLocation;
   const computeMatches = minMatchCharLength > 1 || includeMatches;
   const matchMask = computeMatches ? Array(textLen) : [];
   let index;
-  while ((index = text.indexOf(pattern, bestLocation)) > -1) {
+  while ((index = text2.indexOf(pattern, bestLocation)) > -1) {
     let score = computeScore$1(pattern, {
       currentLocation: index,
       expectedLocation,
@@ -94458,7 +94736,7 @@ function search2(text, pattern, patternAlphabet, {
     bitArr[finish + 1] = (1 << i3) - 1;
     for (let j4 = finish; j4 >= start; j4 -= 1) {
       let currentLocation = j4 - 1;
-      let charMatch = patternAlphabet[text.charAt(currentLocation)];
+      let charMatch = patternAlphabet[text2.charAt(currentLocation)];
       if (computeMatches) {
         matchMask[currentLocation] = +!!charMatch;
       }
@@ -94568,18 +94846,18 @@ var BitapSearch = class {
       addChunk(this.pattern, 0);
     }
   }
-  searchIn(text) {
+  searchIn(text2) {
     const { isCaseSensitive, includeMatches } = this.options;
     if (!isCaseSensitive) {
-      text = text.toLowerCase();
+      text2 = text2.toLowerCase();
     }
-    if (this.pattern === text) {
+    if (this.pattern === text2) {
       let result2 = {
         isMatch: true,
         score: 0
       };
       if (includeMatches) {
-        result2.indices = [[0, text.length - 1]];
+        result2.indices = [[0, text2.length - 1]];
       }
       return result2;
     }
@@ -94595,7 +94873,7 @@ var BitapSearch = class {
     let totalScore = 0;
     let hasMatches = false;
     this.chunks.forEach(({ pattern, alphabet, startIndex }) => {
-      const { isMatch, score, indices } = search2(text, pattern, alphabet, {
+      const { isMatch, score, indices } = search2(text2, pattern, alphabet, {
         location: location + startIndex,
         distance,
         threshold,
@@ -94652,8 +94930,8 @@ var ExactMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^=(.*)$/;
   }
-  search(text) {
-    const isMatch = text === this.pattern;
+  search(text2) {
+    const isMatch = text2 === this.pattern;
     return {
       isMatch,
       score: isMatch ? 0 : 1,
@@ -94674,13 +94952,13 @@ var InverseExactMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^!(.*)$/;
   }
-  search(text) {
-    const index = text.indexOf(this.pattern);
+  search(text2) {
+    const index = text2.indexOf(this.pattern);
     const isMatch = index === -1;
     return {
       isMatch,
       score: isMatch ? 0 : 1,
-      indices: [0, text.length - 1]
+      indices: [0, text2.length - 1]
     };
   }
 };
@@ -94697,8 +94975,8 @@ var PrefixExactMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^\^(.*)$/;
   }
-  search(text) {
-    const isMatch = text.startsWith(this.pattern);
+  search(text2) {
+    const isMatch = text2.startsWith(this.pattern);
     return {
       isMatch,
       score: isMatch ? 0 : 1,
@@ -94719,12 +94997,12 @@ var InversePrefixExactMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^!\^(.*)$/;
   }
-  search(text) {
-    const isMatch = !text.startsWith(this.pattern);
+  search(text2) {
+    const isMatch = !text2.startsWith(this.pattern);
     return {
       isMatch,
       score: isMatch ? 0 : 1,
-      indices: [0, text.length - 1]
+      indices: [0, text2.length - 1]
     };
   }
 };
@@ -94741,12 +95019,12 @@ var SuffixExactMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^(.*)\$$/;
   }
-  search(text) {
-    const isMatch = text.endsWith(this.pattern);
+  search(text2) {
+    const isMatch = text2.endsWith(this.pattern);
     return {
       isMatch,
       score: isMatch ? 0 : 1,
-      indices: [text.length - this.pattern.length, text.length - 1]
+      indices: [text2.length - this.pattern.length, text2.length - 1]
     };
   }
 };
@@ -94763,12 +95041,12 @@ var InverseSuffixExactMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^!(.*)\$$/;
   }
-  search(text) {
-    const isMatch = !text.endsWith(this.pattern);
+  search(text2) {
+    const isMatch = !text2.endsWith(this.pattern);
     return {
       isMatch,
       score: isMatch ? 0 : 1,
-      indices: [0, text.length - 1]
+      indices: [0, text2.length - 1]
     };
   }
 };
@@ -94804,8 +95082,8 @@ var FuzzyMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^(.*)$/;
   }
-  search(text) {
-    return this._bitapSearch.searchIn(text);
+  search(text2) {
+    return this._bitapSearch.searchIn(text2);
   }
 };
 var IncludeMatch = class extends BaseMatch {
@@ -94821,12 +95099,12 @@ var IncludeMatch = class extends BaseMatch {
   static get singleRegex() {
     return /^'(.*)$/;
   }
-  search(text) {
+  search(text2) {
     let location = 0;
     let index;
     const indices = [];
     const patternLen = this.pattern.length;
-    while ((index = text.indexOf(this.pattern, location)) > -1) {
+    while ((index = text2.indexOf(this.pattern, location)) > -1) {
       location = index + patternLen;
       indices.push([index, location - 1]);
     }
@@ -94912,7 +95190,7 @@ var ExtendedSearch = class {
   static condition(_3, options) {
     return options.useExtendedSearch;
   }
-  searchIn(text) {
+  searchIn(text2) {
     const query = this.query;
     if (!query) {
       return {
@@ -94921,7 +95199,7 @@ var ExtendedSearch = class {
       };
     }
     const { includeMatches, isCaseSensitive } = this.options;
-    text = isCaseSensitive ? text : text.toLowerCase();
+    text2 = isCaseSensitive ? text2 : text2.toLowerCase();
     let numMatches = 0;
     let allIndices = [];
     let totalScore = 0;
@@ -94931,7 +95209,7 @@ var ExtendedSearch = class {
       numMatches = 0;
       for (let j4 = 0, pLen = searchers2.length; j4 < pLen; j4 += 1) {
         const searcher = searchers2[j4];
-        const { isMatch, indices, score } = searcher.search(text);
+        const { isMatch, indices, score } = searcher.search(text2);
         if (isMatch) {
           numMatches += 1;
           totalScore += score;
@@ -95168,16 +95446,16 @@ var Fuse = class {
     const searcher = createSearcher(query, this.options);
     const { records } = this._myIndex;
     const results = [];
-    records.forEach(({ v: text, i: idx, n: norm4 }) => {
-      if (!isDefined(text)) {
+    records.forEach(({ v: text2, i: idx, n: norm4 }) => {
+      if (!isDefined(text2)) {
         return;
       }
-      const { isMatch, score, indices } = searcher.searchIn(text);
+      const { isMatch, score, indices } = searcher.searchIn(text2);
       if (isMatch) {
         results.push({
-          item: text,
+          item: text2,
           idx,
-          matches: [{ score, value: text, norm: norm4, indices }]
+          matches: [{ score, value: text2, norm: norm4, indices }]
         });
       }
     });
@@ -95267,16 +95545,16 @@ var Fuse = class {
     }
     let matches = [];
     if (isArray(value)) {
-      value.forEach(({ v: text, i: idx, n: norm4 }) => {
-        if (!isDefined(text)) {
+      value.forEach(({ v: text2, i: idx, n: norm4 }) => {
+        if (!isDefined(text2)) {
           return;
         }
-        const { isMatch, score, indices } = searcher.searchIn(text);
+        const { isMatch, score, indices } = searcher.searchIn(text2);
         if (isMatch) {
           matches.push({
             score,
             key,
-            value: text,
+            value: text2,
             idx,
             norm: norm4,
             indices
@@ -95284,10 +95562,10 @@ var Fuse = class {
         }
       });
     } else {
-      const { v: text, n: norm4 } = value;
-      const { isMatch, score, indices } = searcher.searchIn(text);
+      const { v: text2, n: norm4 } = value;
+      const { isMatch, score, indices } = searcher.searchIn(text2);
       if (isMatch) {
-        matches.push({ score, key, value: text, norm: norm4, indices });
+        matches.push({ score, key, value: text2, norm: norm4, indices });
       }
     }
     return matches;
@@ -95396,14 +95674,14 @@ var SimpleLRU = class {
 
 // src/template/search-score.ts
 var MIN_MEANINGFUL_TERM = 3;
-function words(text) {
-  const cached = WORD_CACHE.get(text);
+function words(text2) {
+  const cached = WORD_CACHE.get(text2);
   if (cached)
     return cached;
-  const out = norm2(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const out = norm2(text2).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   if (WORD_CACHE.size > 4e3)
     WORD_CACHE.clear();
-  WORD_CACHE.set(text, out);
+  WORD_CACHE.set(text2, out);
   return out;
 }
 var WORD_CACHE = new Map();
@@ -95413,21 +95691,21 @@ function queryTerms(query) {
 function norm2(s3) {
   return s3.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
-function matchesWord(text, term) {
+function matchesWord(text2, term) {
   if (!term)
     return false;
   const q4 = norm2(term);
   if (!q4)
     return false;
-  return words(text).some((w4) => w4 === q4 || w4.startsWith(q4));
+  return words(text2).some((w4) => w4 === q4 || w4.startsWith(q4));
 }
-function containsFragment(text, term) {
+function containsFragment(text2, term) {
   if (!term)
     return false;
-  return norm2(text).includes(norm2(term));
+  return norm2(text2).includes(norm2(term));
 }
-function firstWordOffset(text, term) {
-  const t4 = norm2(text);
+function firstWordOffset(text2, term) {
+  const t4 = norm2(text2);
   const q4 = norm2(term);
   if (!q4)
     return -1;
@@ -96182,16 +96460,32 @@ function reconcileKeys(list, live, renames = new Map()) {
 // src/bib/bibManager.ts
 var import_fast_deep_equal3 = __toModule(require_fast_deep_equal());
 init_helpers();
-var normalizeDiacritics = (s3) => s3.normalize("NFD").replace(/\p{Mn}/gu, "");
+
+// src/bib/csl-markdown.ts
 function cslEntryHtmlToMarkdown(html) {
   let s3 = html.trim();
-  const wrap = /^<div\b[^>]*class="[^"]*\bcsl-entry\b[^"]*"[^>]*>([\s\S]*)<\/div>\s*$/i.exec(s3);
-  if (wrap)
-    s3 = wrap[1];
-  s3 = s3.replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, "*$1*").replace(/<em\b[^>]*>([\s\S]*?)<\/em>/gi, "*$1*").replace(/<b\b[^>]*>([\s\S]*?)<\/b>/gi, "**$1**").replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, "**$1**").replace(/<[^>]+>/g, "");
+  const unwrap = (re) => {
+    const m3 = re.exec(s3);
+    if (m3)
+      s3 = m3[1];
+  };
+  unwrap(/^<div\b[^>]*class="[^"]*\bcsl-bib-body\b[^"]*"[^>]*>([\s\S]*)<\/div>\s*$/i);
+  unwrap(/^<div\b[^>]*class="[^"]*\bcsl-entry\b[^"]*"[^>]*>([\s\S]*)<\/div>\s*$/i);
+  s3 = s3.replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, "*$1*").replace(/<em\b[^>]*>([\s\S]*?)<\/em>/gi, "*$1*").replace(/<b\b[^>]*>([\s\S]*?)<\/b>/gi, "**$1**").replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, "**$1**");
+  s3 = s3.replace(/<\/div>\s*<div\b[^>]*>/gi, "\n\n");
+  s3 = s3.replace(/<[^>]+>/g, "");
   const txt = document.createElement("textarea");
   txt.innerHTML = s3;
-  return txt.value.replace(/\s+/g, " ").trim();
+  return txt.value.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// src/bib/bibManager.ts
+var normalizeDiacritics = (s3) => s3.normalize("NFD").replace(/\p{Mn}/gu, "");
+function stripUrlFields(entry) {
+  const copy = { ...entry };
+  delete copy.URL;
+  delete copy.DOI;
+  return copy;
 }
 var RENDER_CACHE_VERSION = 3;
 var CITED_KEYS_INDEX_VERSION = 2;
@@ -97467,11 +97761,18 @@ var BibManager = class {
       return out;
     await this.plugin.initPromise.promise;
     await this.initPromise.promise;
-    const style = this.resolveRenderStyle((_b = (_a = opts.style) != null ? _a : this.plugin.settings.cslStylePath) != null ? _b : this.plugin.settings.cslStyleURL);
-    const lang = (_d = (_c = opts.lang) != null ? _c : this.plugin.settings.cslLang) != null ? _d : "en-US";
+    const lang = (_b = (_a = opts.lang) != null ? _a : this.plugin.settings.cslLang) != null ? _b : "en-US";
+    const requestedStyle = (_d = (_c = opts.style) != null ? _c : this.plugin.settings.cslStylePath) != null ? _d : this.plugin.settings.cslStyleURL;
+    let style = this.resolveRenderStyle(requestedStyle);
+    if (!this.styleCache.has(style)) {
+      const keyedStyle = this.plugin.settings.cslStylePath || this.plugin.settings.cslStyleURL || DEFAULT_CSL_STYLE;
+      if (this.styleCache.has(keyedStyle))
+        style = keyedStyle;
+    }
+    const bibSource = opts.suppressUrls ? new Map(resolved.map((k4) => [k4, stripUrlFields(this.bibCache.get(k4))])) : this.bibCache;
     let engine;
     try {
-      engine = this.buildEngine(lang, this.langCache, style, this.styleCache, this.bibCache);
+      engine = this.buildEngine(lang, this.langCache, style, this.styleCache, bibSource);
     } catch (e3) {
       engine = this.engine;
     }
@@ -97493,10 +97794,19 @@ var BibManager = class {
     }
     return out;
   }
-  async renderEntryForDisplay(key, opts = {}) {
-    const map = await this.renderEntries([key], opts);
-    const html = map.get(key);
-    return html ? cslEntryHtmlToMarkdown(html).trim() : "";
+  async renderEntryElements(keys, opts = {}) {
+    var _a;
+    const entries = await this.renderEntries(keys, opts);
+    const out = new Map();
+    for (const [key, html] of entries) {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const el = (_a = doc.body.querySelector(".csl-entry")) != null ? _a : doc.body.firstElementChild;
+      if (!el)
+        continue;
+      el.dataset.citekey = key;
+      out.set(key, el);
+    }
+    return out;
   }
   getBibForCiteKey(file, key) {
     if (!this.fileCache.has(file)) {
@@ -97717,14 +98027,14 @@ var BibManager = class {
     const keys = new Set();
     for (const p4 of paths) {
       try {
-        let text;
+        let text2;
         if (isAbsolutePath(p4)) {
           const buf = await import_obsidian28.FileSystemAdapter.readLocalFile(p4);
-          text = new TextDecoder().decode(buf);
+          text2 = new TextDecoder().decode(buf);
         } else {
-          text = await app.vault.adapter.read((0, import_obsidian28.normalizePath)(p4));
+          text2 = await app.vault.adapter.read((0, import_obsidian28.normalizePath)(p4));
         }
-        for (const m3 of text.matchAll(/@\w+\s*\{\s*([^,\s\n]+)\s*,/gm)) {
+        for (const m3 of text2.matchAll(/@\w+\s*\{\s*([^,\s\n]+)\s*,/gm)) {
           keys.add(m3[1].trim());
         }
       } catch (e3) {
@@ -98882,6 +99192,7 @@ var BibManager = class {
 // src/citeSuggest/citeSuggest.ts
 var import_obsidian29 = __toModule(require("obsidian"));
 init_search_excerpt();
+init_highlight();
 
 // src/template/cite-insert.ts
 function insideUnclosedWikilink(beforeStart, afterCursor = "") {
@@ -99168,11 +99479,11 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     const current = context.query.slice(doubleAt ? 1 : 0).trim();
     const idx = list.findIndex((e3) => e3.query === current && e3.doubleAt === doubleAt);
     const next = idx === -1 ? list[0] : list[(idx + 1) % list.length];
-    const text = `${next.doubleAt ? "@@" : "@"}${next.query}`;
-    context.editor.replaceRange(text, context.start, context.end);
+    const text2 = `${next.doubleAt ? "@@" : "@"}${next.query}`;
+    context.editor.replaceRange(text2, context.start, context.end);
     context.editor.setCursor({
       line: context.start.line,
-      ch: context.start.ch + text.length
+      ch: context.start.ch + text2.length
     });
   }
   async zotlitFallback(searchQuery) {
@@ -99221,21 +99532,21 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     const excerpts = this.excerptsFor(item);
     const terms = this.termsFor(item, suggestion);
     const citekey = frag.createSpan({ text: "@" });
-    this.appendHighlighted(citekey, (_a = item.id) != null ? _a : "", terms);
+    appendHighlighted(citekey, (_a = item.id) != null ? _a : "", terms);
     if (item.title) {
       const title = frag.createSpan("sw-suggest-title");
-      this.appendHighlighted(title, item.title, terms);
+      appendHighlighted(title, item.title, terms);
     }
     const authorText = this.authorTextFor(item);
     if (authorText) {
       const authors = frag.createSpan({ cls: "sw-suggest-authors" });
-      this.appendHighlighted(authors, authorText, terms);
+      appendHighlighted(authors, authorText, terms);
     }
     const meta = getEntryMeta(item);
     if (meta)
       frag.createSpan({ text: meta, cls: "sw-suggest-meta" });
     this.appendLibraryLine(frag, item);
-    this.appendExcerpts(frag, excerpts);
+    this.appendExcerpts(frag, excerpts, terms);
     el.setText(frag);
   }
   appendLibraryLine(frag, item) {
@@ -99284,44 +99595,10 @@ var CiteSuggest = class extends import_obsidian29.EditorSuggest {
     }
     return parts.join("; ");
   }
-  appendHighlighted(el, text, terms) {
-    const spans = findTermSpans(text, terms);
-    if (spans.length === 0) {
-      el.appendText(text);
-      return;
-    }
-    let at = 0;
-    for (const s3 of spans) {
-      if (s3.start > at)
-        el.appendText(text.slice(at, s3.start));
-      const strong = createEl("strong", {
-        cls: "sw-suggest-match",
-        text: text.slice(s3.start, s3.start + s3.length)
-      });
-      el.append(strong);
-      at = s3.start + s3.length;
-    }
-    if (at < text.length)
-      el.appendText(text.slice(at));
-  }
-  appendExcerpts(frag, excerpts) {
+  appendExcerpts(frag, excerpts, terms) {
     for (const excerpt of excerpts) {
       const line = frag.createDiv({ cls: "sw-suggest-excerpt" });
-      let at = 0;
-      for (const m3 of excerpt.matches) {
-        if (m3.length <= 0 || m3.start < at || m3.start + m3.length > excerpt.text.length) {
-          continue;
-        }
-        if (m3.start > at)
-          line.appendText(excerpt.text.slice(at, m3.start));
-        line.append(createEl("strong", {
-          cls: "sw-suggest-match",
-          text: excerpt.text.slice(m3.start, m3.start + m3.length)
-        }));
-        at = m3.start + m3.length;
-      }
-      if (at < excerpt.text.length)
-        line.appendText(excerpt.text.slice(at));
+      appendHighlighted(line, excerpt.text, terms);
     }
   }
   excerptsFor(item) {
@@ -99544,8 +99821,8 @@ function rewriteContainers(str3) {
   out += str3.slice(last);
   return out;
 }
-function convertCitationsInText(text) {
-  const lines = text.split("\n");
+function convertCitationsInText(text2) {
+  const lines = text2.split("\n");
   const outLines = lines.map((line) => /\[\[@/.test(line) ? rewriteContainers(line) : line);
   return mergeCompoundCitations(outLines.join("\n"));
 }
@@ -99555,8 +99832,8 @@ function referenceBlock(entry) {
 ${entry}
 :::`;
 }
-function collectReferenceKeys(text) {
-  const groups = getCitationSegments(text, false, true).filter((g4) => g4.reference);
+function collectReferenceKeys(text2) {
+  const groups = getCitationSegments(text2, false, true).filter((g4) => g4.reference);
   const keys = new Set();
   for (const g4 of groups) {
     for (const c3 of getCitations(g4).citations)
@@ -99564,10 +99841,10 @@ function collectReferenceKeys(text) {
   }
   return [...keys];
 }
-function substituteReferenceInsertions(text, lookup) {
-  const groups = getCitationSegments(text, false, true).filter((g4) => g4.reference);
+function substituteReferenceInsertions(text2, lookup) {
+  const groups = getCitationSegments(text2, false, true).filter((g4) => g4.reference);
   if (!groups.length)
-    return text;
+    return text2;
   const edits = groups.map((g4) => {
     var _a, _b, _c, _d;
     const group = getCitations(g4);
@@ -99578,7 +99855,7 @@ function substituteReferenceInsertions(text, lookup) {
       text: parts.length ? "\n\n" + parts.map(referenceBlock).join("\n\n") + "\n\n" : ""
     };
   }).filter((e3) => e3.text).sort((a3, b3) => b3.from - a3.from);
-  let out = text;
+  let out = text2;
   for (const e3 of edits) {
     out = out.slice(0, e3.from) + e3.text + out.slice(e3.to);
   }
@@ -99586,14 +99863,14 @@ function substituteReferenceInsertions(text, lookup) {
 }
 
 // src/exportCompiler.ts
-async function convertCitationsForExport(plugin, text) {
-  const keys = collectReferenceKeys(text);
+async function convertCitationsForExport(plugin, text2) {
+  const keys = collectReferenceKeys(text2);
   if (!keys.length)
-    return convertCitationsInText(text);
+    return convertCitationsInText(text2);
   const rendered = await plugin.bibManager.renderReferenceMarkdown(keys);
   if (!rendered.size)
-    return convertCitationsInText(text);
-  return convertCitationsInText(substituteReferenceInsertions(text, (key) => rendered.get(key)));
+    return convertCitationsInText(text2);
+  return convertCitationsInText(substituteReferenceInsertions(text2, (key) => rendered.get(key)));
 }
 function execFileAsync(file, args, options) {
   const { execFile } = require("child_process");
@@ -100912,11 +101189,11 @@ ${res.stderr}`, 8e3);
   }
   async citedKeysFromText() {
     var _a;
-    const text = await this.app.vault.cachedRead(this.file);
+    const text2 = await this.app.vault.cachedRead(this.file);
     const keys = new Set();
     const re = /\[\[@([^|\]\s]+)|(?:^|[^\w@])@([A-Za-z][\w:.#$%&+?<>~/-]*)/gm;
     let m3;
-    while (m3 = re.exec(text))
+    while (m3 = re.exec(text2))
       keys.add((_a = m3[1]) != null ? _a : m3[2]);
     return Array.from(keys);
   }
@@ -101714,10 +101991,10 @@ var CitekeyReconcileModal = class extends import_obsidian34.Modal {
     this.plan = plan;
     this.onConfirm = onConfirm;
   }
-  link(parent, path2, text) {
+  link(parent, path2, text2) {
     const a3 = parent.createEl("a", {
       cls: "internal-link",
-      text: text != null ? text : path2,
+      text: text2 != null ? text2 : path2,
       href: path2
     });
     a3.addEventListener("click", (e3) => {
@@ -102379,8 +102656,8 @@ var ReferenceList = class extends import_obsidian42.Plugin {
         const entries = cache2.bib.findAll(".csl-entry");
         if (!entries.length)
           return;
-        const text = entries.map((e3) => (0, import_obsidian42.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
-        editor.replaceSelection(text);
+        const text2 = entries.map((e3) => (0, import_obsidian42.htmlToMarkdown)(e3.innerHTML).trim()).join("\n\n");
+        editor.replaceSelection(text2);
       }
     });
     this.addCommand({
@@ -102809,8 +103086,8 @@ var ReferenceList = class extends import_obsidian42.Plugin {
     ico.addClass("sw-status-icon", "clickable-icon");
     ico.setAttr("aria-label", t("ScholarWeft settings"));
     ico.setAttr("data-tooltip-position", "top");
-    const text = this.statusBarText = ico.createSpan({ cls: "sw-status-text sw-status-hidden" });
-    text.setAttr("aria-hidden", "true");
+    const text2 = this.statusBarText = ico.createSpan({ cls: "sw-status-text sw-status-hidden" });
+    text2.setAttr("aria-hidden", "true");
     this.setStatusBarIdle();
     let isOpen = false;
     ico.addEventListener("click", () => {

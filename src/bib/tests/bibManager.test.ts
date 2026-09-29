@@ -349,6 +349,34 @@ describe('zoteroItemToCSL()', () => {
     expect(r._tags).toBeUndefined();
   });
 
+  it('maps a legal case, whose name is caseName rather than title', () => {
+    const result = zoteroItemToCSL(
+      {
+        key: 'CASE0001',
+        data: {
+          citationKey: 'roe1973',
+          itemType: 'case',
+          caseName: 'Roe v. Wade',
+          court: 'Supreme Court of the United States',
+          dateDecided: '1973-01-22',
+          docketNumber: '70-18',
+          reporter: 'U.S.',
+          reporterVolume: '410',
+          firstPage: '113',
+        },
+      },
+      1
+    ) as any;
+    expect(result.type).toBe('legal_case');
+    expect(result.title).toBe('Roe v. Wade');
+    expect(result.issued).toEqual({ 'date-parts': [[1973, 1, 22]] });
+    expect(result['container-title']).toBe('U.S.');
+    expect(result.volume).toBe('410');
+    expect(result.page).toBe('113');
+    expect(result.number).toBe('70-18');
+    expect(result.authority).toBe('Supreme Court of the United States');
+  });
+
   it('maps a journal article correctly', () => {
     const result = zoteroItemToCSL(baseItem(), 1);
     expect(result).not.toBeNull();
@@ -550,6 +578,9 @@ describe('BibManager CSL rendering pipeline', () => {
     expect(cache.unresolvedKeys.size).toBe(0);
     expect(cache.citations).toHaveLength(2);
     expect(cache.citeBibMap.get('smith2020')).toContain('A Test Article');
+    // The cached HTML is the in-body (`citeBibMap`) source: emphasis must stay
+    // real markup there, not become text.
+    expect(cache.citeBibMap.get('doe2021')).toMatch(/<(i|em)\b/i);
   });
 
   it('pre-renders full reference entries as plain markdown text', async () => {
@@ -567,6 +598,70 @@ describe('BibManager CSL rendering pipeline', () => {
     expect(smith).toContain('A Test Article');
     // Tags are stripped; emphasis survives as markdown.
     expect(smith).not.toMatch(/[<>]/);
+  });
+
+  it('renders references as the shared CSL entry element (display path)', async () => {
+    const { manager } = makeManager(entries);
+    await manager.buildGlobalEngine();
+
+    const map = await manager.renderEntryElements([
+      'smith2020',
+      'doe2021',
+      'missing2024',
+    ]);
+
+    expect(map.has('missing2024')).toBe(false);
+    const book = map.get('doe2021');
+    expect(book).toBeInstanceOf(HTMLElement);
+    expect(book!.classList.contains('csl-entry')).toBe(true);
+    // The element carries a citekey so the modal can key rows by it.
+    expect(book!.dataset.citekey).toBe('doe2021');
+    expect(book!.textContent).toContain('A Test Book');
+    // The shared HTML path keeps emphasis as real markup (a book title is
+    // italicised), which is the whole reason it replaces the Markdown string.
+    expect(book!.innerHTML).toMatch(/<(i|em)\b/i);
+  });
+
+  it('gives the sidebar the same emphasised CSL entry HTML', async () => {
+    const { manager } = makeManager(entries);
+    const file = makeFile();
+    await manager.buildGlobalEngine();
+    await manager.getReferenceList(file, 'Book [@doe2021].');
+
+    const bib = manager.getBibForCiteKey(file, 'doe2021');
+    expect(bib).toBeInstanceOf(HTMLElement);
+    const entry = bib!.querySelector('.csl-entry') as HTMLElement;
+    expect(entry).toBeTruthy();
+    expect(entry.textContent).toContain('A Test Book');
+    // Unchanged by the modal work: the sidebar renders the raw CSL HTML.
+    expect(entry.innerHTML).toMatch(/<(i|em)\b/i);
+  });
+
+  it('suppresses URL/DOI for search-result references when asked', async () => {
+    const linked: PartialCSLEntry[] = [
+      {
+        ...entries[0],
+        URL: 'https://example.com/paper',
+        DOI: '10.1234/test',
+      } as any,
+    ];
+    const { manager } = makeManager(linked);
+    await manager.buildGlobalEngine();
+
+    const withLinks = (await manager.renderEntryElements(['smith2020'])).get('smith2020')!;
+    expect(withLinks.textContent).toMatch(/https?:\/\//);
+
+    const stripped = (
+      await manager.renderEntryElements(['smith2020'], { suppressUrls: true })
+    ).get('smith2020')!;
+    expect(stripped.textContent).not.toMatch(/https?:\/\//);
+    expect(stripped.textContent).not.toMatch(/doi\.org/i);
+    // The rest of the entry is untouched.
+    expect(stripped.textContent).toContain('A Test Article');
+    // Suppression must not mutate the shared cache — other surfaces still link.
+    expect((manager.bibCache.get('smith2020') as any).URL).toBe(
+      'https://example.com/paper'
+    );
   });
 
   it('does not render unresolved citekeys but records them in the file cache', async () => {

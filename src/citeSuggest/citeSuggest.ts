@@ -10,7 +10,8 @@ import {
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
 import { normalizeDiacritics } from 'src/bib/bibManager';
-import { excerptsForResult, findTermSpans } from 'src/template/search-excerpt';
+import { excerptsForResult } from 'src/template/search-excerpt';
+import { appendHighlighted } from 'src/template/highlight';
 import {
   afterOpenBracketIn,
   computeInsertion,
@@ -456,18 +457,18 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     const terms = this.termsFor(item, suggestion);
 
     const citekey = frag.createSpan({ text: '@' });
-    this.appendHighlighted(citekey, item.id ?? '', terms);
+    appendHighlighted(citekey, item.id ?? '', terms);
 
     if (item.title) {
       const title = frag.createSpan('sw-suggest-title');
-      this.appendHighlighted(title, item.title, terms);
+      appendHighlighted(title, item.title, terms);
     }
 
     // Author/editor names, so a search by name shows why it matched.
     const authorText = this.authorTextFor(item);
     if (authorText) {
       const authors = frag.createSpan({ cls: 'sw-suggest-authors' });
-      this.appendHighlighted(authors, authorText, terms);
+      appendHighlighted(authors, authorText, terms);
     }
 
 
@@ -479,7 +480,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // only for a NON-default library, below the result like an excerpt.
     this.appendLibraryLine(frag, item);
 
-    this.appendExcerpts(frag, excerpts);
+    this.appendExcerpts(frag, excerpts, terms);
 
     el.setText(frag);
 
@@ -542,40 +543,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     return parts.join('; ');
   }
 
-  /** Append `text`, emphasising every span matching one of `terms`. */
-  private appendHighlighted(
-    el: HTMLElement,
-    text: string,
-    terms: readonly string[]
-  ): void {
-    const spans = findTermSpans(text, terms);
-    if (spans.length === 0) {
-      el.appendText(text);
-      return;
-    }
-    let at = 0;
-    for (const s of spans) {
-      if (s.start > at) el.appendText(text.slice(at, s.start));
-      // Use `<mark>`, the same element the working excerpt emphasis uses, rather
-      // than `<strong>`. Obsidian's own stylesheet gives `mark` visible
-      // highlighting wherever it appears, so the emphasis cannot depend on our
-      // CSS being applied to the right ancestor — which is what silently failed
-      // for `<strong>`.
-      // `<strong>` rather than `<mark>`: only bold is wanted, and `mark` brings
-      // a background and colour that would then have to be overridden. The
-      // class is on the element itself, so nothing depends on the popup's
-      // ancestor structure (an ancestor selector is what silently failed
-      // before).
-      const strong = createEl('strong', {
-        cls: 'sw-suggest-match',
-        text: text.slice(s.start, s.start + s.length),
-      });
-      el.append(strong);
-      at = s.start + s.length;
-    }
-    if (at < text.length) el.appendText(text.slice(at));
-  }
-
   /**
    * Append the excerpt lines to a suggestion, emphasising EVERY matched term in
    * each. Several lines are shown when the terms sit far apart, so 2–3 matched
@@ -583,29 +550,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
    */
   private appendExcerpts(
     frag: DocumentFragment,
-    excerpts: ReturnType<typeof excerptsForResult>
+    excerpts: ReturnType<typeof excerptsForResult>,
+    terms: readonly string[]
   ): void {
     for (const excerpt of excerpts) {
       const line = frag.createDiv({ cls: 'sw-suggest-excerpt' });
-      let at = 0;
-      for (const m of excerpt.matches) {
-        if (
-          m.length <= 0 ||
-          m.start < at ||
-          m.start + m.length > excerpt.text.length
-        ) {
-          continue;
-        }
-        if (m.start > at) line.appendText(excerpt.text.slice(at, m.start));
-        line.append(
-          createEl('strong', {
-            cls: 'sw-suggest-match',
-            text: excerpt.text.slice(m.start, m.start + m.length),
-          })
-        );
-        at = m.start + m.length;
-      }
-      if (at < excerpt.text.length) line.appendText(excerpt.text.slice(at));
+      appendHighlighted(line, excerpt.text, terms);
     }
   }
 

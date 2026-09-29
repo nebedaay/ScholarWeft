@@ -18,6 +18,46 @@ export interface ImportItemFlags {
   hasAttachment: boolean;
   hasAnnotations: boolean;
   hasLitNote: boolean;
+  /** The item's type group, for the type filter (see `typeGroupOf`). */
+  typeGroup: ImportTypeGroup;
+}
+
+/**
+ * How the dialogue groups item types for filtering. The five "named" groups are
+ * the common scholarly types; everything else falls into `other`, so a filter
+ * can never silently hide an item with no checkbox to reach it.
+ */
+export type ImportTypeGroup =
+  | 'book'
+  | 'article'
+  | 'chapter'
+  | 'news'
+  | 'webpage'
+  | 'other';
+
+/** The groups in display order (also the order of the checkboxes). */
+export const IMPORT_TYPE_GROUPS: readonly ImportTypeGroup[] = [
+  'book',
+  'article',
+  'chapter',
+  'news',
+  'webpage',
+  'other',
+];
+
+/** CSL `type` → group. Anything not listed is `other`. */
+const CSL_TYPE_TO_GROUP: Record<string, ImportTypeGroup> = {
+  book: 'book',
+  'article-journal': 'article',
+  chapter: 'chapter',
+  'article-newspaper': 'news',
+  'article-magazine': 'news',
+  webpage: 'webpage',
+};
+
+/** The type group of a CSL entry (or `other` for anything unrecognised). */
+export function typeGroupOf(type: string | null | undefined): ImportTypeGroup {
+  return CSL_TYPE_TO_GROUP[type ?? ''] ?? 'other';
 }
 
 export interface ImportFilters {
@@ -33,6 +73,11 @@ export interface ImportFilters {
    * implies you want everything.
    */
   withoutLitNote: boolean;
+  /**
+   * Enabled item-type groups. EMPTY means "every type" — checking one or more
+   * restricts to those groups, so an all-off default never hides anything.
+   */
+  types: ImportTypeGroup[];
 }
 
 export function defaultFilters(): ImportFilters {
@@ -41,6 +86,7 @@ export function defaultFilters(): ImportFilters {
     hasAttachment: false,
     hasAnnotations: false,
     withoutLitNote: true,
+    types: [],
   };
 }
 
@@ -58,7 +104,8 @@ interface RawChildrenShape {
  */
 export function flagsFromChildren(
   children: RawChildrenShape | null | undefined,
-  hasLitNote: boolean
+  hasLitNote: boolean,
+  type?: string | null
 ): ImportItemFlags {
   const attachments = children?.attachments ?? [];
   const isPdfOrSnapshot = (ct: string | null | undefined) => {
@@ -70,6 +117,7 @@ export function flagsFromChildren(
     hasAttachment: attachments.some((a) => isPdfOrSnapshot(a?.contentType)),
     hasAnnotations: (children?.annotations?.length ?? 0) > 0,
     hasLitNote,
+    typeGroup: typeGroupOf(type),
   };
 }
 
@@ -77,8 +125,10 @@ export function flagsFromChildren(
  * Does an item satisfy the filters?
  *
  * The "has*" filters are ANDed; `withoutLitNote` is a NEGATIVE filter (keep only
- * items that LACK a note). A disabled filter never constrains anything, so the
- * all-OFF (except withoutLitNote) default means "everything missing a note".
+ * items that LACK a note); `types` restricts to the enabled type groups unless
+ * it is empty (which means every type). A disabled filter never constrains
+ * anything, so the all-OFF (except withoutLitNote) default means "everything
+ * missing a note".
  */
 export function passesImportFilters(
   flags: ImportItemFlags,
@@ -88,6 +138,9 @@ export function passesImportFilters(
   if (filters.hasAttachment && !flags.hasAttachment) return false;
   if (filters.hasAnnotations && !flags.hasAnnotations) return false;
   if (filters.withoutLitNote && flags.hasLitNote) return false;
+  if (filters.types.length && !filters.types.includes(flags.typeGroup)) {
+    return false;
+  }
   return true;
 }
 

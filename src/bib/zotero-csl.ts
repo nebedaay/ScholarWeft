@@ -95,7 +95,10 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
     groupID: groupId,
   };
 
-  if (data.title) csl.title = data.title;
+  // A legal case stores its name in `caseName`, not `title` (CSL `legal_case`
+  // carries the case name in `title`, which is why cases rendered blank before).
+  const title = data.title ?? data.caseName;
+  if (title) csl.title = title;
 
   if (data.creators?.length) {
     const byRole: Record<string, any[]> = {};
@@ -107,18 +110,23 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
     for (const [role, names] of Object.entries(byRole)) csl[role] = names;
   }
 
-  if (data.date) csl.issued = parseZoteroDate(data.date);
+  // Cases date with `dateDecided`; everything else with `date`.
+  const date = data.date ?? data.dateDecided;
+  if (date) csl.issued = parseZoteroDate(date);
 
   const containerTitle =
     data.publicationTitle ?? data.bookTitle ?? data.encyclopediaTitle ??
     data.dictionaryTitle ?? data.blogTitle ?? data.websiteTitle ??
-    data.forumTitle ?? data.proceedingsTitle ?? data.programTitle;
+    data.forumTitle ?? data.proceedingsTitle ?? data.programTitle ??
+    data.reporter;
   if (containerTitle) csl['container-title'] = containerTitle;
   if (data.journalAbbreviation) csl['container-title-short'] = data.journalAbbreviation;
 
-  if (data.volume) csl.volume = data.volume;
+  const volume = data.volume ?? data.reporterVolume;
+  if (volume) csl.volume = volume;
   if (data.issue) csl.issue = data.issue;
-  if (data.pages) csl.page = data.pages;
+  const page = data.pages ?? data.firstPage;
+  if (page) csl.page = page;
   if (data.numberOfVolumes) csl['number-of-volumes'] = data.numberOfVolumes;
   if (data.numberOfPages) csl['number-of-pages'] = data.numberOfPages;
   if (data.edition) csl.edition = data.edition;
@@ -137,7 +145,9 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   if (data.reportType) csl.genre = data.reportType;
   if (data.reportNumber) csl.number = data.reportNumber;
   if (data.patentNumber) csl.number = data.patentNumber;
+  if (data.docketNumber) csl.number = data.docketNumber;
   if (data.country) csl.jurisdiction = data.country;
+  if (data.court) csl.authority = data.court;
   if (data.applicationNumber) csl['call-number'] = data.applicationNumber;
   if (data.series) csl['collection-title'] = data.series;
   if (data.seriesTitle) csl['collection-title'] = data.seriesTitle;

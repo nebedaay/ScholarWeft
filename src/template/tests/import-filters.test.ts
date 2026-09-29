@@ -3,6 +3,7 @@ import {
   defaultFilters,
   flagsFromChildren,
   passesImportFilters,
+  typeGroupOf,
   type ImportFilters,
 } from '../import-filters';
 
@@ -11,6 +12,7 @@ const flags = (o: Partial<ReturnType<typeof flagsFromChildren>>) => ({
   hasAttachment: false,
   hasAnnotations: false,
   hasLitNote: false,
+  typeGroup: 'other' as const,
   ...o,
 });
 
@@ -21,7 +23,25 @@ describe('defaultFilters()', () => {
       hasAttachment: false,
       hasAnnotations: false,
       withoutLitNote: true,
+      types: [],
     });
+  });
+});
+
+describe('typeGroupOf()', () => {
+  it('maps the named CSL types to their groups', () => {
+    expect(typeGroupOf('book')).toBe('book');
+    expect(typeGroupOf('article-journal')).toBe('article');
+    expect(typeGroupOf('chapter')).toBe('chapter');
+    expect(typeGroupOf('article-newspaper')).toBe('news');
+    expect(typeGroupOf('article-magazine')).toBe('news');
+    expect(typeGroupOf('webpage')).toBe('webpage');
+  });
+
+  it('puts everything else in "other"', () => {
+    expect(typeGroupOf('thesis')).toBe('other');
+    expect(typeGroupOf('report')).toBe('other');
+    expect(typeGroupOf(undefined)).toBe('other');
   });
 });
 
@@ -50,6 +70,20 @@ describe('passesImportFilters()', () => {
     expect(passesImportFilters(flags({ hasNotes: false }), f)).toBe(false);
     expect(passesImportFilters(flags({ hasNotes: false }), { ...base, hasNotes: false })).toBe(true);
   });
+
+  it('shows every type when no type is checked', () => {
+    for (const g of ['book', 'article', 'chapter', 'news', 'webpage', 'other'] as const) {
+      expect(passesImportFilters(flags({ typeGroup: g }), base)).toBe(true);
+    }
+  });
+
+  it('restricts to the checked type groups', () => {
+    const f: ImportFilters = { ...base, types: ['book', 'chapter'] };
+    expect(passesImportFilters(flags({ typeGroup: 'book' }), f)).toBe(true);
+    expect(passesImportFilters(flags({ typeGroup: 'chapter' }), f)).toBe(true);
+    expect(passesImportFilters(flags({ typeGroup: 'article' }), f)).toBe(false);
+    expect(passesImportFilters(flags({ typeGroup: 'other' }), f)).toBe(false);
+  });
 });
 
 describe('flagsFromChildren()', () => {
@@ -68,6 +102,12 @@ describe('flagsFromChildren()', () => {
 
   it('carries the literature-note flag through', () => {
     expect(flagsFromChildren({}, true).hasLitNote).toBe(true);
+  });
+
+  it('derives the type group from the entry type', () => {
+    expect(flagsFromChildren({}, false, 'book').typeGroup).toBe('book');
+    expect(flagsFromChildren({}, false, 'thesis').typeGroup).toBe('other');
+    expect(flagsFromChildren({}, false).typeGroup).toBe('other');
   });
 });
 

@@ -7,15 +7,20 @@ import {
   defaultFilters,
   flagsFromChildren,
   passesImportFilters,
+  IMPORT_TYPE_GROUPS,
   type ImportFilters,
   type ImportItemFlags,
+  type ImportTypeGroup,
 } from '../template/import-filters';
+import {
+  sortImportEntries,
+  type ImportSortMode,
+  type SortDirection,
+} from '../template/import-order';
 import { readChildren } from '../template/children-cache';
 import type { RawZoteroChildren } from '../template/children';
-import {
-  excerptForResult,
-  findTermSpans,
-} from '../template/search-excerpt';
+import { excerptForResult } from '../template/search-excerpt';
+import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
 
 /**
  * Native "Add literature notes" dialogue.
@@ -31,15 +36,50 @@ import {
 /** Rows rendered per batch; more load on scroll (Obsidian has no virtual list). */
 const PAGE = 100;
 
+/** UI labels for the type groups (keys into the locale table). */
+const TYPE_GROUP_LABELS: Record<ImportTypeGroup, string> = {
+  book: 'Books',
+  article: 'Articles',
+  chapter: 'Book sections',
+  news: 'Newspaper/magazine articles',
+  webpage: 'Web pages',
+  other: 'Other',
+};
+
+/** Where the dialogue remembers the last search + ordering (per app). */
+const LAST_SEARCH_KEY = 'scholar-weft:add-notes-search';
+const DEFAULT_PLACEHOLDER = 'Search by citekey, author, title…';
+const ABSTRACT_PLACEHOLDER =
+  'Search citekey, author, title, abstract, publication…';
+
+interface LastSearchState {
+  query: string;
+  searchAbstract: boolean;
+  sortMode: ImportSortMode;
+  sortDir: SortDirection;
+}
+
+/** The remembered search/ordering, or `{}` when absent/unreadable. */
+function loadLastSearch(): Partial<LastSearchState> {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_SEARCH_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
 export class AddLiteratureNotesModal extends Modal {
   private plugin: ReferenceList;
   private query = '';
   private searchAbstract = false;
   private filters: ImportFilters = defaultFilters();
+  private sortMode: ImportSortMode = 'relevance';
+  private sortDir: SortDirection = 'asc';
   private selected = new Set<string>();
   private listEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private searchInput!: HTMLInputElement;
+  private dirSelect: HTMLSelectElement | null = null;
   private confirmBtn: HTMLButtonElement | null = null;
   private rendered = 0;
   private matches: PartialCSLEntry[] = [];
@@ -56,6 +96,19 @@ export class AddLiteratureNotesModal extends Modal {
     contentEl.addClass('sw-add-notes');
     if (modalEl) modalEl.addClass('sw-add-notes-modal');
 
+    // Restore the last search + ordering BEFORE building the UI, so the box,
+    // the toggle and the selects all start where the user left them and the
+    // results come back. Filters are deliberately NOT restored — a stale
+    // "Books only" could silently hide everything.
+    const saved = loadLastSearch();
+    this.query = typeof saved.query === 'string' ? saved.query : '';
+    this.searchAbstract = saved.searchAbstract === true;
+    this.sortMode =
+      saved.sortMode === 'author' || saved.sortMode === 'dateAdded'
+        ? saved.sortMode
+        : 'relevance';
+    this.sortDir = saved.sortDir === 'desc' ? 'desc' : 'asc';
+
     contentEl.createEl('h3', { text: t('Add literature notes') });
 
     // Search box + the abstract toggle (the `@@` tier).
@@ -64,11 +117,15 @@ export class AddLiteratureNotesModal extends Modal {
       cls: 'sw-add-notes__search',
       attr: {
         type: 'search',
-        placeholder: t('Search by citekey, author, title…'),
+        placeholder: t(
+          this.searchAbstract ? ABSTRACT_PLACEHOLDER : DEFAULT_PLACEHOLDER
+        ),
       },
     });
+    this.searchInput.value = this.query;
     this.searchInput.addEventListener('input', () => {
       this.query = this.searchInput.value;
+      this.persistSearch();
       this.refresh();
     });
     const absLabel = searchRow.createEl('label', { cls: 'sw-add-notes__abstract' });
@@ -76,12 +133,58 @@ export class AddLiteratureNotesModal extends Modal {
     absBox.checked = this.searchAbstract;
     absBox.addEventListener('change', () => {
       this.searchAbstract = absBox.checked;
-      this.searchInput.placeholder = absBox.checked
-        ? t('Search citekey, author, title, abstract, publication…')
-        : t('Search by citekey, author, title…');
+      this.searchInput.placeholder = t(
+        absBox.checked ? ABSTRACT_PLACEHOLDER : DEFAULT_PLACEHOLDER
+      );
+      this.persistSearch();
       this.refresh();
     });
     absLabel.appendText(' ' + t('Search abstracts'));
+
+    // Ordering: a sort mode + a direction. "Ranked search" is the default and
+    // the only mode whose order comes from the query itself; the direction
+    // control is disabled for it (and, with no query, it falls back to author
+    // order — see `orderMatches`).
+    const orderRow = contentEl.createDiv({ cls: 'sw-add-notes__order' });
+    orderRow.createSpan({ cls: 'sw-add-notes__order-label', text: t('Order by') });
+    const modeSelect = orderRow.createEl('select', { cls: 'dropdown' });
+    const modeOptions: Array<[ImportSortMode, string]> = [
+      ['relevance', t('Ranked search')],
+      ['author', t('Author, title, year')],
+      ['dateAdded', t('Date added')],
+    ];
+    for (const [value, label] of modeOptions) {
+      modeSelect.createEl('option', { text: label, value });
+    }
+    modeSelect.value = this.sortMode;
+    this.dirSelect = orderRow.createEl('select', { cls: 'dropdown' });
+    const dirOptions: Array<[SortDirection, string]> = [
+      ['asc', t('Ascending')],
+      ['desc', t('Descending')],
+    ];
+    for (const [value, label] of dirOptions) {
+      this.dirSelect.createEl('option', { text: label, value });
+    }
+    this.dirSelect.value = this.sortDir;
+    this.dirSelect.disabled = this.sortMode === 'relevance';
+
+    modeSelect.addEventListener('change', () => {
+      this.sortMode = modeSelect.value as ImportSortMode;
+      // A sensible direction per mode; the user can still flip it.
+      if (this.sortMode === 'dateAdded') this.sortDir = 'desc';
+      else if (this.sortMode === 'author') this.sortDir = 'asc';
+      if (this.dirSelect) {
+        this.dirSelect.value = this.sortDir;
+        this.dirSelect.disabled = this.sortMode === 'relevance';
+      }
+      this.persistSearch();
+      this.refresh();
+    });
+    this.dirSelect.addEventListener('change', () => {
+      this.sortDir = this.dirSelect!.value as SortDirection;
+      this.persistSearch();
+      this.refresh();
+    });
 
     // Filters (left column) + list (right).
     const body = contentEl.createDiv({ cls: 'sw-add-notes__body' });
@@ -118,6 +221,8 @@ export class AddLiteratureNotesModal extends Modal {
     this.confirmBtn.addEventListener('click', () => void this.createSelected());
 
     this.searchInput.focus();
+    // A restored query is selected so typing replaces it in one go.
+    if (this.query) this.searchInput.select();
     this.buildLitNoteIndex();
     this.refresh();
     // Build the library-wide presence index in the background (first open only),
@@ -130,10 +235,37 @@ export class AddLiteratureNotesModal extends Modal {
         })
         .catch((e) => console.warn('[sw:add-notes] presence index failed', e));
     }
+    // Cold start: a restored search can only be answered once the library is
+    // loaded, so re-run when it is (otherwise the box shows a query but no
+    // results until something else triggers a refresh).
+    if (!this.plugin.bibManager.fuseReady) {
+      void this.plugin.bibManager.initPromise.promise
+        .then(() => {
+          if (this.containerEl.isConnected) this.refresh();
+        })
+        .catch(() => {});
+    }
+  }
+
+  /** Remember the last search + ordering, so the next open starts there. */
+  private persistSearch(): void {
+    try {
+      localStorage.setItem(
+        LAST_SEARCH_KEY,
+        JSON.stringify({
+          query: this.query,
+          searchAbstract: this.searchAbstract,
+          sortMode: this.sortMode,
+          sortDir: this.sortDir,
+        })
+      );
+    } catch {
+      /* localStorage unavailable — remembering is best-effort */
+    }
   }
 
   private renderFilters(side: HTMLElement): void {
-    const mk = (label: string, key: keyof ImportFilters) => {
+    const mk = (label: string, key: 'hasNotes' | 'hasAttachment' | 'hasAnnotations' | 'withoutLitNote') => {
       const row = side.createEl('label', { cls: 'sw-add-notes__filter' });
       const input = row.createEl('input', { type: 'checkbox' });
       input.checked = this.filters[key];
@@ -147,6 +279,23 @@ export class AddLiteratureNotesModal extends Modal {
     mk(t('Items with a PDF or snapshot'), 'hasAttachment');
     mk(t('Items with annotations'), 'hasAnnotations');
     mk(t('Items without a literature note'), 'withoutLitNote');
+
+    // Item types: a union of the checked groups; NONE checked means every type,
+    // so the default never hides anything.
+    side.createDiv({ cls: 'sw-add-notes__filter-group', text: t('Item types') });
+    for (const group of IMPORT_TYPE_GROUPS) {
+      const row = side.createEl('label', { cls: 'sw-add-notes__filter' });
+      const input = row.createEl('input', { type: 'checkbox' });
+      input.checked = this.filters.types.includes(group);
+      input.addEventListener('change', () => {
+        const types = new Set(this.filters.types);
+        if (input.checked) types.add(group);
+        else types.delete(group);
+        this.filters = { ...this.filters, types: [...types] };
+        this.refresh();
+      });
+      row.appendText(' ' + t(TYPE_GROUP_LABELS[group]));
+    }
   }
 
   /** Vault-wide literature-note existence, by citekey (one scan, cached). */
@@ -174,47 +323,69 @@ export class AddLiteratureNotesModal extends Modal {
     const children = stable
       ? readChildren<RawZoteroChildren>(this.plugin.bibManager.childrenCache, stable)
       : null;
-    return flagsFromChildren(children, this.litNotes.has(entry.id));
+    return flagsFromChildren(
+      children,
+      this.litNotes.has(entry.id),
+      (entry as { type?: string }).type
+    );
+  }
+
+  /**
+   * Order the filtered matches. "Ranked search" keeps the query ranking when
+   * searching, but with NO query there is no ranking to keep — so it falls back
+   * to author order rather than the cache's insertion order.
+   */
+  private orderMatches(entries: PartialCSLEntry[], searching: boolean): PartialCSLEntry[] {
+    if (this.sortMode === 'relevance') {
+      return searching ? entries : sortImportEntries(entries, 'author', 'asc');
+    }
+    return sortImportEntries(entries, this.sortMode, this.sortDir);
   }
 
   private refresh(): void {
     const q = this.query.trim();
+    const searching = !!q;
+    let filtered: PartialCSLEntry[];
     if (q) {
       const { entries } = this.plugin.bibManager.searchTier(
         this.searchAbstract ? 'abstract' : 'title',
         q,
         100000
       );
-      this.matches = entries
+      filtered = entries
         .map((e) => e.entry)
         .filter((e) => passesImportFilters(this.flagsFor(e), this.filters));
       this.termsByKey = new Map(entries.map((e) => [e.entry.id, e.terms]));
     } else {
-      this.matches = Array.from(this.plugin.bibManager.bibCache.values()).filter(
+      filtered = Array.from(this.plugin.bibManager.bibCache.values()).filter(
         (e) => passesImportFilters(this.flagsFor(e), this.filters)
       );
       this.termsByKey = new Map();
     }
+    this.matches = this.orderMatches(filtered, searching);
     this.rendered = 0;
     this.listEl.empty();
     this.renderMore();
     this.updateStatus();
   }
 
-  private renderedRefs = new Map<string, string>();
+  private renderedRefs = new Map<string, HTMLElement>();
 
   private renderMore(): void {
     const slice = this.matches.slice(this.rendered, this.rendered + PAGE);
     for (const entry of slice) this.renderRow(entry);
     this.rendered += slice.length;
-    // Fill in formatted references for the rows just added, in ONE call (the
-    // plugin's own renderer — the same one `[[@key|reference]]` uses).
+    // Fill in formatted references for the rows just added, in ONE call. Uses
+    // the SHARED reference path: the same citeproc HTML the sidebar and in-body
+    // references render (`.csl-entry`), so italics and every other CSL rule
+    // appear here exactly as they do there. URLs/DOIs are suppressed: these are
+    // search results, so a click-through link is noise.
     const unrendered = slice
       .map((e) => e.id)
       .filter((id) => !this.renderedRefs.has(id));
     if (unrendered.length) {
       void this.plugin.bibManager
-        .renderReferenceMarkdown(unrendered)
+        .renderEntryElements(unrendered, { suppressUrls: true })
         .then((map) => {
           for (const [k, v] of map) this.renderedRefs.set(k, v);
           if (this.containerEl.isConnected) this.fillReferences();
@@ -230,9 +401,16 @@ export class AddLiteratureNotesModal extends Modal {
     ) as HTMLElement[]) {
       const key = row.dataset.citekey;
       if (!key) continue;
+      const entry = this.renderedRefs.get(key);
+      if (!entry) continue;
       const refEl = row.querySelector('.sw-add-notes__ref') as HTMLElement | null;
-      const text = this.renderedRefs.get(key);
-      if (refEl && text) refEl.setText(text);
+      if (!refEl) continue;
+      // Highlight the current search's terms on the CLONE, so the cached
+      // element stays clean for the next search.
+      const clone = entry.cloneNode(true) as HTMLElement;
+      highlightMatchesIn(clone, this.termsByKey.get(key) ?? []);
+      refEl.empty();
+      refEl.append(clone);
     }
   }
 
@@ -242,11 +420,19 @@ export class AddLiteratureNotesModal extends Modal {
     row.toggleClass('is-selected', this.selected.has(entry.id));
     row.dataset.citekey = entry.id;
 
+    // The terms that matched, emphasised in EVERY field below the citekey —
+    // exactly what the `@`/`@@` popup does, via the same highlighter.
+    const terms = this.termsByKey.get(entry.id) ?? [];
+
     const info = row.createDiv({ cls: 'sw-add-notes__info' });
     const head = info.createDiv({ cls: 'sw-add-notes__head' });
-    head.createSpan({ cls: 'sw-add-notes__citekey', text: `@${entry.id}` });
+    const citekey = head.createSpan({ cls: 'sw-add-notes__citekey' });
+    appendHighlighted(citekey, `@${entry.id}`, terms);
     const creators = this.creatorText(entry);
-    if (creators) head.createSpan({ cls: 'sw-add-notes__authors', text: creators });
+    if (creators) {
+      const authors = head.createSpan({ cls: 'sw-add-notes__authors' });
+      appendHighlighted(authors, creators, terms);
+    }
     if (entry.groupID && entry.groupID !== 1) {
       const name =
         this.plugin.settings.zoteroGroups?.find(
@@ -258,21 +444,27 @@ export class AddLiteratureNotesModal extends Modal {
       head.createSpan({ cls: 'sw-add-notes__has-note', text: `· ${t('has a note')}` });
     }
 
-    // The formatted reference, from the PLUGIN'S OWN renderer (the same one
-    // `[[@key|reference]]` uses: `renderReferenceMarkdown`), filled in
+    // The formatted reference, from the shared reference path — the same
+    // citeproc HTML the sidebar and in-body references render, filled in
     // asynchronously by `fillReferences`. Shows the title until it is ready.
     const ref = info.createDiv({ cls: 'sw-add-notes__ref' });
-    ref.setText(this.renderedRefs.get(entry.id) ?? entry.title ?? '');
+    const rendered = this.renderedRefs.get(entry.id);
+    if (rendered) {
+      const clone = rendered.cloneNode(true) as HTMLElement;
+      highlightMatchesIn(clone, terms);
+      ref.append(clone);
+    } else {
+      appendHighlighted(ref, entry.title ?? '', terms);
+    }
 
     // An abstract excerpt around the matched terms, when searching.
-    const terms = this.termsByKey.get(entry.id) ?? [];
     const excerpt = excerptForResult(
       entry as { abstract?: string | null },
       terms
     );
     if (excerpt) {
       const line = info.createDiv({ cls: 'sw-add-notes__excerpt' });
-      this.appendHighlighted(line, excerpt.text, excerpt.matches);
+      appendHighlighted(line, excerpt.text, terms);
     }
 
     row.addEventListener('click', () => {
@@ -281,26 +473,6 @@ export class AddLiteratureNotesModal extends Modal {
       row.toggleClass('is-selected', this.selected.has(entry.id));
       this.updateStatus();
     });
-  }
-
-  private appendHighlighted(
-    el: HTMLElement,
-    text: string,
-    matches: Array<{ start: number; length: number }>
-  ): void {
-    let at = 0;
-    for (const m of matches) {
-      if (m.length <= 0 || m.start < at || m.start + m.length > text.length) continue;
-      if (m.start > at) el.appendText(text.slice(at, m.start));
-      el.append(
-        createEl('strong', {
-          cls: 'sw-suggest-match',
-          text: text.slice(m.start, m.start + m.length),
-        })
-      );
-      at = m.start + m.length;
-    }
-    if (at < text.length) el.appendText(text.slice(at));
   }
 
   private creatorText(entry: PartialCSLEntry): string {
