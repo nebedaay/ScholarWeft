@@ -57,8 +57,12 @@ function splitAuthorInText(expanded: string): { text: string; narrative: boolean
  * `mergeContainerExpression` (the single container parser), so the export
  * converter and the in-app parser can't drift. Text between the outer brackets
  * is dropped (only the members are emitted).
+ *
+ * Exported so the REVERT path (linked → pandoc) flattens containers with the
+ * same implementation the export path uses; a second copy would be free to
+ * drift.
  */
-function rewriteContainers(str: string): string {
+export function rewriteContainers(str: string): string {
   const containers: { open: number; close: number; merged: string }[] = [];
   let scan = 0;
   while (scan < str.length) {

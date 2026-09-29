@@ -213,7 +213,7 @@ export class AddLiteratureNotesModal extends Modal {
     const footer = main.createDiv({ cls: 'sw-add-notes__footer' });
     this.statusEl = footer.createDiv({ cls: 'sw-add-notes__status' });
     const actions = footer.createDiv({ cls: 'sw-add-notes__actions' });
-    const selectAll = actions.createEl('button', { text: t('Select all shown') });
+    const selectAll = actions.createEl('button', { text: t('Select all results') });
     selectAll.addEventListener('click', () => {
       for (const e of this.matches) this.selected.add(e.id);
       this.redrawSelection();

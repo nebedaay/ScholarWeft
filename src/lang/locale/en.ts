@@ -275,7 +275,7 @@ export default {
   'Date added': 'Date added',
   Ascending: 'Ascending',
   Descending: 'Descending',
-  'Select all shown': 'Select all shown',
+  'Select all results': 'Select all results',
   Clear: 'Clear',
   'Add notes': 'Add notes',
   reference: 'reference',

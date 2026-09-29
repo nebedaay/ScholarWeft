@@ -1704,6 +1704,12 @@ export class BibManager {
         }
       }
 
+      // Collections can be added, renamed or DELETED in Zotero between
+      // refreshes, and the item delta never reports a collection change — so
+      // drop the cached index here and let the next reader rebuild it (an
+      // "Ensure…" style refresh, not a fetch on this path).
+      this.invalidateCollectionsIndex();
+
       // File group-library notes under their library folder. Cheap (a folder
       // listing + a metadata scan) and idempotent, so running it each refresh
       // means a library RENAME in Zotero is picked up without a manual command.
@@ -2931,6 +2937,11 @@ export class BibManager {
   async ensureCollectionsIndex(): Promise<void> {
     if (this.collectionsReady) return;
     await this.buildCollectionsIndex();
+  }
+
+  /** Drop the collection index so the next `ensure…` rebuilds it. */
+  invalidateCollectionsIndex(): void {
+    this.collectionsReady = false;
   }
 
   /**
