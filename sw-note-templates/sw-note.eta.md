@@ -26,6 +26,7 @@
 <% add_property('up', ['[[Bibliographic Notes]]']); -%>
 <% add_property('related', [], { force: true, merge: 'subtract', subtractFrom: 'sw-related' }); -%>
 <% add_property('sw-related', related_links(), { force: true, merge: 'replace' }); -%>
+<% add_property('zotero-collections', collection_links(), { merge: 'replace' }); -%>
 <% add_property('item-type', item.itemType); -%>
 <% add_property('title', item.title); -%>
 <% add_property('shorttitle', short_title()); -%>

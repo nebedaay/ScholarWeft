@@ -6,6 +6,7 @@ import type { PartialCSLEntry } from '../bib/types';
 import {
   defaultFilters,
   flagsFromChildren,
+  flagsFromPresence,
   passesImportFilters,
   IMPORT_TYPE_GROUPS,
   type ImportFilters,
@@ -28,6 +29,7 @@ import {
 import type { CollectionNode } from '../template/collections';
 import { excerptForResult } from '../template/search-excerpt';
 import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
+import { formatImportSummary } from '../template/import-summary';
 import { setModalTitle } from './modalTitle';
 
 /**
@@ -519,20 +521,27 @@ export class AddLiteratureNotesModal extends Modal {
 
   private flagsFor(entry: PartialCSLEntry): ImportItemFlags {
     const stable = this.stableKeyFor(entry);
-    const children = stable
-      ? readChildren<RawZoteroChildren>(this.plugin.bibManager.childrenCache, stable)
-      : null;
     const groupID = entry.groupID && entry.groupID !== 1 ? entry.groupID : 1;
     const collections = membershipTokens(
       groupID,
       (entry as { _collections?: string[] })._collections
     );
-    return flagsFromChildren(
-      children,
-      this.litNotes.has(entry.id),
-      (entry as { type?: string }).type,
-      collections
-    );
+    const type = (entry as { type?: string }).type;
+
+    // The library-wide presence index is what the has-notes/PDF/annotations
+    // filters must use — the fetched-children cache holds only the items whose
+    // children were fetched (so filtering by it returns almost nothing). Fall
+    // back to it only when presence is not built yet.
+    const presence = stable
+      ? this.plugin.bibManager.syncState.presence?.[stable]
+      : undefined;
+    if (presence) {
+      return flagsFromPresence(presence, this.litNotes.has(entry.id), type, collections);
+    }
+    const children = stable
+      ? readChildren<RawZoteroChildren>(this.plugin.bibManager.childrenCache, stable)
+      : null;
+    return flagsFromChildren(children, this.litNotes.has(entry.id), type, collections);
   }
 
   /**
@@ -731,19 +740,24 @@ export class AddLiteratureNotesModal extends Modal {
     this.close();
     const source = this.sourceFile();
     const progress = new Notice(`Creating literature notes… 0/${citekeys.length}`, 0);
-    let created = 0;
+    // Open the note when the user asked for exactly one (and the setting allows).
+    const open =
+      citekeys.length === 1 && this.plugin.settings.openImportedNote !== false;
+    const createdKeys: string[] = [];
     for (const ck of citekeys) {
       try {
-        await this.plugin.bibManager.createLiteratureNote(ck, source, { open: false });
-        created++;
+        await this.plugin.bibManager.createLiteratureNote(ck, source, { open });
+        createdKeys.push(ck);
       } catch (e) {
         console.warn('[sw:add-notes] failed for', ck, e);
       }
-      progress.setMessage(`Creating literature notes… ${created}/${citekeys.length}`);
+      progress.setMessage(
+        `Creating literature notes… ${createdKeys.length}/${citekeys.length}`
+      );
     }
     progress.hide();
     new Notice(
-      `Created or refreshed ${created} literature note${created === 1 ? '' : 's'}.`,
+      formatImportSummary(createdKeys.map((k) => `@${k}`)),
       8000
     );
   }

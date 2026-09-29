@@ -45,6 +45,7 @@ import { CiteSuggest } from './citeSuggest/citeSuggest';
 import { ExportModal } from './exportModal';
 import { ImportModal } from './importModal';
 import { setModalTitle } from './modals/modalTitle';
+import { formatImportSummary } from './template/import-summary';
 import { CitekeyRenameModal } from './modals/citekeyRenameModal';
 import { CitekeyReconcileModal } from './modals/citekeyReconcileModal';
 import type { CitekeyReconcilePlan } from './template/note-lookup';
@@ -489,7 +490,7 @@ export default class ReferenceList extends Plugin {
 
     this.addCommand({
       id: 'add-literature-notes',
-      name: t('Add literature notes (search and filter)'),
+      name: t('Add Literature Notes from Zotero (search and filter)'),
       callback: async () => {
         const { AddLiteratureNotesModal } = await import(
           './modals/addLiteratureNotesModal'
@@ -672,7 +673,7 @@ export default class ReferenceList extends Plugin {
     if (Platform.isDesktop) {
       this.addCommand({
         id: 'compile-export-book',
-        name: t('Compile and export the current document (DOCX, ODT, PDF, LaTeX)'),
+        name: t('Compile / Export Document (DOCX, ODT, PDF, LaTeX)'),
         // Always listed (no checkCallback gating) so it's discoverable; if no
         // note is active when it runs, explain instead of doing nothing.
         callback: () => {
@@ -1436,17 +1437,22 @@ export default class ReferenceList extends Plugin {
     }
 
     const run = new Notice(`Importing ${citekeys.length} literature note(s)…`, 0);
-    let imported = 0;
+    const importedKeys: string[] = [];
+    // Open the note when the user picked exactly one (and the setting allows).
+    const open = citekeys.length === 1 && this.settings.openImportedNote !== false;
     for (const ck of citekeys) {
       try {
-        await this.bibManager.createLiteratureNote(ck, anchor, { open: false });
-        imported++;
+        await this.bibManager.createLiteratureNote(ck, anchor, { open });
+        importedKeys.push(ck);
       } catch (e) {
         console.warn('[sw:import] picker import failed for', ck, e);
       }
     }
     run.hide();
-    new Notice(`Imported ${imported}/${citekeys.length} literature note(s).`, 6000);
+    new Notice(
+      formatImportSummary(importedKeys.map((k) => `@${k}`)),
+      8000
+    );
   }
 
   private findCitekeyByZoteroKey(zoteroKey: string | null): string | null {

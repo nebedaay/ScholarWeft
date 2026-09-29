@@ -1771,12 +1771,37 @@ Annotation callouts
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
 }
 /* Modal titles use Obsidian's standard top-bar element (`Modal.titleEl`); this
-   only nudges the weight so it reads as a heading. The app supplies the font,
-   centering and spacing. */
+   only nudges size and weight so it reads as a heading. The app supplies the
+   font and centering. */
 .sw-modal-title {
+  font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
+}
+
+/* Cap the larger form modals to the viewport so THEIR content scrolls instead
+   of the whole window (which pushes the action buttons off screen). */
+.sw-export-modal,
+.sw-import-modal {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* Cap the Add-notes modal to the viewport so its OWN panes scroll. Without
+   this the dialogue grows past the screen and the whole window scrolls, which
+   pushes the Add-notes buttons out of view even though everything is inside a
+   scrollable pane. */
+.sw-add-notes-modal {
+  height: min(85vh, 820px);
+  display: flex;
+  flex-direction: column;
+}
+.sw-add-notes-modal .modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .sw-add-notes__searchrow {
   display: flex;
@@ -1834,8 +1859,7 @@ Annotation callouts
 /* Collections: a compact, selectable tree, one heading per library. */
 .sw-add-notes__collection-list {
   flex: 1 1 auto;
-  min-height: 80px;
-  max-height: 260px;
+  min-height: 100px;
   overflow-y: auto;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
@@ -1910,6 +1934,7 @@ Annotation callouts
   flex-direction: column;
   gap: var(--size-4-2);
   overflow-y: auto;
+  min-height: 0;
 }
 .sw-add-notes__filter {
   display: block;

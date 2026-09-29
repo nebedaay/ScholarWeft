@@ -6,7 +6,7 @@
 // without Obsidian's file layer.
 
 import { buildNoteContextWithChildren, type RawZoteroChildren } from './children';
-import type { CachedEntry } from './context';
+import type { CachedEntry, NoteContextCollection } from './context';
 import { makeEta } from './engine';
 import { MANAGED_OPEN } from './merge';
 import {
@@ -29,6 +29,11 @@ export interface RenderNoteOptions {
   baseAttachmentPath?: string | null;
   /** Vault-relative note path; enables `note_link`. */
   notePath?: string | null;
+  /**
+   * The Zotero collections the item belongs to, resolved by the caller from the
+   * collection index (the CSL entry carries only keys).
+   */
+  collections?: NoteContextCollection[];
   /**
    * Vault path of an annotation's copied excerpt image, by annotation key. When
    * set, excerpt images link as Obsidian wikilinks instead of `file://` paths.
@@ -68,6 +73,7 @@ export function renderNote(
     dataDir: opts.dataDir,
     baseAttachmentPath: opts.baseAttachmentPath,
     notePath: opts.notePath,
+    collections: opts.collections,
     noteHeadingLevel: opts.noteHeadingLevel,
     imageVaultPath: opts.imageVaultPath,
   });

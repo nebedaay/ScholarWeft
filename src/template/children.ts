@@ -18,7 +18,7 @@
 
 import { processAnnotations } from './annotations';
 import { annotationColorToName } from './color';
-import type { NoteContextRelatedItem } from './context';
+import type { NoteContextCollection, NoteContextRelatedItem } from './context';
 import {
   backlinkFor,
   buildNoteContext,
@@ -78,6 +78,11 @@ export interface ZoteroChildrenOptions {
    * simply contributes no link.
    */
   relatedItems?: NoteContextRelatedItem[];
+  /**
+   * The item's Zotero collections, resolved to name/path by the caller (the
+   * cache/CSL entry carries only the keys). Empty on the CSL-only path.
+   */
+  collections?: NoteContextCollection[];
 }
 
 // ─── Raw access ─────────────────────────────────────────────────────────────
@@ -456,6 +461,9 @@ export function buildNoteContextWithChildren(
   raw: RawZoteroChildren,
   opts: ZoteroChildrenOptions = {}
 ): NoteContext {
-  const ctx = buildNoteContext(entry, { notePath: opts.notePath });
+  const ctx = buildNoteContext(entry, {
+    notePath: opts.notePath,
+    collections: opts.collections,
+  });
   return applyChildren(ctx, raw, opts);
 }

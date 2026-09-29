@@ -138,6 +138,29 @@ export function flagsFromChildren(
 }
 
 /**
+ * Flags from the library-wide CHILD PRESENCE index — one compact signature per
+ * item, built without per-item fetches. This is what the dialogue must use for
+ * the has-notes/PDF/annotations filters; the fetched-children cache only has the
+ * handful of items whose children happened to be fetched, so filtering by it
+ * returns almost nothing.
+ */
+export function flagsFromPresence(
+  presence: { n?: 1; a?: 1; an?: 1 } | null | undefined,
+  hasLitNote: boolean,
+  type?: string | null,
+  collections: string[] = []
+): ImportItemFlags {
+  return {
+    hasNotes: !!presence?.n,
+    hasAttachment: !!presence?.a,
+    hasAnnotations: !!presence?.an,
+    hasLitNote,
+    typeGroup: typeGroupOf(type),
+    collections,
+  };
+}
+
+/**
  * Does an item satisfy the filters?
  *
  * The "has*" filters are ANDed; `withoutLitNote` is a NEGATIVE filter (keep only

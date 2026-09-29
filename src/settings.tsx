@@ -89,6 +89,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   ownNoteNotesHeadingLevel: 3,
   /** Vault folder excerpt images are copied into (vault-root relative). */
   ownNoteImageFolder: 'Attachments',
+  /** Open the note when exactly ONE literature note is imported (default on). */
+  openImportedNote: true,
   /** How to treat an existing ZotLit note when our template renders it. */
   ownNoteZotLitHandling: 'ask',
   // autoUpdateNotes is intentionally NOT set: undefined means "not yet chosen",
@@ -254,6 +256,11 @@ export interface ReferenceListSettings {
    * Obsidian cannot render Zotero's `file://` cache paths.
    */
   ownNoteImageFolder?: string;
+  /**
+   * Open the freshly created note when exactly ONE literature note is imported.
+   * Default on; turn off to import quietly.
+   */
+  openImportedNote?: boolean;
   /**
    * How to treat a note that ZotLit created when our own template renders it:
    * `ask` (prompt, default), `convert` (replace ZotLit's region with ours), or
@@ -1283,6 +1290,22 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.ownNoteImageFolder ?? '')
             .onChange((value) => {
               this.plugin.settings.ownNoteImageFolder = value.trim();
+              this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName(t('Open a single imported note'))
+        .setDesc(
+          t(
+            'When you import exactly one literature note, open it. Turn off to import quietly.'
+          )
+        )
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.openImportedNote !== false)
+            .onChange((value) => {
+              this.plugin.settings.openImportedNote = value;
               this.plugin.saveSettings();
             })
         );

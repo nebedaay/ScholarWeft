@@ -436,6 +436,22 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(out).toContain('related: []');
   });
 
+  it('writes zotero-collections from the resolved collections', () => {
+    const withCols = renderNote(entry, raw, {
+      templateSource: template,
+      importDate: '2026-09-25',
+      collections: [
+        { key: 'c1', name: 'Economics', path: ['Economics'] },
+        { key: 'c2', name: 'Microeconomics', path: ['Economics', 'Microeconomics'] },
+      ],
+    }).content;
+    expect(withCols).toContain('zotero-collections:');
+    expect(withCols).toContain('"[[Economics]]"');
+    expect(withCols).toContain('"[[Microeconomics]]"');
+    // No collections → the property is omitted, not written empty.
+    expect(out).not.toContain('zotero-collections:');
+  });
+
   it('writes the stable zotero-key from the item key', () => {
     expect(out).toContain('zotero-key: EKUBHHNW');
     // It sits with the other Zotero identifiers (after zotero-link).

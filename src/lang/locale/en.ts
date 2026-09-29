@@ -227,6 +227,10 @@ export default {
   'Add literature notes (search and filter)':
     'Add literature notes (search and filter)',
   'Add literature notes': 'Add literature notes',
+  'Add Literature Notes from Zotero (search and filter)':
+    'Add Literature Notes from Zotero (search and filter)',
+  'Compile / Export Document (DOCX, ODT, PDF, LaTeX)':
+    'Compile / Export Document (DOCX, ODT, PDF, LaTeX)',
   'Add Literature Notes from Zotero': 'Add Literature Notes from Zotero',
   'Save Bibliography Snapshot': 'Save Bibliography Snapshot',
   'Update Literature Notes Automatically?':
@@ -259,7 +263,9 @@ export default {
   All: 'All',
   None: 'None',
   'No literature note': 'No literature note',
-  'Zotero notes': 'Zotero notes',
+  'Open a single imported note': 'Open a single imported note',
+  'When you import exactly one literature note, open it. Turn off to import quietly.':
+    'When you import exactly one literature note, open it. Turn off to import quietly.',  'Zotero notes': 'Zotero notes',
   'PDF/snapshot': 'PDF/snapshot',
   Annotations: 'Annotations',
   Collections: 'Collections',

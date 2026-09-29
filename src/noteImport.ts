@@ -399,12 +399,19 @@ export async function createOrUpdateOwnNote(
   const images = await copyExcerptImages(plugin, citekey, children, groupID, dataDir);
   const imageVaultPath = (key: string) => images.get(key) ?? null;
 
+  // Resolve the item's Zotero collections to name/path for the
+  // `zotero-collections` property. Best-effort: the index is fetched once per
+  // session, and a failure just leaves the property empty.
+  await plugin.bibManager?.ensureCollectionsIndex().catch(() => {});
+  const collections = plugin.bibManager?.collectionsForEntry(entry) ?? [];
+
   // First pass: no existing note, just to resolve the filename.
   const first = renderNote(entry, children, {
     templateSource,
     groupID,
     dataDir,
     imageVaultPath,
+    collections,
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
   });
   const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, '');
@@ -471,6 +478,7 @@ export async function createOrUpdateOwnNote(
     dataDir,
     imageVaultPath,
     notePath,
+    collections,
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
     existingContent: existing,
     migrateRelated,

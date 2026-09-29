@@ -22,6 +22,7 @@ import {
 import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
 import { SimpleLRU } from './lru';
 import { buildCollectionNodes, type CollectionNode } from 'src/template/collections';
+import { indexedKeyFor, type NoteContextCollection } from 'src/template/context';
 import {
   MIN_MATCH_CHARS,
   TIER_IGNORE_LOCATION,
@@ -2933,6 +2934,38 @@ export class BibManager {
   }
 
   /**
+   * The collections an entry belongs to, resolved to name/path from the cached
+   * index. Empty when the item is in none (or the index is not built yet). Used
+   * to populate the note template's `zotero-collections` property.
+   */
+  collectionsForEntry(
+    entry: PartialCSLEntry | null | undefined
+  ): NoteContextCollection[] {
+    const keys = (entry as { _collections?: unknown } | null | undefined)
+      ?._collections;
+    if (!Array.isArray(keys) || !keys.length) return [];
+    const raw = entry as { groupID?: number } | null | undefined;
+    const groupID = raw?.groupID && raw.groupID !== 1 ? raw.groupID : 1;
+    const byKey = new Map(
+      this.collectionNodes
+        .filter((n) => n.groupID === groupID)
+        .map((n) => [n.key, n] as const)
+    );
+    const out: NoteContextCollection[] = [];
+    for (const k of keys) {
+      const node = typeof k === 'string' ? byKey.get(k) : undefined;
+      if (node) {
+        out.push({
+          key: node.key,
+          name: node.name,
+          path: node.path ? node.path.split(' > ') : [],
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
    * Build the child-presence index (one pass per child type) so the import
    * dialogue's has-notes / PDF / annotations filters are accurate library-wide.
    * Native API only.
@@ -2956,7 +2989,13 @@ export class BibManager {
         notes: rows.notes,
         attachmentToItem: attToItem,
       });
-      for (const [k, v] of Object.entries(built)) presence[k] = v;
+      // Key by the SAME stable key the dialogue looks up (`KEY` for the personal
+      // library, `KEYgGROUPID` for a group), so a group item is not shadowed by
+      // a personal item that happens to share its key.
+      const gid = group.id === 1 ? null : group.id;
+      for (const [k, v] of Object.entries(built)) {
+        presence[indexedKeyFor(k, gid)] = v;
+      }
     }
     this.syncState = { ...this.syncState, presence };
     this.presenceReady = true;

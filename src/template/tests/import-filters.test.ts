@@ -2,6 +2,7 @@ import {
   countPassing,
   defaultFilters,
   flagsFromChildren,
+  flagsFromPresence,
   passesImportFilters,
   typeGroupOf,
   type ImportFilters,
@@ -141,6 +142,25 @@ describe('flagsFromChildren()', () => {
     expect(flagsFromChildren({}, false, 'book').typeGroup).toBe('book');
     expect(flagsFromChildren({}, false, 'thesis').typeGroup).toBe('other');
     expect(flagsFromChildren({}, false).typeGroup).toBe('other');
+  });
+});
+
+describe('flagsFromPresence()', () => {
+  it('reads the library-wide presence signature', () => {
+    expect(flagsFromPresence({ n: 1, a: 1, an: 1 }, false)).toMatchObject({
+      hasNotes: true,
+      hasAttachment: true,
+      hasAnnotations: true,
+    });
+    expect(flagsFromPresence({}, false)).toMatchObject({
+      hasNotes: false,
+      hasAttachment: false,
+      hasAnnotations: false,
+    });
+    expect(flagsFromPresence(undefined, true)).toMatchObject({
+      hasNotes: false,
+      hasLitNote: true,
+    });
   });
 });
 

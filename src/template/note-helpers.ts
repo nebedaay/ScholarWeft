@@ -498,6 +498,17 @@ export class NoteHelpers {
     return out;
   }
 
+  /**
+   * The item's Zotero collections as `[[Collection]]` frontmatter links, for the
+   * `zotero-collections` property. Zotero-owned, so the template reconciles it
+   * with `replace` — moving an item out of a collection removes the link here.
+   */
+  collectionLinks(ctx: NoteContext): string[] {
+    return ctx.collections
+      .filter((c) => c.name)
+      .map((c) => `[[${c.name}]]`);
+  }
+
   /** Attachments as `[filename](reader link)` frontmatter entries. */
   attachmentLinks(ctx: NoteContext): string[] {
     return ctx.attachments

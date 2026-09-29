@@ -171,6 +171,11 @@ export interface NoteContextChildren {
   notes?: NoteContextNote[];
   /** Vault-relative path of the literature note, once it is known. */
   notePath?: string | null;
+  /**
+   * The Zotero collections the item belongs to, resolved from the collection
+   * index (key → name/path) by the caller. The CSL entry carries only keys.
+   */
+  collections?: NoteContextCollection[];
 }
 
 /**
@@ -683,7 +688,7 @@ export function buildNoteContext(
     tags: (Array.isArray(e._tags) ? (e._tags as unknown[]) : [])
       .filter((t): t is string => typeof t === 'string' && !!t)
       .map((name) => ({ name, type: 'unknown' as const })),
-    collections: [],
+    collections: children.collections ?? [],
 
     annotations: children.annotations ?? [],
     attachments: children.attachments ?? [],

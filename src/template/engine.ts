@@ -148,6 +148,7 @@ export class NoteTemplateEngine extends Eta {
         `const short_title = () => this.noteHelpers.shortTitle(${d}); ` +
         `const aliases = () => this.noteHelpers.aliases(${d}); ` +
         `const related_links = () => this.noteHelpers.relatedLinks(${d}); ` +
+        `const collection_links = () => this.noteHelpers.collectionLinks(${d}); ` +
         `const attachment_links = () => this.noteHelpers.attachmentLinks(${d}); ` +
         `const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d}); `,
       plugins: [includeDataPlugin],
