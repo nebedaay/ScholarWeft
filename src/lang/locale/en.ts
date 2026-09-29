@@ -217,6 +217,8 @@ export default {
     'Update literature notes automatically?',
   'ScholarWeft can update a literature note automatically whenever its Zotero item changes — its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.':
     'ScholarWeft can update a literature note automatically whenever its Zotero item changes — its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.',
+  'Only the managed frontmatter fields and the annotations region change — your own writing is never overwritten, and you can keep working while it runs.':
+    'Only the managed frontmatter fields and the annotations region change — your own writing is never overwritten, and you can keep working while it runs.',
   Yes: 'Yes',
   No: 'No',
   Skip: 'Skip',

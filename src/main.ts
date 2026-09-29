@@ -2022,14 +2022,42 @@ export default class ReferenceList extends Plugin {
   }
 
   private async updateNotesForTemplate(files: TFile[]): Promise<void> {
-    const progress = new Notice(`Updating ${files.length} note(s)… 0/${files.length}`, 0);
+    // Tell the user the SCALE first: a first-run pass can be hundreds of notes
+    // and several minutes. Reassure that it is non-destructive and that they can
+    // keep working (updates are sequential and yield between notes, so the UI
+    // stays responsive; only the managed fields and region change).
+    const estimate = Math.max(1, Math.ceil(files.length / 90)); // ~90 notes/min
+    new Notice(
+      `Updating ${files.length} literature note${
+        files.length !== 1 ? 's' : ''
+      } to the current template — about ${estimate} minute${
+        estimate !== 1 ? 's' : ''
+      }. You can keep working; your own writing is never overwritten.`,
+      10000
+    );
+
+    const progress = new Notice(
+      `Updating notes… 0/${files.length} (you can keep working)`,
+      0
+    );
     let updated = 0;
+    let skipped = 0;
     for (const f of files) {
       if (await this.updateLiteratureNote(f, { confirm: false })) updated++;
-      progress.setMessage(`Updating notes… ${updated}/${files.length}`);
+      else skipped++;
+      progress.setMessage(
+        `Updating notes… ${updated + skipped}/${files.length} (you can keep working)`
+      );
+      // Yield so typing/scrolling stays responsive during a long pass.
+      await new Promise((r) => setTimeout(r, 0));
     }
     progress.hide();
-    new Notice(`Updated ${updated} literature note${updated !== 1 ? 's' : ''} to the current template.`, 8000);
+    new Notice(
+      `Updated ${updated} literature note${updated !== 1 ? 's' : ''} to the current template` +
+        (skipped ? `, skipped ${skipped}` : '') +
+        '.',
+      8000
+    );
   }
 
   private _templateCheckTimer: number | null = null;

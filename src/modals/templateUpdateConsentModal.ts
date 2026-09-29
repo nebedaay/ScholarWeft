@@ -21,14 +21,19 @@ export class TemplateUpdateConsentModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
+    const estimate = Math.max(1, Math.ceil(this.count / 90)); // ~90 notes/min
     contentEl.createEl('h3', { text: t('The note template has changed') });
     contentEl.createEl('p', {
       text:
         `${this.count} literature note${this.count !== 1 ? 's were' : ' was'} ` +
-        `${this.count !== 1 ? 'rendered' : 'rendered'} with an older template. ` +
-        t(
-          'ScholarWeft can update them to the current template — only the managed frontmatter fields and the annotations region change; your own writing is untouched.'
-        ),
+        `rendered with an older template. Updating ${
+          this.count !== 1 ? 'them' : 'it'
+        } takes about ${estimate} minute${estimate !== 1 ? 's' : ''}.`,
+    });
+    contentEl.createEl('p', {
+      text: t(
+        'Only the managed frontmatter fields and the annotations region change — your own writing is never overwritten, and you can keep working while it runs.'
+      ),
     });
     new Setting(contentEl)
       .addButton((b) =>

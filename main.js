@@ -228,6 +228,7 @@ var init_en = __esm({
       "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.": "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.",
       "Update literature notes automatically?": "Update literature notes automatically?",
       "ScholarWeft can update a literature note automatically whenever its Zotero item changes \u2014 its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.": "ScholarWeft can update a literature note automatically whenever its Zotero item changes \u2014 its metadata, or one of its annotations or attachments. Your own writing is never touched: only the managed frontmatter fields and the annotations region are refreshed.",
+      "Only the managed frontmatter fields and the annotations region change \u2014 your own writing is never overwritten, and you can keep working while it runs.": "Only the managed frontmatter fields and the annotations region change \u2014 your own writing is never overwritten, and you can keep working while it runs.",
       Yes: "Yes",
       No: "No",
       Skip: "Skip",
@@ -21114,9 +21115,13 @@ var init_templateUpdateConsentModal = __esm({
       }
       onOpen() {
         const { contentEl } = this;
+        const estimate = Math.max(1, Math.ceil(this.count / 90));
         contentEl.createEl("h3", { text: t("The note template has changed") });
         contentEl.createEl("p", {
-          text: `${this.count} literature note${this.count !== 1 ? "s were" : " was"} ${this.count !== 1 ? "rendered" : "rendered"} with an older template. ` + t("ScholarWeft can update them to the current template \u2014 only the managed frontmatter fields and the annotations region change; your own writing is untouched.")
+          text: `${this.count} literature note${this.count !== 1 ? "s were" : " was"} rendered with an older template. Updating ${this.count !== 1 ? "them" : "it"} takes about ${estimate} minute${estimate !== 1 ? "s" : ""}.`
+        });
+        contentEl.createEl("p", {
+          text: t("Only the managed frontmatter fields and the annotations region change \u2014 your own writing is never overwritten, and you can keep working while it runs.")
         });
         new import_obsidian39.Setting(contentEl).addButton((b3) => b3.setButtonText(t("Yes")).setCta().onClick(() => this.choose("yes"))).addButton((b3) => b3.setButtonText(t("No")).onClick(() => this.choose("no"))).addButton((b3) => b3.setButtonText(t("Skip")).onClick(() => this.choose("ask")));
       }
@@ -102864,15 +102869,21 @@ var ReferenceList = class extends import_obsidian41.Plugin {
       await this.updateNotesForTemplate(stale);
   }
   async updateNotesForTemplate(files) {
-    const progress = new import_obsidian41.Notice(`Updating ${files.length} note(s)\u2026 0/${files.length}`, 0);
+    const estimate = Math.max(1, Math.ceil(files.length / 90));
+    new import_obsidian41.Notice(`Updating ${files.length} literature note${files.length !== 1 ? "s" : ""} to the current template \u2014 about ${estimate} minute${estimate !== 1 ? "s" : ""}. You can keep working; your own writing is never overwritten.`, 1e4);
+    const progress = new import_obsidian41.Notice(`Updating notes\u2026 0/${files.length} (you can keep working)`, 0);
     let updated = 0;
+    let skipped = 0;
     for (const f3 of files) {
       if (await this.updateLiteratureNote(f3, { confirm: false }))
         updated++;
-      progress.setMessage(`Updating notes\u2026 ${updated}/${files.length}`);
+      else
+        skipped++;
+      progress.setMessage(`Updating notes\u2026 ${updated + skipped}/${files.length} (you can keep working)`);
+      await new Promise((r3) => setTimeout(r3, 0));
     }
     progress.hide();
-    new import_obsidian41.Notice(`Updated ${updated} literature note${updated !== 1 ? "s" : ""} to the current template.`, 8e3);
+    new import_obsidian41.Notice(`Updated ${updated} literature note${updated !== 1 ? "s" : ""} to the current template` + (skipped ? `, skipped ${skipped}` : "") + ".", 8e3);
   }
   scheduleTemplateUpdateCheck() {
     if (this._templateCheckTimer != null)
