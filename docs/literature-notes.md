@@ -287,6 +287,23 @@ If a note was created by ZotLit, ScholarWeft **asks before converting it**, so t
 
 All of these honour the own-template setting and are non-destructive: only the managed fields and region change. Updating a ZotLit note is subject to the conversion prompt above.
 
+## Keeping notes up to date automatically
+
+Three separate switches, all on the **Literature note import** settings page, each a **Yes / No** pair with **neither selected** to begin with:
+
+| Setting | What it does |
+|---|---|
+| **Update literature notes automatically** | When a Zotero item changes — its metadata, one of its annotations, an attachment, a tag — re-render its literature note. |
+| **Update citekeys automatically** | When Zotero gives a reference a new citekey, rename its literature note (and its derived files) and update the citations across the vault. |
+| **Update notes when the template changes** | When your note **template** changes, re-render the notes that were made with the older one. |
+
+**Nothing changes until you answer.** While a switch is unselected, ScholarWeft asks the first time that kind of change is detected, and your answer becomes the setting — so there is no after-the-fact surprise. All three are non-destructive: only the managed frontmatter fields and the `%%sw-managed%%` region are rewritten, never your own writing.
+
+The template update uses each note's `updated` stamp to work out which notes are stale, and shows you how many are affected and roughly how long it will take before it starts. You can keep working while it runs.
+## Group libraries: one folder each
+
+If you use Zotero group libraries, their notes go into their **own subfolder** of your literature-notes folder, named after the library. Two libraries can hold the same work (and so the same citekey), and separate folders keep those two notes apart instead of one overwriting the other. Filing happens automatically on a Zotero refresh and at startup, follows a **rename** of a Zotero library (offering to rename the folder with it), and is also available as the command **File literature notes into their library folders**.
+
 ## Bringing your Zotero notes into the literature note
 
 Zotero **child notes** can be brought into a literature note under `## Notes`:

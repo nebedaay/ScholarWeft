@@ -46,6 +46,11 @@ import { ExportModal } from './exportModal';
 import { ImportModal } from './importModal';
 import { setModalTitle } from './modals/modalTitle';
 import { formatImportSummary } from './template/import-summary';
+import {
+  DEFAULT_NOTES_PER_MINUTE,
+  estimateMinutes,
+  nextNotesPerMinute,
+} from './template/update-rate';
 import { CitekeyRenameModal } from './modals/citekeyRenameModal';
 import { CitekeyReconcileModal } from './modals/citekeyReconcileModal';
 import type { CitekeyReconcilePlan } from './template/note-lookup';
@@ -2074,7 +2079,12 @@ export default class ReferenceList extends Plugin {
       './modals/templateUpdateConsentModal'
     );
     const answer = await new Promise<'yes' | 'no' | 'ask'>((resolve) =>
-      new TemplateUpdateConsentModal(this.app, stale.length, resolve).open()
+      new TemplateUpdateConsentModal(
+        this.app,
+        stale.length,
+        resolve,
+        this._notesPerMinute
+      ).open()
     );
     if (answer === 'ask') return;
     this.settings.autoUpdateTemplate = answer === 'yes';
@@ -2127,16 +2137,19 @@ export default class ReferenceList extends Plugin {
    *  The default reflects the fetched-children CACHE: a template-only pass
    *  re-renders unchanged items from cache (no Zotero round trips), which is
    *  ~10x a cold pass — a few hundred notes is a minute, not ten. A measured
-   *  rate replaces it after the first real pass. */
-  private _notesPerMinute = 900;
+   *  rate replaces it after the first real pass (see `update-rate.ts`). */
+  private _notesPerMinute = DEFAULT_NOTES_PER_MINUTE;
 
   private estimateMinutes(count: number): number {
-    return Math.max(1, Math.ceil(count / Math.max(10, this._notesPerMinute)));
+    return estimateMinutes(count, this._notesPerMinute);
   }
 
   private recordUpdateRate(updated: number, elapsedMs: number): void {
     if (updated >= 10 && elapsedMs > 0) {
-      this._notesPerMinute = updated / (elapsedMs / 60000);
+      this._notesPerMinute = nextNotesPerMinute(
+        this._notesPerMinute,
+        updated / (elapsedMs / 60000)
+      );
       console.log(
         `[sw:template] measured ${this._notesPerMinute.toFixed(0)} notes/min`
       );

@@ -1,6 +1,24 @@
 Install/update via BRAT.
 
-### Add Literature Notes from Zotero — a new search-and-filter window
+### Notes now keep themselves up to date
+
+ScholarWeft can watch Zotero and refresh a literature note whenever its item
+changes — a corrected title, a new annotation, an added tag, a new child note.
+Your own writing is never touched: only the managed frontmatter fields and the
+annotations region are rewritten.
+
+- **Nothing changes until you say so.** The first time a change is detected you
+  are asked, and your answer becomes the setting. There is no after-the-fact
+  notice and nothing is modified before you agree.
+- **It also updates when the template changes.** Update the note template and
+  ScholarWeft offers to re-render the notes that were made with the older one.
+  Notes carry an `updated` stamp, so it can tell which are stale, and the
+  affected count is shown before anything runs.
+- All of this is **non-destructive** — a re-import reconciles the managed fields
+  and the region between `%%sw-managed%%` and `%%/sw-managed%%`, and leaves
+  everything else exactly as you wrote it.
+
+### Add Literature Notes from Zotero — a search-and-filter window
 
 Finding the references to import is now a proper dialogue inside Obsidian, not
 just Zotero's own picker. **ScholarWeft: Add Literature Notes from Zotero
@@ -11,8 +29,7 @@ shows, so book and journal titles are italicised, not asterisked.
 **Narrow it down with filters that fit in one column:**
 
 - **Show items with** — *No literature note* (on by default), *Zotero notes*,
-  *PDF/snapshot*, *Annotations*. These read a library-wide index, so they are
-  accurate for every item, not just the ones you have opened.
+  *PDF/snapshot*, *Annotations*.
 - **Show item types** — *All*, or any of *Books*, *Articles*, *Book sections*,
   *Newspaper/magazine articles*, *Web pages*, *Other*.
 - **Collections** — a tree of your collections, one heading per library (so a
@@ -21,14 +38,11 @@ shows, so book and journal titles are italicised, not asterisked.
   collection off turns its whole branch off, and **All / None** plus a clickable
   library heading let you isolate a single collection in one step.
 
-**Order the results** by *Ranked search* (the query's own ranking), *Author,
-title, year*, or *Date added*, ascending or descending. The last search and
-ordering are remembered, so reopening the dialogue resumes where you left off.
-
-Results are checked off individually or **Select all shown**, then **Add notes**
-imports them (non-destructive: re-importing merges into the existing note). When
-exactly one note is imported it opens — turn that off with **Open a single
-imported note** on the Literature note import page.
+**Order** by *Ranked search*, *Author, title, year*, or *Date added*, ascending
+or descending. The last search and ordering are remembered, so reopening the
+dialogue resumes where you left off. Imported notes can be re-imported safely —
+an existing note is merged into, not duplicated — and a single imported note
+opens (**Open a single imported note** on the Literature note import page).
 
 ### Collection membership on your notes
 
@@ -58,17 +72,48 @@ cache is normally refreshed by delta, which never revisits an item that has not
 changed in Zotero — so these fields needed one full pass to appear on existing
 items. You will see it once after this update.
 
+### Searching is richer, and the popup behaves
+
+`@` and `@@` were reworked and no longer depend on ZotLit in any way:
+
+- **`@` searches citekeys, authors and titles** (not just citekeys), and `@@`
+  adds abstracts, publishers and containing works on top — the same search with
+  more fields, so widening never buries a title or author match. (The brief
+  `@@@` level is gone; `@@` covers it.)
+- **The list is useful before you type.** An empty `@` leads with the search you
+  last ran in this note, then the references you recently cited — here, then
+  anywhere else. **Tab** cycles back through your recent searches.
+- **Underscore stands in for a space** in a single word (`@social_theory`).
+- Matched terms are **bolded** in every field and in the abstract excerpt, and
+  the popup shows an honest count (*"20 of 137"*).
+- Untitled, unattributed junk items are kept out of the list, and trashed items
+  are pruned.
+
+### A home for multi-library vaults
+
+If you use Zotero group libraries, their notes now live in **their own
+subfolder** named after the library, so two libraries holding the same work
+(which share a citekey) become two distinct notes instead of colliding. The
+filing is automatic on refresh and at startup, follows a **rename** of a Zotero
+library, and is also available as a command.
+
 ### Smaller things
 
-- The **Update all literature notes** pass is much faster now that unchanged
-  items are re-rendered from cache instead of re-fetched — its time estimate
-  says a minute where it used to say twelve.
-- Import summaries name what was imported — *"Imported 3 literature notes:
-  @a, @b, @c"* — listing up to twenty and then *"and N other notes"*.
-- Modal titles sit in the title bar beside the close button, and the
+- **Updating notes is much faster.** An unchanged item is re-rendered from cache
+  instead of re-fetched, so a template-wide update of a few hundred notes takes
+  about a minute instead of ten. Batch summaries name the notes they updated,
+  and any that were skipped, with the reason.
+- **Time estimates are learned, not fixed.** ScholarWeft assumes a fast cached
+  pass to start, then refines the figure the first time it actually runs a batch —
+  so the estimate reflects your library and machine, not a guess.
+- Import summaries name what was imported — *"Imported 3 literature notes: @a,
+  @b, @c"* — listing up to twenty and then *"and N other notes"*.
+- **Code is not a citation** — a citekey inside an inline code span or a fenced
+  block is ignored.
+- Modal titles sit in the title bar beside the close button, and the new
   search-and-filter window fits the screen without scrolling the main window.
 
 ### Everything already in ScholarWeft still works
 
-The reference sidebar, linked citations, `@`/`@@` autocomplete, document import
-and export, and the ZotLit import path (when ZotLit is selected) are unchanged.
+The reference sidebar, linked citations, document import and export, and the
+ZotLit import path (when ZotLit is selected) are unchanged.

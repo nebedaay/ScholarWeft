@@ -27,6 +27,7 @@ See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 | Create literature notes for citations lacking notes (vault) | Vault | The same, for every note in the vault |
 | Update this literature note | Current note | Re-render the active note from its Zotero item — only the managed fields and annotations region change (needs a `zotero-key`) |
 | Insert Zotero notes into literature notes (vault) | Vault | Copy a source's Zotero child notes into its literature note. ZotLit-only: the command is listed only while ZotLit is the import path — see [Literature Notes](./literature-notes.md#bringing-your-zotero-notes-into-the-literature-note) |
+| File literature notes into their library folders | Vault | Put each literature note in the subfolder named after its Zotero library (runs automatically on refresh too) — see [Literature Notes](./literature-notes.md#group-libraries-one-folder-each) |
 | Review and update citekeys from Zotero | Vault | Match notes to items by `zotero-key` and rename those whose citekey changed (also offered automatically after a Zotero refresh) |
 | List citekey discrepancies | Vault | Report-only: pending renames, notes whose new name is taken, and notes whose `zotero-key` is not in the loaded library (each linked) |
 

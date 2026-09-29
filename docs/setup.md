@@ -355,7 +355,7 @@ Settings live under **Settings → ScholarWeft**, in five pages:
 
 - **Bibliography** — where your sources come from. See [Bibliography](./bibliography.md) and [Zotero](./zotero.md).
 - **Citation and reference searching and formatting** — how citations are found (the `@` / `@@` reference search) and how they and the reference list render inside Obsidian. See [Citations](./citations.md) and [Searching for References](./searching.md).
-- **Literature note import** — where literature notes live and how they are created. See [Literature Notes](./literature-notes.md).
+- **Literature note import** — where literature notes live and how they are created. Includes the three automatic-update switches (Zotero changes, citekey changes, template changes). See [Literature Notes](./literature-notes.md).
 - **Document import/export and compilation** — tools, templates, and defaults for compiling/exporting. See [Document Import and Export](./import-export.md).
 - **Addons for displaying and linking notes** — optional add-ons (the Basic note template, and YAML property formatting).
 

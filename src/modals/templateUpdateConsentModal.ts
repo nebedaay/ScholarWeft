@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from 'obsidian';
 
 import { t } from '../lang/helpers';
+import { estimateMinutes } from '../template/update-rate';
 import { setModalTitle } from './modalTitle';
 
 /**
@@ -15,14 +16,16 @@ export class TemplateUpdateConsentModal extends Modal {
   constructor(
     app: App,
     private readonly count: number,
-    private readonly onChoose: (answer: 'yes' | 'no' | 'ask') => void
+    private readonly onChoose: (answer: 'yes' | 'no' | 'ask') => void,
+    /** The learned notes-per-minute, so the estimate matches the batch notice. */
+    private readonly notesPerMinute?: number
   ) {
     super(app);
   }
 
   onOpen(): void {
     const { contentEl } = this;
-    const estimate = Math.max(1, Math.ceil(this.count / 900)); // ~900 notes/min (cached)
+    const estimate = estimateMinutes(this.count, this.notesPerMinute);
     setModalTitle(this, t('The Note Template Has Changed'));
     contentEl.createEl('p', {
       text:
