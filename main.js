@@ -251,6 +251,10 @@ var init_en = __esm({
       "Web pages": "Web pages",
       Other: "Other",
       "Order by": "Order by",
+      Collections: "Collections",
+      "Filter collections\u2026": "Filter collections\u2026",
+      Uncategorized: "Uncategorized",
+      "No collections found": "No collections found",
       "Ranked search": "Ranked search",
       "Author, title, year": "Author, title, year",
       "Date added": "Date added",
@@ -21045,6 +21049,52 @@ var require_citeproc_commonjs = __commonJS({
   }
 });
 
+// src/template/collections.ts
+function collectionToken(groupID, key) {
+  return `${groupID}:${key}`;
+}
+function collectionTokens(groupID, keys) {
+  if (!Array.isArray(keys))
+    return [];
+  return keys.filter((k4) => typeof k4 === "string" && !!k4).map((k4) => collectionToken(groupID, k4));
+}
+function buildCollectionNodes(raw, groupID) {
+  const byKey = new Map();
+  for (const c3 of raw)
+    if (c3 == null ? void 0 : c3.key)
+      byKey.set(c3.key, c3);
+  const ancestors = (key) => {
+    const names = [];
+    const seen = new Set();
+    let cur = key;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const node = byKey.get(cur);
+      if (!node)
+        break;
+      names.unshift(node.name || cur);
+      cur = node.parentCollection;
+    }
+    return names;
+  };
+  return raw.filter((c3) => !!(c3 == null ? void 0 : c3.key)).map((c3) => {
+    const names = ancestors(c3.key);
+    return {
+      key: c3.key,
+      groupID,
+      name: c3.name,
+      path: names.join(" > "),
+      depth: Math.max(0, names.length - 1)
+    };
+  }).sort((a3, b3) => collator.compare(a3.path, b3.path) || collator.compare(a3.key, b3.key));
+}
+var collator;
+var init_collections = __esm({
+  "src/template/collections.ts"() {
+    collator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+  }
+});
+
 // src/template/search-excerpt.ts
 function excerptsForResult(item, queryTerms3, opts = {}) {
   if (queryTerms3.length === 0)
@@ -21345,10 +21395,12 @@ function defaultFilters() {
     hasAttachment: false,
     hasAnnotations: false,
     withoutLitNote: true,
-    types: []
+    types: [],
+    collections: [],
+    uncategorized: false
   };
 }
-function flagsFromChildren(children, hasLitNote, type) {
+function flagsFromChildren(children, hasLitNote, type, collections = []) {
   var _a, _b, _c, _d, _e;
   const attachments = (_a = children == null ? void 0 : children.attachments) != null ? _a : [];
   const isPdfOrSnapshot2 = (ct) => {
@@ -21360,7 +21412,8 @@ function flagsFromChildren(children, hasLitNote, type) {
     hasAttachment: attachments.some((a3) => isPdfOrSnapshot2(a3 == null ? void 0 : a3.contentType)),
     hasAnnotations: ((_e = (_d = children == null ? void 0 : children.annotations) == null ? void 0 : _d.length) != null ? _e : 0) > 0,
     hasLitNote,
-    typeGroup: typeGroupOf(type)
+    typeGroup: typeGroupOf(type),
+    collections
   };
 }
 function passesImportFilters(flags, filters) {
@@ -21374,6 +21427,12 @@ function passesImportFilters(flags, filters) {
     return false;
   if (filters.types.length && !filters.types.includes(flags.typeGroup)) {
     return false;
+  }
+  if (filters.collections.length || filters.uncategorized) {
+    const inSelected = flags.collections.some((c3) => filters.collections.includes(c3));
+    const uncategorized = flags.collections.length === 0;
+    if (!inSelected && !(filters.uncategorized && uncategorized))
+      return false;
   }
   return true;
 }
@@ -21424,10 +21483,10 @@ function dateAddedOf(entry) {
   return text(entry._dateAdded);
 }
 function compareAuthor(a3, b3) {
-  return collator.compare(authorKey(a3), authorKey(b3)) || collator.compare(titleKey(a3), titleKey(b3)) || yearOf(a3) - yearOf(b3) || collator.compare(dateAddedOf(a3), dateAddedOf(b3));
+  return collator2.compare(authorKey(a3), authorKey(b3)) || collator2.compare(titleKey(a3), titleKey(b3)) || yearOf(a3) - yearOf(b3) || collator2.compare(dateAddedOf(a3), dateAddedOf(b3));
 }
 function compareDateAdded(a3, b3) {
-  return collator.compare(dateAddedOf(a3), dateAddedOf(b3)) || collator.compare(authorKey(a3), authorKey(b3)) || collator.compare(titleKey(a3), titleKey(b3));
+  return collator2.compare(dateAddedOf(a3), dateAddedOf(b3)) || collator2.compare(authorKey(a3), authorKey(b3)) || collator2.compare(titleKey(a3), titleKey(b3));
 }
 function authorRank(entry) {
   if (authorKey(entry))
@@ -21450,10 +21509,10 @@ function sortImportEntries(entries, mode, dir = "asc") {
   });
   return out;
 }
-var collator;
+var collator2;
 var init_import_order = __esm({
   "src/template/import-order.ts"() {
-    collator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+    collator2 = new Intl.Collator("en", { sensitivity: "base", numeric: true });
   }
 });
 
@@ -21477,6 +21536,7 @@ var init_addLiteratureNotesModal = __esm({
     init_import_filters();
     init_import_order();
     init_children_cache();
+    init_collections();
     init_search_excerpt();
     init_highlight();
     PAGE = 100;
@@ -21506,6 +21566,8 @@ var init_addLiteratureNotesModal = __esm({
         this.matches = [];
         this.termsByKey = new Map();
         this.litNotes = new Set();
+        this.collectionQuery = "";
+        this.collectionListEl = null;
         this.renderedRefs = new Map();
         this.plugin = plugin;
       }
@@ -21626,6 +21688,12 @@ var init_addLiteratureNotesModal = __esm({
               this.refresh();
           }).catch((e3) => console.warn("[sw:add-notes] presence index failed", e3));
         }
+        if (!this.plugin.bibManager.collectionsReady) {
+          void this.plugin.bibManager.ensureCollectionsIndex().then(() => {
+            if (this.containerEl.isConnected)
+              this.renderCollectionList();
+          }).catch((e3) => console.warn("[sw:add-notes] collections index failed", e3));
+        }
         if (!this.plugin.bibManager.fuseReady) {
           void this.plugin.bibManager.initPromise.promise.then(() => {
             if (this.containerEl.isConnected)
@@ -21676,6 +21744,66 @@ var init_addLiteratureNotesModal = __esm({
           });
           row.appendText(" " + t(TYPE_GROUP_LABELS[group]));
         }
+        side.createDiv({ cls: "sw-add-notes__filter-group", text: t("Collections") });
+        const colWrap = side.createDiv({ cls: "sw-add-notes__collections" });
+        const colSearch = colWrap.createEl("input", {
+          cls: "sw-add-notes__collection-search",
+          attr: { type: "search", placeholder: t("Filter collections\u2026") }
+        });
+        colSearch.value = this.collectionQuery;
+        colSearch.addEventListener("input", () => {
+          this.collectionQuery = colSearch.value;
+          this.renderCollectionList();
+        });
+        this.collectionListEl = colWrap.createDiv({
+          cls: "sw-add-notes__collection-list"
+        });
+        this.renderCollectionList();
+      }
+      renderCollectionList() {
+        const list = this.collectionListEl;
+        if (!list)
+          return;
+        list.empty();
+        const uncat = list.createEl("label", { cls: "sw-add-notes__filter" });
+        const uncatBox = uncat.createEl("input", { type: "checkbox" });
+        uncatBox.checked = this.filters.uncategorized;
+        uncatBox.addEventListener("change", () => {
+          this.filters = { ...this.filters, uncategorized: uncatBox.checked };
+          this.refresh();
+        });
+        uncat.appendText(" " + t("Uncategorized"));
+        const nodes = this.plugin.bibManager.collectionNodes;
+        if (!nodes.length) {
+          list.createDiv({
+            cls: "sw-add-notes__collection-empty",
+            text: t("No collections found")
+          });
+          return;
+        }
+        const q4 = this.collectionQuery.trim().toLowerCase();
+        const selected = new Set(this.filters.collections);
+        for (const node of nodes) {
+          if (q4 && !node.path.toLowerCase().includes(q4))
+            continue;
+          const token = collectionToken(node.groupID, node.key);
+          const row = list.createEl("label", {
+            cls: "sw-add-notes__filter sw-add-notes__collection"
+          });
+          row.style.paddingLeft = `${8 + node.depth * 10}px`;
+          const input = row.createEl("input", { type: "checkbox" });
+          input.checked = selected.has(token);
+          input.addEventListener("change", () => {
+            const set = new Set(this.filters.collections);
+            if (input.checked)
+              set.add(token);
+            else
+              set.delete(token);
+            this.filters = { ...this.filters, collections: [...set] };
+            this.refresh();
+          });
+          row.appendText(" " + node.path);
+        }
       }
       buildLitNoteIndex() {
         var _a;
@@ -21695,7 +21823,9 @@ var init_addLiteratureNotesModal = __esm({
       flagsFor(entry) {
         const stable = this.stableKeyFor(entry);
         const children = stable ? readChildren(this.plugin.bibManager.childrenCache, stable) : null;
-        return flagsFromChildren(children, this.litNotes.has(entry.id), entry.type);
+        const groupID = entry.groupID && entry.groupID !== 1 ? entry.groupID : 1;
+        const collections = collectionTokens(groupID, entry._collections);
+        return flagsFromChildren(children, this.litNotes.has(entry.id), entry.type, collections);
       }
       orderMatches(entries, searching) {
         if (this.sortMode === "relevance") {
@@ -69195,6 +69325,11 @@ function zoteroItemToCSL(item, groupId) {
     if (tags.length)
       csl._tags = tags;
   }
+  if (Array.isArray(data.collections) && data.collections.length) {
+    const keys = data.collections.filter((k4) => typeof k4 === "string" && !!k4);
+    if (keys.length)
+      csl._collections = keys;
+  }
   if (data.dateAdded)
     csl._dateAdded = data.dateAdded;
   if ((_T = data.creators) == null ? void 0 : _T.length) {
@@ -69561,6 +69696,33 @@ async function isZoteroRunningNative(port = DEFAULT_ZOTERO_PORT) {
     return false;
   }
 }
+async function fetchCollectionsNative(port = DEFAULT_ZOTERO_PORT, groupId = 1) {
+  var _a, _b, _c;
+  if (!await isZoteroRunningNative(port))
+    return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(groupId);
+  const limit = 100;
+  const out = [];
+  for (let start = 0; ; start += limit) {
+    const { data } = await fetchNativePageWithRetry(port, `/api/${libraryType}/${libraryId}/collections?format=json&limit=${limit}&start=${start}`);
+    if (!Array.isArray(data) || data.length === 0)
+      break;
+    for (const c3 of data) {
+      const key = typeof (c3 == null ? void 0 : c3.key) === "string" ? c3.key : "";
+      const name = typeof ((_a = c3 == null ? void 0 : c3.data) == null ? void 0 : _a.name) === "string" ? c3.data.name : "";
+      if (!key)
+        continue;
+      out.push({
+        key,
+        name,
+        parentCollection: (_c = (_b = c3 == null ? void 0 : c3.data) == null ? void 0 : _b.parentCollection) != null ? _c : null
+      });
+    }
+    if (data.length < limit)
+      break;
+  }
+  return out;
+}
 async function getZUserGroupsNative(port = DEFAULT_ZOTERO_PORT) {
   var _a, _b;
   if (!await isZoteroRunningNative(port))
@@ -69654,7 +69816,7 @@ async function fetchTrashedItemKeysNative(port = DEFAULT_ZOTERO_PORT, libraryID 
   return out;
 }
 var LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1e3;
-var MAPPING_VERSION = 1;
+var MAPPING_VERSION = 2;
 function needsMappingRemap(cacheData) {
   var _a;
   return ((_a = cacheData == null ? void 0 : cacheData.mappingVersion) != null ? _a : 0) !== MAPPING_VERSION;
@@ -95715,6 +95877,9 @@ var SimpleLRU = class {
   }
 };
 
+// src/bib/bibManager.ts
+init_collections();
+
 // src/template/search-score.ts
 var MIN_MEANINGFUL_TERM = 3;
 function words(text2) {
@@ -96829,6 +96994,8 @@ var BibManager = class {
     this.globalWatchedBibPaths = new Set();
     this.scopedWatchedBibPaths = new Map();
     this.presenceReady = false;
+    this.collectionNodes = [];
+    this.collectionsReady = false;
     this._childrenCacheTimer = null;
     this.warming = false;
     this.warmingSkipPDFs = false;
@@ -98275,6 +98442,27 @@ var BibManager = class {
       h3 = Math.imul(h3, 16777619);
     }
     return (h3 >>> 0).toString(16);
+  }
+  async buildCollectionsIndex() {
+    var _a, _b;
+    const { settings } = this.plugin;
+    if (settings.useNativeZoteroAPI === false)
+      return;
+    const port = (_a = settings.zoteroPort) != null ? _a : DEFAULT_ZOTERO_PORT;
+    const nodes = [];
+    for (const group of (_b = settings.zoteroGroups) != null ? _b : []) {
+      const raw = await fetchCollectionsNative(port, group.id);
+      if (!raw)
+        continue;
+      nodes.push(...buildCollectionNodes(raw, group.id));
+    }
+    this.collectionNodes = nodes;
+    this.collectionsReady = true;
+  }
+  async ensureCollectionsIndex() {
+    if (this.collectionsReady)
+      return;
+    await this.buildCollectionsIndex();
   }
   async buildChildPresenceIndex() {
     var _a, _b, _c;

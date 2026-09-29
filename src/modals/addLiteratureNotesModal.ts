@@ -19,6 +19,7 @@ import {
 } from '../template/import-order';
 import { readChildren } from '../template/children-cache';
 import type { RawZoteroChildren } from '../template/children';
+import { collectionToken, collectionTokens } from '../template/collections';
 import { excerptForResult } from '../template/search-excerpt';
 import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
 
@@ -85,6 +86,8 @@ export class AddLiteratureNotesModal extends Modal {
   private matches: PartialCSLEntry[] = [];
   private termsByKey = new Map<string, string[]>();
   private litNotes = new Set<string>();
+  private collectionQuery = '';
+  private collectionListEl: HTMLElement | null = null;
 
   constructor(app: App, plugin: ReferenceList) {
     super(app);
@@ -235,6 +238,18 @@ export class AddLiteratureNotesModal extends Modal {
         })
         .catch((e) => console.warn('[sw:add-notes] presence index failed', e));
     }
+    // Collections load fast and populate the checklist; nothing is fetched if
+    // the index is already built.
+    if (!this.plugin.bibManager.collectionsReady) {
+      void this.plugin.bibManager
+        .ensureCollectionsIndex()
+        .then(() => {
+          if (this.containerEl.isConnected) this.renderCollectionList();
+        })
+        .catch((e) =>
+          console.warn('[sw:add-notes] collections index failed', e)
+        );
+    }
     // Cold start: a restored search can only be answered once the library is
     // loaded, so re-run when it is (otherwise the box shows a query but no
     // results until something else triggers a refresh).
@@ -296,6 +311,72 @@ export class AddLiteratureNotesModal extends Modal {
       });
       row.appendText(' ' + t(TYPE_GROUP_LABELS[group]));
     }
+
+    // Collections: a UNION (in at least one checked collection). Searchable
+    // because a real library has hundreds, nested; the path disambiguates
+    // duplicate names. Items in no collection are reachable via Uncategorized.
+    side.createDiv({ cls: 'sw-add-notes__filter-group', text: t('Collections') });
+    const colWrap = side.createDiv({ cls: 'sw-add-notes__collections' });
+    const colSearch = colWrap.createEl('input', {
+      cls: 'sw-add-notes__collection-search',
+      attr: { type: 'search', placeholder: t('Filter collections…') },
+    });
+    colSearch.value = this.collectionQuery;
+    colSearch.addEventListener('input', () => {
+      this.collectionQuery = colSearch.value;
+      this.renderCollectionList();
+    });
+    this.collectionListEl = colWrap.createDiv({
+      cls: 'sw-add-notes__collection-list',
+    });
+    this.renderCollectionList();
+  }
+
+  /** Fill the collection checklist from the index, honouring the search box. */
+  private renderCollectionList(): void {
+    const list = this.collectionListEl;
+    if (!list) return;
+    list.empty();
+
+    const uncat = list.createEl('label', { cls: 'sw-add-notes__filter' });
+    const uncatBox = uncat.createEl('input', { type: 'checkbox' });
+    uncatBox.checked = this.filters.uncategorized;
+    uncatBox.addEventListener('change', () => {
+      this.filters = { ...this.filters, uncategorized: uncatBox.checked };
+      this.refresh();
+    });
+    uncat.appendText(' ' + t('Uncategorized'));
+
+    const nodes = this.plugin.bibManager.collectionNodes;
+    if (!nodes.length) {
+      list.createDiv({
+        cls: 'sw-add-notes__collection-empty',
+        text: t('No collections found'),
+      });
+      return;
+    }
+
+    const q = this.collectionQuery.trim().toLowerCase();
+    const selected = new Set(this.filters.collections);
+    for (const node of nodes) {
+      if (q && !node.path.toLowerCase().includes(q)) continue;
+      const token = collectionToken(node.groupID, node.key);
+      const row = list.createEl('label', {
+        cls: 'sw-add-notes__filter sw-add-notes__collection',
+      });
+      // Indent by nesting depth so the hierarchy reads at a glance.
+      row.style.paddingLeft = `${8 + node.depth * 10}px`;
+      const input = row.createEl('input', { type: 'checkbox' });
+      input.checked = selected.has(token);
+      input.addEventListener('change', () => {
+        const set = new Set(this.filters.collections);
+        if (input.checked) set.add(token);
+        else set.delete(token);
+        this.filters = { ...this.filters, collections: [...set] };
+        this.refresh();
+      });
+      row.appendText(' ' + node.path);
+    }
   }
 
   /** Vault-wide literature-note existence, by citekey (one scan, cached). */
@@ -323,10 +404,16 @@ export class AddLiteratureNotesModal extends Modal {
     const children = stable
       ? readChildren<RawZoteroChildren>(this.plugin.bibManager.childrenCache, stable)
       : null;
+    const groupID = entry.groupID && entry.groupID !== 1 ? entry.groupID : 1;
+    const collections = collectionTokens(
+      groupID,
+      (entry as { _collections?: string[] })._collections
+    );
     return flagsFromChildren(
       children,
       this.litNotes.has(entry.id),
-      (entry as { type?: string }).type
+      (entry as { type?: string }).type,
+      collections
     );
   }
 

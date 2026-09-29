@@ -16,10 +16,12 @@ import {
   fetchItemParentNative,
   fetchLibraryVersionNative,
   fetchLibraryChildRowsNative,
+  fetchCollectionsNative,
   DEFAULT_ZOTERO_PORT,
 } from './helpers';
 import { BBTAdapter, NativeAdapter, ZoteroAdapter } from './zotero';
 import { SimpleLRU } from './lru';
+import { buildCollectionNodes, type CollectionNode } from 'src/template/collections';
 import {
   MIN_MATCH_CHARS,
   TIER_IGNORE_LOCATION,
@@ -2899,6 +2901,36 @@ export class BibManager {
 
   /** Do we have a library-wide child-presence index? */
   presenceReady = false;
+
+  /** Collection key → display node, for the import dialogue's collection filter. */
+  collectionNodes: CollectionNode[] = [];
+  /** Have the collections been fetched (native API) at least once? */
+  collectionsReady = false;
+
+  /**
+   * Build the collection-name index (key → "Parent > Child" path) the import
+   * dialogue filters by. Native API only; a null read (Zotero down) leaves the
+   * previous index in place rather than wiping it.
+   */
+  async buildCollectionsIndex(): Promise<void> {
+    const { settings } = this.plugin;
+    if (settings.useNativeZoteroAPI === false) return;
+    const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
+    const nodes: CollectionNode[] = [];
+    for (const group of settings.zoteroGroups ?? []) {
+      const raw = await fetchCollectionsNative(port, group.id);
+      if (!raw) continue;
+      nodes.push(...buildCollectionNodes(raw, group.id));
+    }
+    this.collectionNodes = nodes;
+    this.collectionsReady = true;
+  }
+
+  /** Fetch the collection index once (the first time something needs it). */
+  async ensureCollectionsIndex(): Promise<void> {
+    if (this.collectionsReady) return;
+    await this.buildCollectionsIndex();
+  }
 
   /**
    * Build the child-presence index (one pass per child type) so the import

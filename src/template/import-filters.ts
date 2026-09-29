@@ -20,6 +20,12 @@ export interface ImportItemFlags {
   hasLitNote: boolean;
   /** The item's type group, for the type filter (see `typeGroupOf`). */
   typeGroup: ImportTypeGroup;
+  /**
+   * Collection tokens (`groupID:key`) the item belongs to. Empty means it is in
+   * no collection. Tokens, not bare keys, because collection keys are only
+   * unique within a library.
+   */
+  collections: string[];
 }
 
 /**
@@ -78,6 +84,14 @@ export interface ImportFilters {
    * restricts to those groups, so an all-off default never hides anything.
    */
   types: ImportTypeGroup[];
+  /**
+   * Selected collection tokens (`groupID:key`). EMPTY means "any collection".
+   * An item matches when it is in AT LEAST ONE of the selected collections
+   * (union, not intersection).
+   */
+  collections: string[];
+  /** Also show items that are in NO collection at all. */
+  uncategorized: boolean;
 }
 
 export function defaultFilters(): ImportFilters {
@@ -87,6 +101,8 @@ export function defaultFilters(): ImportFilters {
     hasAnnotations: false,
     withoutLitNote: true,
     types: [],
+    collections: [],
+    uncategorized: false,
   };
 }
 
@@ -105,7 +121,8 @@ interface RawChildrenShape {
 export function flagsFromChildren(
   children: RawChildrenShape | null | undefined,
   hasLitNote: boolean,
-  type?: string | null
+  type?: string | null,
+  collections: string[] = []
 ): ImportItemFlags {
   const attachments = children?.attachments ?? [];
   const isPdfOrSnapshot = (ct: string | null | undefined) => {
@@ -118,6 +135,7 @@ export function flagsFromChildren(
     hasAnnotations: (children?.annotations?.length ?? 0) > 0,
     hasLitNote,
     typeGroup: typeGroupOf(type),
+    collections,
   };
 }
 
@@ -126,9 +144,10 @@ export function flagsFromChildren(
  *
  * The "has*" filters are ANDed; `withoutLitNote` is a NEGATIVE filter (keep only
  * items that LACK a note); `types` restricts to the enabled type groups unless
- * it is empty (which means every type). A disabled filter never constrains
- * anything, so the all-OFF (except withoutLitNote) default means "everything
- * missing a note".
+ * it is empty (which means every type). The collection filter is a UNION: an
+ * item matches if it is in ANY selected collection, or if `uncategorized` is on
+ * and it is in none. A disabled filter never constrains anything, so the
+ * all-OFF (except withoutLitNote) default means "everything missing a note".
  */
 export function passesImportFilters(
   flags: ImportItemFlags,
@@ -140,6 +159,13 @@ export function passesImportFilters(
   if (filters.withoutLitNote && flags.hasLitNote) return false;
   if (filters.types.length && !filters.types.includes(flags.typeGroup)) {
     return false;
+  }
+  if (filters.collections.length || filters.uncategorized) {
+    const inSelected = flags.collections.some((c) =>
+      filters.collections.includes(c)
+    );
+    const uncategorized = flags.collections.length === 0;
+    if (!inSelected && !(filters.uncategorized && uncategorized)) return false;
   }
   return true;
 }

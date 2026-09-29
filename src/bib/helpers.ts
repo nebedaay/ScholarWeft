@@ -517,6 +517,48 @@ export async function isZoteroRunningNative(
   }
 }
 
+/** A Zotero collection as the local API returns it (only what we need). */
+export interface ZoteroCollectionRaw {
+  key: string;
+  name: string;
+  /** Parent collection key, or false/null for a top-level collection. */
+  parentCollection?: string | false | null;
+}
+
+/**
+ * Fetch every collection of a library (paginated), for the collection-name
+ * index the import dialogue builds paths from. Native API only; returns null
+ * when Zotero is unreachable (the caller keeps its previous index).
+ */
+export async function fetchCollectionsNative(
+  port: string = DEFAULT_ZOTERO_PORT,
+  groupId: number = 1
+): Promise<ZoteroCollectionRaw[] | null> {
+  if (!(await isZoteroRunningNative(port))) return null;
+  const { libraryType, libraryId } = nativeLibraryCoords(groupId);
+  const limit = 100;
+  const out: ZoteroCollectionRaw[] = [];
+  for (let start = 0; ; start += limit) {
+    const { data } = await fetchNativePageWithRetry(
+      port,
+      `/api/${libraryType}/${libraryId}/collections?format=json&limit=${limit}&start=${start}`
+    );
+    if (!Array.isArray(data) || data.length === 0) break;
+    for (const c of data) {
+      const key = typeof c?.key === 'string' ? c.key : '';
+      const name = typeof c?.data?.name === 'string' ? c.data.name : '';
+      if (!key) continue;
+      out.push({
+        key,
+        name,
+        parentCollection: c?.data?.parentCollection ?? null,
+      });
+    }
+    if (data.length < limit) break;
+  }
+  return out;
+}
+
 export async function getZUserGroupsNative(
   port: string = DEFAULT_ZOTERO_PORT
 ): Promise<Array<{ id: number; name: string }> | null> {
@@ -669,7 +711,7 @@ const LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1000;
  * FULL refetch, the same one-time-migration pattern as the `_version` /
  * `_creators` backfill.
  */
-export const MAPPING_VERSION = 1;
+export const MAPPING_VERSION = 2;
 
 /** Does a persisted library cache predate the current CSL mapping? */
 export function needsMappingRemap(

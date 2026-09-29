@@ -13,6 +13,7 @@ const flags = (o: Partial<ReturnType<typeof flagsFromChildren>>) => ({
   hasAnnotations: false,
   hasLitNote: false,
   typeGroup: 'other' as const,
+  collections: [] as string[],
   ...o,
 });
 
@@ -24,6 +25,8 @@ describe('defaultFilters()', () => {
       hasAnnotations: false,
       withoutLitNote: true,
       types: [],
+      collections: [],
+      uncategorized: false,
     });
   });
 });
@@ -83,6 +86,33 @@ describe('passesImportFilters()', () => {
     expect(passesImportFilters(flags({ typeGroup: 'chapter' }), f)).toBe(true);
     expect(passesImportFilters(flags({ typeGroup: 'article' }), f)).toBe(false);
     expect(passesImportFilters(flags({ typeGroup: 'other' }), f)).toBe(false);
+  });
+
+  it('matches ANY selected collection (union, not intersection)', () => {
+    const f: ImportFilters = { ...base, collections: ['1:aa', '1:bb'] };
+    expect(passesImportFilters(flags({ collections: ['1:aa'] }), f)).toBe(true);
+    expect(passesImportFilters(flags({ collections: ['1:cc', '1:bb'] }), f)).toBe(true);
+    expect(passesImportFilters(flags({ collections: ['1:cc'] }), f)).toBe(false);
+    expect(passesImportFilters(flags({ collections: [] }), f)).toBe(false);
+  });
+
+  it('matches collections within the library they belong to', () => {
+    const f: ImportFilters = { ...base, collections: ['1:aa'] };
+    // Same key, different library → not a match.
+    expect(passesImportFilters(flags({ collections: ['2:aa'] }), f)).toBe(false);
+  });
+
+  it('Uncategorized keeps only items in no collection', () => {
+    const f: ImportFilters = { ...base, uncategorized: true };
+    expect(passesImportFilters(flags({ collections: [] }), f)).toBe(true);
+    expect(passesImportFilters(flags({ collections: ['1:aa'] }), f)).toBe(false);
+  });
+
+  it('Uncategorized widens the collection filter rather than replacing it', () => {
+    const f: ImportFilters = { ...base, collections: ['1:aa'], uncategorized: true };
+    expect(passesImportFilters(flags({ collections: ['1:aa'] }), f)).toBe(true);
+    expect(passesImportFilters(flags({ collections: [] }), f)).toBe(true);
+    expect(passesImportFilters(flags({ collections: ['1:zz'] }), f)).toBe(false);
   });
 });
 

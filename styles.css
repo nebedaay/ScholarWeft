@@ -1799,6 +1799,30 @@ Annotation callouts
   font-weight: var(--font-semibold);
   color: var(--text-muted);
 }
+.sw-add-notes__collections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+}
+.sw-add-notes__collection-search {
+  width: 100%;
+}
+.sw-add-notes__collection-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: var(--size-4-1) 0;
+}
+.sw-add-notes__collection {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.sw-add-notes__collection-empty {
+  padding: var(--size-4-1) var(--size-4-2);
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
 .sw-add-notes__abstract {
   flex: 0 0 auto;
   white-space: nowrap;
@@ -1812,7 +1836,7 @@ Annotation callouts
   min-height: 0;
 }
 .sw-add-notes__filters {
-  flex: 0 0 190px;
+  flex: 0 0 230px;
   display: flex;
   flex-direction: column;
   gap: var(--size-4-2);

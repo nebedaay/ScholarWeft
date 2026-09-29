@@ -292,8 +292,18 @@ describe('zoteroItemToCSL()', () => {
     expect(result['title-short']).toBe('Short');
   });
 
-  it('omits the new fields entirely when Zotero has no value for them', () => {
-    // Templates test for presence, so an empty array/string must not appear as
+  it('retains Zotero collection keys (for the collection filter)', () => {
+    const result = zoteroItemToCSL(
+      baseItem({ collections: ['7VWQMK69', '', 42] }),
+      1
+    ) as any;
+    expect(result._collections).toEqual(['7VWQMK69']);
+    // No collections → the field is absent, not an empty array.
+    expect((zoteroItemToCSL(baseItem({ collections: [] }), 1) as any)._collections)
+      .toBeUndefined();
+  });
+
+  it('omits the new fields entirely when Zotero has no value for them', () => {    // Templates test for presence, so an empty array/string must not appear as
     // though it were data.
     const result = zoteroItemToCSL(baseItem(), 1) as any;
     expect(result._extra).toBeUndefined();

@@ -1,0 +1,83 @@
+/**
+ * Collection-name index for the import dialogue's collection filter.
+ *
+ * Zotero stores a collection's NAME and its PARENT; an item carries only the
+ * collection KEYS it belongs to. Turning those into readable, disambiguated
+ * labels ("Parent > Child") is pure list work, so it lives here and is tested
+ * on its own.
+ */
+
+import type { ZoteroCollectionRaw } from '../bib/helpers';
+
+export interface CollectionNode {
+  key: string;
+  groupID: number;
+  name: string;
+  /** Full "Parent > Child" path — disambiguates duplicate names. */
+  path: string;
+  /** Nesting depth (0 = top level), for indentation. */
+  depth: number;
+}
+
+const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+
+/**
+ * A filter token identifying a collection across libraries. Collection keys are
+ * only unique WITHIN a library, so membership is matched on `groupID:key`.
+ */
+export function collectionToken(groupID: number, key: string): string {
+  return `${groupID}:${key}`;
+}
+
+/** The token for the collection an entry belongs to, given its library. */
+export function collectionTokens(
+  groupID: number,
+  keys: readonly string[] | null | undefined
+): string[] {
+  if (!Array.isArray(keys)) return [];
+  return keys.filter((k) => typeof k === 'string' && !!k).map((k) => collectionToken(groupID, k));
+}
+
+/**
+ * Build the display nodes from a library's raw collections: each gets its full
+ * "Parent > Child" path and depth, sorted by path. A missing parent (or a
+ * parent cycle) just truncates the path rather than looping.
+ */
+export function buildCollectionNodes(
+  raw: readonly ZoteroCollectionRaw[],
+  groupID: number
+): CollectionNode[] {
+  const byKey = new Map<string, ZoteroCollectionRaw>();
+  for (const c of raw) if (c?.key) byKey.set(c.key, c);
+
+  const ancestors = (key: string): string[] => {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let cur: string | false | null | undefined = key;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const node = byKey.get(cur);
+      if (!node) break;
+      names.unshift(node.name || cur);
+      cur = node.parentCollection;
+    }
+    return names;
+  };
+
+  return raw
+    .filter((c) => !!c?.key)
+    .map((c) => {
+      const names = ancestors(c.key);
+      return {
+        key: c.key,
+        groupID,
+        name: c.name,
+        path: names.join(' > '),
+        depth: Math.max(0, names.length - 1),
+      };
+    })
+    .sort(
+      (a, b) =>
+        collator.compare(a.path, b.path) || collator.compare(a.key, b.key)
+    );
+}

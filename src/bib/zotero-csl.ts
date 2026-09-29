@@ -201,6 +201,15 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
       .filter((t: unknown): t is string => typeof t === 'string' && !!t);
     if (tags.length) csl._tags = tags;
   }
+  // Zotero collection KEYS the item belongs to (names live in the collection
+  // index). Retained so the import dialogue can filter by collection without a
+  // per-item request. Not a CSL field.
+  if (Array.isArray(data.collections) && data.collections.length) {
+    const keys = data.collections.filter(
+      (k: unknown): k is string => typeof k === 'string' && !!k
+    );
+    if (keys.length) csl._collections = keys;
+  }
   if (data.dateAdded) csl._dateAdded = data.dateAdded;
 
   // Ordered creators with Zotero's OWN `creatorType`, retained because the CSL
