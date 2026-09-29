@@ -189,6 +189,8 @@ function updateBibliographyPath(
   return getUpdatedPath(bibliography);
 }
 
+type UpdateResult = { ok: true; reason?: undefined } | { ok: false; reason: string };
+
 export default class ReferenceList extends Plugin {
   api: LinkedCitationsApi;
   settings: ReferenceListSettings;
@@ -1463,19 +1465,28 @@ export default class ReferenceList extends Plugin {
    * The note's format (not the current setting) decides whether a warning is
    * shown: an update renders with whichever import path is selected, so a note
    * in the other format — or one whose region will be added or removed — is
-   * confirmed first. Returns false when the note has no `zotero-key`, its item
-   * is not in the loaded library, or the user declined the confirmation.
+   * confirmed first.
+   *
+   * Returns a RESULT so a batch can report WHICH note was skipped and WHY,
+   * instead of a bare count.
    */
-  async updateLiteratureNote(file: TFile, opts?: { confirm?: boolean }): Promise<boolean> {
+  async updateLiteratureNoteResult(
+    file: TFile,
+    opts?: { confirm?: boolean }
+  ): Promise<UpdateResult> {
     const stable =
       this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
-    if (typeof stable !== 'string' || !stable) return false;
+    if (typeof stable !== 'string' || !stable) {
+      return { ok: false, reason: 'no zotero-key' };
+    }
     const citekey = this.findCitekeyByStableKey(stable);
-    if (!citekey) return false;
+    if (!citekey) {
+      return { ok: false, reason: `item ${stable} is not in the loaded library` };
+    }
 
     if (opts?.confirm !== false) {
       const proceed = await this.confirmFormatChange(file);
-      if (!proceed) return false;
+      if (!proceed) return { ok: false, reason: 'declined the format-change prompt' };
     }
 
     try {
@@ -1483,11 +1494,16 @@ export default class ReferenceList extends Plugin {
         open: false,
         stableKey: stable,
       });
-      return true;
+      return { ok: true };
     } catch (e) {
       console.warn('[sw:update] failed for', file.path, e);
-      return false;
+      return { ok: false, reason: (e as Error)?.message ?? 'update failed' };
     }
+  }
+
+  /** Boolean convenience wrapper around {@link updateLiteratureNoteResult}. */
+  async updateLiteratureNote(file: TFile, opts?: { confirm?: boolean }): Promise<boolean> {
+    return (await this.updateLiteratureNoteResult(file, opts)).ok;
   }
 
   /**
@@ -1555,23 +1571,24 @@ export default class ReferenceList extends Plugin {
       0
     );
     let updated = 0;
-    let skipped = 0;
+    const skipped: Array<{ path: string; reason: string }> = [];
+    const startedAt = Date.now();
     for (const file of files) {
-      if (await this.updateLiteratureNote(file)) updated++;
-      else skipped++;
+      const res = await this.updateLiteratureNoteResult(file);
+      if (res.ok) {
+        updated++;
+      } else {
+        skipped.push({ path: file.path, reason: res.reason });
+      }
       progress.setMessage(
-        `Updating literature notes… ${updated + skipped}/${files.length} (you can keep working)`
+        `Updating literature notes… ${updated + skipped.length}/${files.length} (you can keep working)`
       );
       // Yield so typing/scrolling stays responsive during a long pass.
       await new Promise((r) => setTimeout(r, 0));
     }
     progress.hide();
-    new Notice(
-      `Updated ${updated} literature note(s)${
-        skipped ? `, skipped ${skipped}` : ''
-      }.`,
-      8000
-    );
+    this.recordUpdateRate(updated, Date.now() - startedAt);
+    this.reportBatchResult(updated, skipped);
   }
 
   // ── Auto note-update (Zotero-driven) ────────────────────────────────────────
@@ -2031,12 +2048,12 @@ export default class ReferenceList extends Plugin {
     // and several minutes. Reassure that it is non-destructive and that they can
     // keep working (updates are sequential and yield between notes, so the UI
     // stays responsive; only the managed fields and region change).
-    const estimate = Math.max(1, Math.ceil(files.length / 90)); // ~90 notes/min
+    const est = this.estimateMinutes(files.length);
     new Notice(
       `Updating ${files.length} literature note${
         files.length !== 1 ? 's' : ''
-      } to the current template — about ${estimate} minute${
-        estimate !== 1 ? 's' : ''
+      } to the current template — about ${est} minute${
+        est !== 1 ? 's' : ''
       }. You can keep working; your own writing is never overwritten.`,
       10000
     );
@@ -2046,23 +2063,75 @@ export default class ReferenceList extends Plugin {
       0
     );
     let updated = 0;
-    let skipped = 0;
+    const skipped: Array<{ path: string; reason: string }> = [];
+    const startedAt = Date.now();
     for (const f of files) {
-      if (await this.updateLiteratureNote(f, { confirm: false })) updated++;
-      else skipped++;
+      const res = await this.updateLiteratureNoteResult(f, { confirm: false });
+      if (res.ok) {
+        updated++;
+      } else {
+        skipped.push({ path: f.path, reason: res.reason });
+      }
       progress.setMessage(
-        `Updating notes… ${updated + skipped}/${files.length} (you can keep working)`
+        `Updating notes… ${updated + skipped.length}/${files.length} (you can keep working)`
       );
       // Yield so typing/scrolling stays responsive during a long pass.
       await new Promise((r) => setTimeout(r, 0));
     }
     progress.hide();
-    new Notice(
-      `Updated ${updated} literature note${updated !== 1 ? 's' : ''} to the current template` +
-        (skipped ? `, skipped ${skipped}` : '') +
-        '.',
-      8000
-    );
+    this.recordUpdateRate(updated, Date.now() - startedAt);
+    this.reportBatchResult(updated, skipped, 'to the current template');
+  }
+
+  /** Notes-per-minute for estimates, learned from real passes (default 90). */
+  private _notesPerMinute = 90;
+
+  private estimateMinutes(count: number): number {
+    return Math.max(1, Math.ceil(count / Math.max(10, this._notesPerMinute)));
+  }
+
+  private recordUpdateRate(updated: number, elapsedMs: number): void {
+    if (updated >= 10 && elapsedMs > 0) {
+      this._notesPerMinute = updated / (elapsedMs / 60000);
+      console.log(
+        `[sw:template] measured ${this._notesPerMinute.toFixed(0)} notes/min`
+      );
+    }
+  }
+
+  /**
+   * Final summary listing WHICH notes were skipped and WHY, so a bare
+   * "skipped 1" can't leave the user guessing.
+   */
+  private reportBatchResult(
+    updated: number,
+    skipped: Array<{ path: string; reason: string }>,
+    suffix = ''
+  ): void {
+    const head = `Updated ${updated} literature note${updated !== 1 ? 's' : ''}${
+      suffix ? ' ' + suffix : ''
+    }.`;
+    if (!skipped.length) {
+      new Notice(head, 8000);
+      return;
+    }
+    const notice = new Notice('', 12000);
+    const el =
+      (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ??
+      notice.containerEl;
+    if (!el) return;
+    el.createEl('div', { text: head });
+    el.createEl('div', {
+      text: `Skipped ${skipped.length}:`,
+    });
+    for (const s of skipped.slice(0, 20)) {
+      const name = s.path.split('/').pop() ?? s.path;
+      el.createEl('div', { cls: 'sw-auto-update-key', text: `${name} — ${s.reason}` });
+    }
+    if (skipped.length > 20) {
+      el.createEl('div', { text: `…and ${skipped.length - 20} more (see console).` });
+    }
+    console.warn('[sw:template] skipped notes:', skipped);
   }
 
   private _templateCheckTimer: number | null = null;

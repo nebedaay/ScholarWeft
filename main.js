@@ -101541,6 +101541,7 @@ var ReferenceList = class extends import_obsidian41.Plugin {
     this._autoUpdateTimer = null;
     this._autoUpdateRunning = false;
     this._autoUpdatePrompting = false;
+    this._notesPerMinute = 90;
     this._templateCheckTimer = null;
     this.suggestPosition = null;
     this.persistCitedKeysIndex = (0, import_obsidian41.debounce)(async () => {
@@ -102451,29 +102452,34 @@ var ReferenceList = class extends import_obsidian41.Plugin {
   findCitekeyByStableKey(stable) {
     return this.bibManager.findCitekeyByStableKey(stable);
   }
-  async updateLiteratureNote(file, opts) {
-    var _a, _b;
+  async updateLiteratureNoteResult(file, opts) {
+    var _a, _b, _c;
     const stable = (_b = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter) == null ? void 0 : _b["zotero-key"];
-    if (typeof stable !== "string" || !stable)
-      return false;
+    if (typeof stable !== "string" || !stable) {
+      return { ok: false, reason: "no zotero-key" };
+    }
     const citekey = this.findCitekeyByStableKey(stable);
-    if (!citekey)
-      return false;
+    if (!citekey) {
+      return { ok: false, reason: `item ${stable} is not in the loaded library` };
+    }
     if ((opts == null ? void 0 : opts.confirm) !== false) {
       const proceed = await this.confirmFormatChange(file);
       if (!proceed)
-        return false;
+        return { ok: false, reason: "declined the format-change prompt" };
     }
     try {
       await this.bibManager.createLiteratureNote(citekey, file, {
         open: false,
         stableKey: stable
       });
-      return true;
+      return { ok: true };
     } catch (e3) {
       console.warn("[sw:update] failed for", file.path, e3);
-      return false;
+      return { ok: false, reason: (_c = e3 == null ? void 0 : e3.message) != null ? _c : "update failed" };
     }
+  }
+  async updateLiteratureNote(file, opts) {
+    return (await this.updateLiteratureNoteResult(file, opts)).ok;
   }
   async confirmFormatChange(file) {
     let source;
@@ -102515,17 +102521,21 @@ var ReferenceList = class extends import_obsidian41.Plugin {
     }
     const progress = new import_obsidian41.Notice(`Updating literature notes\u2026 0/${files.length} (you can keep working)`, 0);
     let updated = 0;
-    let skipped = 0;
+    const skipped = [];
+    const startedAt = Date.now();
     for (const file of files) {
-      if (await this.updateLiteratureNote(file))
+      const res = await this.updateLiteratureNoteResult(file);
+      if (res.ok) {
         updated++;
-      else
-        skipped++;
-      progress.setMessage(`Updating literature notes\u2026 ${updated + skipped}/${files.length} (you can keep working)`);
+      } else {
+        skipped.push({ path: file.path, reason: res.reason });
+      }
+      progress.setMessage(`Updating literature notes\u2026 ${updated + skipped.length}/${files.length} (you can keep working)`);
       await new Promise((r3) => setTimeout(r3, 0));
     }
     progress.hide();
-    new import_obsidian41.Notice(`Updated ${updated} literature note(s)${skipped ? `, skipped ${skipped}` : ""}.`, 8e3);
+    this.recordUpdateRate(updated, Date.now() - startedAt);
+    this.reportBatchResult(updated, skipped);
   }
   scheduleAutoUpdate(citekeys) {
     if (this.settings.autoUpdateNotes === false)
@@ -102870,21 +102880,58 @@ var ReferenceList = class extends import_obsidian41.Plugin {
       await this.updateNotesForTemplate(stale);
   }
   async updateNotesForTemplate(files) {
-    const estimate = Math.max(1, Math.ceil(files.length / 90));
-    new import_obsidian41.Notice(`Updating ${files.length} literature note${files.length !== 1 ? "s" : ""} to the current template \u2014 about ${estimate} minute${estimate !== 1 ? "s" : ""}. You can keep working; your own writing is never overwritten.`, 1e4);
+    const est = this.estimateMinutes(files.length);
+    new import_obsidian41.Notice(`Updating ${files.length} literature note${files.length !== 1 ? "s" : ""} to the current template \u2014 about ${est} minute${est !== 1 ? "s" : ""}. You can keep working; your own writing is never overwritten.`, 1e4);
     const progress = new import_obsidian41.Notice(`Updating notes\u2026 0/${files.length} (you can keep working)`, 0);
     let updated = 0;
-    let skipped = 0;
+    const skipped = [];
+    const startedAt = Date.now();
     for (const f3 of files) {
-      if (await this.updateLiteratureNote(f3, { confirm: false }))
+      const res = await this.updateLiteratureNoteResult(f3, { confirm: false });
+      if (res.ok) {
         updated++;
-      else
-        skipped++;
-      progress.setMessage(`Updating notes\u2026 ${updated + skipped}/${files.length} (you can keep working)`);
+      } else {
+        skipped.push({ path: f3.path, reason: res.reason });
+      }
+      progress.setMessage(`Updating notes\u2026 ${updated + skipped.length}/${files.length} (you can keep working)`);
       await new Promise((r3) => setTimeout(r3, 0));
     }
     progress.hide();
-    new import_obsidian41.Notice(`Updated ${updated} literature note${updated !== 1 ? "s" : ""} to the current template` + (skipped ? `, skipped ${skipped}` : "") + ".", 8e3);
+    this.recordUpdateRate(updated, Date.now() - startedAt);
+    this.reportBatchResult(updated, skipped, "to the current template");
+  }
+  estimateMinutes(count) {
+    return Math.max(1, Math.ceil(count / Math.max(10, this._notesPerMinute)));
+  }
+  recordUpdateRate(updated, elapsedMs) {
+    if (updated >= 10 && elapsedMs > 0) {
+      this._notesPerMinute = updated / (elapsedMs / 6e4);
+      console.log(`[sw:template] measured ${this._notesPerMinute.toFixed(0)} notes/min`);
+    }
+  }
+  reportBatchResult(updated, skipped, suffix = "") {
+    var _a, _b;
+    const head = `Updated ${updated} literature note${updated !== 1 ? "s" : ""}${suffix ? " " + suffix : ""}.`;
+    if (!skipped.length) {
+      new import_obsidian41.Notice(head, 8e3);
+      return;
+    }
+    const notice = new import_obsidian41.Notice("", 12e3);
+    const el = (_a = notice.noticeEl) != null ? _a : notice.containerEl;
+    if (!el)
+      return;
+    el.createEl("div", { text: head });
+    el.createEl("div", {
+      text: `Skipped ${skipped.length}:`
+    });
+    for (const s3 of skipped.slice(0, 20)) {
+      const name = (_b = s3.path.split("/").pop()) != null ? _b : s3.path;
+      el.createEl("div", { cls: "sw-auto-update-key", text: `${name} \u2014 ${s3.reason}` });
+    }
+    if (skipped.length > 20) {
+      el.createEl("div", { text: `\u2026and ${skipped.length - 20} more (see console).` });
+    }
+    console.warn("[sw:template] skipped notes:", skipped);
   }
   scheduleTemplateUpdateCheck() {
     if (this._templateCheckTimer != null)
