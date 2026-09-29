@@ -144,7 +144,7 @@ Better BibTeX (BBT) is a Zotero add-on that gives every item a stable **citekey*
 3. Click the **gear ⚙** icon (top-right of the Plugins window) → **Install Plugin From File…**.
 4. Select the downloaded `.xpi` file. Restart Zotero if it asks.
 5. Check it worked: **Tools** or **Settings** (depending on your operating system) should now have a **Better BibTeX** submenu.
-6. At the top of that Better BibTeX submenu, set the **Citation key formula** to `auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct`. This keeps citekeys short and free of punctuation and unusual characters (first author, two-letter short title, year). (The [setup script](#the-easy-way-run-the-setup-script) can set this for you.)
+6. At the top of that Better BibTeX submenu, set the **Citation key formula** to `auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct`. This keeps citekeys short and free of punctuation and unusual characters (first author, two-word short title, year). (The [setup script](#the-easy-way-run-the-setup-script) can set this for you.)
 
 BBT generates citekeys automatically. If an item has no citekey yet, right-click it → **Better BibTeX → Pin Citation Key** (or just leave it — BBT fills it in).
 

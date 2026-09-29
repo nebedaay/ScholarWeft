@@ -191,6 +191,12 @@ export interface ReferenceListSettings {
   renderLinkCitations?: boolean;
   renderCitationsAsLinks?: boolean;
   /**
+   * Extra vault folders the whole-vault convert commands must NOT rewrite
+   * (comma-separated, vault-root relative). Added to the built-in skips
+   * (`docs`, `src`, `node_modules`).
+   */
+  convertExcludeFolders?: string;
+  /**
    * When true, aliased citation wikilinks of the form [[@key|alias]] are
    * parsed as Pandoc citations. The alias text becomes the citation
    * expression; the `@` placeholder inside it expands to the link's own
@@ -893,8 +899,24 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(t('Hide links in references'))
-      .setDesc(t('Replace links with link icons to save space.'))
+      .setName(t('Folders excluded from vault-wide conversion'))
+      .setDesc(
+        t(
+          'The two commands that convert citations across the whole vault ("Convert pandoc citations to linked citations (vault)" and "Revert linked citations to pandoc-style citations (vault)") skip these folders, so documentation and archived material are never rewritten. Comma-separated, vault-root relative. "docs" and "src" are always skipped.'
+        )
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder('Archive, Old notes')
+          .setValue(this.plugin.settings.convertExcludeFolders ?? '')
+          .onChange((value) => {
+            this.plugin.settings.convertExcludeFolders = value.trim();
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Hide links in references'))      .setDesc(t('Replace links with link icons to save space.'))
       .addToggle((text) =>
         text.setValue(!!this.plugin.settings.hideLinks).onChange((value) => {
           this.plugin.settings.hideLinks = value;

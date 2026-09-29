@@ -1,5 +1,30 @@
 Install/update via BRAT.
 
+### Reverting to pandoc citations now matches what you see
+
+Reverting linked citations produced one bracketed citation per link, so a run of
+contiguous citations exported as `[@a] [@b]` — which pandoc reads as two
+unrelated citations, not the compound your note displayed. Reverting now forms
+the same compound export does, so contiguous citations and containers both come
+out as `[@a; @b]`. Full-reference insertions and code are left untouched, and a
+test pins the two directions together so they cannot drift again.
+
+### Smaller fixes
+
+- **Vault-wide conversion can skip folders.** The two commands that convert
+  citations across the whole vault used to rewrite *every* markdown file —
+  documentation and archived notes included — and leave a `.bk` backup beside
+  each. They now always skip `docs`, `src` and `node_modules`, and
+  **Settings → Citation and reference searching and formatting → Folders
+  excluded from vault-wide conversion** takes any others you name.
+- **Collections refresh.** A collection you renamed or deleted in Zotero stayed
+  in the Add Literature Notes pane for the rest of the session. The collection
+  list is now refreshed on every Zotero refresh.
+- **"Select all results"** replaces "Select all shown" in that dialogue — the
+  old label read as "whatever is on screen right now".
+- The time estimate for a bulk template update is **learned from your own
+  passes** rather than fixed, so it reflects your library and machine.
+
 ### Notes now keep themselves up to date
 
 ScholarWeft can watch Zotero and refresh a literature note whenever its item

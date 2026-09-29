@@ -56,6 +56,10 @@ export default {
   'Unable to find pandoc on your system. If it is installed, please manually enter a path.':
     'Unable to find pandoc on your system. If it is installed, please manually enter a path.',
   'Hide links in references': 'Hide links in references',
+  'Folders excluded from vault-wide conversion':
+    'Folders excluded from vault-wide conversion',
+  'The two commands that convert citations across the whole vault ("Convert pandoc citations to linked citations (vault)" and "Revert linked citations to pandoc-style citations (vault)") skip these folders, so documentation and archived material are never rewritten. Comma-separated, vault-root relative. "docs" and "src" are always skipped.':
+    'The two commands that convert citations across the whole vault ("Convert pandoc citations to linked citations (vault)" and "Revert linked citations to pandoc-style citations (vault)") skip these folders, so documentation and archived material are never rewritten. Comma-separated, vault-root relative. "docs" and "src" are always skipped.',
   'Replace links with link icons to save space.':
     'Replace links with link icons to save space.',
   'Show PDF links in references': 'Show PDF links in references',

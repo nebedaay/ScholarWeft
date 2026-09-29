@@ -1,9 +1,25 @@
 import { Notice, TFile } from 'obsidian';
 import type ReferenceList from './main';
+import {
+  DEFAULT_EXCLUDED_FOLDERS,
+  filesToConvert,
+} from './template/convert-scope';
 import { convertLinksToPandoc } from './parser/compound';
 import { rewriteContainers } from './convertCitations';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * The vault-wide folders this plugin's convert commands should skip: the
+ * built-in non-content folders plus whatever the user added in settings.
+ */
+export function convertExcludedFolders(extra?: string): string[] {
+  const user = (extra ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...DEFAULT_EXCLUDED_FOLDERS, ...user];
+}
 
 /**
  * Convert a single [[@key|alias]] member to its pandoc equivalent.
@@ -121,9 +137,15 @@ export async function convertNoteToPandoc(
  * Writes per-file ".bk" backups (only when none exist yet).
  */
 export async function convertVaultToPandoc(plugin: ReferenceList): Promise<void> {
+  const allowed = new Set(
+    filesToConvert(
+      plugin.app.vault.getMarkdownFiles().map((f) => f.path),
+      convertExcludedFolders(plugin.settings.convertExcludeFolders)
+    )
+  );
   const files = plugin.app.vault
     .getMarkdownFiles()
-    .filter((f) => !f.path.endsWith('.bk') && !f.path.endsWith('.bk.md'));
+    .filter((f) => allowed.has(f.path));
 
   const progress = new Notice(`Reverting citations across ${files.length} files…`, 0);
   let convertedFiles = 0;

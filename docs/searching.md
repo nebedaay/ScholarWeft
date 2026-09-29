@@ -1,6 +1,6 @@
 # Searching for references
 
-ScholarWeft's search and autocomplete function is how you find a work to cite. Knowing what the two levels of search cover is the quickest way to get good results.
+ScholarWeft's search and autocomplete popup is how you find a work to cite. The **Add Literature Notes from Zotero (search and filter)** uses the same search modes to select Zotero items to import as literature notes. Knowing what the two levels of search cover is the quickest way to get good results.
 
 ## The two levels
 
@@ -23,8 +23,7 @@ runs the full ranked search.
 
 A **space ends a bare `@` search**, so you can type a citation and keep writing.
 Use an **underscore for a space** inside a single token (`@social_theory` =
-`@social theory`), or `@@`, when you want several words. A **period closes the
-popup** too.
+`@social theory`), or `@@`, when you want several words. A **period closes the popup** too. Pushing enter/return or clicking on a search result inserts the selected search result and encloses it in brackets.
 
 If the popup feels intrusive, raise **Characters after @ before searching**
 (Settings → ScholarWeft → Citation and reference searching and formatting) to

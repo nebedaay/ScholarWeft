@@ -1,8 +1,18 @@
-# Literature Notes
+# Creating Literature Notes from Zotero
 
-ScholarWeft treats each source's literature note (normally `@citekey.md`) as the graph node its citations link to. This page covers where those notes live, how they are created and formatted, and how ScholarWeft refreshes them.
+ScholarWeft treats each source's literature note as the graph node its citations link to. For linked citations to work properly, your notes need to be named after the citekey of the work they represent (`@citekey.md`). This page covers where those notes live, how they are created and formatted, and how ScholarWeft refreshes them.
 
-## Folder
+## Consistent and effective citekeys
+
+Before importing and linking literature notes, you need an effective way to generate citekeys that you’ll use as linked citations. For concise, stable, and consistent citekeys with no punctuation, install the Better BibTeX add-on in Zotero and set its Citation key formula (Zotero → Settings → Better BibTeX) to:
+
+```
+auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct
+```
+
+This gives every item `firstauthor + two-word short title + year` (e.g. `smithNewTrends2020`). See [Setup, Step 3](./setup.md#3-better-bibtex-recommended).
+
+## Literature notes folder
 
 **Settings → Literature note import → Literature notes folder** sits directly under the **Import literature notes with ScholarWeft** toggle and sets where ScholarWeft creates and finds its literature notes (default `Literature Notes`; leave it blank for the vault root).
 
@@ -11,28 +21,103 @@ The field follows the import path, so there is only ever one answer to "where do
 - **Import literature notes with ScholarWeft** (the default) — this field decides.
 - **ZotLit** — notes go to the folder configured in ZotLit's own settings (read live), so ZotLit's notes and ScholarWeft's stay in one place. To change it, use ZotLit's settings.
 
+Notes imported from group libraries outside of “My Library” are stored in a subfolder inside your literature notes folder with the group name.
+
 Using a dedicated folder keeps citations resolvable and tidy, but any folder works as long as the filename is `@citekey`.
-
-## Finding a note
-
-ScholarWeft identifies a literature note by its stable **`zotero-key`** first — the Zotero item key (`KEY`, or `KEYgGROUPID` for a group library) — and only if that’s missing by the `@citekey` filename. Even if you rename a note or change its citekey in Zotero, ScholarWeft can still find it and update it by its item key rather than creating a duplicate.
-
-If a file already sits at the expected `@citekey.md` name but is *not* that item's note (a different library's copy, another work with a similar title, or one of your own notes), ScholarWeft never overwrites it: it creates a suffixed sibling (`@citekeya.md`, `@citekeyb.md`, …) and tells you. If that happens, you should give that other note a different name and rename the literature note as `@citekey.md` if you want to cite it.
 
 ## Creating notes
 
-- **Create literature notes for citations lacking notes (current note)** and **…(vault)** create a note for every cited work that doesn't already have one.
-- Individual notes can also be created from the reference sidebar, a citation tooltip, or an entry's "Create literature note" button.
+There are several ways to create literature notes using ScholarWeft, both through commands in the command palette and while editing a note. 
 
-Creating notes needs **Zotero** for citekey and metadata lookup. ZotLit is not required.
+### Creating notes from the command palette
 
-**Consistent citekeys.** For short, stable citekeys with no punctuation, install the **Better BibTeX** add-on in Zotero and set its **Citation key formula** (Zotero → Settings → Better BibTeX) to:
+- The **Add Literature Notes from Zotero (search and filter)** command is ScholarWeft’s own way to search your Zotero items and filter by what you’re most likely to need. Unlike the Zotero command (see below), this command is aware of which libraries you’ve enabled, what you’ve already imported, and which items have annotations, notes, and other attachments you may want to access from inside Obsidian.
+- The **Import Literature Notes from Zotero...** command uses the native Zotero interface (requires the Better BibTeX plugin installed in Zotero) to search your Zotero libraries and insert literature notes for one or more items.
+- The **Create literature notes for citations lacking notes (current note)** and **…(vault)** commands in the command palette create a note for every cited work that doesn't already have one. This command facilitates linking your Obsidian notes to your literature by making sure there's an Obsidian note for everything you cite.
+- Individual notes can also be created from the “**Create literature note**” button (a page icon with a + sign) on each reference in the reference sidebar and in the tooltip that pops up when you mouse over a citation. Linked citations that have no literature note are easy to spot by their purple dotted underline. After importing the literature note, the underline turns blue.
 
-```
-auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct
-```
+<img src="../images/add-literature-note-modal.png" width="100%" alt="Add Literature Notes from Zotero"/>
+#### The Add Literature Notes from Zotero (search and filter) command
 
-This gives every item `firstauthor + two-letter short title + year` (e.g. `smithSo2020`). See [Setup, Step 3](./setup.md#3-better-bibtex-recommended).
+This command is the most direct way to import when you know what you are looking for but not its citekey. It requires no extra plugins or dependencies.
+
+This plugin uses the same two search modes you use to search and insert citations into notes (see [searching](./searching.md)). Tick the **Search abstracts** box (equivalent to `@@` in the citation search popup) option to search abstracts and other fields not included in the basic search (equivalent to `@`).
+
+This search offers several filters to help you locate the items you want:
+
+  - **Show items with** narrows to items that have a **Zotero note**, a **PDF or snapshot**, or **annotations**, or that ***lack* a literature note** (on by default, because we’re searching notes to import).
+  - **Show item types** narrows to **books**, **articles**, **book sections**,
+    **newspaper/magazine articles**, **web pages**, or **other** (everything else). The default is **all**.
+  - **Collections** is a tree of your collections, one heading per library you’ve enabled in ScholarWeft settings, with subcollections nested under their parents. Everything is on at first; turning a collection off turns its whole branch off, and **All**, **None** and the library headings let you isolate one branch quickly.
+  - **Order** the results by the search ranking, author/title/year, or date added. Your last search and ordering are remembered for next time.
+  - You can select results individually by clicking each row, or take them all with **Select all results**; re-importing an existing item merges into its note rather than duplicating it. A single imported note opens (turn that off with **Open a single imported note**).
+
+
+## Literature notes produced by the default template
+
+ScholarWeft’s default template is carefully crafted to allow you to curate your Zotero items and annotate attachments with your interlinked Obsidian thought universe in mind. Knowing how ScholarWeft renders Zotero items and annotations will help you develop useful literature notes that are instantly connected with your Obsidian thought network.
+
+Here’s an example of the default template’s output:
+
+<img src="../images/scholarweft-zotero-annotation-example.png" width="100%" alt="Zotero PDF annotation example">
+
+<img src="../images/scholarweft-annotation-example.png" width="80%" alt="ScholarWeft annotation example">
+
+A few things to note in this example:
+
+- The highlighted quote spans two pages, and the second comment (not visible here because it's in a different column) starts with `+`, so it’s appended to the previous quote, and the location information below is a page range including both pages. You can append as many highlights as you want to condense the important parts of longer quotes.
+- Wikilinks in the Zotero annotation comment — `[[Saussure, Ferdinand de|Saussure]]` — are rendered as links in Obsidian, integrating the comment as a node in Obsidian’s thought network.
+- “**Tags**” added to the Zotero comment are also rendered as `[[wikilinks]]`, including a `@citekey` reference. (Obsidian doesn’t allow rendering citations inside callouts, so it’s rendered as a literal citekey.)
+
+The template structures each literature note as follows:
+
+- **Frontmatter** includes metadata provided by Zotero such as document-type, created, added, up, item-type, title, shorttitle, authors, editors, abstract, …), converting any HTML formatting in `abstract` and `title` to Markdown. Fields that do not apply to an item are left out entirely.
+- **Every item type contributes its own fields.** Not every Zotero item has a title — a case has a **case name**, a statute a **name of act**, an email a **subject** — and those stand in for the title. The fields that make a reference readable are imported as well: `number` (docket, report, patent, public-law number…), `authority` (court or issuing body), `genre` (thesis, report, manuscript type…), `jurisdiction`, `medium`, `section`, `event`, `pages`, and so on. So a case note carries its court, docket number, reporter and page rather than just a name.
+- **Collections are recorded** in `zotero-collections:` as `[[…]]` links to the collections the item belongs to (via `collection_links()`). Zotero owns this list, so it is rebuilt on every update — moving an item out of a collection removes the link. This allows you to turn Zotero collections into meaningful Obsidian nodes.
+- **Two related properties, with clear owners.** `related:` is **yours** — ScholarWeft writes `related: []` when creating a note and never touches it again, so links you add stay. `sw-related:` holds what **Zotero** supplies: the item's Zotero tags and its Related items, as `[[…]]` links. Zotero's list is rebuilt on every import, so a tag or related link you remove in Zotero disappears from the note — no stale entries to prune.
+- **Upgrading from an older version of ScholarWeft?** Notes made before `sw-related` existed have Zotero's tags and related links inside `related:`. The first time ScholarWeft updates such a note, that one-off tidy runs: entries Zotero still supplies move out (they now live in `sw-related:`), while your own links — and any entry Zotero no longer has — stay. The transition is recorded per Zotero item, so it happens **exactly once**; from then on `related:` is entirely yours and is never written to again.
+- **Body**: a `## Notes` section (yours) and, when the item has annotations, a managed `## Annotations` region between `%%sw-managed%%` and `%%/sw-managed%%` markers. The region is omitted entirely when the item has no annotations.
+- **Child notes** are inlined under `## Notes`. Each note's first line is Zotero's note title (Zotero shows it in the item pane and ZotLit names the standalone note after it), so a short first line (≤100 characters, a single line) is rendered as a heading at the configured inside-note level (default `###`, one below `## Notes`). Multiple notes are separated by a horizontal rule with blank lines around it, so two notes under one item stay distinct.
+- **Annotations** keep Zotero's PDF reading order. A comment that starts with `+` in the annotated PDF merges that annotation into the previous one of the same type on the same attachment — text or images are joined and the page label becomes a range — so a rectangular selection spanning two pages reads as one quote.
+- **Excerpt images** are copied into your vault and embedded as `![[…]]`. **Excerpt-image folder** sets where they go (default `Attachments`, relative to the vault root); names are `@<citekey>_p<page>_<annotationKey>.png`.
+- **Re-importing** refreshes the managed frontmatter fields and that region, and refills `## Notes` **only when it is empty** (whitespace doesn't count) — so notes you clear are restored, but anything you have written there is never overwritten or appended over. Your other properties, and all other writing, are left alone.
+
+If a note was created by ZotLit, ScholarWeft **asks before converting it**, so trying the plugin never silently reworks your existing notes. **Convert** is remembered for the notes you update; **Leave** applies to that note only, and the next ZotLit note asks again. The **ZotLit notes** setting can also be set to *Ask each time* (default), *Always convert*, or *Never touch ZotLit notes*.
+
+## Keeping literature notes and citekeys in sync with Zotero
+
+**Automatic updates:** By default, ScholarWeft automatically updates your literature notes and citekeys. Whenever an item or citekey changes in Zotero, and whenever the template used to produce a literature note changes, ScholarWeft updates anything that has changed. It leaves any notes you’ve taken outside of the metadata properties and annotation content it manages.
+
+You can opt out of auto-updates if you prefer ScholarWeft not to change your files automatically. If you haven’t explicitly turned on this setting, it asks you first.
+
+If you don’t enable auto-update, you can also explicitly tell ScholarWeft to update one or more notes:
+
+- **Update this literature note** re-renders the active note from its item (the note must carry a `zotero-key`).
+- **Update all literature notes** (a button on the **Literature note import** settings page) re-renders every note that has a `zotero-key` — the middle ground between updating a single note and importing every Zotero item. Unchanged items are not re-fetched (the fetched-children cache), so it is quick when nothing has changed, and it is rarely needed when auto-update is on.
+
+All of these honour the own-template setting and are non-destructive: only the managed fields and region change. Updating a ZotLit note while you’ve enabled ScholarWeft literature note creation is subject to a conversion prompt, as described below.
+
+### Three kinds of auto-update
+
+Three separate switches, all on the **Literature note import** settings page, each a **Yes / No** pair with **neither selected** to begin with:
+
+| Setting | What it does |
+|---|---|
+| **Update literature notes automatically** | When a Zotero item changes — its metadata, one of its annotations, an attachment, a tag — re-render its literature note. |
+| **Update citekeys automatically** | When Zotero gives a reference a new citekey, rename its literature note (and its derived files) and update the citations across the vault. |
+| **Update notes when the template changes** | When your note **template** changes, re-render the notes that were made with the older one. |
+
+**Nothing changes until you answer.** While a switch is unselected, ScholarWeft asks the first time that kind of change is detected, and your answer becomes the setting — so there is no after-the-fact surprise. All three are non-destructive: only the managed frontmatter fields and the `%%sw-managed%%` region are rewritten, never your own writing.
+
+The template update uses each note's `updated` stamp to work out which notes are stale, and shows you how many are affected and roughly how long it will take before it starts. You can keep working while it runs.
+
+A Zotero item's citekey can change (for example, when you change your Better BibTeX citekey formula), but its stable item key cannot. ScholarWeft matches each literature note to its item by the `zotero-key` it carries, so the note itself records its old name — no separate rename history is kept. When the two differ, ScholarWeft offers to update them:
+
+- The literature note is renamed to `@<new citekey>.md`; Obsidian rewrites its resolved `[[@old]]` links automatically, and ScholarWeft rewrites the rest (plain `[@old]` citations and unresolved links).
+- Files derived from the old key — transcriptions and translations named `@<old> - …` — are renamed alongside it.
+- With the own template, the renamed note is re-rendered, so its excerpt images (`@<citekey>_p…_<annotationKey>.png`) follow too.
+
+This runs automatically after a Zotero refresh when a change is found, and can be run on demand with **Review and update citekeys from Zotero**. Nothing is changed until you confirm the preview.
 
 ## Note template
 
@@ -95,7 +180,7 @@ The default template uses `<%~ … %>` for helper output, because helpers like `
 | `## Notes` (outside the markers) | Your section; child notes are inlined here by `zotero_notes()` |
 | `%%sw-managed%%` … `%%/sw-managed%%` | The managed `## Annotations` region — replaced on re-import |
 
-### Helper functions
+### Template rendering helper functions
 
 These are available as bare globals (no import needed). All are called inside `<% %>` / `<%~ %>`. Note that `add_property()` and friends act on the **current render**, so they must appear between `start_YAML()` and `end_YAML()`.
 
@@ -231,75 +316,6 @@ Several fields carry **callable link helpers** (e.g. `item.noteLink(alias?, subp
 
 Fields the cache cannot supply faithfully are noted where they matter: `tags[].type` is `"unknown"` (Zotero's tag types are not retained), `relatedItems` and `collections` need the Zotero database (collection names are resolved from the collection index, so they are `[]` until it loads), and cross-role creator ordering may differ from Zotero's own.
 
-### Example output
-
-Here’s an example of the default template’s output:
-
-<img src="../images/scholarweft-zotero-annotation-example.png" width="100%" alt="Zotero PDF annotation example">
-
-<img src="../images/scholarweft-annotation-example.png" width="80%" alt="ScholarWeft annotation example">
-
-A few things to note in this example:
-
-- The highlighted quote spans two pages, and the second comment (not visible here because it's in a different column) starts with `+`, so it’s appended to the previous quote, and the location information below is a page range including both pages.
-- Wikilinks in the Zotero annotation comment — `[[Saussure, Ferdinand de|Saussure]]` — are rendered as links in Obsidian.
-- “Tags” added to the Zotero comment are also rendered as `[[wikilinks]]`, including a `@citekey` reference. (Obsidian doesn’t allow rendering citations inside callouts, so it’s presented as a literal citekey.)
-
-The template structures each literature note as follows:
-
-- **Frontmatter** includes metadata provided by Zotero such as document-type, created, added, up, item-type, title, shorttitle, authors, editors, abstract, …), converting any HTML formatting in `abstract` and `title` to Markdown. Fields that do not apply to an item are left out entirely.
-- **Every item type contributes its own fields.** Not every Zotero item has a title — a case has a **case name**, a statute a **name of act**, an email a **subject** — and those stand in for the title. The fields that make a reference readable are imported as well: `number` (docket, report, patent, public-law number…), `authority` (court or issuing body), `genre` (thesis, report, manuscript type…), `jurisdiction`, `medium`, `section`, `event`, `pages`, and so on. So a case note carries its court, docket number, reporter and page rather than just a name.
-- **Collections are recorded** in `zotero-collections:` as `[[…]]` links to the collections the item belongs to (via `collection_links()`). Zotero owns this list, so it is rebuilt on every update — moving an item out of a collection removes the link.
-- **Two related properties, with clear owners.** `related:` is **yours** — ScholarWeft writes `related: []` when creating a note and never touches it again, so links you add stay. `sw-related:` holds what **Zotero** supplies: the item's Zotero tags and its Related items, as `[[…]]` links. Zotero's list is rebuilt on every import, so a tag or related link you remove in Zotero disappears from the note — no stale entries to prune.
-- **Upgrading from an older version?** Notes made before `sw-related` existed have Zotero's tags and related links inside `related:`. The first time ScholarWeft updates such a note, that one-off tidy runs: entries Zotero still supplies move out (they now live in `sw-related:`), while your own links — and any entry Zotero no longer has — stay. The transition is recorded per Zotero item, so it happens **exactly once**; from then on `related:` is entirely yours and is never written to again.
-- **Body**: a `## Notes` section (yours) and, when the item has annotations, a managed `## Annotations` region between `%%sw-managed%%` and `%%/sw-managed%%` markers. The region is omitted entirely when the item has no annotations.
-- **Child notes** are inlined under `## Notes`. Each note's first line is Zotero's note title (Zotero shows it in the item pane and ZotLit names the standalone note after it), so a short first line (≤100 characters, a single line) is rendered as a heading at the configured inside-note level (default `###`, one below `## Notes`). Multiple notes are separated by a horizontal rule with blank lines around it, so two notes under one item stay distinct.
-- **Annotations** keep Zotero's PDF reading order. A comment that starts with `+` in the annotated PDF merges that annotation into the previous one of the same type on the same attachment — text or images are joined and the page label becomes a range — so a rectangular selection spanning two pages reads as one quote.
-- **Excerpt images** are copied into your vault and embedded as `![[…]]`, because Obsidian cannot display Zotero's `file://` cache paths. **Excerpt-image folder** sets where they go (default `Attachments`, relative to the vault root); names are `@<citekey>_p<page>_<annotationKey>.png`.
-- **Re-importing** refreshes the managed frontmatter fields and that region, and refills `## Notes` **only when it is empty** (whitespace doesn't count) — so notes you clear are restored, but anything you have written there is never overwritten or appended over. Your other properties, and all other writing, are left alone.
-
-If a note was created by ZotLit, ScholarWeft **asks before converting it**, so trying the plugin never silently reworks your existing notes. **Convert** is remembered for the notes you update; **Leave** applies to that note only, and the next ZotLit note asks again. The **ZotLit notes** setting can also be set to *Ask each time* (default), *Always convert*, or *Never touch ZotLit notes*.
-
-## Importing and updating
-
-- **Add Literature Notes from Zotero (search and filter)** searches and filters
-  your whole library inside Obsidian — no Zotero window, no Better BibTeX — and
-  creates or refreshes the notes you select. It is the most direct way to import
-  when you know what you are looking for but not its citekey.
-  - **Search** by citekey, author or title, or tick **Search abstracts** to add
-    abstract and publication detail to the search.
-  - **Show items with** narrows to items that have a Zotero note, a PDF or
-    snapshot, or annotations, or that *lack* a literature note (on by default).
-  - **Show item types** narrows to books, articles, book sections,
-    newspaper/magazine articles, web pages, or everything else.
-  - **Collections** is a tree of your collections, one heading per library
-    (subcollections nested under their parents). Everything is on at first;
-    turning a collection off turns its whole branch off, and **All**, **None**
-    and the library headings let you isolate one branch quickly.
-  - **Order** the results by the search ranking, author/title/year, or date
-    added. Your last search and ordering are remembered for next time.
-  - Results are checked off individually or with **Select all shown**; re-importing
-    an existing item merges into its note rather than duplicating it. A single
-    imported note opens (turn that off with **Open a single imported note**).
-- **Import literature notes from Zotero…** opens Zotero's own item picker so you can select one or more references and create or refresh their notes. It needs **Better BibTeX**, and Zotero shows one picker at a time.
-- **Update this literature note** re-renders the active note from its item (the note must carry a `zotero-key`).
-- **Update all literature notes** (a button on the **Literature note import** settings page) re-renders every note that has a `zotero-key` — the middle ground between updating a single note and importing every Zotero item. Unchanged items are not re-fetched (the fetched-children cache), so it is quick when nothing has changed, and it is rarely needed when auto-update is on.
-
-All of these honour the own-template setting and are non-destructive: only the managed fields and region change. Updating a ZotLit note is subject to the conversion prompt above.
-
-## Keeping notes up to date automatically
-
-Three separate switches, all on the **Literature note import** settings page, each a **Yes / No** pair with **neither selected** to begin with:
-
-| Setting | What it does |
-|---|---|
-| **Update literature notes automatically** | When a Zotero item changes — its metadata, one of its annotations, an attachment, a tag — re-render its literature note. |
-| **Update citekeys automatically** | When Zotero gives a reference a new citekey, rename its literature note (and its derived files) and update the citations across the vault. |
-| **Update notes when the template changes** | When your note **template** changes, re-render the notes that were made with the older one. |
-
-**Nothing changes until you answer.** While a switch is unselected, ScholarWeft asks the first time that kind of change is detected, and your answer becomes the setting — so there is no after-the-fact surprise. All three are non-destructive: only the managed frontmatter fields and the `%%sw-managed%%` region are rewritten, never your own writing.
-
-The template update uses each note's `updated` stamp to work out which notes are stale, and shows you how many are affected and roughly how long it will take before it starts. You can keep working while it runs.
 ## Group libraries: one folder each
 
 If you use Zotero group libraries, their notes go into their **own subfolder** of your literature-notes folder, named after the library. Two libraries can hold the same work (and so the same citekey), and separate folders keep those two notes apart instead of one overwriting the other. Filing happens automatically on a Zotero refresh and at startup, follows a **rename** of a Zotero library (offering to rename the folder with it), and is also available as the command **File literature notes into their library folders**.
@@ -308,26 +324,22 @@ If you use Zotero group libraries, their notes go into their **own subfolder** o
 
 Zotero **child notes** can be brought into a literature note under `## Notes`:
 
-- With ScholarWeft's own template (the default), the item's child notes are rendered inline under `## Notes` when the note is created, and refilled on update **only when the section is empty** (whitespace doesn't count).
+- With ScholarWeft's own template (the default), the item's child notes are rendered inline under `## Notes` when the note is created, and refilled on update **only when the section is empty** (whitespace doesn't count). If a Zotero item has a note that you do not want to be reimported on the next update, put your own notes or some dummy text such as `---` under `## Notes` so it’s not recognized as empty.
 - The ZotLit path needs a separate step, because ZotLit imports a note's child notes as separate files rather than into the literature note. When **Create literature notes with ZotLit** is on, **Settings → Literature note import** shows an **Insert Zotero notes into literature notes** button (the same action is available as a command, but only while ZotLit is the import path). It goes through every literature note, fetches the matching item's child notes from Zotero, and inserts their text as Markdown directly under `## Notes`, above ZotLit's `%%zt-managed%%` region. Nothing inside the managed region is touched, so later updates don't overwrite it.
   - **Only notes with an empty `## Notes` section are filled.** If a section already has content, it is left alone — ScholarWeft never overwrites or appends over what's there. The summary tells you how many were skipped and how many had no Zotero notes; skipped paths are also printed to the developer console (Ctrl/Cmd+Shift+I).
   - After a run, a marker comment (`<!-- sw-zn: KEY … -->`) at the end of the file records which Zotero notes were inserted, so re-running is a no-op.
   - On both paths this also runs automatically while a note is being created, as part of that flow.
 
+## How ScholarWeft knows which literature note goes with which Zotero item
+
+ScholarWeft identifies a literature note by its stable **`zotero-key`** first — the Zotero item key (`KEY`, or `KEYgGROUPID` for a group library) — and only if that’s missing by the `@citekey` filename. Even if you rename a note or change its citekey in Zotero, ScholarWeft can still find it and update it by its item key rather than creating a duplicate.
+
+If a file already sits at the expected `@citekey.md` name but is *not* that item's note (a different library's copy, another work with a similar title, or one of your own notes), ScholarWeft never overwrites it: it creates a suffixed sibling (`@citekeya.md`, `@citekeyb.md`, …) and tells you. If that happens, you should give that other note a different name and rename the literature note as `@citekey.md` if you want to cite it.
+
 ## ZotLit (optional)
 
-ScholarWeft does not require [ZotLit](https://github.com/PKM-er/obsidian-zotlit). If you already use it, or prefer its templates, you can opt in: **Settings → Literature note import → Import literature notes with ScholarWeft** off, then **Create literature notes with ZotLit** on. Only then does ScholarWeft hand note creation and annotation formatting to ZotLit. You can also install a curated set of ZotLit templates: **Install and use ScholarWeft's ZotLit import templates** writes them to `sw-zotlit-templates/` and points ZotLit's template folder there, leaving your own templates untouched. See [ZotLit Import Templates](./zotlit-import-templates.md).
+If you already use or prefer [ZotLit](https://github.com/PKM-er/obsidian-zotlit) for literature note importing, you can opt in: **Settings → Literature note import → Import literature notes with ScholarWeft** off, then **Create literature notes with ZotLit** on. If you set this, ScholarWeft hands note creation and annotation formatting to ZotLit. You can also install a curated set of ZotLit templates: **Install and use ScholarWeft's ZotLit import templates** writes them to `sw-zotlit-templates/` and points ZotLit's template folder there, leaving your own templates untouched. See [ZotLit Import Templates](./zotlit-import-templates.md).
 
-With the default own-template path, ZotLit is not needed to render notes at all — and ZotLit-only settings stay hidden.
-
-## Updating citekeys
-
-A Zotero item's citekey can change (for example, when you edit it with Better BibTeX), but its stable item key cannot. ScholarWeft matches each literature note to its item by the `zotero-key` it carries, so the note itself records its old name — no separate rename history is kept. When the two differ, ScholarWeft offers to update them:
-
-- The literature note is renamed to `@<new citekey>.md`; Obsidian rewrites its resolved `[[@old]]` links automatically, and ScholarWeft rewrites the rest (plain `[@old]` citations and unresolved links).
-- Files derived from the old key — transcriptions and translations named `@<old> - …` — are renamed alongside it.
-- With the own template, the renamed note is re-rendered, so its excerpt images (`@<citekey>_p…_<annotationKey>.png`) follow too.
-
-This runs automatically after a Zotero refresh when a change is found, and can be run on demand with **Review and update citekeys from Zotero**. Nothing is changed until you confirm the preview.
+If you do not enable ZotLit literature note creation, ZotLit-only settings stay hidden.
 
 See [Commands](./commands.md) and [Dependencies](./dependencies.md).

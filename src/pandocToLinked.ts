@@ -1,6 +1,8 @@
 import { Notice, TFile } from 'obsidian';
 import type ReferenceList from './main';
 import { getCitationSegments } from 'src/parser/parser';
+import { convertExcludedFolders } from './linkedToPandoc';
+import { filesToConvert } from './template/convert-scope';
 
 // ── config ────────────────────────────────────────────────────────────────────
 
@@ -249,9 +251,15 @@ export async function convertVault(
     return;
   }
 
-  const files = plugin.app.vault.getMarkdownFiles().filter(
-    (f) => !f.path.endsWith('.bk') && !f.path.endsWith('.bk.md')
+  const allowed = new Set(
+    filesToConvert(
+      plugin.app.vault.getMarkdownFiles().map((f) => f.path),
+      convertExcludedFolders(plugin.settings.convertExcludeFolders)
+    )
   );
+  const files = plugin.app.vault
+    .getMarkdownFiles()
+    .filter((f) => allowed.has(f.path));
 
   const progress = new Notice(`Converting citations across ${files.length} files…`, 0);
   let convertedFiles = 0;

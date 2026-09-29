@@ -22,8 +22,8 @@ Beyond linking your scholarly notes and references, ScholarWeft links your writi
 - [Searching for References](./docs/searching.md) — the two levels, what counts as a match, how results are ranked, and tips
 - [Bibliography](./docs/bibliography.md) — `.bib`/CSL sources, per-note overrides
 - [Zotero](./docs/zotero.md) — connection modes, port, libraries
-- [Literature Notes](./docs/literature-notes.md) — where notes live and how they are created
-- [Document Import and Export](./docs/import-export.md) — compile/export to markdown, DOCX, ODT, PDF
+- [Creating Literature Notes from Zotero](./docs/literature-notes.md) — where notes live and how they are created
+- [Document Import and Export](./docs/import-export.md) — compile a longer document from a series of notes, export to markdown, DOCX, ODT, PDF
 - [Commands](./docs/commands.md) — the full command list
 - [ZotLit Import Templates](./docs/zotlit-import-templates.md) — rich annotation templates
 - [Mobile](./docs/mobile.md) — iOS/Android behaviour
