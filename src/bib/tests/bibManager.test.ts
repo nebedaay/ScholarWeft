@@ -42,7 +42,7 @@ jest.mock('../bibtex', () => ({
 }));
 
 import { BibManager } from '../bibManager';
-import { bibPathsToCSL, searchZoteroBBT } from '../helpers';
+import { bibPathsToCSL, needsMappingRemap, MAPPING_VERSION, searchZoteroBBT } from '../helpers';
 import { parseBibFile } from '../bibtex';
 import { ZOTERO_TYPE_TO_CSL, zoteroItemToCSL } from '../zotero-csl';
 import { parseExtra } from '../extra';
@@ -161,6 +161,16 @@ beforeEach(() => {
 });
 
 // ─── SimpleLRU ────────────────────────────────────────────────────────────────
+
+describe('needsMappingRemap()', () => {
+  it('forces a remap for a cache written before the current CSL mapping', () => {
+    expect(needsMappingRemap({ mappingVersion: MAPPING_VERSION })).toBe(false);
+    expect(needsMappingRemap({ mappingVersion: MAPPING_VERSION - 1 })).toBe(true);
+    // A cache with no version predates any mapping stamp.
+    expect(needsMappingRemap({})).toBe(true);
+    expect(needsMappingRemap(null)).toBe(true);
+  });
+});
 
 describe('SimpleLRU', () => {
   it('stores and retrieves values', () => {

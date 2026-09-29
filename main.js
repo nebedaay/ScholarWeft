@@ -69587,13 +69587,15 @@ async function getZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, loa
   if (loadCached || !isRunning) {
     if (await app.vault.adapter.exists(cachePath)) {
       const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
-      return {
-        list: applyGroupID(cacheData.items, groupId),
-        version: (_a = cacheData.version) != null ? _a : 0
-      };
-    }
-    if (!isRunning)
+      if (!needsMappingRemap(cacheData) || !isRunning) {
+        return {
+          list: applyGroupID(cacheData.items, groupId),
+          version: (_a = cacheData.version) != null ? _a : 0
+        };
+      }
+    } else if (!isRunning) {
       return { list: null, version: 0 };
+    }
   }
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
   const { items: rawItems, version } = await fetchAllZoteroItemsNative(port, libraryType, libraryId);
@@ -69604,7 +69606,13 @@ async function getZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId, loa
       cslItems.push(cslItem);
   }
   const itemCount = await fetchLibraryCountNative(port, groupId);
-  await app.vault.adapter.write(cachePath, JSON.stringify({ items: cslItems, version, builtAt: Date.now(), itemCount }));
+  await app.vault.adapter.write(cachePath, JSON.stringify({
+    items: cslItems,
+    version,
+    builtAt: Date.now(),
+    itemCount,
+    mappingVersion: MAPPING_VERSION
+  }));
   return { list: applyGroupID(cslItems, groupId), version };
 }
 async function fetchLibraryCountNative(port = DEFAULT_ZOTERO_PORT, libraryID = 1) {
@@ -69645,6 +69653,11 @@ async function fetchTrashedItemKeysNative(port = DEFAULT_ZOTERO_PORT, libraryID 
   return out;
 }
 var LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1e3;
+var MAPPING_VERSION = 1;
+function needsMappingRemap(cacheData) {
+  var _a;
+  return ((_a = cacheData == null ? void 0 : cacheData.mappingVersion) != null ? _a : 0) !== MAPPING_VERSION;
+}
 async function fetchLibraryVersionNative(port = DEFAULT_ZOTERO_PORT, libraryID = 1) {
   if (!await isZoteroRunningNative(port))
     return 0;
@@ -69737,6 +69750,8 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
   if (!await app.vault.adapter.exists(cachePath))
     return null;
   const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
+  if (needsMappingRemap(cacheData))
+    sinceVersion = 0;
   const list0 = cacheData.items;
   let versionedCount = 0;
   let creatorsMissing = false;
@@ -69823,7 +69838,8 @@ async function refreshZBibNative(port = DEFAULT_ZOTERO_PORT, _cacheDir, groupId,
     items: list,
     version,
     builtAt: Date.now(),
-    itemCount: (_a = currentCount != null ? currentCount : cachedCount) != null ? _a : void 0
+    itemCount: (_a = currentCount != null ? currentCount : cachedCount) != null ? _a : void 0,
+    mappingVersion: MAPPING_VERSION
   }));
   return {
     list: applyGroupID(list, groupId),

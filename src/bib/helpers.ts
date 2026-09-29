@@ -554,12 +554,18 @@ export async function getZBibNative(
   if (loadCached || !isRunning) {
     if (await app.vault.adapter.exists(cachePath)) {
       const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
-      return {
-        list: applyGroupID(cacheData.items as CSLList, groupId),
-        version: cacheData.version ?? 0,
-      };
+      // A CSL-mapping change must re-map EVERY entry, but this persisted list is
+      // only delta-refreshed otherwise. Serve it as-is only when it is current
+      // (or Zotero is down — then the migration runs on the next load with it up).
+      if (!needsMappingRemap(cacheData) || !isRunning) {
+        return {
+          list: applyGroupID(cacheData.items as CSLList, groupId),
+          version: cacheData.version ?? 0,
+        };
+      }
+    } else if (!isRunning) {
+      return { list: null, version: 0 };
     }
-    if (!isRunning) return { list: null, version: 0 };
   }
 
   const { libraryType, libraryId } = nativeLibraryCoords(groupId);
@@ -578,7 +584,13 @@ export async function getZBibNative(
   const itemCount = await fetchLibraryCountNative(port, groupId);
   await app.vault.adapter.write(
     cachePath,
-    JSON.stringify({ items: cslItems, version, builtAt: Date.now(), itemCount })
+    JSON.stringify({
+      items: cslItems,
+      version,
+      builtAt: Date.now(),
+      itemCount,
+      mappingVersion: MAPPING_VERSION,
+    })
   );
 
   return { list: applyGroupID(cslItems, groupId), version };
@@ -647,6 +659,24 @@ export async function fetchTrashedItemKeysNative(
  *  way a PERMANENTLY deleted item (in neither `/items` nor `/items/trash`) is
  *  ever dropped. */
 const LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Bump whenever `zoteroItemToCSL` changes how a Zotero item maps to CSL fields
+ * (a new field, a renamed variable, a title fallback). The persisted library
+ * cache is otherwise only DELTA-refreshed, so an item UNCHANGED in Zotero is
+ * never re-mapped and keeps the old fields — that is why a legal case stayed
+ * title-less after the `caseName`→`title` fix. A version mismatch forces one
+ * FULL refetch, the same one-time-migration pattern as the `_version` /
+ * `_creators` backfill.
+ */
+export const MAPPING_VERSION = 1;
+
+/** Does a persisted library cache predate the current CSL mapping? */
+export function needsMappingRemap(
+  cacheData: { mappingVersion?: number } | null | undefined
+): boolean {
+  return (cacheData?.mappingVersion ?? 0) !== MAPPING_VERSION;
+}
 
 /** The library's current `Last-Modified-Version`, or 0. */
 export async function fetchLibraryVersionNative(
@@ -794,6 +824,11 @@ export async function refreshZBibNative(
   // Zotero's own creatorType), which older caches lack. Force a full re-fetch
   // (since=0) so every entry gets both written back; skipped once migrated.
   const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
+
+  // Force a full re-fetch when the CSL MAPPING changed — the delta would never
+  // re-map an item unchanged in Zotero.
+  if (needsMappingRemap(cacheData)) sinceVersion = 0;
+
   const list0 = cacheData.items as CSLList;
   let versionedCount = 0;
   let creatorsMissing = false;
@@ -911,6 +946,7 @@ export async function refreshZBibNative(
       version,
       builtAt: Date.now(),
       itemCount: currentCount ?? cachedCount ?? undefined,
+      mappingVersion: MAPPING_VERSION,
     })
   );
 
