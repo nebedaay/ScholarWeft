@@ -76,4 +76,21 @@ describe('rewriteLinkedToPandoc()', () => {
     expect(rewriteLinkedToPandoc('plain text').changed).toBe(false);
     expect(rewriteLinkedToPandoc('[@a]').changed).toBe(false);
   });
+
+  it('agrees with the export converter (one shared pipeline)', () => {
+    // Both paths run `convertLinksToPandoc`; a note that is reverted and then
+    // exported must produce the same pandoc text.
+    const { convertCitationsInText } = require('../convertCitations');
+    for (const src of [
+      '[[@a]] [[@b]]',
+      '[ [[@a]]; [[@b]] ]',
+      '[[@a]] [[@b]] [[@c]]',
+      'See [[@smith2020]].',
+      '[[@key|@ -]] argues',
+      '[[@key|see @, p. 6]]',
+      '[[@a|@, p. 3]] [[@b]]',
+    ]) {
+      expect(rewriteLinkedToPandoc(src).out).toBe(convertCitationsInText(src));
+    }
+  });
 });

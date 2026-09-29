@@ -22,10 +22,10 @@ import {
   expandAlias,
   getCitationSegments,
   getCitations,
-  mergeCompoundCitations,
   mergeContainerExpression,
 } from './parser/parser';
 import type { CitationSegments } from './parser/parser';
+import { convertLinksToPandoc } from './parser/compound';
 
 // Matches [[@key|alias]] / [[@key]] / ⟦ (from transformLinkAliases specialRe).
 const SPECIAL_RE = new RegExp(
@@ -53,16 +53,19 @@ function splitAuthorInText(expanded: string): { text: string; narrative: boolean
 
 /**
  * Rewrite outer-bracket containers "[ ... [[@k1]] ... [[@k2]] ... ]" into a
- * single merged pandoc citation. Member parsing is delegated to the shared
- * `mergeContainerExpression` (the single container parser), so the export
- * converter and the in-app parser can't drift. Text between the outer brackets
- * is dropped (only the members are emitted).
+ * single merged pandoc citation, and emit each surviving `[[@key|alias]]` link
+ * through `renderStandalone`. Member parsing is delegated to the shared
+ * `mergeContainerExpression` (the single container parser). Text between the
+ * outer brackets is dropped (only the members are emitted).
  *
- * Exported so the REVERT path (linked → pandoc) flattens containers with the
- * same implementation the export path uses; a second copy would be free to
- * drift.
+ * This is the EXPORT path's container stage. The revert path supplies its own
+ * (it has no pure-text-label case to handle), but both feed the result into the
+ * same `convertLinksToPandoc` pipeline — see `parser/compound.ts`.
  */
-export function rewriteContainers(str: string): string {
+export function rewriteContainers(
+  str: string,
+  renderStandalone: (m: RegExpExecArray) => string = defaultStandalone
+): string {
   const containers: { open: number; close: number; merged: string }[] = [];
   let scan = 0;
   while (scan < str.length) {
@@ -113,9 +116,8 @@ export function rewriteContainers(str: string): string {
       // Only the FIRST member can be narrative (the plugin drops a mid-group
       // '-' flag); pandoc expresses that as `@first [rest…]`.
       // Emit the members as a FLAT sequence of pandoc citations. The single
-      // compound-forming function (`mergeCompoundCitations`, below) then
-      // combines it — exactly as it combines genuinely adjacent citations — so
-      // containered and contiguous references take the SAME path.
+      // The shared pipeline (`convertLinksToPandoc`) then forms compounds, so
+      // containered and contiguous references take one path.
       const merged = firstNarrative
         ? mergedParts[0] +
           (mergedParts.length > 1 ? ' [' + mergedParts.slice(1).join('; ') + ']' : '')
@@ -148,26 +150,10 @@ export function rewriteContainers(str: string): string {
       ci++;
     }
     if (isInside(m.index)) continue;
-    // Standalone wikilink — emit the alias-expanded citation.
+    // Standalone wikilink — emit through the caller's renderer.
     out += str.slice(last, m.index);
-    const full = m[0];
-    const key = m[1] ?? m[3];
-    const alias = m[2];
-    const aliasText = alias ?? '@' + key;
-    if (alias !== undefined && !/@/.test(alias)) {
-      // Pure text label (no citation material): in Obsidian this stays a simple
-      // link to the literature note; an exported document can't follow the
-      // wikilink, so the citation is attached: "Smith's work [@key]".
-      out += alias + ' [@' + key + ']';
-    } else {
-      // Citation material (or plain [[@key]]): emit the expanded citation. A
-      // trailing whitespace-separated '-' is the plugin's author-in-text
-      // (narrative) flag — pandoc expresses narrative as `@key` outside the
-      // brackets, so the dash is consumed and the brackets dropped.
-      const a = splitAuthorInText(expandAlias(aliasText, key));
-      out += a.narrative ? a.text : '[' + a.text + ']';
-    }
-    last = m.index + full.length;
+    out += renderStandalone(m);
+    last = m.index + m[0].length;
   }
   while (ci < containers.length) {
     const c = containers[ci];
@@ -183,15 +169,36 @@ export function rewriteContainers(str: string): string {
   return out;
 }
 
+/**
+ * The EXPORT default: render one `[[@key|alias]]` match to pandoc text.
+ *
+ * A pure text label (`[[@key|Smith's work]]`, no `@`) cannot be followed by an
+ * exported document, so the citation is attached after it. Otherwise the alias
+ * is expanded and bracketed — with a trailing author-in-text `-` consumed and
+ * the brackets dropped (pandoc's AuthorInText takes `@key` outside brackets).
+ */
+export function defaultStandalone(m: RegExpExecArray): string {
+  const key = m[1] ?? m[3];
+  const alias = m[2];
+  const aliasText = alias ?? '@' + key;
+  if (alias !== undefined && !/@/.test(alias)) {
+    return alias + ' [@' + key + ']';
+  }
+  const a = splitAuthorInText(expandAlias(aliasText, key));
+  return a.narrative ? a.text : '[' + a.text + ']';
+}
+
 /** Convert linked-citation wikilinks in `text` to pandoc citation syntax. */
 export function convertCitationsInText(text: string): string {
-  const lines = text.split('\n');
-  const outLines = lines.map((line) =>
-    /\[\[@/.test(line) ? rewriteContainers(line) : line
-  );
-  // Compound formation is the SHARED function (src/parser/compound.ts), also
-  // used by the CLI, so containered and contiguous references take one path.
-  return mergeCompoundCitations(outLines.join('\n'));
+  // ONE pipeline (see `parser/compound.ts`): containers first, then each
+  // surviving link, then adjacent citations merged into compounds.
+  return convertLinksToPandoc(text, {
+    linkRe: SPECIAL_RE,
+    flatten: (s) => rewriteContainers(s, defaultStandalone),
+    // Containers plus standalone links were already emitted by `flatten`;
+    // nothing further to render here.
+    renderLink: () => null,
+  });
 }
 
 /**

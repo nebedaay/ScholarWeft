@@ -1,6 +1,6 @@
 import { Notice, TFile } from 'obsidian';
 import type ReferenceList from './main';
-import { mergeCompoundCitations } from './parser/compound';
+import { convertLinksToPandoc } from './parser/compound';
 import { rewriteContainers } from './convertCitations';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ const isRefAlias = (alias: string | undefined): boolean =>
  * have no pandoc equivalent and are left byte-for-byte untouched.
  */
 export function rewriteLinkedToPandoc(body: string): { out: string; changed: boolean } {
-  // Mask the things neither step may touch, so `rewriteContainers` cannot
+  // Mask the things neither step may touch, so container flattening cannot
   // mistake a full-reference link for a container member.
   const masked: string[] = [];
   const shield = (m: string) => `\u0000${masked.push(m) - 1}\u0000`;
@@ -66,26 +66,18 @@ export function rewriteLinkedToPandoc(body: string): { out: string; changed: boo
     .replace(/`[^`\n]+`/g, shield)
     .replace(/\[\[@[^\]|]*\|(?:ref|reference)\]\]/gi, shield);
 
-  out = rewriteLinks(out);
-  // Container flattening parses `[[@…]]` members, so the full-reference links
-  // must still be shielded above — which they are.
-  out = rewriteContainers(out);
-  out = mergeCompoundCitations(out);
+  // ONE pipeline, shared with the export converter (see `convertLinksToPandoc`).
+  out = convertLinksToPandoc(out, {
+    linkRe: LINK_RE,
+    flatten: rewriteContainers,
+    renderLink: ({ key, alias }) => {
+      if (isRefAlias(alias)) return null; // full-reference — leave as-is
+      return singleToPandoc(key, alias);
+    },
+  });
 
   out = out.replace(/\u0000(\d+)\u0000/g, (_, i: string) => masked[+i]);
   return { out, changed: out !== body };
-}
-
-/**
- * Replace every `[[@key|alias]]` link with its individual pandoc form.
- * Grouping is NOT decided here — adjacency is handled afterwards by
- * `mergeCompoundCitations`, the one compound-former the export path also uses.
- */
-function rewriteLinks(text: string): string {
-  return text.replace(LINK_RE, (raw, key: string, alias: string | undefined) => {
-    if (isRefAlias(alias)) return raw; // full-reference — no pandoc equivalent
-    return singleToPandoc(key, alias);
-  });
 }
 
 // ── per-note conversion ───────────────────────────────────────────────────────
