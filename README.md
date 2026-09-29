@@ -46,8 +46,8 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 
 ### References and literature notes
 
-- **Import and update from Zotero** — pick one or more references in Zotero's native dialog and create or refresh their notes; update the current note, or every note in the vault, in place. Re-imports update only the managed annotations region and metadata, leaving your own writing untouched.
-- **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette. ScholarWeft's default template provides comprehensive bibliographic data in the note’s frontmatter and rich annotation callouts. See [Literature Notes](./docs/literature-notes.md).
+- **Import and update from Zotero** — **Add Literature Notes from Zotero (search and filter)** opens a search-and-filter window over your whole library inside Obsidian (item types, collections, child presence, ordering), or pick items in Zotero's own dialog; then create or refresh their notes. Update the current note, or every note in the vault, in place. Re-imports update only the managed annotations region and metadata, leaving your own writing untouched. See [Literature Notes](./docs/literature-notes.md#importing-and-updating).
+- **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette. ScholarWeft's default template provides comprehensive bibliographic data in the note’s frontmatter (every item type's own fields, its Zotero collections) and rich annotation callouts. See [Literature Notes](./docs/literature-notes.md).
 - **Multiple bibliography sources** — any number of `.bib`/CSL-JSON/CSL-YAML files plus Zotero, merged; Zotero wins on conflicts. See [Bibliography](./docs/bibliography.md).
 - **Native Zotero 7/8 API** — no Better BibTeX needed to resolve and format citations (BBT still required for Zotero 6, and still the easiest way to auto-generate citekeys). See [Zotero](./docs/zotero.md).
 - **Citekey sync** — update citations and literature notes across the vault if your citekeys change; images attached from annotations are also renamed.

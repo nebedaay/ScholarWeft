@@ -55,7 +55,7 @@ It asks before each step and skips anything you’ve already done. It offers to 
 
 Run the script first; the numbered steps below are the manual equivalent, and your fallback if a step fails.
 
-The script installs plugin **files**; anything that needs another plugin's **settings** is finished from inside Obsidian the first time you open it (that's the only safe way to change another plugin's settings). So after running the script, open Obsidian once and it will finish any in-Obsidian setup — no manual step needed. It also offers the optional **Basic note template + Templater** step (see [Step 6b](#6b-optional-basic-note-template--templater)).
+The script installs plugin **files**; anything that needs another plugin's **settings** is finished from inside Obsidian the first time you open it (that's the only safe way to change another plugin's settings). So after running the script, open Obsidian once and it will finish any in-Obsidian setup — no manual step needed. It also offers the optional **Basic note template + Templater** step (see [Step 5b](#5b-optional-basic-note-template--templater)).
 
 If you have more than one Obsidian vault on your machine, you'll have to run the script for each vault you want to use them with, just repeating the Obsidian plugin steps (installing and configuring ScholarWeft).
 

@@ -218,7 +218,8 @@ Every helper reads from a single data root, **`item`**. It mirrors ZotLit's publ
 | `item.authors` | The primary creators (authors, directors, …). |
 | `item.authorsShort` | `"Smith"`, `"Smith and Jones"`, `"Smith et al."` |
 | `item.tags` | `[{ name, type }]` (type is `"unknown"` on this path). |
-| `item.collections` | Currently empty. |
+| `item.collections` | The Zotero collections the item belongs to, `[{ key, name, path }]` (`path` is the ancestor chain, e.g. `['Economics','Microeconomics']`). |
+| `item.number`, `item.genre`, `item.authority`, `item.jurisdiction`, `item.medium`, `item.section`, `item.eventTitle`, `item.eventPlace`, `item.archive`, `item.archiveLocation`, `item.callNumber`, `item.version`, `item.status` | Type-specific fields (see **Every item type contributes its own fields** below). |
 | `item.relatedItems` | `[{ key, citationKey, title }]` for Zotero's Related panel. |
 | `item.attachments` | `[{ key, filename, contentType, backlink, fileLink, … }]`. |
 | `item.annotations` | `[{ type, text, comment, colorName, pageLabel, page, backlink, imgLink, tags, parentAttachment, continuationMedia, … }]`. |
@@ -228,7 +229,7 @@ Every helper reads from a single data root, **`item`**. It mirrors ZotLit's publ
 
 Several fields carry **callable link helpers** (e.g. `item.noteLink(alias?, subpath?)`, `item.attachments[].fileLink()`, `item.annotations[].imgLink(alias?)`) rather than plain strings, because they may be unresolved until the note path is known. Call them.
 
-Fields the cache cannot supply faithfully are noted where they matter: `collections` is empty, `tags[].type` is `"unknown"`, and cross-role creator ordering may differ from Zotero's own.
+Fields the cache cannot supply faithfully are noted where they matter: `tags[].type` is `"unknown"` (Zotero's tag types are not retained), `relatedItems` and `collections` need the Zotero database (collection names are resolved from the collection index, so they are `[]` until it loads), and cross-role creator ordering may differ from Zotero's own.
 
 ### Example output
 

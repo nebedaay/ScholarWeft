@@ -4,7 +4,7 @@ ScholarWeft reads and formats citations, shows the reference sidebar, and manage
 
 Install a dependency only when you need the feature it enables. The plugin detects what is installed and greys out options that need something missing, with an explanation and a link back here.
 
-**The easiest way to install everything under “Python 3”/“Pandoc”/“LibreOffice”/“LaTeX” below is the bundled installer script** — see [Setup](./setup.md#6-optional-document-importexport-tools). On macOS:
+**The easiest way to install everything under “Python 3”/“Pandoc”/“LibreOffice”/“LaTeX” below is the bundled installer script** — see [Setup](./setup.md#5-optional-document-importexport-tools). On macOS:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nebedaay/ScholarWeft/main/install/install-mac.sh | bash
