@@ -487,6 +487,17 @@ export default class ReferenceList extends Plugin {
     });
 
     this.addCommand({
+      id: 'add-literature-notes',
+      name: t('Add literature notes (search and filter)'),
+      callback: async () => {
+        const { AddLiteratureNotesModal } = await import(
+          './modals/addLiteratureNotesModal'
+        );
+        new AddLiteratureNotesModal(this.app, this).open();
+      },
+    });
+
+    this.addCommand({
       id: 'import-literature-notes-from-zotero',
       name: t('Import literature notes from Zotero…'),
       callback: async () => {

@@ -1005,7 +1005,8 @@ export class BibManager {
   searchTier(
     tier: 'title' | 'abstract',
     query: string,
-    limit: number
+    limit: number,
+    offset = 0
   ): {
     entries: Array<{ entry: PartialCSLEntry; terms: string[] }>;
     total: number;
@@ -1077,7 +1078,7 @@ export class BibManager {
     const ordered = [...scored.entries()].sort((a, b) => a[1] - b[1]);
     return {
       entries: ordered
-        .slice(0, limit)
+        .slice(Math.max(0, offset), Math.max(0, offset) + limit)
         .map(([id]) => ({
           entry: ranked.get(id)!,
           terms: matchedTerms.get(id) ?? [],

@@ -1761,3 +1761,89 @@ Annotation callouts
   padding: 8px;
   color: var(--text-muted);
 }
+
+/* ── "Add literature notes" dialogue ───────────────────────────────────────── */
+.sw-add-notes-modal {
+  /* A little larger than the default prompt, for a searchable list. */
+  width: min(820px, 92vw);
+  height: min(680px, 90vh);
+}
+.sw-add-notes {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.sw-add-notes__search {
+  width: 100%;
+  margin-bottom: var(--size-4-2);
+}
+.sw-add-notes__body {
+  display: flex;
+  gap: var(--size-4-3);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.sw-add-notes__filters {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-2);
+  overflow-y: auto;
+}
+.sw-add-notes__filter {
+  display: block;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+.sw-add-notes__hint {
+  display: block;
+  color: var(--text-faint);
+}
+.sw-add-notes__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: var(--size-4-1);
+}
+.sw-add-notes__row {
+  display: flex;
+  gap: var(--size-4-2);
+  align-items: flex-start;
+  padding: var(--size-4-1) var(--size-4-2);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+.sw-add-notes__row:hover {
+  background: var(--background-modifier-hover);
+}
+.sw-add-notes__info {
+  min-width: 0;
+}
+.sw-add-notes__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sw-add-notes__meta {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.sw-add-notes__library,
+.sw-add-notes__has-note {
+  color: var(--text-faint);
+}
+.sw-add-notes__more,
+.sw-add-notes__status {
+  padding: var(--size-4-2);
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+.sw-add-notes__footer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--size-4-2);
+  margin-top: var(--size-4-3);
+}

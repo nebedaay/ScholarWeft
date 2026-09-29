@@ -224,6 +224,23 @@ export default {
   Skip: 'Skip',
   'File literature notes into their library folders':
     'File literature notes into their library folders',
+  'Add literature notes (search and filter)':
+    'Add literature notes (search and filter)',
+  'Add literature notes': 'Add literature notes',
+  'Search by citekey, author, title, abstract…':
+    'Search by citekey, author, title, abstract…',
+  'Items with Zotero notes': 'Items with Zotero notes',
+  'Items with a PDF or snapshot': 'Items with a PDF or snapshot',
+  'Items with annotations': 'Items with annotations',
+  'Items without a literature note': 'Items without a literature note',
+  'Select all shown': 'Select all shown',
+  Clear: 'Clear',
+  'Add notes': 'Add notes',
+  reference: 'reference',
+  references: 'references',
+  selected: 'selected',
+  'has a note': 'has a note',
+  'Scroll for more…': 'Scroll for more…',
   'Citekey changes detected': 'Citekey changes detected',
   'Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?':
     'Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?',
