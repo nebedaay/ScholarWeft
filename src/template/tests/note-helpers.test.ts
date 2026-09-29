@@ -196,9 +196,22 @@ describe('re-import merge', () => {
       ['title', 'replace'],
       ['citekey', 'keep'],
       ['edition', 'replace'],
+      // The plugin GUARANTEES an `updated` stamp even when the template omits it.
+      ['updated', 'replace'],
     ]);
     // An omitted (empty) field is still in scope, so replace can remove it.
     expect(specs[2].lines).toEqual([]);
+    expect(specs[3].lines[0]).toMatch(/^updated: \d{4}-\d{2}-\d{2} /);
+  });
+
+  it('does not duplicate updated when the template declares it', () => {
+    const ctx = buildNoteContext(entry);
+    prepareTemplateData(ctx);
+    helpers.startYAML(ctx);
+    helpers.addProperty(ctx, 'updated', helpers.updated(ctx));
+    helpers.endYAML(ctx);
+    const specs = helpers.fieldSpecs(ctx);
+    expect(specs.filter((s) => s.key === 'updated')).toHaveLength(1);
   });
 
   it('merges a fresh render into an existing note, keeping user data', () => {

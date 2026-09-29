@@ -50,6 +50,7 @@ import {
 import { mergeNote, type NotesReimport } from './merge';
 import {
   YamlBuilder,
+  serializeProperty,
   type YamlFieldSpec,
   type YamlPropertyOptions,
   type YamlValue,
@@ -110,6 +111,44 @@ export function todayIso(now: Date = new Date()): string {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * A full local timestamp with MILLISECONDS: `YYYY-MM-DD HH:MM:SS.mmm`.
+ *
+ * Used for the `updated` property. Sub-second precision matters because
+ * template changes are compared against it over time ranges — a same-second
+ * change must not be mis-ordered.
+ */
+export function timestampIso(now: Date = new Date()): string {
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  return (
+    `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ` +
+    `${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}.` +
+    `${p(now.getMilliseconds(), 3)}`
+  );
+}
+
+/** Parse the `updated` timestamp back to epoch ms, or null when unparseable. */
+export function parseTimestamp(value: unknown): number | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/.exec(
+    value.trim()
+  );
+  if (!m) {
+    const t = Date.parse(value);
+    return Number.isFinite(t) ? t : null;
+  }
+  const [, y, mo, d, h, mi, s, ms] = m;
+  return new Date(
+    Number(y),
+    Number(mo) - 1,
+    Number(d),
+    Number(h),
+    Number(mi),
+    Number(s),
+    Number((ms ?? '0').padEnd(3, '0'))
+  ).getTime();
 }
 
 /**
@@ -178,7 +217,21 @@ export class NoteHelpers {
     ctx: NoteContext,
     opts: { migrateRelated?: boolean } = {}
   ): YamlFieldSpec[] {
-    const specs = this.stateOf(ctx).yaml.fieldSpecs();
+    const state = this.stateOf(ctx);
+    let specs = state.yaml.fieldSpecs();
+    // GUARANTEE the `updated` stamp: a custom template that omits it still gets
+    // one, so template staleness can always be judged. `replace` refreshes it on
+    // every render (which is the point).
+    if (!specs.some((s) => s.key === 'updated')) {
+      specs = [
+        ...specs,
+        {
+          key: 'updated',
+          merge: 'replace',
+          lines: serializeProperty('updated', timestampIso()),
+        },
+      ];
+    }
     if (opts.migrateRelated) return specs;
     // Outside the one-time transfer, `related:` is the user's alone: swap the
     // `subtract` strategy for `keep`, so an existing value is never rewritten.
@@ -368,6 +421,15 @@ export class NoteHelpers {
 
   importDate(ctx: NoteContext): string {
     return this.stateOf(ctx).importDate;
+  }
+
+  /**
+   * The `updated` timestamp for this render: a full local timestamp with
+   * milliseconds. The plugin GUARANTEES a note carries it, so a custom template
+   * that omits `updated` still gets one on the next import (see `render.ts`).
+   */
+  updated(_ctx: NoteContext): string {
+    return timestampIso();
   }
 
   isFirstImport(ctx: NoteContext): boolean {

@@ -68,6 +68,11 @@ import {
   type SyncState,
 } from 'src/template/zotero-sync';
 import {
+  currentHash,
+  recordTemplateHash,
+  type TemplateTimeline,
+} from 'src/template/template-history';
+import {
   recordQuery,
   recordRecentKey,
   reconcileKeys,
@@ -614,6 +619,9 @@ export class BibManager {
   /** Zotero child-delta watermark + attachment→item map for auto note-update.
    *  Persisted to `.scholar-weft/sync-state.json`. */
   syncState: SyncState = emptySyncState();
+
+  /** Template-hash timeline (`.scholar-weft/template-history.json`). */
+  templateTimeline: TemplateTimeline = { entries: [] };
 
   /** Per-note query history, so the 0-character popup can re-run THIS note's
    *  last query and Tab can cycle its earlier ones. Kept per note, so tabbing
@@ -2778,6 +2786,82 @@ export class BibManager {
     } catch {
       // no persisted list yet — first run
     }
+  }
+
+  /** The content-hash of the CURRENTLY APPLICABLE template source. */
+  private hashString(s: string): string {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return (h >>> 0).toString(16);
+  }
+
+  /** Load the template timeline (once at startup). */
+  async loadTemplateHistory(): Promise<void> {
+    try {
+      const raw = await app.vault.adapter.read(
+        normalizePath(`${SW_CACHE_DIR}/template-history.json`)
+      );
+      const data = JSON.parse(raw);
+      if (Array.isArray(data?.entries)) {
+        this.templateTimeline = {
+          entries: data.entries.filter(
+            (e: unknown): e is { hash: string; at: number } =>
+              !!e &&
+              typeof (e as { hash?: unknown }).hash === 'string' &&
+              typeof (e as { at?: unknown }).at === 'number'
+          ),
+        };
+      }
+    } catch {
+      /* first run */
+    }
+  }
+
+  private async saveTemplateHistory(): Promise<void> {
+    try {
+      const dir = normalizePath(SW_CACHE_DIR);
+      if (!(await app.vault.adapter.exists(dir))) {
+        await app.vault.adapter.mkdir(dir);
+      }
+      await app.vault.adapter.write(
+        normalizePath(`${SW_CACHE_DIR}/template-history.json`),
+        JSON.stringify(this.templateTimeline)
+      );
+    } catch (e) {
+      console.warn('[sw] saveTemplateHistory failed:', e);
+    }
+  }
+
+  /**
+   * Record the currently-applicable template's hash in the timeline. Called on
+   * startup, when the template setting changes, and when the template FILE
+   * changes. An unchanged hash appends nothing, so a spurious mtime bump cannot
+   * split a range.
+   *
+   * Recording continues EVEN WHEN template updates are declined — the timeline
+   * is a record of reality, so re-enabling later catches up correctly.
+   */
+  async recordCurrentTemplate(templateSource: string): Promise<boolean> {
+    const hash = templateSource ? this.hashString(templateSource) : '';
+    const { timeline, changed } = recordTemplateHash(
+      this.templateTimeline,
+      hash,
+      Date.now()
+    );
+    if (changed) {
+      this.templateTimeline = timeline;
+      await this.saveTemplateHistory();
+      console.log('[sw:template] template changed → hash', hash);
+    }
+    return changed;
+  }
+
+  /** Hash of the applicable template right now. */
+  get currentTemplateHash(): string {
+    return currentHash(this.templateTimeline);
   }
 
   /** Restore the Zotero child-delta watermark + attachment map (once at startup). */

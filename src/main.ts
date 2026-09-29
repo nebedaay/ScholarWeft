@@ -72,6 +72,9 @@ import {
   resolveLiteratureNoteFolder,
 } from './template/lit-folder';
 import { shouldRefreshOnRefocus } from './template/refocus';
+import { readTemplate } from './template/note-template-io';
+import { isNoteStale } from './template/template-history';
+import { parseTimestamp } from './template/note-helpers';
 import {
   DEFAULT_MIN_CHARS,
   detectCitationTrigger,
@@ -304,6 +307,8 @@ export default class ReferenceList extends Plugin {
     await this.bibManager.loadRecentKeys();
     // Restore the Zotero child-delta watermark for auto note-update.
     await this.bibManager.loadSyncState();
+    // Restore the template-hash timeline.
+    await this.bibManager.loadTemplateHistory();
     this.api = {
       version: API_VERSION,
       focusReferenceListView: () => this.initLeaf(),
@@ -834,6 +839,11 @@ export default class ReferenceList extends Plugin {
         debounce(
           async (file) => {
             if (!(file instanceof TFile)) return;
+            // The note TEMPLATE changed: re-record its hash and re-check
+            // staleness, so a template edit is picked up without a restart.
+            if (file.path === this.settings.noteTemplatePath) {
+              void this.recordTemplateAndCheck();
+            }
             await this.bibManager.updateCitedKeysIndex(file);
             this.persistCitedKeysIndex();
             this.persistRenderedCache();
@@ -1299,6 +1309,17 @@ export default class ReferenceList extends Plugin {
     // Rebuild the citation index on startup if the persisted one is missing,
     // empty, or stale — otherwise a failed load would silently shrink it.
     void this.ensureCitedKeysIndex();
+    // Template staleness: record the CURRENT template in the timeline (always —
+    // even if updates are declined, so re-enabling catches up), then offer.
+    void (async () => {
+      try {
+        const src = await readTemplate(this);
+        const changed = await this.bibManager.recordCurrentTemplate(src ?? '');
+        if (changed) this.scheduleTemplateUpdateCheck();
+      } catch (e) {
+        console.warn('[sw:template] startup record failed', e);
+      }
+    })();
     // File any group-library notes under their library folder. Runs after the
     // library is loaded (below), and again after every refresh — not a one-shot
     // startup timer, which could fire before groups were known and then record
@@ -1959,6 +1980,81 @@ export default class ReferenceList extends Plugin {
         '.',
       8000
     );
+  }
+
+  /**
+   * Template-staleness pass: find own-template notes rendered with an OLDER
+   * template hash and, per the tri-state setting, ask-then-apply, apply, or
+   * skip. The timeline is always updated BEFORE this runs, so a decline never
+   * stops tracking — re-enabling later catches up.
+   */
+  async offerTemplateUpdate(): Promise<void> {
+    const timeline = this.bibManager.templateTimeline;
+    if (!this.bibManager.currentTemplateHash) return;
+
+    // Only ScholarWeft's own-template notes carry `updated`.
+    const stale: TFile[] = [];
+    for (const f of this.app.vault.getMarkdownFiles()) {
+      const fm = this.app.metadataCache.getFileCache(f)?.frontmatter;
+      if (!fm) continue;
+      if (fm['document-type'] !== '[[zotero-import]]') continue;
+      const updatedMs = parseTimestamp(fm['updated']);
+      if (isNoteStale(timeline, updatedMs)) stale.push(f);
+    }
+    if (!stale.length) return;
+
+    if (this.settings.autoUpdateTemplate === true) {
+      await this.updateNotesForTemplate(stale);
+      return;
+    }
+    if (this.settings.autoUpdateTemplate === false) return;
+
+    const { TemplateUpdateConsentModal } = await import(
+      './modals/templateUpdateConsentModal'
+    );
+    const answer = await new Promise<'yes' | 'no' | 'ask'>((resolve) =>
+      new TemplateUpdateConsentModal(this.app, stale.length, resolve).open()
+    );
+    if (answer === 'ask') return;
+    this.settings.autoUpdateTemplate = answer === 'yes';
+    await this.saveSettings();
+    if (answer === 'yes') await this.updateNotesForTemplate(stale);
+  }
+
+  private async updateNotesForTemplate(files: TFile[]): Promise<void> {
+    const progress = new Notice(`Updating ${files.length} note(s)… 0/${files.length}`, 0);
+    let updated = 0;
+    for (const f of files) {
+      if (await this.updateLiteratureNote(f, { confirm: false })) updated++;
+      progress.setMessage(`Updating notes… ${updated}/${files.length}`);
+    }
+    progress.hide();
+    new Notice(`Updated ${updated} literature note${updated !== 1 ? 's' : ''} to the current template.`, 8000);
+  }
+
+  private _templateCheckTimer: number | null = null;
+
+  /** Debounced template-staleness check (coalesces startup + file events). */
+  scheduleTemplateUpdateCheck(): void {
+    if (this._templateCheckTimer != null) return;
+    this._templateCheckTimer = window.setTimeout(() => {
+      this._templateCheckTimer = null;
+      void this.offerTemplateUpdate().catch((e) =>
+        console.warn('[sw:template] offer failed', e)
+      );
+    }, 3000);
+  }
+
+  /** Record the current template (when it changed) and re-check staleness. */
+  async recordTemplateAndCheck(): Promise<void> {
+    try {
+      const src = await readTemplate(this);
+      if (await this.bibManager.recordCurrentTemplate(src ?? '')) {
+        this.scheduleTemplateUpdateCheck();
+      }
+    } catch (e) {
+      console.warn('[sw:template] record failed', e);
+    }
   }
 
   async getCitekeysForFile(file?: TFile) {

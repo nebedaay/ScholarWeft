@@ -270,6 +270,9 @@ export interface ReferenceListSettings {
    *  `undefined` = not yet chosen (asked on the first detected change);
    *  `true`/`false` = chosen. */
   autoUpdateCitekeys?: boolean;
+  /** Re-render notes when the note TEMPLATE changes.
+   *  `undefined` = not yet chosen (asked on the first detected change). */
+  autoUpdateTemplate?: boolean;
   /**
    * When true, a newly created literature note gets the item's Zotero child
    * notes inserted automatically (into its managed "## Notes" section), so it
@@ -1325,6 +1328,16 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         () => this.plugin.settings.autoUpdateCitekeys,
         (v) => {
           this.plugin.settings.autoUpdateCitekeys = v;
+          this.plugin.saveSettings();
+        }
+      );
+
+      autoUpdateRadio(
+        'Update notes when the template changes',
+        'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.',
+        () => this.plugin.settings.autoUpdateTemplate,
+        (v) => {
+          this.plugin.settings.autoUpdateTemplate = v;
           this.plugin.saveSettings();
         }
       );

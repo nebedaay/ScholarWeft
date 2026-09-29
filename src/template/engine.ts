@@ -143,6 +143,7 @@ export class NoteTemplateEngine extends Eta {
         `const heading = (l, t) => this.noteHelpers.heading(${d}, l, t); ` +
         `const escape_md = (t) => this.noteHelpers.escapeMd(${d}, t); ` +
         `const import_date = () => this.noteHelpers.importDate(${d}); ` +
+        `const updated = () => this.noteHelpers.updated(${d}); ` +
         `const is_first_import = () => this.noteHelpers.isFirstImport(${d}); ` +
         `const short_title = () => this.noteHelpers.shortTitle(${d}); ` +
         `const aliases = () => this.noteHelpers.aliases(${d}); ` +

@@ -226,6 +226,10 @@ export default {
   'Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?':
     'Zotero has given one or more references a new citekey. ScholarWeft can rename the matching literature notes (and their associated files) and update citations across the vault. Do this automatically from now on?',
   'Update citekeys automatically': 'Update citekeys automatically',
+  'Update notes when the template changes':
+    'Update notes when the template changes',
+  'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.':
+    'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.',
   'When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Leave both unselected and you will be asked the first time it happens.':
     'When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Leave both unselected and you will be asked the first time it happens.',
   'Heading level (1–6) that an inlined Zotero child note\'s own top heading is shifted to. 3 puts it one level below the "## Notes" heading.':

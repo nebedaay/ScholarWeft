@@ -21,6 +21,7 @@
 <% start_YAML(); -%>
 <% add_property('document-type', '[[zotero-import]]'); -%>
 <% add_property('created', import_date()); -%>
+<% add_property('updated', updated()); -%>
 <% add_property('added', item.dateAdded ? item.dateAdded.slice(0, 10) : null); -%>
 <% add_property('up', ['[[Bibliographic Notes]]']); -%>
 <% add_property('related', [], { force: true, merge: 'subtract', subtractFrom: 'sw-related' }); -%>
