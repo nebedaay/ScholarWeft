@@ -21475,7 +21475,7 @@ var init_addLiteratureNotesModal = __esm({
         }
       }
       renderRow(entry) {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         const row = this.listEl.createDiv({ cls: "sw-add-notes__row" });
         row.toggleClass("is-selected", this.selected.has(entry.id));
         row.dataset.citekey = entry.id;
@@ -21492,14 +21492,9 @@ var init_addLiteratureNotesModal = __esm({
         if (this.litNotes.has(entry.id)) {
           head.createSpan({ cls: "sw-add-notes__has-note", text: `\xB7 ${t("has a note")}` });
         }
-        const bib = this.plugin.bibManager.getBibForCiteKey(this.sourceFile(), entry.id);
-        if (bib) {
-          const ref = info.createDiv({ cls: "sw-add-notes__ref" });
-          ref.setText((_d = bib.textContent) != null ? _d : "");
-        } else if (entry.title) {
-          info.createDiv({ cls: "sw-add-notes__title", text: entry.title });
-        }
-        const terms = (_e = this.termsByKey.get(entry.id)) != null ? _e : [];
+        const ref = info.createDiv({ cls: "sw-add-notes__ref" });
+        ref.setText((_e = (_d = this.renderedRefs.get(entry.id)) != null ? _d : entry.title) != null ? _e : "");
+        const terms = (_f = this.termsByKey.get(entry.id)) != null ? _f : [];
         const excerpt = excerptForResult(entry, terms);
         if (excerpt) {
           const line = info.createDiv({ cls: "sw-add-notes__excerpt" });
@@ -97456,6 +97451,53 @@ var BibManager = class {
     const groupId = (_a = item == null ? void 0 : item.groupID) != null ? _a : 1;
     this.zCitekeyToLinks.set(key, groupId === 1 ? `zotero://select/library/items/${zKey}` : `zotero://select/groups/${groupId}/items/${zKey}`);
   }
+  resolveRenderStyle(style) {
+    var _a;
+    const raw = style || DEFAULT_CSL_STYLE;
+    const looksBare = !/[\\/]/.test(raw) && !/^https?:/i.test(raw) && !/\.csl$/i.test(raw);
+    if (!looksBare)
+      return raw;
+    return (_a = resolveZoteroStylePath(raw, this.plugin.settings.zoteroDataDir)) != null ? _a : raw;
+  }
+  async renderEntries(keys, opts = {}) {
+    var _a, _b, _c, _d, _e;
+    const out = new Map();
+    const resolved = [...new Set(keys)].filter((k4) => this.bibCache.has(k4));
+    if (!resolved.length)
+      return out;
+    await this.plugin.initPromise.promise;
+    await this.initPromise.promise;
+    const style = this.resolveRenderStyle((_b = (_a = opts.style) != null ? _a : this.plugin.settings.cslStylePath) != null ? _b : this.plugin.settings.cslStyleURL);
+    const lang = (_d = (_c = opts.lang) != null ? _c : this.plugin.settings.cslLang) != null ? _d : "en-US";
+    let engine;
+    try {
+      engine = this.buildEngine(lang, this.langCache, style, this.styleCache, this.bibCache);
+    } catch (e3) {
+      engine = this.engine;
+    }
+    if (!engine)
+      return out;
+    engine.updateItems(resolved);
+    for (const key of resolved)
+      engine.retrieveItem(key);
+    const bib = engine.makeBibliography();
+    if (bib == null ? void 0 : bib.length) {
+      const ids = (_e = bib[0].entry_ids) != null ? _e : [];
+      bib[1].forEach((entry, i3) => {
+        var _a2;
+        const key = (_a2 = ids[i3]) == null ? void 0 : _a2[0];
+        if (!key || typeof entry !== "string")
+          return;
+        out.set(key, entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${key}`));
+      });
+    }
+    return out;
+  }
+  async renderEntryForDisplay(key, opts = {}) {
+    const map = await this.renderEntries([key], opts);
+    const html = map.get(key);
+    return html ? cslEntryHtmlToMarkdown(html).trim() : "";
+  }
   getBibForCiteKey(file, key) {
     if (!this.fileCache.has(file)) {
       return null;
@@ -97478,39 +97520,10 @@ var BibManager = class {
     return el;
   }
   async renderReferenceMarkdown(keys) {
-    var _a;
+    const entries = await this.renderEntries(keys);
     const out = new Map();
-    const resolved = [...new Set(keys)].filter((k4) => this.bibCache.has(k4));
-    if (!resolved.length)
-      return out;
-    await this.plugin.initPromise.promise;
-    await this.initPromise.promise;
-    const { settings } = this.plugin;
-    const style = settings.cslStylePath || settings.cslStyleURL || DEFAULT_CSL_STYLE;
-    const lang = settings.cslLang || "en-US";
-    let engine;
-    try {
-      engine = this.buildEngine(lang, this.langCache, style, this.styleCache, this.bibCache);
-    } catch (e3) {
-      engine = this.engine;
-    }
-    if (!engine)
-      return out;
-    engine.updateItems(resolved);
-    for (const key of resolved)
-      engine.retrieveItem(key);
-    const bib = engine.makeBibliography();
-    if (bib == null ? void 0 : bib.length) {
-      const ids = (_a = bib[0].entry_ids) != null ? _a : [];
-      bib[1].forEach((entry, i3) => {
-        var _a2;
-        const key = (_a2 = ids[i3]) == null ? void 0 : _a2[0];
-        if (!key)
-          return;
-        const clean = entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${key}`);
-        out.set(key, cslEntryHtmlToMarkdown(clean));
-      });
-    }
+    for (const [key, html] of entries)
+      out.set(key, cslEntryHtmlToMarkdown(html));
     return out;
   }
   async getReferenceList(file, content, shouldContinue = () => true) {

@@ -2129,6 +2129,94 @@ export class BibManager {
     );
   }
 
+  /**
+   * Resolve the CSL style to render with. A BARE style name (a Zotero style
+   * like `chicago-author-date`, no slash / `.csl` / URL) is resolved against the
+   * Zotero styles folder — WITHOUT this, citeproc loads no style and renders
+   * title-only. Shared by every rendering path so none can skip it.
+   */
+  private resolveRenderStyle(style: string | undefined): string {
+    const raw = style || DEFAULT_CSL_STYLE;
+    const looksBare =
+      !/[\\/]/.test(raw) && !/^https?:/i.test(raw) && !/\.csl$/i.test(raw);
+    if (!looksBare) return raw;
+    return resolveZoteroStylePath(raw, this.plugin.settings.zoteroDataDir) ?? raw;
+  }
+
+  /**
+   * THE reference-rendering core, independent of any note. Renders `keys` to
+   * bibliography entries using a THROWAWAY engine (so live citation numbering
+   * and disambiguation are untouched) built over the current `bibCache` with the
+   * given style/language.
+   *
+   * Every consumer (the note-scoped accessor, the export Markdown helper, the
+   * import dialogue) goes through this ONE function, so style resolution and the
+   * entry_ids walk exist in exactly one place.
+   *
+   * @returns key → raw entry HTML (still carrying its `csl-entry` wrapper).
+   */
+  async renderEntries(
+    keys: string[],
+    opts: { style?: string; lang?: string } = {}
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const resolved = [...new Set(keys)].filter((k) => this.bibCache.has(k));
+    if (!resolved.length) return out;
+
+    await this.plugin.initPromise.promise;
+    await this.initPromise.promise;
+
+    const style = this.resolveRenderStyle(
+      opts.style ?? this.plugin.settings.cslStylePath ?? this.plugin.settings.cslStyleURL
+    );
+    const lang = opts.lang ?? this.plugin.settings.cslLang ?? 'en-US';
+
+    let engine: any;
+    try {
+      engine = this.buildEngine(
+        lang,
+        this.langCache,
+        style,
+        this.styleCache,
+        this.bibCache
+      );
+    } catch {
+      engine = this.engine;
+    }
+    if (!engine) return out;
+
+    engine.updateItems(resolved);
+    for (const key of resolved) engine.retrieveItem(key);
+
+    const bib = engine.makeBibliography();
+    if (bib?.length) {
+      const ids: string[][] = bib[0].entry_ids ?? [];
+      bib[1].forEach((entry: string, i: number) => {
+        const key = ids[i]?.[0];
+        if (!key || typeof entry !== 'string') return;
+        // A style that renders nothing emits citeproc's error text; show the
+        // citekey instead of the alarming message.
+        out.set(key, entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${key}`));
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The formatted entry for `key`, in the style a NOTE renders with (its scoped
+   * style/language when given, else the global one). Context-free: use this for
+   * any UI that shows an arbitrary library item rather than a note's own
+   * citations (the import dialogue).
+   */
+  async renderEntryForDisplay(
+    key: string,
+    opts: { style?: string; lang?: string } = {}
+  ): Promise<string> {
+    const map = await this.renderEntries([key], opts);
+    const html = map.get(key);
+    return html ? cslEntryHtmlToMarkdown(html).trim() : '';
+  }
+
   getBibForCiteKey(file: TFile, key: string) {
     if (!this.fileCache.has(file)) {
       return null;
@@ -2166,47 +2254,11 @@ export class BibManager {
    * disambiguation) is not disturbed by rendering extra items.
    */
   async renderReferenceMarkdown(keys: string[]): Promise<Map<string, string>> {
+    // Delegates to the shared core; this helper only converts the entries to
+    // Markdown, which is what the export needs.
+    const entries = await this.renderEntries(keys);
     const out = new Map<string, string>();
-    const resolved = [...new Set(keys)].filter((k) => this.bibCache.has(k));
-    if (!resolved.length) return out;
-
-    await this.plugin.initPromise.promise;
-    await this.initPromise.promise;
-
-    const { settings } = this.plugin;
-    const style =
-      settings.cslStylePath ||
-      settings.cslStyleURL ||
-      DEFAULT_CSL_STYLE;
-    const lang = settings.cslLang || 'en-US';
-
-    let engine: any;
-    try {
-      engine = this.buildEngine(
-        lang,
-        this.langCache,
-        style,
-        this.styleCache,
-        this.bibCache
-      );
-    } catch {
-      engine = this.engine;
-    }
-    if (!engine) return out;
-
-    engine.updateItems(resolved);
-    for (const key of resolved) engine.retrieveItem(key);
-
-    const bib = engine.makeBibliography();
-    if (bib?.length) {
-      const ids: string[][] = bib[0].entry_ids ?? [];
-      bib[1].forEach((entry: string, i: number) => {
-        const key = ids[i]?.[0];
-        if (!key) return;
-        const clean = entry.replace(/\[CSL STYLE ERROR[^\]]*\]/g, `@${key}`);
-        out.set(key, cslEntryHtmlToMarkdown(clean));
-      });
-    }
+    for (const [key, html] of entries) out.set(key, cslEntryHtmlToMarkdown(html));
     return out;
   }
 

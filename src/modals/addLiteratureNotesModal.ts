@@ -258,17 +258,11 @@ export class AddLiteratureNotesModal extends Modal {
       head.createSpan({ cls: 'sw-add-notes__has-note', text: `· ${t('has a note')}` });
     }
 
-    // The rendered reference — the same thing the popup tooltip shows.
-    const bib = this.plugin.bibManager.getBibForCiteKey(
-      this.sourceFile(),
-      entry.id
-    ) as HTMLElement | null;
-    if (bib) {
-      const ref = info.createDiv({ cls: 'sw-add-notes__ref' });
-      ref.setText(bib.textContent ?? '');
-    } else if (entry.title) {
-      info.createDiv({ cls: 'sw-add-notes__title', text: entry.title });
-    }
+    // The formatted reference, from the PLUGIN'S OWN renderer (the same one
+    // `[[@key|reference]]` uses: `renderReferenceMarkdown`), filled in
+    // asynchronously by `fillReferences`. Shows the title until it is ready.
+    const ref = info.createDiv({ cls: 'sw-add-notes__ref' });
+    ref.setText(this.renderedRefs.get(entry.id) ?? entry.title ?? '');
 
     // An abstract excerpt around the matched terms, when searching.
     const terms = this.termsByKey.get(entry.id) ?? [];
