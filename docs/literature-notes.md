@@ -192,6 +192,7 @@ The **Child-note heading level** setting supplies the default `level`, so a temp
 | `short_title()` | The item's short title, else the title up to its first `:`. |
 | `aliases()` | The default `aliases:` list (`Author - year - Short Title`, then the full title, then the short title). |
 | `related_links()` | Zotero's tags and Related items as `[[…]]` links (for `sw-related:`). |
+| `collection_links()` | The item's Zotero collections as `[[…]]` links (for `zotero-collections:`). |
 | `attachment_links()` | Attachments as `[filename](zotero link)` entries. |
 | `attachments_with_annotations()` | The attachments that actually carry annotations, in fetch order. |
 | `merge_into(existing, rendered)` | Reconciles a fresh render with an existing note (managed fields + managed region). `renderNote` already calls this; you rarely call it yourself. |
@@ -245,7 +246,9 @@ A few things to note in this example:
 
 The template structures each literature note as follows:
 
-- **Frontmatter** includes metadata provided by Zotero such as document-type, created, added, up, item-type, title, shorttitle, authors, editors, abstract, …), converting any HTML formatting in `abstract` and `title` to Markdown.
+- **Frontmatter** includes metadata provided by Zotero such as document-type, created, added, up, item-type, title, shorttitle, authors, editors, abstract, …), converting any HTML formatting in `abstract` and `title` to Markdown. Fields that do not apply to an item are left out entirely.
+- **Every item type contributes its own fields.** Not every Zotero item has a title — a case has a **case name**, a statute a **name of act**, an email a **subject** — and those stand in for the title. The fields that make a reference readable are imported as well: `number` (docket, report, patent, public-law number…), `authority` (court or issuing body), `genre` (thesis, report, manuscript type…), `jurisdiction`, `medium`, `section`, `event`, `pages`, and so on. So a case note carries its court, docket number, reporter and page rather than just a name.
+- **Collections are recorded** in `zotero-collections:` as `[[…]]` links to the collections the item belongs to (via `collection_links()`). Zotero owns this list, so it is rebuilt on every update — moving an item out of a collection removes the link.
 - **Two related properties, with clear owners.** `related:` is **yours** — ScholarWeft writes `related: []` when creating a note and never touches it again, so links you add stay. `sw-related:` holds what **Zotero** supplies: the item's Zotero tags and its Related items, as `[[…]]` links. Zotero's list is rebuilt on every import, so a tag or related link you remove in Zotero disappears from the note — no stale entries to prune.
 - **Upgrading from an older version?** Notes made before `sw-related` existed have Zotero's tags and related links inside `related:`. The first time ScholarWeft updates such a note, that one-off tidy runs: entries Zotero still supplies move out (they now live in `sw-related:`), while your own links — and any entry Zotero no longer has — stay. The transition is recorded per Zotero item, so it happens **exactly once**; from then on `related:` is entirely yours and is never written to again.
 - **Body**: a `## Notes` section (yours) and, when the item has annotations, a managed `## Annotations` region between `%%sw-managed%%` and `%%/sw-managed%%` markers. The region is omitted entirely when the item has no annotations.
@@ -258,11 +261,30 @@ If a note was created by ZotLit, ScholarWeft **asks before converting it**, so t
 
 ## Importing and updating
 
+- **Add Literature Notes from Zotero (search and filter)** searches and filters
+  your whole library inside Obsidian — no Zotero window, no Better BibTeX — and
+  creates or refreshes the notes you select. It is the most direct way to import
+  when you know what you are looking for but not its citekey.
+  - **Search** by citekey, author or title, or tick **Search abstracts** to add
+    abstract and publication detail to the search.
+  - **Show items with** narrows to items that have a Zotero note, a PDF or
+    snapshot, or annotations, or that *lack* a literature note (on by default).
+  - **Show item types** narrows to books, articles, book sections,
+    newspaper/magazine articles, web pages, or everything else.
+  - **Collections** is a tree of your collections, one heading per library
+    (subcollections nested under their parents). Everything is on at first;
+    turning a collection off turns its whole branch off, and **All**, **None**
+    and the library headings let you isolate one branch quickly.
+  - **Order** the results by the search ranking, author/title/year, or date
+    added. Your last search and ordering are remembered for next time.
+  - Results are checked off individually or with **Select all shown**; re-importing
+    an existing item merges into its note rather than duplicating it. A single
+    imported note opens (turn that off with **Open a single imported note**).
 - **Import literature notes from Zotero…** opens Zotero's own item picker so you can select one or more references and create or refresh their notes. It needs **Better BibTeX**, and Zotero shows one picker at a time.
 - **Update this literature note** re-renders the active note from its item (the note must carry a `zotero-key`).
 - **Update all literature notes** (a button on the **Literature note import** settings page) re-renders every note that has a `zotero-key` — the middle ground between updating a single note and importing every Zotero item. Unchanged items are not re-fetched (the fetched-children cache), so it is quick when nothing has changed, and it is rarely needed when auto-update is on.
 
-All three honour the own-template setting and are non-destructive: only the managed fields and region change. Updating a ZotLit note is subject to the conversion prompt above.
+All of these honour the own-template setting and are non-destructive: only the managed fields and region change. Updating a ZotLit note is subject to the conversion prompt above.
 
 ## Bringing your Zotero notes into the literature note
 

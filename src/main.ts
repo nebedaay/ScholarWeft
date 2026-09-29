@@ -2122,8 +2122,13 @@ export default class ReferenceList extends Plugin {
     this.reportBatchResult(updated, skipped, 'to the current template');
   }
 
-  /** Notes-per-minute for estimates, learned from real passes (default 90). */
-  private _notesPerMinute = 90;
+  /** Notes-per-minute for estimates, learned from real passes.
+   *
+   *  The default reflects the fetched-children CACHE: a template-only pass
+   *  re-renders unchanged items from cache (no Zotero round trips), which is
+   *  ~10x a cold pass — a few hundred notes is a minute, not ten. A measured
+   *  rate replaces it after the first real pass. */
+  private _notesPerMinute = 900;
 
   private estimateMinutes(count: number): number {
     return Math.max(1, Math.ceil(count / Math.max(10, this._notesPerMinute)));

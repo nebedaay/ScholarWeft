@@ -1,61 +1,74 @@
 Install/update via BRAT.
 
-### Write literature notes with your own template
+### Add Literature Notes from Zotero — a new search-and-filter window
 
-ScholarWeft's Zotero import now renders each note from a template you control,
-with helpers that take care of the fiddly parts.
+Finding the references to import is now a proper dialogue inside Obsidian, not
+just Zotero's own picker. **ScholarWeft: Add Literature Notes from Zotero
+(search and filter)** opens a search box over your whole library with the
+results rendered as full references — the same formatted entry the sidebar
+shows, so book and journal titles are italicised, not asterisked.
 
-- **Use the default template** (on by default) keeps the bundled template.
-- Turn it off to pick a **Template file** anywhere in your vault — with
-  type-ahead, or the **Browse…** button.
-- **Copy the default template to your vault** writes an editable copy into a
-  folder you choose and selects it, so you can start from something that already
-  works. Your copy is an ordinary vault file; plugin updates never touch it.
+**Narrow it down with filters that fit in one column:**
 
-Templates use the Eta language (`.eta.md`), and helper functions handle YAML and
-Markdown for you — you write what you want
-(`add_property('title', item.title)`) instead of indentation you have to debug.
-[Literature Notes](docs/literature-notes.md) documents every helper, the `item`
-data behind them, and how a re-import keeps only the managed frontmatter fields
-and annotations region up to date.
+- **Show items with** — *No literature note* (on by default), *Zotero notes*,
+  *PDF/snapshot*, *Annotations*. These read a library-wide index, so they are
+  accurate for every item, not just the ones you have opened.
+- **Show item types** — *All*, or any of *Books*, *Articles*, *Book sections*,
+  *Newspaper/magazine articles*, *Web pages*, *Other*.
+- **Collections** — a tree of your collections, one heading per library (so a
+  shared library's collections are not confused with your own), subcollections
+  nested under their parents. Everything is on to begin with; turning a
+  collection off turns its whole branch off, and **All / None** plus a clickable
+  library heading let you isolate a single collection in one step.
 
-Want consistent citekeys? The Literature note import page now points to **Better
-BibTeX** and the citation-key formula that keeps keys short and free of
-punctuation (Zotero → Settings → Better BibTeX).
+**Order the results** by *Ranked search* (the query's own ranking), *Author,
+title, year*, or *Date added*, ascending or descending. The last search and
+ordering are remembered, so reopening the dialogue resumes where you left off.
 
-### Addons for displaying and linking notes
+Results are checked off individually or **Select all shown**, then **Add notes**
+imports them (non-destructive: re-importing merges into the existing note). When
+exactly one note is imported it opens — turn that off with **Open a single
+imported note** on the Literature note import page.
 
-Optional add-ons now have their own settings page — always visible, whether you
-import with ScholarWeft or ZotLit:
+### Collection membership on your notes
 
-- **Basic note template** — installs the Basic note template and has Templater
-  apply it to new notes. It used to live with the ZotLit settings and vanished
-  whenever ScholarWeft's own import (the default) was on; now it is always
-  reachable.
-- **Format YAML properties** — makes `title`, `short-title`, `up` and `related`
-  stand out in the Properties view, with a colour picker for the title
-  background and a size slider. It writes and enables the CSS snippet for you.
+Literature notes now record the Zotero collections their item belongs to:
 
-### Citekey reconciliation
+```yaml
+zotero-collections: ["[[Economics]]", "[[Microeconomics]]"]
+```
 
-When a Better BibTeX citekey changes, **Review and update citekeys from Zotero**
-matches notes to items by the stable `zotero-key`, shows a preview, and renames
-only what actually changed — the literature note, its derived transcriptions and
-translations, and citations across the vault. **List citekey discrepancies** is a
-report-only command for pending renames, names that are already taken, and notes
-whose item has left your library.
+The template helper is `collection_links()`. Zotero owns this field, so it is
+kept in step on every update — moving an item out of a collection removes the
+link here.
 
-### Zotero child notes
+### Every item type's own fields
 
-- When ScholarWeft inserts a source's Zotero child notes, a note's short first
-  line now renders as a heading at the configured level, and multiple notes are
-  separated by a horizontal rule — the same shape ScholarWeft's own template
-  produces.
-- Re-importing a literature note refills the generated `## Notes` section **only
-  when it is empty**, so notes you cleared come back, but your own writing there
-  is never overwritten.
+Not every Zotero item has a *title*. A legal case has a **case name**, a statute
+a **name of act**, an email a **subject** — and before, those arrived untitled,
+so they were hidden from search, sorted oddly, and rendered blank. Each type's
+name now maps to the reference's title, and the fields that make a reference
+readable are imported too: **number** (docket, report, patent, public-law…),
+**authority** (court, issuing body), **genre** (thesis, report, manuscript
+type…), **jurisdiction**, **medium**, **section**, **event**, and **pages**.
+Empty fields are simply left out.
+
+**A one-time rebuild updates the items already in your library.** The library
+cache is normally refreshed by delta, which never revisits an item that has not
+changed in Zotero — so these fields needed one full pass to appear on existing
+items. You will see it once after this update.
+
+### Smaller things
+
+- The **Update all literature notes** pass is much faster now that unchanged
+  items are re-rendered from cache instead of re-fetched — its time estimate
+  says a minute where it used to say twelve.
+- Import summaries name what was imported — *"Imported 3 literature notes:
+  @a, @b, @c"* — listing up to twenty and then *"and N other notes"*.
+- Modal titles sit in the title bar beside the close button, and the
+  search-and-filter window fits the screen without scrolling the main window.
 
 ### Everything already in ScholarWeft still works
 
-The reference sidebar, linked citations, search, document import and export, and
-ZotLit import templates (when ZotLit is selected) are unchanged.
+The reference sidebar, linked citations, `@`/`@@` autocomplete, document import
+and export, and the ZotLit import path (when ZotLit is selected) are unchanged.

@@ -22,7 +22,7 @@ export class TemplateUpdateConsentModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    const estimate = Math.max(1, Math.ceil(this.count / 90)); // ~90 notes/min
+    const estimate = Math.max(1, Math.ceil(this.count / 900)); // ~900 notes/min (cached)
     setModalTitle(this, t('The Note Template Has Changed'));
     contentEl.createEl('p', {
       text:

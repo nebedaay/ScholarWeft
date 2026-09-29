@@ -20,6 +20,7 @@ See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 
 | Command | Scope | Notes |
 |---|---|---|
+| Add Literature Notes from Zotero (search and filter) | — | Search and filter your whole library inside Obsidian, then create or refresh the selected notes — see [Literature Notes](./literature-notes.md) |
 | Import literature notes from Zotero… | — | Pick one or more items in Zotero's native picker; create or refresh their notes (needs Better BibTeX) |
 | Create literature notes for citations lacking notes (current note) | Current note | Uses ScholarWeft's own template (or ZotLit when you select it) |
 | Create literature notes for citations lacking notes (vault) | Vault | For every note |
