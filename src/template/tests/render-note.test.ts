@@ -404,6 +404,33 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(at('attachments')).toBeLessThan(at('aliases'));
   });
 
+  it("imports a non-publication type's reference fields (case number, court)", () => {
+    const caseEntry: CachedEntry = {
+      id: 'roe1973',
+      type: 'legal_case',
+      groupID: 1,
+      title: 'Roe v. Wade',
+      authority: 'Supreme Court of the United States',
+      number: '70-18',
+      'container-title': 'U.S.',
+      volume: '410',
+      page: '113',
+      issued: { 'date-parts': [[1973, 1, 22]] },
+      _zoteroKey: 'CASE0001',
+    };
+    const caseOut = render(raw, caseEntry);
+
+    expect(caseOut).toContain('item-type: case');
+    expect(caseOut).toContain('title: Roe v. Wade');
+    expect(caseOut).toContain('authority: Supreme Court of the United States');
+    expect(caseOut).toContain('number: 70-18');
+    expect(caseOut).toContain('publication: "[[U.S.]]"');
+    expect(caseOut).toContain('volume: "410"');
+    // A field with no value is omitted, not written empty.
+    expect(caseOut).not.toContain('genre:');
+    expect(caseOut).not.toContain('medium:');
+  });
+
   it('always writes related, even when empty', () => {
     expect(out).toContain('related: []');
   });

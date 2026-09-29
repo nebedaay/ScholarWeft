@@ -215,6 +215,25 @@ export interface NoteContext {
   series: string | null;
   seriesNumber: string | null;
   numberOfVolumes: string | null;
+  /**
+   * Type-specific reference fields. Non-publication Zotero types carry their
+   * important details here (a case's docket/court, a statute's section, a
+   * thesis's type, a standard's version, …), and a template that omits them
+   * renders a reference with the wrong shape.
+   */
+  number: string | null;
+  genre: string | null;
+  authority: string | null;
+  jurisdiction: string | null;
+  medium: string | null;
+  section: string | null;
+  eventTitle: string | null;
+  eventPlace: string | null;
+  archive: string | null;
+  archiveLocation: string | null;
+  callNumber: string | null;
+  version: string | null;
+  status: string | null;
   extra: ItemExtra | null;
 
   // People, tags, membership
@@ -642,6 +661,19 @@ export function buildNoteContext(
     series: str(e['collection-title']),
     seriesNumber: str(e['collection-number']),
     numberOfVolumes: str(e['number-of-volumes']),
+    number: str(e.number),
+    genre: str(e.genre),
+    authority: str(e.authority),
+    jurisdiction: str(e.jurisdiction),
+    medium: str(e.medium),
+    section: str(e.section),
+    eventTitle: str(e['event-title']),
+    eventPlace: str(e['event-place']),
+    archive: str(e.archive),
+    archiveLocation: str(e['archive_location']),
+    callNumber: str(e['call-number']),
+    version: str(e.version),
+    status: str(e.status),
     extra: parseExtra(e._extra),
 
     creators,

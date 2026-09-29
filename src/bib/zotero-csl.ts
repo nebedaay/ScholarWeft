@@ -95,9 +95,12 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
     groupID: groupId,
   };
 
-  // A legal case stores its name in `caseName`, not `title` (CSL `legal_case`
-  // carries the case name in `title`, which is why cases rendered blank before).
-  const title = data.title ?? data.caseName;
+  // Every Zotero type has its OWN name field, and only `case`, `statute` and
+  // `email` differ from `title` (caseName / nameOfAct / subject). CSL puts the
+  // item's name in `title` for ALL of them, so map the nearest equivalent —
+  // otherwise the entry is "untitled" to the index, the search, the sort and
+  // the popup's usable-entry filter.
+  const title = data.title ?? data.caseName ?? data.nameOfAct ?? data.subject;
   if (title) csl.title = title;
 
   if (data.creators?.length) {
@@ -110,50 +113,79 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
     for (const [role, names] of Object.entries(byRole)) csl[role] = names;
   }
 
-  // Cases date with `dateDecided`; everything else with `date`.
-  const date = data.date ?? data.dateDecided;
+  // Date: `date` for most, `dateDecided` (case), `dateEnacted` (statute),
+  // `issueDate`/`filingDate` (patent).
+  const date =
+    data.date ?? data.dateDecided ?? data.dateEnacted ??
+    data.issueDate ?? data.filingDate;
   if (date) csl.issued = parseZoteroDate(date);
 
+  // `reporter` (case) and `code` (statute/bill) are the containing work, like
+  // `publicationTitle` for an article.
   const containerTitle =
     data.publicationTitle ?? data.bookTitle ?? data.encyclopediaTitle ??
     data.dictionaryTitle ?? data.blogTitle ?? data.websiteTitle ??
     data.forumTitle ?? data.proceedingsTitle ?? data.programTitle ??
-    data.reporter;
+    data.reporter ?? data.code;
   if (containerTitle) csl['container-title'] = containerTitle;
   if (data.journalAbbreviation) csl['container-title-short'] = data.journalAbbreviation;
 
-  const volume = data.volume ?? data.reporterVolume;
+  const volume = data.volume ?? data.reporterVolume ?? data.codeVolume;
   if (volume) csl.volume = volume;
   if (data.issue) csl.issue = data.issue;
-  const page = data.pages ?? data.firstPage;
+  const page = data.pages ?? data.firstPage ?? data.codePages;
   if (page) csl.page = page;
   if (data.numberOfVolumes) csl['number-of-volumes'] = data.numberOfVolumes;
-  if (data.numberOfPages) csl['number-of-pages'] = data.numberOfPages;
+  const numPages = data.numberOfPages ?? data.numPages;
+  if (numPages) csl['number-of-pages'] = numPages;
   if (data.edition) csl.edition = data.edition;
-  if (data.publisher) csl.publisher = data.publisher;
-  if (data.institution) csl.publisher = data.institution;
-  if (data.university) csl.publisher = data.university;
-  if (data.place) csl['publisher-place'] = data.place;
+  const publisher =
+    data.publisher ?? data.institution ?? data.university ??
+    data.repository ?? data.organization;
+  if (publisher) csl.publisher = publisher;
+  const place = data.place ?? data.repositoryLocation;
+  if (place) csl['publisher-place'] = place;
   if (data.DOI) csl.DOI = data.DOI;
   if (data.URL) csl.URL = data.URL;
   if (data.ISBN) csl.ISBN = data.ISBN;
   if (data.ISSN) csl.ISSN = data.ISSN;
-  if (data.callNumber) csl['call-number'] = data.callNumber;
   if (data.abstractNote) csl.abstract = data.abstractNote;
   if (data.language) csl.language = data.language;
-  if (data.thesisType) csl.genre = data.thesisType;
-  if (data.reportType) csl.genre = data.reportType;
-  if (data.reportNumber) csl.number = data.reportNumber;
-  if (data.patentNumber) csl.number = data.patentNumber;
-  if (data.docketNumber) csl.number = data.docketNumber;
+
+  // Type-specific fields that appear in a reference — the nearest equivalent of
+  // title/author/date for non-publication types. First non-empty wins.
+  const genre =
+    data.thesisType ?? data.reportType ?? data.manuscriptType ??
+    data.letterType ?? data.mapType ?? data.type;
+  if (genre) csl.genre = genre;
+  const number =
+    data.number ?? data.reportNumber ?? data.patentNumber ??
+    data.docketNumber ?? data.documentNumber ?? data.publicLawNumber ??
+    data.billNumber;
+  if (number) csl.number = number;
+  const authority =
+    data.court ?? data.issuingAuthority ?? data.legislativeBody ?? data.committee;
+  if (authority) csl.authority = authority;
   if (data.country) csl.jurisdiction = data.country;
-  if (data.court) csl.authority = data.court;
-  if (data.applicationNumber) csl['call-number'] = data.applicationNumber;
+  const medium = data.artworkMedium ?? data.interviewMedium ?? data.format;
+  if (medium) csl.medium = medium;
+  if (data.section) csl.section = data.section;
+  if (data.eventPlace) csl['event-place'] = data.eventPlace;
+  if (data.archive) csl.archive = data.archive;
+  if (data.archiveLocation) csl['archive_location'] = data.archiveLocation;
+  if (data.callNumber) csl['call-number'] = data.callNumber;
+  // A patent's application number is not a call number; keep it only as the
+  // fallback when Zotero has no real call number (matches prior behaviour).
+  if (data.applicationNumber && !data.callNumber) {
+    csl['call-number'] = data.applicationNumber;
+  }
+  if (data.versionNumber) csl.version = data.versionNumber;
+  if (data.status) csl.status = data.status;
   if (data.series) csl['collection-title'] = data.series;
   if (data.seriesTitle) csl['collection-title'] = data.seriesTitle;
   if (data.seriesNumber) csl['collection-number'] = data.seriesNumber;
   if (data.conferenceName) csl['event-title'] = data.conferenceName;
-  if (data.section) csl.section = data.section;
+
   // Zotero's Short Title maps to the CSL short form of the title.
   if (data.shortTitle) csl['title-short'] = data.shortTitle;
 

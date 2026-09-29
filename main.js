@@ -69077,7 +69077,7 @@ var CREATOR_TYPE_TO_CSL_ROLE = {
   castMember: "performer"
 };
 function zoteroItemToCSL(item, groupId) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n2, _o, _p;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n2, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T;
   const data = item.data;
   if (!(data == null ? void 0 : data.citationKey))
     return null;
@@ -69088,10 +69088,10 @@ function zoteroItemToCSL(item, groupId) {
     type: ZOTERO_TYPE_TO_CSL[data.itemType] || "document",
     groupID: groupId
   };
-  const title = (_a = data.title) != null ? _a : data.caseName;
+  const title = (_c = (_b = (_a = data.title) != null ? _a : data.caseName) != null ? _b : data.nameOfAct) != null ? _c : data.subject;
   if (title)
     csl.title = title;
-  if ((_b = data.creators) == null ? void 0 : _b.length) {
+  if ((_d = data.creators) == null ? void 0 : _d.length) {
     const byRole = {};
     for (const creator of data.creators) {
       const role = CREATOR_TYPE_TO_CSL_ROLE[creator.creatorType] || "author";
@@ -69102,36 +69102,35 @@ function zoteroItemToCSL(item, groupId) {
     for (const [role, names] of Object.entries(byRole))
       csl[role] = names;
   }
-  const date = (_c = data.date) != null ? _c : data.dateDecided;
+  const date = (_h = (_g = (_f = (_e = data.date) != null ? _e : data.dateDecided) != null ? _f : data.dateEnacted) != null ? _g : data.issueDate) != null ? _h : data.filingDate;
   if (date)
     csl.issued = parseZoteroDate(date);
-  const containerTitle = (_l = (_k = (_j = (_i = (_h = (_g = (_f = (_e = (_d = data.publicationTitle) != null ? _d : data.bookTitle) != null ? _e : data.encyclopediaTitle) != null ? _f : data.dictionaryTitle) != null ? _g : data.blogTitle) != null ? _h : data.websiteTitle) != null ? _i : data.forumTitle) != null ? _j : data.proceedingsTitle) != null ? _k : data.programTitle) != null ? _l : data.reporter;
+  const containerTitle = (_r = (_q = (_p = (_o = (_n2 = (_m = (_l = (_k = (_j = (_i = data.publicationTitle) != null ? _i : data.bookTitle) != null ? _j : data.encyclopediaTitle) != null ? _k : data.dictionaryTitle) != null ? _l : data.blogTitle) != null ? _m : data.websiteTitle) != null ? _n2 : data.forumTitle) != null ? _o : data.proceedingsTitle) != null ? _p : data.programTitle) != null ? _q : data.reporter) != null ? _r : data.code;
   if (containerTitle)
     csl["container-title"] = containerTitle;
   if (data.journalAbbreviation)
     csl["container-title-short"] = data.journalAbbreviation;
-  const volume = (_m = data.volume) != null ? _m : data.reporterVolume;
+  const volume = (_t = (_s = data.volume) != null ? _s : data.reporterVolume) != null ? _t : data.codeVolume;
   if (volume)
     csl.volume = volume;
   if (data.issue)
     csl.issue = data.issue;
-  const page = (_n2 = data.pages) != null ? _n2 : data.firstPage;
+  const page = (_v = (_u = data.pages) != null ? _u : data.firstPage) != null ? _v : data.codePages;
   if (page)
     csl.page = page;
   if (data.numberOfVolumes)
     csl["number-of-volumes"] = data.numberOfVolumes;
-  if (data.numberOfPages)
-    csl["number-of-pages"] = data.numberOfPages;
+  const numPages = (_w = data.numberOfPages) != null ? _w : data.numPages;
+  if (numPages)
+    csl["number-of-pages"] = numPages;
   if (data.edition)
     csl.edition = data.edition;
-  if (data.publisher)
-    csl.publisher = data.publisher;
-  if (data.institution)
-    csl.publisher = data.institution;
-  if (data.university)
-    csl.publisher = data.university;
-  if (data.place)
-    csl["publisher-place"] = data.place;
+  const publisher = (_A = (_z = (_y = (_x = data.publisher) != null ? _x : data.institution) != null ? _y : data.university) != null ? _z : data.repository) != null ? _A : data.organization;
+  if (publisher)
+    csl.publisher = publisher;
+  const place = (_B = data.place) != null ? _B : data.repositoryLocation;
+  if (place)
+    csl["publisher-place"] = place;
   if (data.DOI)
     csl.DOI = data.DOI;
   if (data.URL)
@@ -69140,28 +69139,41 @@ function zoteroItemToCSL(item, groupId) {
     csl.ISBN = data.ISBN;
   if (data.ISSN)
     csl.ISSN = data.ISSN;
-  if (data.callNumber)
-    csl["call-number"] = data.callNumber;
   if (data.abstractNote)
     csl.abstract = data.abstractNote;
   if (data.language)
     csl.language = data.language;
-  if (data.thesisType)
-    csl.genre = data.thesisType;
-  if (data.reportType)
-    csl.genre = data.reportType;
-  if (data.reportNumber)
-    csl.number = data.reportNumber;
-  if (data.patentNumber)
-    csl.number = data.patentNumber;
-  if (data.docketNumber)
-    csl.number = data.docketNumber;
+  const genre = (_G = (_F = (_E = (_D = (_C = data.thesisType) != null ? _C : data.reportType) != null ? _D : data.manuscriptType) != null ? _E : data.letterType) != null ? _F : data.mapType) != null ? _G : data.type;
+  if (genre)
+    csl.genre = genre;
+  const number = (_M = (_L = (_K = (_J = (_I = (_H = data.number) != null ? _H : data.reportNumber) != null ? _I : data.patentNumber) != null ? _J : data.docketNumber) != null ? _K : data.documentNumber) != null ? _L : data.publicLawNumber) != null ? _M : data.billNumber;
+  if (number)
+    csl.number = number;
+  const authority = (_P = (_O = (_N = data.court) != null ? _N : data.issuingAuthority) != null ? _O : data.legislativeBody) != null ? _P : data.committee;
+  if (authority)
+    csl.authority = authority;
   if (data.country)
     csl.jurisdiction = data.country;
-  if (data.court)
-    csl.authority = data.court;
-  if (data.applicationNumber)
+  const medium = (_R = (_Q = data.artworkMedium) != null ? _Q : data.interviewMedium) != null ? _R : data.format;
+  if (medium)
+    csl.medium = medium;
+  if (data.section)
+    csl.section = data.section;
+  if (data.eventPlace)
+    csl["event-place"] = data.eventPlace;
+  if (data.archive)
+    csl.archive = data.archive;
+  if (data.archiveLocation)
+    csl["archive_location"] = data.archiveLocation;
+  if (data.callNumber)
+    csl["call-number"] = data.callNumber;
+  if (data.applicationNumber && !data.callNumber) {
     csl["call-number"] = data.applicationNumber;
+  }
+  if (data.versionNumber)
+    csl.version = data.versionNumber;
+  if (data.status)
+    csl.status = data.status;
   if (data.series)
     csl["collection-title"] = data.series;
   if (data.seriesTitle)
@@ -69170,20 +69182,18 @@ function zoteroItemToCSL(item, groupId) {
     csl["collection-number"] = data.seriesNumber;
   if (data.conferenceName)
     csl["event-title"] = data.conferenceName;
-  if (data.section)
-    csl.section = data.section;
   if (data.shortTitle)
     csl["title-short"] = data.shortTitle;
   if (data.extra)
     csl._extra = data.extra;
-  if ((_o = data.tags) == null ? void 0 : _o.length) {
+  if ((_S = data.tags) == null ? void 0 : _S.length) {
     const tags = data.tags.map((t4) => t4 == null ? void 0 : t4.tag).filter((t4) => typeof t4 === "string" && !!t4);
     if (tags.length)
       csl._tags = tags;
   }
   if (data.dateAdded)
     csl._dateAdded = data.dateAdded;
-  if ((_p = data.creators) == null ? void 0 : _p.length) {
+  if ((_T = data.creators) == null ? void 0 : _T.length) {
     const creators = data.creators.filter((c3) => c3 && typeof c3 === "object").map((c3) => {
       const out = { role: c3.creatorType || "author" };
       if (c3.name)
@@ -86901,7 +86911,7 @@ SWTOKFIGURECOUNTER
     "language": "javascript"
   }
 ]
-`, "binary": false, "hash": "68c1516a9f7da1a9" }, "sw-markdown-templates/sw-basic-note-template.md": { "content": '---\ncreated: <% tp.file.creation_date() %>\nup:\n  - "[[Unassigned]]"\nrelated:\naliases:\n---\n', "binary": false, "hash": "6121f12af7527481" }, "sw-note-templates/sw-note.eta.md": { "content": "<%/*\n  sw-note.eta.md \u2014 OUR single-file literature-note template.\n\n  One copy-pasteable file: it emits BOTH the frontmatter and the body. It mirrors\n  the user's ZotLit setup \u2014 the frontmatter fields and order match\n  `sw-zotlit-settings/frontmatter-fields.json`, and the body follows the layout\n  of the ZotLit templates (`sw-zotlit-templates/`), NOT the older\n  Zotero-Integration shape: there is NO title heading or abstract in the\n  body (those live only in the frontmatter), `## Notes` is always present and\n  OUTSIDE the managed region, and the managed region holds only `## Annotations`\n  \u2014 emitted only when there ARE annotations, so an empty region is never left\n  behind (it is appended later if annotations appear).\n\n  Everything whitespace-sensitive is in the helpers (`add_property` serialises\n  YAML, `annotation_callout` builds the callout, `zotero_notes` the note text) so\n  this file states INTENT only.\n\n  Data root: `item` (see src/template/context.ts). Settled helper API is\n  documented in src/template/note-helpers.ts.\n*/-%>\n<% start_YAML(); -%>\n<% add_property('document-type', '[[zotero-import]]'); -%>\n<% add_property('created', import_date()); -%>\n<% add_property('updated', updated()); -%>\n<% add_property('added', item.dateAdded ? item.dateAdded.slice(0, 10) : null); -%>\n<% add_property('up', ['[[Bibliographic Notes]]']); -%>\n<% add_property('related', [], { force: true, merge: 'subtract', subtractFrom: 'sw-related' }); -%>\n<% add_property('sw-related', related_links(), { force: true, merge: 'replace' }); -%>\n<% add_property('item-type', item.itemType); -%>\n<% add_property('title', item.title); -%>\n<% add_property('shorttitle', short_title()); -%>\n<% add_property('authors', creator_values('author')); -%>\n<% add_property('editors', creator_values('editor')); -%>\n<% add_property('translators', creator_values('translator')); -%>\n<% add_property('abstract', item.abstract); -%>\n<% add_property('series', item.series ? wikilink(item.series) : null); -%>\n<% add_property('series-number', item.seriesNumber); -%>\n<% add_property('edition', item.edition); -%>\n<% add_property('contributors', creator_values('contributor')); -%>\n<% add_property('year', item.date ? `[[${item.date.year}]]` : null); -%>\n<% add_property('issue', item.issue); -%>\n<% add_property('volume', item.volume); -%>\n<% add_property('publication', item.containerTitle ? wikilink(item.containerTitle) : null); -%>\n<% add_property('place', item.place); -%>\n<% add_property('publisher', item.publisher ? wikilink(item.publisher) : null); -%>\n<% add_property('volumes', item.numberOfVolumes); -%>\n<% add_property('doi', item.DOI); -%>\n<% add_property('citekey', item.citekey); -%>\n<% add_property('zotero-link', item.backlink); -%>\n<% add_property('zotero-key', item.indexedKey); -%>\n<% add_property('attachments', attachment_links()); -%>\n<% add_property('aliases', aliases()); -%>\n<%~ end_YAML() -%>\n## Notes\n\n<% const notes = zotero_notes(); -%>\n<% if (notes) { -%>\n<%~ notes %>\n<% } -%>\n<% const annotated = attachments_with_annotations(); -%>\n<% if (annotated.length) { %>\n%%sw-managed%%\n## Annotations\n\n<% for (const attachment of annotated) { -%>\n### [<%= attachment.filename ?? attachment.key %>](<%= attachment.backlink %>)\n\n<% for (const annotation of item.annotations.filter((a) => a.parentAttachment?.key === attachment.key)) { -%>\n<%~ annotation_callout(annotation) %>\n\n<% } -%>\n<% } -%>\n%%/sw-managed%%\n<% } -%>\n", "binary": false, "hash": "ada15700c853e0ba" }, "sw-note-templates/zotlit-annotation.eta.md": { "content": '<%/* zotlit-annotation.eta.md \u2014 renders ONE annotation as a callout block.\n     Merged annotations arrive pre-combined from zotlit-content.eta.md\n     (text / comment / pageLabel / tags already merged, "+" marker\n     stripped), so this template needs no merge logic of its own. */-%>\n<% const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : "";\nconst colorRaw = item.colorName ?? "Yellow";\nconst colorCap = cap(colorRaw);\nconst typeCap = cap(item.type);\nconst esc = s => (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");\nconst mdComment = s => (s ?? "").replace(/<i>/g, "*").replace(/<\\/i>/g, "*").replace(/<b>/g, "**").replace(/<\\/b>/g, "**").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");\nconst escText = s => esc(s).replace(/\\[/g, "\\\\[").replace(/\\]/g, "\\\\]");\n// Callout-safe multi-line content: EVERY line (including blank lines) gets a\n// "> " prefix so paragraphs stay inside the callout. Obsidian callouts break\n// on any line lacking the prefix; comments with several paragraphs or blank\n// lines otherwise leak their later lines outside the [!ann-\u2026] block.\nconst calloutLines = s => (s ?? "").split(/\\r?\\n/).map(l => l.trim() ? `> ${l}` : ">").join("\\n");\n-%>\n<% bq(() => { -%>\n[!<%= colorRaw %>-<%= item.type %>-annotation] <%= colorCap %> <%= typeCap %>\n<% if (item.comment || (item.tags && item.tags.length > 0)) { -%>\n> [!ann-comment]\n<% if (item.comment) { -%>\n<%= calloutLines(mdComment(item.comment)) %>\n<% } -%>\n<% for (const tag of (item.tags ?? [])) { -%>\n> - [[<%= tag.name %>]]\n<% } -%>\n<% } -%>\n\n<% if (item.type === "highlight" && item.text) { -%>\n> [!ann-highlight-text-<%= colorRaw %>]\n> <%= escText(item.text) %>\n<% } else if (item.type === "underline" && item.text) { -%>\n> [!ann-underline-text-<%= colorRaw %>]\n> <%= escText(item.text) %>\n<% } else if (item.type === "image") { -%>\n> [!ann-image-<%= colorRaw %>]\n> <%= embed(typeof item.imgLink === "function" ? item.imgLink : () => item.imgLink) %>\n> - <%= typeof item.imgLink === "function" ? item.imgLink("view image") : item.imgLink %>\n> - [[image annotations|images]]\n<% } else if (item.type === "text" || item.type === "note") { -%>\n> [!ann-text-<%= colorRaw %>]Text comment\u2014click to view in context:\n<% if (item.comment) { -%>\n<%= calloutLines(mdComment(item.comment)) %>\n<% } -%>\n<% } else if (item.type === "ink") { -%>\n> [!ann-ink-<%= colorRaw %>]\n> <%= embed(typeof item.imgLink === "function" ? item.imgLink : () => item.imgLink) %>\n> - <%= typeof item.imgLink === "function" ? item.imgLink("view ink image") : item.imgLink %>\n<% } -%>\n- [[<%= colorCap %> annotations|<%= colorCap %>]]\n- (<% if (item.pageLabel) { %>[<%= item.pageLabel.includes("\u2013") ? "pp. " : "p. " %><%= item.pageLabel %>](<%= item.backlink %>)<% } else { %>[View](<%= item.backlink %>)<% } %>, <%= item.dateAdded %>)\n<% }) %>\n', "binary": false, "hash": "4b9388bf00d15fc7" }, "sw-note-templates/zotlit-content.eta.md": { "content": '<%/* zotlit-content.eta.md \u2014 annotations region (Eta, JS templates).\n     Groups annotations by attachment and renders each through the\n     "annotation" template. Zotero-Integration-style "+" concatenation:\n     an annotation whose comment begins with "+" is appended to the\n     PREVIOUS annotation on the same attachment (joined with " ... "),\n     chaining across multiple "+" annotations. The merged group keeps\n     the first annotation\'s links and date; the page label becomes a\n     range ("pp. 4\u20136") when pages differ; comments and tags combine.\n     Display-only \u2014 Zotero data is never modified, and re-updates\n     reproduce the same merge. */-%>\n<% if (item.annotations && item.annotations.length > 0) { -%>\n## Annotations\n\n<% const merged = [];\nlet group = null;\nfor (let i = 0; i < item.annotations.length; i++) {\n  const a = { ...item.annotations[i] };\n  const plus = typeof a.comment === "string" && /^\\+\\s*/.test(a.comment);\n  if (plus && group && a.parentAttachment?.key === group.parentAttachment?.key && a.text) {\n    a.comment = a.comment.replace(/^\\+\\s*/, "");\n    group.text = [(group.text ?? "").trim(), a.text.trim()].filter(Boolean).join(" ... ");\n    group.comment = [group.comment, a.comment].filter(c => c && c.trim()).join(" ... ") || null;\n    if (a.pageLabel && group.pageLabel && group.pageLabel !== a.pageLabel) {\n      group.pageLabel = `${group.pageLabel.split("\u2013")[0]}\u2013${a.pageLabel}`;\n    }\n    if (a.tags?.length) {\n      const seen = new Set((group.tags ?? []).map(t => t.name));\n      group.tags = [...(group.tags ?? []), ...a.tags.filter(t => !seen.has(t.name))];\n    }\n    continue;\n  }\n  if (plus && a.comment) a.comment = a.comment.replace(/^\\+\\s*/, "");\n  merged.push(a);\n  group = a;\n} -%>\n<% for (const attachment of item.attachments) { -%>\n<% const anns = merged.filter(a => a.parentAttachment?.key === attachment.key);\nif (anns.length === 0) continue; -%>\n### [<%= attachment.filename ?? attachment.key %>](<%= attachment.backlink %>)\n\n<% for (const annotation of anns) { -%>\n<%~ include("annotation", annotation) %>\n\n<% } -%>\n<% } -%>\n<% } -%>\n', "binary": false, "hash": "81f9fddff28be6e0" }, "sw-note-templates/zotlit-filename.liquid.md": { "content": "@{{ item.citationKey | default: item.DOI | default: item.title | default: item.key }}{% suffix %}\n", "binary": false, "hash": "88a3b6d3685ed0b5" }, "sw-note-templates/zotlit-note.eta.md": { "content": '## Notes\n\n<%~ include("content", item) %>\n', "binary": false, "hash": "86f02945a4536479" } };
+`, "binary": false, "hash": "68c1516a9f7da1a9" }, "sw-markdown-templates/sw-basic-note-template.md": { "content": '---\ncreated: <% tp.file.creation_date() %>\nup:\n  - "[[Unassigned]]"\nrelated:\naliases:\n---\n', "binary": false, "hash": "6121f12af7527481" }, "sw-note-templates/sw-note.eta.md": { "content": "<%/*\n  sw-note.eta.md \u2014 OUR single-file literature-note template.\n\n  One copy-pasteable file: it emits BOTH the frontmatter and the body. It mirrors\n  the user's ZotLit setup \u2014 the frontmatter fields and order match\n  `sw-zotlit-settings/frontmatter-fields.json`, and the body follows the layout\n  of the ZotLit templates (`sw-zotlit-templates/`), NOT the older\n  Zotero-Integration shape: there is NO title heading or abstract in the\n  body (those live only in the frontmatter), `## Notes` is always present and\n  OUTSIDE the managed region, and the managed region holds only `## Annotations`\n  \u2014 emitted only when there ARE annotations, so an empty region is never left\n  behind (it is appended later if annotations appear).\n\n  Everything whitespace-sensitive is in the helpers (`add_property` serialises\n  YAML, `annotation_callout` builds the callout, `zotero_notes` the note text) so\n  this file states INTENT only.\n\n  Data root: `item` (see src/template/context.ts). Settled helper API is\n  documented in src/template/note-helpers.ts.\n*/-%>\n<% start_YAML(); -%>\n<% add_property('document-type', '[[zotero-import]]'); -%>\n<% add_property('created', import_date()); -%>\n<% add_property('updated', updated()); -%>\n<% add_property('added', item.dateAdded ? item.dateAdded.slice(0, 10) : null); -%>\n<% add_property('up', ['[[Bibliographic Notes]]']); -%>\n<% add_property('related', [], { force: true, merge: 'subtract', subtractFrom: 'sw-related' }); -%>\n<% add_property('sw-related', related_links(), { force: true, merge: 'replace' }); -%>\n<% add_property('item-type', item.itemType); -%>\n<% add_property('title', item.title); -%>\n<% add_property('shorttitle', short_title()); -%>\n<% add_property('authors', creator_values('author')); -%>\n<% add_property('editors', creator_values('editor')); -%>\n<% add_property('translators', creator_values('translator')); -%>\n<% add_property('abstract', item.abstract); -%>\n<% add_property('series', item.series ? wikilink(item.series) : null); -%>\n<% add_property('series-number', item.seriesNumber); -%>\n<% add_property('edition', item.edition); -%>\n<% add_property('contributors', creator_values('contributor')); -%>\n<% add_property('year', item.date ? `[[${item.date.year}]]` : null); -%>\n<% add_property('issue', item.issue); -%>\n<% add_property('volume', item.volume); -%>\n<% add_property('publication', item.containerTitle ? wikilink(item.containerTitle) : null); -%>\n<% add_property('place', item.place); -%>\n<% add_property('publisher', item.publisher ? wikilink(item.publisher) : null); -%>\n<% add_property('volumes', item.numberOfVolumes); -%>\n<% add_property('number', item.number); -%>\n<% add_property('genre', item.genre); -%>\n<% add_property('authority', item.authority); -%>\n<% add_property('jurisdiction', item.jurisdiction); -%>\n<% add_property('medium', item.medium); -%>\n<% add_property('section', item.section); -%>\n<% add_property('event', item.eventTitle); -%>\n<% add_property('version', item.version); -%>\n<% add_property('doi', item.DOI); -%>\n<% add_property('citekey', item.citekey); -%>\n<% add_property('zotero-link', item.backlink); -%>\n<% add_property('zotero-key', item.indexedKey); -%>\n<% add_property('attachments', attachment_links()); -%>\n<% add_property('aliases', aliases()); -%>\n<%~ end_YAML() -%>\n## Notes\n\n<% const notes = zotero_notes(); -%>\n<% if (notes) { -%>\n<%~ notes %>\n<% } -%>\n<% const annotated = attachments_with_annotations(); -%>\n<% if (annotated.length) { %>\n%%sw-managed%%\n## Annotations\n\n<% for (const attachment of annotated) { -%>\n### [<%= attachment.filename ?? attachment.key %>](<%= attachment.backlink %>)\n\n<% for (const annotation of item.annotations.filter((a) => a.parentAttachment?.key === attachment.key)) { -%>\n<%~ annotation_callout(annotation) %>\n\n<% } -%>\n<% } -%>\n%%/sw-managed%%\n<% } -%>\n", "binary": false, "hash": "8b5a21e802751f04" }, "sw-note-templates/zotlit-annotation.eta.md": { "content": '<%/* zotlit-annotation.eta.md \u2014 renders ONE annotation as a callout block.\n     Merged annotations arrive pre-combined from zotlit-content.eta.md\n     (text / comment / pageLabel / tags already merged, "+" marker\n     stripped), so this template needs no merge logic of its own. */-%>\n<% const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : "";\nconst colorRaw = item.colorName ?? "Yellow";\nconst colorCap = cap(colorRaw);\nconst typeCap = cap(item.type);\nconst esc = s => (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");\nconst mdComment = s => (s ?? "").replace(/<i>/g, "*").replace(/<\\/i>/g, "*").replace(/<b>/g, "**").replace(/<\\/b>/g, "**").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");\nconst escText = s => esc(s).replace(/\\[/g, "\\\\[").replace(/\\]/g, "\\\\]");\n// Callout-safe multi-line content: EVERY line (including blank lines) gets a\n// "> " prefix so paragraphs stay inside the callout. Obsidian callouts break\n// on any line lacking the prefix; comments with several paragraphs or blank\n// lines otherwise leak their later lines outside the [!ann-\u2026] block.\nconst calloutLines = s => (s ?? "").split(/\\r?\\n/).map(l => l.trim() ? `> ${l}` : ">").join("\\n");\n-%>\n<% bq(() => { -%>\n[!<%= colorRaw %>-<%= item.type %>-annotation] <%= colorCap %> <%= typeCap %>\n<% if (item.comment || (item.tags && item.tags.length > 0)) { -%>\n> [!ann-comment]\n<% if (item.comment) { -%>\n<%= calloutLines(mdComment(item.comment)) %>\n<% } -%>\n<% for (const tag of (item.tags ?? [])) { -%>\n> - [[<%= tag.name %>]]\n<% } -%>\n<% } -%>\n\n<% if (item.type === "highlight" && item.text) { -%>\n> [!ann-highlight-text-<%= colorRaw %>]\n> <%= escText(item.text) %>\n<% } else if (item.type === "underline" && item.text) { -%>\n> [!ann-underline-text-<%= colorRaw %>]\n> <%= escText(item.text) %>\n<% } else if (item.type === "image") { -%>\n> [!ann-image-<%= colorRaw %>]\n> <%= embed(typeof item.imgLink === "function" ? item.imgLink : () => item.imgLink) %>\n> - <%= typeof item.imgLink === "function" ? item.imgLink("view image") : item.imgLink %>\n> - [[image annotations|images]]\n<% } else if (item.type === "text" || item.type === "note") { -%>\n> [!ann-text-<%= colorRaw %>]Text comment\u2014click to view in context:\n<% if (item.comment) { -%>\n<%= calloutLines(mdComment(item.comment)) %>\n<% } -%>\n<% } else if (item.type === "ink") { -%>\n> [!ann-ink-<%= colorRaw %>]\n> <%= embed(typeof item.imgLink === "function" ? item.imgLink : () => item.imgLink) %>\n> - <%= typeof item.imgLink === "function" ? item.imgLink("view ink image") : item.imgLink %>\n<% } -%>\n- [[<%= colorCap %> annotations|<%= colorCap %>]]\n- (<% if (item.pageLabel) { %>[<%= item.pageLabel.includes("\u2013") ? "pp. " : "p. " %><%= item.pageLabel %>](<%= item.backlink %>)<% } else { %>[View](<%= item.backlink %>)<% } %>, <%= item.dateAdded %>)\n<% }) %>\n', "binary": false, "hash": "4b9388bf00d15fc7" }, "sw-note-templates/zotlit-content.eta.md": { "content": '<%/* zotlit-content.eta.md \u2014 annotations region (Eta, JS templates).\n     Groups annotations by attachment and renders each through the\n     "annotation" template. Zotero-Integration-style "+" concatenation:\n     an annotation whose comment begins with "+" is appended to the\n     PREVIOUS annotation on the same attachment (joined with " ... "),\n     chaining across multiple "+" annotations. The merged group keeps\n     the first annotation\'s links and date; the page label becomes a\n     range ("pp. 4\u20136") when pages differ; comments and tags combine.\n     Display-only \u2014 Zotero data is never modified, and re-updates\n     reproduce the same merge. */-%>\n<% if (item.annotations && item.annotations.length > 0) { -%>\n## Annotations\n\n<% const merged = [];\nlet group = null;\nfor (let i = 0; i < item.annotations.length; i++) {\n  const a = { ...item.annotations[i] };\n  const plus = typeof a.comment === "string" && /^\\+\\s*/.test(a.comment);\n  if (plus && group && a.parentAttachment?.key === group.parentAttachment?.key && a.text) {\n    a.comment = a.comment.replace(/^\\+\\s*/, "");\n    group.text = [(group.text ?? "").trim(), a.text.trim()].filter(Boolean).join(" ... ");\n    group.comment = [group.comment, a.comment].filter(c => c && c.trim()).join(" ... ") || null;\n    if (a.pageLabel && group.pageLabel && group.pageLabel !== a.pageLabel) {\n      group.pageLabel = `${group.pageLabel.split("\u2013")[0]}\u2013${a.pageLabel}`;\n    }\n    if (a.tags?.length) {\n      const seen = new Set((group.tags ?? []).map(t => t.name));\n      group.tags = [...(group.tags ?? []), ...a.tags.filter(t => !seen.has(t.name))];\n    }\n    continue;\n  }\n  if (plus && a.comment) a.comment = a.comment.replace(/^\\+\\s*/, "");\n  merged.push(a);\n  group = a;\n} -%>\n<% for (const attachment of item.attachments) { -%>\n<% const anns = merged.filter(a => a.parentAttachment?.key === attachment.key);\nif (anns.length === 0) continue; -%>\n### [<%= attachment.filename ?? attachment.key %>](<%= attachment.backlink %>)\n\n<% for (const annotation of anns) { -%>\n<%~ include("annotation", annotation) %>\n\n<% } -%>\n<% } -%>\n<% } -%>\n', "binary": false, "hash": "81f9fddff28be6e0" }, "sw-note-templates/zotlit-filename.liquid.md": { "content": "@{{ item.citationKey | default: item.DOI | default: item.title | default: item.key }}{% suffix %}\n", "binary": false, "hash": "88a3b6d3685ed0b5" }, "sw-note-templates/zotlit-note.eta.md": { "content": '## Notes\n\n<%~ include("content", item) %>\n', "binary": false, "hash": "86f02945a4536479" } };
 
 // src/assetSetup.ts
 var import_obsidian7 = __toModule(require("obsidian"));
@@ -90210,6 +90220,19 @@ function buildNoteContext(entry, children = {}) {
     series: str(e3["collection-title"]),
     seriesNumber: str(e3["collection-number"]),
     numberOfVolumes: str(e3["number-of-volumes"]),
+    number: str(e3.number),
+    genre: str(e3.genre),
+    authority: str(e3.authority),
+    jurisdiction: str(e3.jurisdiction),
+    medium: str(e3.medium),
+    section: str(e3.section),
+    eventTitle: str(e3["event-title"]),
+    eventPlace: str(e3["event-place"]),
+    archive: str(e3.archive),
+    archiveLocation: str(e3["archive_location"]),
+    callNumber: str(e3["call-number"]),
+    version: str(e3.version),
+    status: str(e3.status),
     extra: parseExtra(e3._extra),
     creators,
     primaryCreatorType,

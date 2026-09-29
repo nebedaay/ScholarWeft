@@ -44,6 +44,14 @@
 <% add_property('place', item.place); -%>
 <% add_property('publisher', item.publisher ? wikilink(item.publisher) : null); -%>
 <% add_property('volumes', item.numberOfVolumes); -%>
+<% add_property('number', item.number); -%>
+<% add_property('genre', item.genre); -%>
+<% add_property('authority', item.authority); -%>
+<% add_property('jurisdiction', item.jurisdiction); -%>
+<% add_property('medium', item.medium); -%>
+<% add_property('section', item.section); -%>
+<% add_property('event', item.eventTitle); -%>
+<% add_property('version', item.version); -%>
 <% add_property('doi', item.DOI); -%>
 <% add_property('citekey', item.citekey); -%>
 <% add_property('zotero-link', item.backlink); -%>

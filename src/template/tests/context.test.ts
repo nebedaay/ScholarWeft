@@ -64,6 +64,46 @@ describe('buildNoteContext() — identity', () => {
     expect(c.numberOfVolumes).toBe('2');
   });
 
+  it('exposes the type-specific reference fields (case/statute/thesis…)', () => {
+    const legalCase = buildNoteContext({
+      id: 'roe1973',
+      type: 'legal_case',
+      groupID: 1,
+      title: 'Roe v. Wade',
+      authority: 'Supreme Court of the United States',
+      number: '70-18',
+      'container-title': 'U.S.',
+      volume: '410',
+      page: '113',
+      issued: { 'date-parts': [[1973, 1, 22]] },
+      _zoteroKey: 'CASE0001',
+    } as CachedEntry);
+    expect(legalCase.itemType).toBe('case');
+    expect(legalCase.title).toBe('Roe v. Wade');
+    expect(legalCase.authority).toBe('Supreme Court of the United States');
+    expect(legalCase.number).toBe('70-18');
+    expect(legalCase.containerTitle).toBe('U.S.');
+    expect(legalCase.volume).toBe('410');
+    expect(legalCase.pages).toBe('113');
+
+    const thesis = buildNoteContext({
+      ...fixture,
+      type: 'thesis',
+      genre: 'PhD dissertation',
+      medium: 'print',
+      jurisdiction: 'US',
+      section: 'ii',
+      version: '2',
+      status: 'published',
+    });
+    expect(thesis.genre).toBe('PhD dissertation');
+    expect(thesis.medium).toBe('print');
+    expect(thesis.jurisdiction).toBe('US');
+    expect(thesis.section).toBe('ii');
+    expect(thesis.version).toBe('2');
+    expect(thesis.status).toBe('published');
+  });
+
   it('builds the Zotero deep link, and no web link for a personal library', () => {
     const c = buildNoteContext(fixture);
     expect(c.backlink).toBe('zotero://select/library/items/EKUBHHNW');

@@ -377,6 +377,109 @@ describe('zoteroItemToCSL()', () => {
     expect(result.authority).toBe('Supreme Court of the United States');
   });
 
+  it('maps a statute, whose name is nameOfAct rather than title', () => {
+    const r = zoteroItemToCSL(
+      {
+        key: 'STAT0001',
+        data: {
+          citationKey: 'aedpa1996',
+          itemType: 'statute',
+          nameOfAct: 'Antiterrorism and Effective Death Penalty Act',
+          code: 'U.S.C.',
+          section: '2244',
+          publicLawNumber: '104-132',
+          dateEnacted: '1996-04-24',
+        },
+      },
+      1
+    ) as any;
+    expect(r.title).toBe('Antiterrorism and Effective Death Penalty Act');
+    expect(r['container-title']).toBe('U.S.C.');
+    expect(r.section).toBe('2244');
+    expect(r.number).toBe('104-132');
+    expect(r.issued).toEqual({ 'date-parts': [[1996, 4, 24]] });
+  });
+
+  it('maps an email, whose name is subject rather than title', () => {
+    const r = zoteroItemToCSL(
+      {
+        key: 'MAIL0001',
+        data: {
+          citationKey: 'email2020',
+          itemType: 'email',
+          subject: 'Re: manuscript review',
+          date: '2020-01-02',
+        },
+      },
+      1
+    ) as any;
+    expect(r.title).toBe('Re: manuscript review');
+    expect(r.issued).toEqual({ 'date-parts': [[2020, 1, 2]] });
+  });
+
+  it('maps a thesis and a report to genre / number / publisher', () => {
+    const thesis = zoteroItemToCSL(
+      {
+        key: 'THES0001',
+        data: {
+          citationKey: 'doe2019',
+          itemType: 'thesis',
+          title: 'A Thesis',
+          thesisType: 'PhD dissertation',
+          university: 'Some University',
+          date: '2019',
+        },
+      },
+      1
+    ) as any;
+    expect(thesis.genre).toBe('PhD dissertation');
+    expect(thesis.publisher).toBe('Some University');
+
+    const report = zoteroItemToCSL(
+      {
+        key: 'REP00001',
+        data: {
+          citationKey: 'rep2021',
+          itemType: 'report',
+          title: 'A Report',
+          reportType: 'Technical report',
+          reportNumber: 'TR-5',
+          institution: 'Testing Lab',
+          seriesTitle: 'Working Papers',
+          seriesNumber: '2',
+        },
+      },
+      1
+    ) as any;
+    expect(report.genre).toBe('Technical report');
+    expect(report.number).toBe('TR-5');
+    expect(report.publisher).toBe('Testing Lab');
+    expect(report['collection-title']).toBe('Working Papers');
+    expect(report['collection-number']).toBe('2');
+  });
+
+  it('maps a patent: number, issuing authority, jurisdiction, issue date', () => {
+    const r = zoteroItemToCSL(
+      {
+        key: 'PATE0001',
+        data: {
+          citationKey: 'pat2001',
+          itemType: 'patent',
+          title: 'A Device',
+          patentNumber: 'US1234567',
+          issuingAuthority: 'USPTO',
+          country: 'US',
+          issueDate: '2001-05-01',
+        },
+      },
+      1
+    ) as any;
+    expect(r.number).toBe('US1234567');
+    expect(r.authority).toBe('USPTO');
+    expect(r.jurisdiction).toBe('US');
+    expect(r.issued).toEqual({ 'date-parts': [[2001, 5, 1]] });
+  });
+
   it('maps a journal article correctly', () => {
     const result = zoteroItemToCSL(baseItem(), 1);
     expect(result).not.toBeNull();
