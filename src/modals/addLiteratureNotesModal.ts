@@ -201,10 +201,39 @@ export class AddLiteratureNotesModal extends Modal {
     this.updateStatus();
   }
 
+  private renderedRefs = new Map<string, string>();
+
   private renderMore(): void {
     const slice = this.matches.slice(this.rendered, this.rendered + PAGE);
     for (const entry of slice) this.renderRow(entry);
     this.rendered += slice.length;
+    // Fill in formatted references for the rows just added, in ONE call (the
+    // plugin's own renderer — the same one `[[@key|reference]]` uses).
+    const unrendered = slice
+      .map((e) => e.id)
+      .filter((id) => !this.renderedRefs.has(id));
+    if (unrendered.length) {
+      void this.plugin.bibManager
+        .renderReferenceMarkdown(unrendered)
+        .then((map) => {
+          for (const [k, v] of map) this.renderedRefs.set(k, v);
+          if (this.containerEl.isConnected) this.fillReferences();
+        })
+        .catch((e) => console.warn('[sw:add-notes] reference render failed', e));
+    }
+  }
+
+  /** Fill already-drawn rows with their rendered reference, when ready. */
+  private fillReferences(): void {
+    for (const row of Array.from(
+      this.listEl.querySelectorAll('.sw-add-notes__row')
+    ) as HTMLElement[]) {
+      const key = row.dataset.citekey;
+      if (!key) continue;
+      const refEl = row.querySelector('.sw-add-notes__ref') as HTMLElement | null;
+      const text = this.renderedRefs.get(key);
+      if (refEl && text) refEl.setText(text);
+    }
   }
 
   /** Rich row: citekey, creators, title, the rendered reference, an excerpt. */

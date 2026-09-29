@@ -21326,6 +21326,7 @@ var init_addLiteratureNotesModal = __esm({
         this.matches = [];
         this.termsByKey = new Map();
         this.litNotes = new Set();
+        this.renderedRefs = new Map();
         this.plugin = plugin;
       }
       onOpen() {
@@ -21452,6 +21453,26 @@ var init_addLiteratureNotesModal = __esm({
         for (const entry of slice)
           this.renderRow(entry);
         this.rendered += slice.length;
+        const unrendered = slice.map((e3) => e3.id).filter((id) => !this.renderedRefs.has(id));
+        if (unrendered.length) {
+          void this.plugin.bibManager.renderReferenceMarkdown(unrendered).then((map) => {
+            for (const [k4, v3] of map)
+              this.renderedRefs.set(k4, v3);
+            if (this.containerEl.isConnected)
+              this.fillReferences();
+          }).catch((e3) => console.warn("[sw:add-notes] reference render failed", e3));
+        }
+      }
+      fillReferences() {
+        for (const row of Array.from(this.listEl.querySelectorAll(".sw-add-notes__row"))) {
+          const key = row.dataset.citekey;
+          if (!key)
+            continue;
+          const refEl = row.querySelector(".sw-add-notes__ref");
+          const text = this.renderedRefs.get(key);
+          if (refEl && text)
+            refEl.setText(text);
+        }
       }
       renderRow(entry) {
         var _a, _b, _c, _d, _e;
