@@ -114,22 +114,7 @@ export const normalizeDiacritics = (s: string): string =>
  * `renderReferenceMarkdown` — pandoc/Zotero cannot render an in-body full
  * reference, so the plugin pre-renders it as plain text.
  */
-function cslEntryHtmlToMarkdown(html: string): string {
-  let s = html.trim();
-  const wrap = /^<div\b[^>]*class="[^"]*\bcsl-entry\b[^"]*"[^>]*>([\s\S]*)<\/div>\s*$/i.exec(
-    s
-  );
-  if (wrap) s = wrap[1];
-  s = s
-    .replace(/<i\b[^>]*>([\s\S]*?)<\/i>/gi, '*$1*')
-    .replace(/<em\b[^>]*>([\s\S]*?)<\/em>/gi, '*$1*')
-    .replace(/<b\b[^>]*>([\s\S]*?)<\/b>/gi, '**$1**')
-    .replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
-    .replace(/<[^>]+>/g, '');
-  const txt = document.createElement('textarea');
-  txt.innerHTML = s;
-  return txt.value.replace(/\s+/g, ' ').trim();
-}
+import { cslEntryHtmlToMarkdown } from './csl-markdown';
 
 /**
  * Bump whenever rendering behaviour changes (parser fixes, CSL changes, …)
