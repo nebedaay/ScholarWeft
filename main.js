@@ -251,9 +251,14 @@ var init_en = __esm({
       "Web pages": "Web pages",
       Other: "Other",
       "Order by": "Order by",
+      "Show items with": "Show items with",
+      "Show item types": "Show item types",
+      All: "All",
+      "No literature note": "No literature note",
+      "Zotero notes": "Zotero notes",
+      "PDF/snapshot": "PDF/snapshot",
+      Annotations: "Annotations",
       Collections: "Collections",
-      "Filter collections\u2026": "Filter collections\u2026",
-      Uncategorized: "Uncategorized",
       "No collections found": "No collections found",
       "Ranked search": "Ranked search",
       "Author, title, year": "Author, title, year",
@@ -21079,14 +21084,36 @@ function buildCollectionNodes(raw, groupID) {
   };
   return raw.filter((c3) => !!(c3 == null ? void 0 : c3.key)).map((c3) => {
     const names = ancestors(c3.key);
+    const parent = c3.parentCollection;
     return {
       key: c3.key,
       groupID,
       name: c3.name,
+      parentKey: typeof parent === "string" && byKey.has(parent) ? parent : null,
       path: names.join(" > "),
       depth: Math.max(0, names.length - 1)
     };
   }).sort((a3, b3) => collator.compare(a3.path, b3.path) || collator.compare(a3.key, b3.key));
+}
+function descendantTokens(nodes, groupID, rootKey) {
+  var _a;
+  const byParent = new Map();
+  for (const n2 of nodes) {
+    if (n2.groupID !== groupID || !n2.parentKey)
+      continue;
+    const list = (_a = byParent.get(n2.parentKey)) != null ? _a : [];
+    list.push(n2);
+    byParent.set(n2.parentKey, list);
+  }
+  const out = [];
+  const walk = (key) => {
+    var _a2;
+    out.push(collectionToken(groupID, key));
+    for (const child of (_a2 = byParent.get(key)) != null ? _a2 : [])
+      walk(child.key);
+  };
+  walk(rootKey);
+  return out;
 }
 var collator;
 var init_collections = __esm({
@@ -21396,8 +21423,7 @@ function defaultFilters() {
     hasAnnotations: false,
     withoutLitNote: true,
     types: [],
-    collections: [],
-    uncategorized: false
+    excludeCollections: []
   };
 }
 function flagsFromChildren(children, hasLitNote, type, collections = []) {
@@ -21428,10 +21454,9 @@ function passesImportFilters(flags, filters) {
   if (filters.types.length && !filters.types.includes(flags.typeGroup)) {
     return false;
   }
-  if (filters.collections.length || filters.uncategorized) {
-    const inSelected = flags.collections.some((c3) => filters.collections.includes(c3));
-    const uncategorized = flags.collections.length === 0;
-    if (!inSelected && !(filters.uncategorized && uncategorized))
+  if (filters.excludeCollections.length && flags.collections.length) {
+    const allOff = flags.collections.every((c3) => filters.excludeCollections.includes(c3));
+    if (allOff)
       return false;
   }
   return true;
@@ -21566,8 +21591,7 @@ var init_addLiteratureNotesModal = __esm({
         this.matches = [];
         this.termsByKey = new Map();
         this.litNotes = new Set();
-        this.collectionQuery = "";
-        this.collectionListEl = null;
+        this.collectionsEl = null;
         this.renderedRefs = new Map();
         this.plugin = plugin;
       }
@@ -21691,7 +21715,7 @@ var init_addLiteratureNotesModal = __esm({
         if (!this.plugin.bibManager.collectionsReady) {
           void this.plugin.bibManager.ensureCollectionsIndex().then(() => {
             if (this.containerEl.isConnected)
-              this.renderCollectionList();
+              this.renderCollections();
           }).catch((e3) => console.warn("[sw:add-notes] collections index failed", e3));
         }
         if (!this.plugin.bibManager.fuseReady) {
@@ -21714,96 +21738,141 @@ var init_addLiteratureNotesModal = __esm({
         }
       }
       renderFilters(side) {
-        const mk = (label, key) => {
-          const row = side.createEl("label", { cls: "sw-add-notes__filter" });
-          const input = row.createEl("input", { type: "checkbox" });
-          input.checked = this.filters[key];
-          input.addEventListener("change", () => {
-            this.filters = { ...this.filters, [key]: input.checked };
+        side.createDiv({
+          cls: "sw-add-notes__filter-group",
+          text: t("Show items with")
+        });
+        const withRow = side.createDiv({ cls: "sw-add-notes__toggles" });
+        const withToggles = [
+          [t("No literature note"), "withoutLitNote"],
+          [t("Zotero notes"), "hasNotes"],
+          [t("PDF/snapshot"), "hasAttachment"],
+          [t("Annotations"), "hasAnnotations"]
+        ];
+        for (const [label, key] of withToggles) {
+          this.toggleButton(withRow, label, this.filters[key], (on2) => {
+            this.filters = { ...this.filters, [key]: on2 };
             this.refresh();
           });
-          row.appendText(" " + label);
-        };
-        mk(t("Items with Zotero notes"), "hasNotes");
-        mk(t("Items with a PDF or snapshot"), "hasAttachment");
-        mk(t("Items with annotations"), "hasAnnotations");
-        mk(t("Items without a literature note"), "withoutLitNote");
-        side.createDiv({ cls: "sw-add-notes__filter-group", text: t("Item types") });
-        for (const group of IMPORT_TYPE_GROUPS) {
-          const row = side.createEl("label", { cls: "sw-add-notes__filter" });
-          const input = row.createEl("input", { type: "checkbox" });
-          input.checked = this.filters.types.includes(group);
-          input.addEventListener("change", () => {
-            const types = new Set(this.filters.types);
-            if (input.checked)
-              types.add(group);
-            else
-              types.delete(group);
-            this.filters = { ...this.filters, types: [...types] };
-            this.refresh();
-          });
-          row.appendText(" " + t(TYPE_GROUP_LABELS[group]));
         }
-        side.createDiv({ cls: "sw-add-notes__filter-group", text: t("Collections") });
-        const colWrap = side.createDiv({ cls: "sw-add-notes__collections" });
-        const colSearch = colWrap.createEl("input", {
-          cls: "sw-add-notes__collection-search",
-          attr: { type: "search", placeholder: t("Filter collections\u2026") }
+        side.createDiv({
+          cls: "sw-add-notes__filter-group",
+          text: t("Show item types")
         });
-        colSearch.value = this.collectionQuery;
-        colSearch.addEventListener("input", () => {
-          this.collectionQuery = colSearch.value;
-          this.renderCollectionList();
+        const typeRow = side.createDiv({ cls: "sw-add-notes__toggles" });
+        const allBtn = typeRow.createEl("button", {
+          cls: "sw-add-notes__toggle",
+          text: t("All")
         });
-        this.collectionListEl = colWrap.createDiv({
-          cls: "sw-add-notes__collection-list"
-        });
-        this.renderCollectionList();
-      }
-      renderCollectionList() {
-        const list = this.collectionListEl;
-        if (!list)
-          return;
-        list.empty();
-        const uncat = list.createEl("label", { cls: "sw-add-notes__filter" });
-        const uncatBox = uncat.createEl("input", { type: "checkbox" });
-        uncatBox.checked = this.filters.uncategorized;
-        uncatBox.addEventListener("change", () => {
-          this.filters = { ...this.filters, uncategorized: uncatBox.checked };
+        const typeBtns = new Map();
+        const syncTypeButtons = () => {
+          allBtn.toggleClass("is-on", this.filters.types.length === 0);
+          for (const [g4, b3] of typeBtns) {
+            b3.toggleClass("is-on", this.filters.types.includes(g4));
+          }
+        };
+        allBtn.addEventListener("click", () => {
+          this.filters = { ...this.filters, types: [] };
+          syncTypeButtons();
           this.refresh();
         });
-        uncat.appendText(" " + t("Uncategorized"));
+        for (const group of IMPORT_TYPE_GROUPS) {
+          const btn = typeRow.createEl("button", {
+            cls: "sw-add-notes__toggle",
+            text: t(TYPE_GROUP_LABELS[group])
+          });
+          typeBtns.set(group, btn);
+          btn.addEventListener("click", () => {
+            const set = new Set(this.filters.types);
+            if (set.has(group))
+              set.delete(group);
+            else
+              set.add(group);
+            this.filters = { ...this.filters, types: [...set] };
+            syncTypeButtons();
+            this.refresh();
+          });
+        }
+        syncTypeButtons();
+        side.createDiv({ cls: "sw-add-notes__filter-group", text: t("Collections") });
+        this.collectionsEl = side.createDiv({
+          cls: "sw-add-notes__collection-list"
+        });
+        this.renderCollections();
+      }
+      toggleButton(container, label, on2, onToggle) {
+        const btn = container.createEl("button", {
+          cls: "sw-add-notes__toggle",
+          text: label
+        });
+        btn.toggleClass("is-on", on2);
+        btn.addEventListener("click", () => {
+          const next = !btn.hasClass("is-on");
+          btn.toggleClass("is-on", next);
+          onToggle(next);
+        });
+        return btn;
+      }
+      renderCollections() {
+        var _a, _b, _c;
+        const list = this.collectionsEl;
+        if (!list)
+          return;
+        const scroll = list.scrollTop;
+        list.empty();
         const nodes = this.plugin.bibManager.collectionNodes;
-        if (!nodes.length) {
+        const off = new Set(this.filters.excludeCollections);
+        for (const group of (_a = this.plugin.settings.zoteroGroups) != null ? _a : []) {
+          const inGroup = nodes.filter((n2) => n2.groupID === group.id);
+          if (!inGroup.length)
+            continue;
+          list.createDiv({
+            cls: "sw-add-notes__library-heading",
+            text: group.name || `Group ${group.id}`
+          });
+          const byParent = new Map();
+          for (const n2 of inGroup) {
+            const parent = (_b = n2.parentKey) != null ? _b : "";
+            const arr = (_c = byParent.get(parent)) != null ? _c : [];
+            arr.push(n2);
+            byParent.set(parent, arr);
+          }
+          const renderLevel = (parentKey, depth) => {
+            var _a2;
+            for (const node of (_a2 = byParent.get(parentKey)) != null ? _a2 : []) {
+              const token = collectionToken(node.groupID, node.key);
+              const row = list.createDiv({
+                cls: "sw-add-notes__col-item",
+                text: node.name || node.path
+              });
+              row.style.paddingLeft = `${10 + depth * 12}px`;
+              row.toggleClass("is-off", off.has(token));
+              row.addEventListener("click", () => this.toggleCollection(node, off.has(token)));
+              renderLevel(node.key, depth + 1);
+            }
+          };
+          renderLevel("", 0);
+        }
+        if (!list.childElementCount) {
           list.createDiv({
             cls: "sw-add-notes__collection-empty",
             text: t("No collections found")
           });
-          return;
         }
-        const q4 = this.collectionQuery.trim().toLowerCase();
-        const selected = new Set(this.filters.collections);
-        for (const node of nodes) {
-          if (q4 && !node.path.toLowerCase().includes(q4))
-            continue;
-          const token = collectionToken(node.groupID, node.key);
-          const row = list.createEl("label", {
-            cls: "sw-add-notes__filter sw-add-notes__collection"
-          });
-          row.style.paddingLeft = `${8 + node.depth * 10}px`;
-          const input = row.createEl("input", { type: "checkbox" });
-          input.checked = selected.has(token);
-          input.addEventListener("change", () => {
-            const set = new Set(this.filters.collections);
-            if (input.checked)
-              set.add(token);
-            else
-              set.delete(token);
-            this.filters = { ...this.filters, collections: [...set] };
-            this.refresh();
-          });
-          row.appendText(" " + node.path);
+        list.scrollTop = scroll;
+      }
+      toggleCollection(node, turnOn) {
+        const tokens2 = descendantTokens(this.plugin.bibManager.collectionNodes, node.groupID, node.key);
+        const set = new Set(this.filters.excludeCollections);
+        for (const t4 of tokens2) {
+          if (turnOn)
+            set.delete(t4);
+          else
+            set.add(t4);
         }
+        this.filters = { ...this.filters, excludeCollections: [...set] };
+        this.renderCollections();
+        this.refresh();
       }
       buildLitNoteIndex() {
         var _a;

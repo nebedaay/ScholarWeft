@@ -13,6 +13,8 @@ export interface CollectionNode {
   key: string;
   groupID: number;
   name: string;
+  /** Parent collection key within the same library, or null for top level. */
+  parentKey: string | null;
   /** Full "Parent > Child" path — disambiguates duplicate names. */
   path: string;
   /** Nesting depth (0 = top level), for indentation. */
@@ -68,10 +70,13 @@ export function buildCollectionNodes(
     .filter((c) => !!c?.key)
     .map((c) => {
       const names = ancestors(c.key);
+      const parent = c.parentCollection;
       return {
         key: c.key,
         groupID,
         name: c.name,
+        parentKey:
+          typeof parent === 'string' && byKey.has(parent) ? parent : null,
         path: names.join(' > '),
         depth: Math.max(0, names.length - 1),
       };
@@ -80,4 +85,30 @@ export function buildCollectionNodes(
       (a, b) =>
         collator.compare(a.path, b.path) || collator.compare(a.key, b.key)
     );
+}
+
+/**
+ * The token of every collection under `rootKey` (itself included), within one
+ * library. Turning a collection off turns its whole subtree off, so the UI
+ * needs the full set at once.
+ */
+export function descendantTokens(
+  nodes: readonly CollectionNode[],
+  groupID: number,
+  rootKey: string
+): string[] {
+  const byParent = new Map<string, CollectionNode[]>();
+  for (const n of nodes) {
+    if (n.groupID !== groupID || !n.parentKey) continue;
+    const list = byParent.get(n.parentKey) ?? [];
+    list.push(n);
+    byParent.set(n.parentKey, list);
+  }
+  const out: string[] = [];
+  const walk = (key: string) => {
+    out.push(collectionToken(groupID, key));
+    for (const child of byParent.get(key) ?? []) walk(child.key);
+  };
+  walk(rootKey);
+  return out;
 }

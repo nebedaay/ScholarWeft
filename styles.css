@@ -1799,24 +1799,66 @@ Annotation callouts
   font-weight: var(--font-semibold);
   color: var(--text-muted);
 }
-.sw-add-notes__collections {
+/* Compact on/off pills for the "show items with" and item-type filters. */
+.sw-add-notes__toggles {
   display: flex;
-  flex-direction: column;
-  gap: var(--size-4-1);
+  flex-wrap: wrap;
+  gap: 4px;
 }
-.sw-add-notes__collection-search {
-  width: 100%;
+.sw-add-notes__toggle {
+  font-size: var(--font-ui-smaller);
+  line-height: 1.2;
+  padding: 2px 7px;
+  height: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: pointer;
 }
+.sw-add-notes__toggle:hover {
+  background: var(--background-modifier-hover);
+}
+.sw-add-notes__toggle.is-on {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+/* Collections: a compact, selectable tree, one heading per library. */
 .sw-add-notes__collection-list {
-  max-height: 220px;
+  flex: 1 1 auto;
+  min-height: 80px;
+  max-height: 260px;
   overflow-y: auto;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   padding: var(--size-4-1) 0;
 }
-.sw-add-notes__collection {
+.sw-add-notes__library-heading {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+  padding: var(--size-4-1) var(--size-4-2);
+  position: sticky;
+  top: 0;
+  background: var(--background-secondary);
+}
+.sw-add-notes__col-item {
+  font-size: var(--font-ui-smaller);
+  line-height: 1.35;
+  padding: 1px 8px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+.sw-add-notes__col-item:hover {
+  background: var(--background-modifier-hover);
+}
+.sw-add-notes__col-item.is-off {
+  color: var(--text-faint);
+  text-decoration: line-through;
 }
 .sw-add-notes__collection-empty {
   padding: var(--size-4-1) var(--size-4-2);

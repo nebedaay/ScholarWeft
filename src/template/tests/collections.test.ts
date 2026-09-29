@@ -2,6 +2,7 @@ import {
   buildCollectionNodes,
   collectionToken,
   collectionTokens,
+  descendantTokens,
 } from '../collections';
 
 describe('buildCollectionNodes()', () => {
@@ -34,6 +35,18 @@ describe('buildCollectionNodes()', () => {
 
   it('carries the library id onto every node', () => {
     expect(buildCollectionNodes(raw, 7).every((n) => n.groupID === 7)).toBe(true);
+  });
+
+  it('records each node\'s parent key (null when top-level or missing)', () => {
+    const byKey = new Map(buildCollectionNodes(raw, 1).map((n) => [n.key, n]));
+    expect(byKey.get('p')!.parentKey).toBeNull();
+    expect(byKey.get('c')!.parentKey).toBe('p');
+    expect(byKey.get('g')!.parentKey).toBe('c');
+    const orphan = buildCollectionNodes(
+      [{ key: 'a', name: 'A', parentCollection: 'gone' }],
+      1
+    );
+    expect(orphan[0].parentKey).toBeNull();
   });
 
   it('truncates a path whose parent is missing, without looping', () => {
@@ -69,5 +82,28 @@ describe('collectionTokens()', () => {
     expect(collectionTokens(1, undefined)).toEqual([]);
     expect(collectionTokens(1, null)).toEqual([]);
     expect(collectionTokens(1, ['', 'x'])).toEqual(['1:x']);
+  });
+});
+
+describe('descendantTokens()', () => {
+  const raw = [
+    { key: 'p', name: 'Parent' },
+    { key: 'c', name: 'Child', parentCollection: 'p' },
+    { key: 'g', name: 'Grandchild', parentCollection: 'c' },
+    { key: 's', name: 'Sibling' },
+  ];
+  const nodes = buildCollectionNodes(raw, 1);
+
+  it('returns a node and its whole subtree, its own library only', () => {
+    expect(new Set(descendantTokens(nodes, 1, 'p'))).toEqual(
+      new Set(['1:p', '1:c', '1:g'])
+    );
+    expect(descendantTokens(nodes, 1, 'g')).toEqual(['1:g']);
+    expect(descendantTokens(nodes, 1, 's')).toEqual(['1:s']);
+  });
+
+  it('ignores collections from other libraries', () => {
+    const other = buildCollectionNodes([{ key: 'x', name: 'X' }], 2);
+    expect(descendantTokens([...nodes, ...other], 1, 'p')).not.toContain('2:x');
   });
 });

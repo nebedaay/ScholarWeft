@@ -19,7 +19,8 @@ import {
 } from '../template/import-order';
 import { readChildren } from '../template/children-cache';
 import type { RawZoteroChildren } from '../template/children';
-import { collectionToken, collectionTokens } from '../template/collections';
+import { collectionToken, collectionTokens, descendantTokens } from '../template/collections';
+import type { CollectionNode } from '../template/collections';
 import { excerptForResult } from '../template/search-excerpt';
 import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
 
@@ -86,8 +87,7 @@ export class AddLiteratureNotesModal extends Modal {
   private matches: PartialCSLEntry[] = [];
   private termsByKey = new Map<string, string[]>();
   private litNotes = new Set<string>();
-  private collectionQuery = '';
-  private collectionListEl: HTMLElement | null = null;
+  private collectionsEl: HTMLElement | null = null;
 
   constructor(app: App, plugin: ReferenceList) {
     super(app);
@@ -238,13 +238,13 @@ export class AddLiteratureNotesModal extends Modal {
         })
         .catch((e) => console.warn('[sw:add-notes] presence index failed', e));
     }
-    // Collections load fast and populate the checklist; nothing is fetched if
-    // the index is already built.
+    // Collections load fast and populate the tree; nothing is fetched if the
+    // index is already built.
     if (!this.plugin.bibManager.collectionsReady) {
       void this.plugin.bibManager
         .ensureCollectionsIndex()
         .then(() => {
-          if (this.containerEl.isConnected) this.renderCollectionList();
+          if (this.containerEl.isConnected) this.renderCollections();
         })
         .catch((e) =>
           console.warn('[sw:add-notes] collections index failed', e)
@@ -280,103 +280,166 @@ export class AddLiteratureNotesModal extends Modal {
   }
 
   private renderFilters(side: HTMLElement): void {
-    const mk = (label: string, key: 'hasNotes' | 'hasAttachment' | 'hasAnnotations' | 'withoutLitNote') => {
-      const row = side.createEl('label', { cls: 'sw-add-notes__filter' });
-      const input = row.createEl('input', { type: 'checkbox' });
-      input.checked = this.filters[key];
-      input.addEventListener('change', () => {
-        this.filters = { ...this.filters, [key]: input.checked };
+    // ── Show items with ──────────────────────────────────────────────────────
+    side.createDiv({
+      cls: 'sw-add-notes__filter-group',
+      text: t('Show items with'),
+    });
+    const withRow = side.createDiv({ cls: 'sw-add-notes__toggles' });
+    const withToggles: Array<[string, 'hasNotes' | 'hasAttachment' | 'hasAnnotations' | 'withoutLitNote']> = [
+      [t('No literature note'), 'withoutLitNote'],
+      [t('Zotero notes'), 'hasNotes'],
+      [t('PDF/snapshot'), 'hasAttachment'],
+      [t('Annotations'), 'hasAnnotations'],
+    ];
+    for (const [label, key] of withToggles) {
+      this.toggleButton(withRow, label, this.filters[key], (on) => {
+        this.filters = { ...this.filters, [key]: on };
         this.refresh();
       });
-      row.appendText(' ' + label);
-    };
-    mk(t('Items with Zotero notes'), 'hasNotes');
-    mk(t('Items with a PDF or snapshot'), 'hasAttachment');
-    mk(t('Items with annotations'), 'hasAnnotations');
-    mk(t('Items without a literature note'), 'withoutLitNote');
-
-    // Item types: a union of the checked groups; NONE checked means every type,
-    // so the default never hides anything.
-    side.createDiv({ cls: 'sw-add-notes__filter-group', text: t('Item types') });
-    for (const group of IMPORT_TYPE_GROUPS) {
-      const row = side.createEl('label', { cls: 'sw-add-notes__filter' });
-      const input = row.createEl('input', { type: 'checkbox' });
-      input.checked = this.filters.types.includes(group);
-      input.addEventListener('change', () => {
-        const types = new Set(this.filters.types);
-        if (input.checked) types.add(group);
-        else types.delete(group);
-        this.filters = { ...this.filters, types: [...types] };
-        this.refresh();
-      });
-      row.appendText(' ' + t(TYPE_GROUP_LABELS[group]));
     }
 
-    // Collections: a UNION (in at least one checked collection). Searchable
-    // because a real library has hundreds, nested; the path disambiguates
-    // duplicate names. Items in no collection are reachable via Uncategorized.
-    side.createDiv({ cls: 'sw-add-notes__filter-group', text: t('Collections') });
-    const colWrap = side.createDiv({ cls: 'sw-add-notes__collections' });
-    const colSearch = colWrap.createEl('input', {
-      cls: 'sw-add-notes__collection-search',
-      attr: { type: 'search', placeholder: t('Filter collections…') },
+    // ── Show item types ──────────────────────────────────────────────────────
+    side.createDiv({
+      cls: 'sw-add-notes__filter-group',
+      text: t('Show item types'),
     });
-    colSearch.value = this.collectionQuery;
-    colSearch.addEventListener('input', () => {
-      this.collectionQuery = colSearch.value;
-      this.renderCollectionList();
+    const typeRow = side.createDiv({ cls: 'sw-add-notes__toggles' });
+    // "All" is on exactly when nothing specific is chosen; picking a type turns
+    // it off, and clicking All clears the specific choices.
+    const allBtn = typeRow.createEl('button', {
+      cls: 'sw-add-notes__toggle',
+      text: t('All'),
     });
-    this.collectionListEl = colWrap.createDiv({
-      cls: 'sw-add-notes__collection-list',
-    });
-    this.renderCollectionList();
-  }
-
-  /** Fill the collection checklist from the index, honouring the search box. */
-  private renderCollectionList(): void {
-    const list = this.collectionListEl;
-    if (!list) return;
-    list.empty();
-
-    const uncat = list.createEl('label', { cls: 'sw-add-notes__filter' });
-    const uncatBox = uncat.createEl('input', { type: 'checkbox' });
-    uncatBox.checked = this.filters.uncategorized;
-    uncatBox.addEventListener('change', () => {
-      this.filters = { ...this.filters, uncategorized: uncatBox.checked };
+    const typeBtns = new Map<ImportTypeGroup, HTMLButtonElement>();
+    const syncTypeButtons = () => {
+      allBtn.toggleClass('is-on', this.filters.types.length === 0);
+      for (const [g, b] of typeBtns) {
+        b.toggleClass('is-on', this.filters.types.includes(g));
+      }
+    };
+    allBtn.addEventListener('click', () => {
+      this.filters = { ...this.filters, types: [] };
+      syncTypeButtons();
       this.refresh();
     });
-    uncat.appendText(' ' + t('Uncategorized'));
+    for (const group of IMPORT_TYPE_GROUPS) {
+      const btn = typeRow.createEl('button', {
+        cls: 'sw-add-notes__toggle',
+        text: t(TYPE_GROUP_LABELS[group]),
+      });
+      typeBtns.set(group, btn);
+      btn.addEventListener('click', () => {
+        const set = new Set(this.filters.types);
+        if (set.has(group)) set.delete(group);
+        else set.add(group);
+        this.filters = { ...this.filters, types: [...set] };
+        syncTypeButtons();
+        this.refresh();
+      });
+    }
+    syncTypeButtons();
+
+    // ── Collections ──────────────────────────────────────────────────────────
+    side.createDiv({ cls: 'sw-add-notes__filter-group', text: t('Collections') });
+    this.collectionsEl = side.createDiv({
+      cls: 'sw-add-notes__collection-list',
+    });
+    this.renderCollections();
+  }
+
+  /**
+   * A small on/off pill. Clicking flips it; the handler receives the new state.
+   */
+  private toggleButton(
+    container: HTMLElement,
+    label: string,
+    on: boolean,
+    onToggle: (on: boolean) => void
+  ): HTMLButtonElement {
+    const btn = container.createEl('button', {
+      cls: 'sw-add-notes__toggle',
+      text: label,
+    });
+    btn.toggleClass('is-on', on);
+    btn.addEventListener('click', () => {
+      const next = !btn.hasClass('is-on');
+      btn.toggleClass('is-on', next);
+      onToggle(next);
+    });
+    return btn;
+  }
+
+  /**
+   * The collection tree: one heading per enabled library, then its top-level
+   * collections, each subcollection nested under its parent (name only, no
+   * "Parent > Child" prefix). Collections are ON by default; clicking one off
+   * switches its whole subtree off.
+   */
+  private renderCollections(): void {
+    const list = this.collectionsEl;
+    if (!list) return;
+    const scroll = list.scrollTop;
+    list.empty();
 
     const nodes = this.plugin.bibManager.collectionNodes;
-    if (!nodes.length) {
+    const off = new Set(this.filters.excludeCollections);
+
+    for (const group of this.plugin.settings.zoteroGroups ?? []) {
+      const inGroup = nodes.filter((n) => n.groupID === group.id);
+      if (!inGroup.length) continue;
+
+      list.createDiv({
+        cls: 'sw-add-notes__library-heading',
+        text: group.name || `Group ${group.id}`,
+      });
+      const byParent = new Map<string, typeof inGroup>();
+      for (const n of inGroup) {
+        const parent = n.parentKey ?? '';
+        const arr = byParent.get(parent) ?? [];
+        arr.push(n);
+        byParent.set(parent, arr);
+      }
+      const renderLevel = (parentKey: string, depth: number) => {
+        for (const node of byParent.get(parentKey) ?? []) {
+          const token = collectionToken(node.groupID, node.key);
+          const row = list.createDiv({
+            cls: 'sw-add-notes__col-item',
+            text: node.name || node.path,
+          });
+          row.style.paddingLeft = `${10 + depth * 12}px`;
+          row.toggleClass('is-off', off.has(token));
+          row.addEventListener('click', () => this.toggleCollection(node, off.has(token)));
+          renderLevel(node.key, depth + 1);
+        }
+      };
+      renderLevel('', 0);
+    }
+
+    if (!list.childElementCount) {
       list.createDiv({
         cls: 'sw-add-notes__collection-empty',
         text: t('No collections found'),
       });
-      return;
     }
+    list.scrollTop = scroll;
+  }
 
-    const q = this.collectionQuery.trim().toLowerCase();
-    const selected = new Set(this.filters.collections);
-    for (const node of nodes) {
-      if (q && !node.path.toLowerCase().includes(q)) continue;
-      const token = collectionToken(node.groupID, node.key);
-      const row = list.createEl('label', {
-        cls: 'sw-add-notes__filter sw-add-notes__collection',
-      });
-      // Indent by nesting depth so the hierarchy reads at a glance.
-      row.style.paddingLeft = `${8 + node.depth * 10}px`;
-      const input = row.createEl('input', { type: 'checkbox' });
-      input.checked = selected.has(token);
-      input.addEventListener('change', () => {
-        const set = new Set(this.filters.collections);
-        if (input.checked) set.add(token);
-        else set.delete(token);
-        this.filters = { ...this.filters, collections: [...set] };
-        this.refresh();
-      });
-      row.appendText(' ' + node.path);
+  /** Turn a collection's whole subtree on/off and re-apply the filters. */
+  private toggleCollection(node: CollectionNode, turnOn: boolean): void {
+    const tokens = descendantTokens(
+      this.plugin.bibManager.collectionNodes,
+      node.groupID,
+      node.key
+    );
+    const set = new Set(this.filters.excludeCollections);
+    for (const t of tokens) {
+      if (turnOn) set.delete(t);
+      else set.add(t);
     }
+    this.filters = { ...this.filters, excludeCollections: [...set] };
+    this.renderCollections();
+    this.refresh();
   }
 
   /** Vault-wide literature-note existence, by citekey (one scan, cached). */

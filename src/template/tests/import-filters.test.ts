@@ -25,8 +25,7 @@ describe('defaultFilters()', () => {
       hasAnnotations: false,
       withoutLitNote: true,
       types: [],
-      collections: [],
-      uncategorized: false,
+      excludeCollections: [],
     });
   });
 });
@@ -88,31 +87,26 @@ describe('passesImportFilters()', () => {
     expect(passesImportFilters(flags({ typeGroup: 'other' }), f)).toBe(false);
   });
 
-  it('matches ANY selected collection (union, not intersection)', () => {
-    const f: ImportFilters = { ...base, collections: ['1:aa', '1:bb'] };
-    expect(passesImportFilters(flags({ collections: ['1:aa'] }), f)).toBe(true);
-    expect(passesImportFilters(flags({ collections: ['1:cc', '1:bb'] }), f)).toBe(true);
-    expect(passesImportFilters(flags({ collections: ['1:cc'] }), f)).toBe(false);
-    expect(passesImportFilters(flags({ collections: [] }), f)).toBe(false);
+  it('shows items in a collection when nothing is switched off', () => {
+    expect(passesImportFilters(flags({ collections: ['1:aa'] }), base)).toBe(true);
   });
 
-  it('matches collections within the library they belong to', () => {
-    const f: ImportFilters = { ...base, collections: ['1:aa'] };
-    // Same key, different library → not a match.
-    expect(passesImportFilters(flags({ collections: ['2:aa'] }), f)).toBe(false);
-  });
-
-  it('Uncategorized keeps only items in no collection', () => {
-    const f: ImportFilters = { ...base, uncategorized: true };
-    expect(passesImportFilters(flags({ collections: [] }), f)).toBe(true);
+  it('hides an item once EVERY collection it is in is switched off', () => {
+    const f: ImportFilters = { ...base, excludeCollections: ['1:aa'] };
     expect(passesImportFilters(flags({ collections: ['1:aa'] }), f)).toBe(false);
+    // Still in another, still-on collection → shown.
+    expect(passesImportFilters(flags({ collections: ['1:aa', '1:bb'] }), f)).toBe(true);
   });
 
-  it('Uncategorized widens the collection filter rather than replacing it', () => {
-    const f: ImportFilters = { ...base, collections: ['1:aa'], uncategorized: true };
-    expect(passesImportFilters(flags({ collections: ['1:aa'] }), f)).toBe(true);
+  it('leaves items in no collection alone (nothing to switch off)', () => {
+    const f: ImportFilters = { ...base, excludeCollections: ['1:aa', '1:bb'] };
     expect(passesImportFilters(flags({ collections: [] }), f)).toBe(true);
-    expect(passesImportFilters(flags({ collections: ['1:zz'] }), f)).toBe(false);
+  });
+
+  it('scopes excluded collections to their library', () => {
+    const f: ImportFilters = { ...base, excludeCollections: ['1:aa'] };
+    // Same key, different library → not excluded.
+    expect(passesImportFilters(flags({ collections: ['2:aa'] }), f)).toBe(true);
   });
 });
 

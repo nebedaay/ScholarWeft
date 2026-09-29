@@ -85,13 +85,12 @@ export interface ImportFilters {
    */
   types: ImportTypeGroup[];
   /**
-   * Selected collection tokens (`groupID:key`). EMPTY means "any collection".
-   * An item matches when it is in AT LEAST ONE of the selected collections
-   * (union, not intersection).
+   * Collection tokens (`groupID:key`) turned OFF. Collections are ON by default
+   * (a visibility tree, not a whitelist), and switching one off also switches
+   * off its subtree, so this holds the token of the collection and every
+   * descendant. An item is hidden only when EVERY collection it is in is off.
    */
-  collections: string[];
-  /** Also show items that are in NO collection at all. */
-  uncategorized: boolean;
+  excludeCollections: string[];
 }
 
 export function defaultFilters(): ImportFilters {
@@ -101,8 +100,7 @@ export function defaultFilters(): ImportFilters {
     hasAnnotations: false,
     withoutLitNote: true,
     types: [],
-    collections: [],
-    uncategorized: false,
+    excludeCollections: [],
   };
 }
 
@@ -160,12 +158,14 @@ export function passesImportFilters(
   if (filters.types.length && !filters.types.includes(flags.typeGroup)) {
     return false;
   }
-  if (filters.collections.length || filters.uncategorized) {
-    const inSelected = flags.collections.some((c) =>
-      filters.collections.includes(c)
+  // Collections are ON by default; an item is hidden only when every collection
+  // it belongs to has been switched off. Items in NO collection are unaffected
+  // (there is nothing to switch off).
+  if (filters.excludeCollections.length && flags.collections.length) {
+    const allOff = flags.collections.every((c) =>
+      filters.excludeCollections.includes(c)
     );
-    const uncategorized = flags.collections.length === 0;
-    if (!inSelected && !(filters.uncategorized && uncategorized)) return false;
+    if (allOff) return false;
   }
   return true;
 }
