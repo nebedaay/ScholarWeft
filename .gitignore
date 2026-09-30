@@ -45,5 +45,8 @@ tmp/
 ~$*
 .~lock.*#
 
+# Duplicate copies Finder/browser makes when a name collides — "main (1).js"
+* ([0-9]*).*
+
 # Local working notes (session handoff) — not for the public repo
 HANDOFF.md
