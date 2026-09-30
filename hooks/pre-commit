@@ -1,0 +1,92 @@
+#!/bin/sh
+# ScholarWeft pre-commit: refuse a commit whose markdown has hard line wraps.
+#
+# Obsidian renders markdown with proportional fonts and hides the markup, so a
+# source-level wrap breaks at a random place on screen. The vault convention is
+# one logical line per paragraph (see "AI OS/Me.md" → Text Formatting).
+#
+# This check exists because asking an agent (or a person) not to wrap does not
+# reliably work — wrapping is a generation-time habit, not a decision. The gate
+# is mechanical on purpose.
+#
+# Bypass with:  git commit --no-verify
+#
+# The checker lives at <vault>/scripts/unwrap-md.py. It is resolved from the
+# repo root so the hook works no matter where the file is run from.
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+
+# Locate the shared checker: relative to the repo, then up the tree.
+checker=""
+for candidate in \
+    "$repo_root/scripts/unwrap-md.py" \
+    "$repo_root/../../scripts/unwrap-md.py" \
+    "$repo_root/../scripts/unwrap-md.py"
+do
+    if [ -f "$candidate" ]; then
+        checker=$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")
+        break
+    fi
+done
+
+if [ -z "$checker" ]; then
+    echo "pre-commit: unwrap-md.py not found; skipping the wrap check." >&2
+    exit 0
+fi
+
+# Only the markdown files in THIS commit, that still exist on disk.
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' || true)
+[ -z "$files" ] && exit 0
+
+# Template files are code, not prose: their "lines" are the template's output
+# structure (Eta/Liquid source, indented JS), so they are never unwrapped.
+prose=""
+for f in $files; do
+    case "$f" in
+        *sw-literature-note-templates/*|*sw-zotlit-templates/*|*sw-markdown-templates/*) continue ;;
+    esac
+    [ -f "$f" ] && prose="$prose $f"
+done
+[ -z "$prose" ] && exit 0
+
+if ! python3 "$checker" --check $prose; then
+    cat >&2 <<'EOF'
+
+pre-commit: the markdown above has hard line wraps (see the vault convention:
+one logical line per paragraph). Fix with:
+
+    npm run fix-wraps
+
+or commit with --no-verify to skip this check.
+EOF
+    exit 1
+fi
+
+# Blank-line rule (pandoc strict): a blank line between block elements.
+blanks="$repo_root/scripts/../../scripts/blankline-md.py"
+for candidate in \
+    "$repo_root/scripts/blankline-md.py" \
+    "$repo_root/../../scripts/blankline-md.py" \
+    "$repo_root/../scripts/blankline-md.py"
+do
+    if [ -f "$candidate" ]; then
+        blanks=$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")
+        break
+    fi
+done
+
+if [ -f "$blanks" ] && ! python3 "$blanks" --check $prose; then
+    cat >&2 <<'EOF'
+
+pre-commit: the markdown above is missing blank lines between block elements
+(pandoc strict: heading↔text, paragraph↔list, …; items within a list stay
+tight). Fix with:
+
+    npm run fix-blanks
+
+or commit with --no-verify to skip this check.
+EOF
+    exit 1
+fi

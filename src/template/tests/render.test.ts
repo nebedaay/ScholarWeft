@@ -22,7 +22,7 @@ import type { RawZoteroChildren } from '../children';
 import type { CachedEntry } from '../context';
 
 const templateSource = readFileSync(
-  join(__dirname, '../../../sw-note-templates/sw-note.eta.md'),
+  join(__dirname, '../../../sw-literature-note-templates/sw-note.eta.md'),
   'utf8'
 );
 

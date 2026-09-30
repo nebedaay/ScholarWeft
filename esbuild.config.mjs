@@ -101,9 +101,9 @@ const bundleAssetsPlugin = {
 			// template and set up Templater" button in settings can write it
 			// into the vault. NOT auto-extracted to the plugin dir.
 			await readDir('sw-markdown-templates');
-			// OUR single-file note templates (item-root). Auto-extracted to the
-			// plugin dir so the in-process import path can render them.
-			await readDir('sw-note-templates');
+			// OUR single-file literature-note template (item-root). Auto-extracted
+			// to the plugin dir so the in-process import path can render it.
+			await readDir('sw-literature-note-templates');
 
 			return {
 				contents: `export const BUNDLED_ASSETS = ${JSON.stringify(assets)};`,

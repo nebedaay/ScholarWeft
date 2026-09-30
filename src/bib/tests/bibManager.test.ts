@@ -1516,3 +1516,33 @@ describe('findCitekeyByStableKey with duplicate citekeys across libraries', () =
     expect(manager.findCitekeyByStableKey('CCC33333')).toBeNull();
   });
 });
+
+describe('evictChildrenCache', () => {
+  it('drops only the named snapshot, leaving others intact', () => {
+    const { manager } = makeManager([]);
+    // Avoid scheduling the debounced file write (a real 2.5 s timer).
+    const save = jest.fn();
+    (manager as any).scheduleChildrenCacheSave = save;
+    manager.childrenCache = {
+      NS5RTCYT: { version: 110, at: 1, children: { annotations: [] } },
+      OTHER123: { version: 42, at: 2, children: { annotations: [] } },
+    };
+    manager.evictChildrenCache('NS5RTCYT');
+    expect(manager.childrenCache.NS5RTCYT).toBeUndefined();
+    expect(manager.childrenCache.OTHER123).toBeDefined();
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op for an unknown or empty key', () => {
+    const { manager } = makeManager([]);
+    const save = jest.fn();
+    (manager as any).scheduleChildrenCacheSave = save;
+    manager.childrenCache = {
+      KEEP1111: { version: 1, at: 1, children: {} },
+    };
+    manager.evictChildrenCache('missing');
+    manager.evictChildrenCache('');
+    expect(Object.keys(manager.childrenCache)).toEqual(['KEEP1111']);
+    expect(save).not.toHaveBeenCalled();
+  });
+});

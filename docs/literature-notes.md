@@ -27,7 +27,7 @@ Using a dedicated folder keeps citations resolvable and tidy, but any folder wor
 
 ## Creating notes
 
-There are several ways to create literature notes using ScholarWeft, both through commands in the command palette and while editing a note. 
+There are several ways to create literature notes using ScholarWeft, both through commands in the command palette and while editing a note.
 
 ### Creating notes from the command palette
 
@@ -37,6 +37,7 @@ There are several ways to create literature notes using ScholarWeft, both throug
 - Individual notes can also be created from the “**Create literature note**” button (a page icon with a + sign) on each reference in the reference sidebar and in the tooltip that pops up when you mouse over a citation. Linked citations that have no literature note are easy to spot by their purple dotted underline. After importing the literature note, the underline turns blue.
 
 <img src="../images/add-literature-note-modal.png" width="100%" alt="Add Literature Notes from Zotero"/>
+
 #### The Add Literature Notes from Zotero (search and filter) command
 
 This command is the most direct way to import when you know what you are looking for but not its citekey. It requires no extra plugins or dependencies.
@@ -46,12 +47,10 @@ This plugin uses the same two search modes you use to search and insert citation
 This search offers several filters to help you locate the items you want:
 
   - **Show items with** narrows to items that have a **Zotero note**, a **PDF or snapshot**, or **annotations**, or that ***lack* a literature note** (on by default, because we’re searching notes to import).
-  - **Show item types** narrows to **books**, **articles**, **book sections**,
-    **newspaper/magazine articles**, **web pages**, or **other** (everything else). The default is **all**.
+  - **Show item types** narrows to **books**, **articles**, **book sections**, **newspaper/magazine articles**, **web pages**, or **other** (everything else). The default is **all**.
   - **Collections** is a tree of your collections, one heading per library you’ve enabled in ScholarWeft settings, with subcollections nested under their parents. Everything is on at first; turning a collection off turns its whole branch off, and **All**, **None** and the library headings let you isolate one branch quickly.
   - **Order** the results by the search ranking, author/title/year, or date added. Your last search and ordering are remembered for next time.
   - You can select results individually by clicking each row, or take them all with **Select all results**; re-importing an existing item merges into its note rather than duplicating it. A single imported note opens (turn that off with **Open a single imported note**).
-
 
 ## Literature notes produced by the default template
 
@@ -132,7 +131,7 @@ ScholarWeft ships one self-contained template that emits **both** the frontmatte
 To inspect it, the bundled copy is extracted into the plugin folder:
 
 ```
-.obsidian/plugins/scholar-weft/sw-note-templates/sw-note.eta.md
+.obsidian/plugins/scholar-weft/sw-literature-note-templates/sw-note.eta.md
 ```
 
 The plugin writes it there on load (bundled inside `main.js`, extracted automatically), so you can open it any time to see exactly what the default note does. That folder is **plugin-managed output, not a place to hand-edit**: ScholarWeft rewrites the file whenever the bundled copy changes (a plugin update), so an edit made there is eventually overwritten. To customise, make a copy in your vault — the next section does that for you.

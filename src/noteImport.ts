@@ -10,6 +10,7 @@
 
 import { App, Notice, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
+import { debugLog } from './helpers';
 import {
   DEFAULT_ZOTERO_PORT,
   citekeysForItemKeys,
@@ -458,10 +459,10 @@ export async function createOrUpdateOwnNote(
   if (existing != null && isZotLitManaged(existing)) {
     const name = notePath.split('/').pop() ?? notePath;
     if ((await resolveZotLitHandling(plugin, name)) === 'leave') {
-      console.log('[sw:import] leaving the ZotLit-managed note alone:', notePath);
+      debugLog('[sw:import] leaving the ZotLit-managed note alone:', notePath);
       return true;
     }
-    console.log('[sw:import] converting ZotLit note', notePath);
+    debugLog('[sw:import] converting ZotLit note', notePath);
   }
 
   // One-time `related` → `sw-related` transfer, for an EXISTING note whose key

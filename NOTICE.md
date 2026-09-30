@@ -1,6 +1,7 @@
 ---
 created: 2026-08-25 20:38
 ---
+
 # Third-Party Notices
 
 ScholarWeft incorporates code from the following open-source projects.
@@ -45,8 +46,7 @@ SOFTWARE.
 - **Repository:** https://github.com/Juris-M/citeproc-js
 - **License:** AGPL-3.0 (used under the AGPL-3.0 option of the dual CPAL-1.0 / AGPL-3.0 license)
 
-The full text of the GNU Affero General Public License v3.0 is available at:
-https://www.gnu.org/licenses/agpl-3.0.html
+The full text of the GNU Affero General Public License v3.0 is available at: https://www.gnu.org/licenses/agpl-3.0.html
 
 ---
 
@@ -57,10 +57,7 @@ https://www.gnu.org/licenses/agpl-3.0.html
 - **Repository:** https://github.com/retorquere/zotero-better-bibtex
 - **License:** AGPL-3.0
 
-`scripts/sw-zotero.lua` is derived from the `zotero-live-citations` Pandoc filter
-distributed with Better BibTeX. It has been integrated into this plugin for use
-as a local Pandoc Lua filter. The full AGPL-3.0 license text is available at:
-https://www.gnu.org/licenses/agpl-3.0.html
+`scripts/sw-zotero.lua` is derived from the `zotero-live-citations` Pandoc filter distributed with Better BibTeX. It has been integrated into this plugin for use as a local Pandoc Lua filter. The full AGPL-3.0 license text is available at: https://www.gnu.org/licenses/agpl-3.0.html
 
 ---
 
@@ -120,25 +117,10 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 - **Repository:** https://github.com/aidenlx/zotlit
 - **License:** AGPL-3.0
 
-ScholarWeft's ZotLit-compatible note templates and the engine configuration that
-renders them are written to match ZotLit's behaviour, and two small helpers are
-adapted from its source:
+ScholarWeft's ZotLit-compatible note templates and the engine configuration that renders them are written to match ZotLit's behaviour, and two small helpers are adapted from its source:
 
-- `src/template/blockquote.ts` — adapted from `packages/templates/src/blockquote.ts`
-  (blockquote `>`-prefix formatting, including the collapsing of consecutive
-  blank lines).
-- `src/template/color.ts` — adapted from `packages/db/src/lib/zt-color.ts`
-  (Zotero annotation colour → palette name). The two legacy/importer-written
-  colours are mapped to the nearest current colour rather than given their own
-  names; that mapping is ScholarWeft's choice, not ZotLit's.
-- `src/template/zotlit-helpers.ts` — adapted from
-  `packages/templates/src/{basename,embed,filename-suffix,coerce}.ts` (the
-  `basename`, `embed`, filename-collision `suffix` helpers, and the
-  `coerceOutput` filter) so a template written for ZotLit renders the same here.
+- `src/template/blockquote.ts` — adapted from `packages/templates/src/blockquote.ts` (blockquote `>`-prefix formatting, including the collapsing of consecutive blank lines).
+- `src/template/color.ts` — adapted from `packages/db/src/lib/zt-color.ts` (Zotero annotation colour → palette name). The two legacy/importer-written colours are mapped to the nearest current colour rather than given their own names; that mapping is ScholarWeft's choice, not ZotLit's.
+- `src/template/zotlit-helpers.ts` — adapted from `packages/templates/src/{basename,embed,filename-suffix,coerce}.ts` (the `basename`, `embed`, filename-collision `suffix` helpers, and the `coerceOutput` filter) so a template written for ZotLit renders the same here.
 
-`src/template/engine.ts` reproduces ZotLit's Eta configuration (data-root name,
-auto-trim, `bq`/`basename`/`suffix`/`embed` helpers, and `include` semantics) so
-the bundled templates render identically. Only the data-root binding uses
-ZotLit's `zt` name, because these templates are written against it; ScholarWeft's
-own code uses its own naming. The full AGPL-3.0 license text is available at:
-https://www.gnu.org/licenses/agpl-3.0.html
+`src/template/engine.ts` reproduces ZotLit's Eta configuration (data-root name, auto-trim, `bq`/`basename`/`suffix`/`embed` helpers, and `include` semantics) so the bundled templates render identically. Only the data-root binding uses ZotLit's `zt` name, because these templates are written against it; ScholarWeft's own code uses its own naming. The full AGPL-3.0 license text is available at: https://www.gnu.org/licenses/agpl-3.0.html

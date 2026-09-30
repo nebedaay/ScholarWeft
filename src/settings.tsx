@@ -14,7 +14,6 @@ import {
   installTemplaterTemplatesWithNotice,
   uninstallTemplaterTemplates,
 } from './templaterTemplates';
-import { installCompanionPluginWithNotice, enableCompanionPlugin } from './companionPlugins';
 import ReferenceList from './main';
 import ReactDOM from 'react-dom';
 import React from 'react';
@@ -74,7 +73,7 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   createNotesWithZotLit: false,
   /**
    * When true, literature notes are rendered with ScholarWeft's own bundled
-   * single-file template (`sw-note-templates/sw-note.eta.md`). Re-importing
+   * single-file template (`sw-literature-note-templates/sw-note.eta.md`). Re-importing
    * refreshes only the managed frontmatter fields and the `%%sw-managed%%`
    * region. On by default; turning it off switches to ZotLit.
    */
@@ -1506,7 +1505,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       if (Platform.isDesktop) {
         this.renderCompanionSetting(containerEl, {
           pluginId: 'zotlit',
-          companionKey: 'zotlit',
           name: "Install and use ScholarWeft's ZotLit import templates",
           readyDesc:
             'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
@@ -1553,7 +1551,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     if (Platform.isDesktop) {
       this.renderCompanionSetting(containerEl, {
         pluginId: 'templater-obsidian',
-        companionKey: 'templater',
         name: 'Install the Basic note template and apply it to new notes',
         readyDesc:
           'Installs the Basic note template and sets Templater to apply it by default to every note you manually create in your vault. The template adds four properties at the top of each note that help you situate and connect all notes in your vault: created date, larger category ("up"), related notes, and alternative names ("aliases"). It lives in its own folder ("sw-markdown-templates/"), so your own templates and other Templater rules are left untouched. If new notes still start empty, open Templater\'s settings, turn on "Trigger Templater on new file creation", and confirm its warning.',
@@ -1689,7 +1686,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     containerEl: HTMLElement,
     cfg: {
       pluginId: string;
-      companionKey: string;
       name: string;
       readyDesc: string;
       actionLabel: string;
@@ -1727,53 +1723,32 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       }
     };
     if (!installed) {
+      // ScholarWeft never downloads or installs another plugin: browse the
+      // community directory and install it the normal way, then come back.
       setting.setDesc(
         t(
-          'Not installed. Install it here, or via Settings → Community plugins (Browse).'
+          'Not installed. Install it from Settings → Community plugins (Browse), then return here.'
         )
       );
       setting.addButton((btn) =>
-        btn
-          .setButtonText(t('Install for me'))
-          .onClick(async () => {
-            btn.setDisabled(true);
-            try {
-              if (
-                await installCompanionPluginWithNotice(this.plugin, cfg.companionKey)
-              ) {
-                rerender();
-              }
-            } finally {
-              btn.setDisabled(false);
-            }
-          })
+        btn.setButtonText(t('Open community plugins')).onClick(() => {
+          const s = (this.app as any).setting;
+          s?.open?.();
+          s?.openTabById?.('community-plugins');
+        })
       );
     } else if (!enabled) {
       setting.setDesc(
         t(
-          'Installed but not enabled. Enable it here, or in Settings → Community plugins.'
+          'Installed but not enabled. Turn it on in Settings → Community plugins, then return here.'
         )
       );
       setting.addButton((btn) =>
-        btn
-          .setButtonText(t('Enable and continue'))
-          .onClick(async () => {
-            btn.setDisabled(true);
-            try {
-              if (await enableCompanionPlugin(this.plugin, cfg.companionKey)) {
-                rerender();
-              } else {
-                new Notice(
-                  t(
-                    "Couldn't enable it — turn off Restricted mode and enable it in Settings → Community plugins."
-                  ),
-                  10000
-                );
-              }
-            } finally {
-              btn.setDisabled(false);
-            }
-          })
+        btn.setButtonText(t('Open community plugins')).onClick(() => {
+          const s = (this.app as any).setting;
+          s?.open?.();
+          s?.openTabById?.('community-plugins');
+        })
       );
     } else {
       setting.setDesc(t(cfg.readyDesc));

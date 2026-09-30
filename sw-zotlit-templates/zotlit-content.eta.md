@@ -1,4 +1,5 @@
 <%/* zotlit-content.eta.md — annotations region (Eta, JS templates).
+     Source: ScholarWeft (installed and maintained by the ScholarWeft plugin).
      Groups annotations by attachment and renders each through the
      "annotation" template. Zotero-Integration-style "+" concatenation:
      an annotation whose comment begins with "+" is appended to the

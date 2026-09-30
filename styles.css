@@ -244,7 +244,7 @@ body {
      so other callouts (and themes that set their own blend) are left alone. */
   .callout[data-callout$="-annotation"],
   .callout[data-callout*="ann-"] {
-    --callout-blend-mode: normal;
+    --callout-blend-mode: normal!important;
   }
 }
 
@@ -1407,7 +1407,7 @@ Annotation callouts
 
 
 .callout[data-callout*="ann-highlight-text"], .callout[data-callout*="ann-underline-text"] {
-    background-color: var(--highlight-text-bg);
+    background-color: var(--highlight-text-bg)!important;
     border-radius: 15px 15px / 5px 5px;
     border: 2px solid;
     border-color: var(--highlight-text-shadow) transparent transparent var(--highlight-text-shadow);

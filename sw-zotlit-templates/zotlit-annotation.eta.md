@@ -1,4 +1,5 @@
 <%/* zotlit-annotation.eta.md — renders ONE annotation as a callout block.
+     Source: ScholarWeft (installed and maintained by the ScholarWeft plugin).
      Merged annotations arrive pre-combined from zotlit-content.eta.md
      (text / comment / pageLabel / tags already merged, "+" marker
      stripped), so this template needs no merge logic of its own. */-%>

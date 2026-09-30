@@ -29,6 +29,27 @@ const CONTINUATION = /^\+\s*/;
 export const CONTINUATION_SEPARATOR = ' ... ';
 
 /**
+ * The reader's tag order. Zotero's reader sorts an annotation's tags (`sortTags`
+ * in the reader bundle): colour-tagged tags by colour position first, then
+ * uncolored tags by name using an en-US, numeric, case-insensitive collator.
+ *
+ * The local API exposes neither a stable tag order (`_loadTags` has no
+ * `ORDER BY`; `setTags` sorts only in memory) nor tag colours, so we reproduce
+ * the name half — which is what orders uncolored tags, i.e. the norm. Without
+ * this, the imported order is whatever Zotero's API happened to return, which
+ * can differ from (and look reversed against) the reader.
+ */
+const TAG_COLLATOR = new Intl.Collator(['en-US'], {
+  numeric: true,
+  sensitivity: 'base',
+});
+
+/** Order an annotation's tags the way Zotero's reader displays them. */
+export function sortAnnotationTags(tags: NoteContextTag[]): NoteContextTag[] {
+  return [...tags].sort((a, b) => TAG_COLLATOR.compare(a.name, b.name));
+}
+
+/**
  * Zotero's own reading order: `annotationSortIndex`, then date added, then key.
  * Annotations always carry a sort index; the fallbacks only matter for
  * hand-built contexts.
@@ -139,5 +160,10 @@ export function mergeContinuationAnnotations(
 export function processAnnotations(
   annotations: NoteContextAnnotation[]
 ): NoteContextAnnotation[] {
-  return mergeContinuationAnnotations(sortAnnotations(annotations));
+  // Tags are ordered LAST, after the continuation union, so a "+" annotation's
+  // tags fold in before the final sort (unionTags preserves order, not sorted).
+  return mergeContinuationAnnotations(sortAnnotations(annotations)).map((a) => ({
+    ...a,
+    tags: sortAnnotationTags(a.tags ?? []),
+  }));
 }

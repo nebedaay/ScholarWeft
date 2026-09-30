@@ -178,4 +178,42 @@ describe('processAnnotations', () => {
     expect(processed[0].key).toBe('first');
     expect(processed[0].text).toBe('first ... second');
   });
+
+  it("orders each annotation's tags by name, matching Zotero's reader", () => {
+    const processed = processAnnotations([
+      ann({
+        key: 'a',
+        text: 'x',
+        tags: [
+          { name: 'Sufism', type: 'manual' },
+          { name: 'majāz', type: 'manual' },
+          { name: 'metaphor', type: 'manual' },
+        ],
+      }),
+    ]);
+    expect(processed[0].tags.map((t) => t.name)).toEqual([
+      'majāz',
+      'metaphor',
+      'Sufism',
+    ]);
+  });
+
+  it('re-sorts tags after a "+" continuation unions them', () => {
+    const processed = processAnnotations([
+      ann({
+        key: 'a',
+        text: 'x',
+        sortIndex: '00001',
+        tags: [{ name: 'Sufism', type: 'manual' }],
+      }),
+      ann({
+        key: 'b',
+        text: 'y',
+        comment: '+',
+        sortIndex: '00002',
+        tags: [{ name: 'majāz', type: 'manual' }],
+      }),
+    ]);
+    expect(processed[0].tags.map((t) => t.name)).toEqual(['majāz', 'Sufism']);
+  });
 });

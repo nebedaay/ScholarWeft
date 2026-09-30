@@ -2,30 +2,30 @@
 
 <img src="./images/scholarweft-illustration.png" width="300" alt="ScholarWeft logo">
 
-Weaving your ideas, Obsidian, Zotero, and word processor output into a connected scholarly workflow. It integrates four processes:
+**ScholarWeft** weaves your ideas, references, and finished scholarly output into a connected workflow. Its purpose is to allow you to incubate and finish complex academic writing projects — even long books — organically inside manageable, interlinked Obsidian notes. It integrates four processes:
 
-- Importing and updating your Zotero citations and annotations into Obsidian as literature notes using a rich template
-- Searching your references by citekey, title, author, abstract, and publisher inside Obsidian to find the most relevant references
-- Connecting your works cited to your universe of thoughts, treating them as Zotero links while formatting them as formatted citations
-- Importing and exporting your scholarly writing while keeping active Zotero citations, using complex templates to produce publication-ready academic articles and books
+- Creating automatically synced literature notes from your Zotero references, notes, and annotations using a rich import template.
+- Finding the most relevant works to cite and import using a ranked search of Zotero items by citekey, title, author, abstract, and publisher
+- Connecting your works cited to your universe of thoughts, treating them as Zotero links while also rendering them as formatted citations
+- Importing and exporting your scholarly writing while keeping active Zotero citations, producing publication-ready academic articles and books with sophisticated provided and customized templates
 
-ScholarWeft's unique **linked citations** format weaves every work you cite into your interconnected Obsidian thought universe. The citation `[[@sanchez2009|see @, p. 25]]` is simultaneously a formatted inline citation — "(see Sanchez 2009, 25)" — *and* an Obsidian wikilink to that source’s literature note. Other citation plugins can either link to a literature note (`[[@sanchez2009]]`) or render pandoc-formatted citations (`[see @sanchez2009, p. 25]`), preventing you from integrating publication-ready citations as nodes in Obsidian's note network visualized in backlinks and graphs.
+ScholarWeft's unique **linked citations** weave every work you cite into your interconnected Obsidian thought universe. The citation `[[@sanchez2009|see @, p. 25]]` is simultaneously a formatted inline citation — "(see Sanchez 2009, 25)" — *and* an Obsidian wikilink to that source’s literature note. Other citation plugins can either link to a literature note (`[[@sanchez2009]]`) or render pandoc-formatted citations (`[see @sanchez2009, p. 25]`) but don’t allow you to integrate publication-ready citations as nodes in Obsidian's note network visualized in backlinks and graphs.
 
-Beyond linking your scholarly notes and references, ScholarWeft links your writing inside Obsidian to the world beyond Obsidian. Import DOCX and ODT documents as Obsidian notes, converting their Zotero citations to linked citations and importing a literature note for each cited work. Export an Obsidian note or compile a series of notes as a publication-ready DOCX, ODT, or PDF document with functioning citations — so you can do all your academic writing inside manageable, interlinked Obsidian notes, even long book projects.
+Beyond linking your scholarly notes and references, ScholarWeft links your writing process inside Obsidian to and from the world beyond Obsidian. Move previous writing into Obsidian’s link network by importing DOCX and ODT documents as Obsidian notes with linked citations and literature notes for each cited work. Export an Obsidian note or compile a series of notes as a publication-ready DOCX, ODT, or PDF document with formatted, live Zotero citations.
 
 ## Documentation
 
 - [Setup](./docs/setup.md) — install and first steps
 - [Dependencies](./docs/dependencies.md) — what each feature needs, and where to get it
-- [Linked Citations](./docs/linked-citations.md) — the citation syntax
-- [Citations and References](./docs/citations.md) — formatting, autocomplete, tooltips, the reference sidebar
-- [Searching for References](./docs/searching.md) — the two levels, what counts as a match, how results are ranked, and tips
-- [Bibliography](./docs/bibliography.md) — `.bib`/CSL sources, per-note overrides
 - [Zotero](./docs/zotero.md) — connection modes, port, libraries
-- [Creating Literature Notes from Zotero](./docs/literature-notes.md) — where notes live and how they are created
+- [Bibliography files](./docs/bibliography.md) — `.bib`/CSL sources, per-note overrides independent of Zotero
+- [Linked Citations](./docs/linked-citations.md) — the citation syntax
+- [Citations and References](./docs/citations.md) — formatting, tooltips, the reference sidebar
+- [Searching for References](./docs/searching.md) — two search levels, how results are matched and ranked, and search tips
+- [Creating Literature Notes from Zotero](./docs/literature-notes.md) — where notes live and how to create them from Zotero items
 - [Document Import and Export](./docs/import-export.md) — compile a longer document from a series of notes, export to markdown, DOCX, ODT, PDF
 - [Commands](./docs/commands.md) — the full command list
-- [ZotLit Import Templates](./docs/zotlit-import-templates.md) — rich annotation templates
+- [ZotLit Import Templates](./docs/zotlit-import-templates.md) — rich annotation templates that replicate ScholarWeft’s internal template
 - [Mobile](./docs/mobile.md) — iOS/Android behaviour
 
 ## Features
@@ -35,7 +35,9 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 ### Citations
 
 - **Linked citations** — `[[@smith1992|see @, p. 6]]` → (see Smith 1992, 6): real Obsidian wikilinks *and* publication-ready formatted citations. Cite several works by placing them together — `[[@a]] [[@b]]` → (Author A Year; Author B Year). See [Linked Citations](./docs/linked-citations.md).
+
 - **Full references in the text** — `[[@key|reference]]` (place several such links together for a list), or a container like `[ [[@a|reference]] [[@b]] [[@c]] ]`, inserts the formatted bibliography entry (or a list of them) — for reading lists and syllabi. They render live in Obsidian and export as plain formatted text. See [Inserting full references](./docs/linked-citations.md#inserting-full-references).
+
 - **Conventional pandoc citations** — `[@key]`, `[see @key, p. 25]` render too, and commands convert between formats losslessly.
 - **Live reference sidebar** — a searchable list of every citation in the current note, with copy and jump buttons.
 - **Insert bibliography at cursor** and **bibliography snapshot** (save a note's citations as a `.bib`, colour-coded by sync status).
@@ -70,12 +72,24 @@ Basic citation work needs nothing installed. Document import/export and live Zot
 
 **New to all of this?** **[Setup](./docs/setup.md)** is a complete, click-by-click walkthrough, and it opens with a **setup script** that can do the whole thing for you — install/update the Obsidian and Zotero apps, add ScholarWeft to Obsidian and Better BibTeX to Zotero, switch on Zotero's local connection, and install the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts). It is interactive (asks before each step), safe to re-run, and prints a summary of what succeeded/failed/was skipped. Copy the one-line command for your OS from the top of [Setup](./docs/setup.md#the-easy-way-run-the-setup-script).
 
+## Network use and file access
+
+ScholarWeft works offline for its core features (bibliography files you supply, citation rendering, the reference sidebar, and literature notes from `.bib` files). Some features contact services. Each is listed here in full; nothing is sent anywhere else, and the plugin collects **no telemetry** of any kind.
+
+| Feature | Contacts | Why |
+| --- | --- | --- |
+| Zotero integration | `http://127.0.0.1:<port>` (your own computer) | Reads your local Zotero library, items, annotations and attachments. Nothing leaves your machine. |
+| Import literature notes from Zotero | `http://127.0.0.1:<port>/better-bibtex/cayw` | Opens Zotero's own picker dialog (needs Better BibTeX). Local only. |
+| Citation style/locale download | `raw.githubusercontent.com` (CSL locales), `www.zotero.org/styles/`, the Citation Style Language repository | Downloads the one CSL style or locale file your note asks for, then caches it in `.scholar-weft/`. Only when the style isn't already installed locally. |
+| "Open in Zotero" / DOI links | `doi.org`, your system's default browser | Opens the item's page when you click a link. Nothing is sent automatically. |
+
+**Files outside your vault:** the desktop-only document import/export features run external programs (Python, Pandoc, LibreOffice, LuaLaTeX) and read or write the source and output files you choose, including absolute paths you enter. This is required to compile and export DOCX/ODT/PDF documents. On mobile, these features are unavailable.
 
 ## Companion plugins
 
-ScholarWeft creates and refreshes literature notes itself — no companion plugin is required. If you already use [ZotLit](https://github.com/PKM-er/obsidian-zotlit), you can switch the import path to ZotLit under **Settings → ScholarWeft → Literature note import**. Autocomplete (`@` for citekey, author and title; `@@` to add abstracts and publication details) uses ScholarWeft's own index either way. Neither plugin requires the other.
+ScholarWeft creates and refreshes literature notes itself — no companion plugin is required, and **ScholarWeft never downloads or installs another plugin**. If a feature benefits from a companion plugin, the settings page links you to **Settings → Community plugins** so you can install it yourself the normal way. If you already use [ZotLit](https://github.com/PKM-er/obsidian-zotlit), you can switch the import path to ZotLit under **Settings → ScholarWeft → Literature note import**. Autocomplete (`@` for citekey, author and title; `@@` to add abstracts and publication details) uses ScholarWeft's own index either way. Neither plugin requires the other.
 
-**One-click ZotLit templates:** If you select ZotLit, *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies ScholarWeft’s Zotero import templates into `sw-zotlit-templates/` to yield literature notes similar to those generated when using ScholarWeft’s own import path. This leaves your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** to your ZotLit settings, since ZotLit builds note frontmatter from its settings, not from the templates. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
+**ZotLit import templates (optional):** If you select ZotLit, *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies ScholarWeft’s Zotero import templates into `sw-zotlit-templates/` to yield literature notes similar to those generated when using ScholarWeft’s own import path. This leaves your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** to your ZotLit settings, since ZotLit builds note frontmatter from its settings, not from the templates. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
 
 ## Plugin API
 
@@ -87,10 +101,14 @@ if (plugin?.api?.version === 1) {
 }
 ```
 
-## Credits
+## Credits and lineage
+
+ScholarWeft is a **fork** of **Bripey Citation Suite** by [112345brian](https://github.com/112345brian) (which is itself a fork of [Pandoc Reference List](https://github.com/community-archive/obsidian-pandoc-reference-list) by [mgmeyers](https://github.com/mgmeyers/obsidian-pandoc-reference-list), maintained by [obsidian-community](https://github.com/obsidian-community/obsidian-pandoc-reference-list)). The upstream authors are credited as contributors to this project.
 
 - **Bripey Citation Suite** by [112345brian](https://github.com/112345brian) — the direct upstream fork
 - Original [Pandoc Reference List](https://github.com/community-archive/obsidian-pandoc-reference-list) plugin by [mgmeyers](https://github.com/mgmeyers/obsidian-pandoc-reference-list), maintained by [obsidian-community](https://github.com/obsidian-community/obsidian-pandoc-reference-list)
+
+Both are licensed under the GNU GPL; ScholarWeft is distributed under the same license, as required.
 
 This fork incorporates changes from:
 

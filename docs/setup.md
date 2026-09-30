@@ -94,15 +94,18 @@ Download: <https://obsidian.md/download>
 > **Already have Obsidian?** Check its **Installer version** (**Settings → About**, or **Show debug info**). The installer being behind the app version is normal and harmless — but newer plugins won't load on an installer **below 1.13.4**. If yours is below that, reinstall Obsidian; the [setup script](#the-easy-way-run-the-setup-script) offers a one-step **Refresh Obsidian**, or download the latest from <https://obsidian.md/download> and replace your copy. Your vaults, plugins, and settings are untouched.
 
 **macOS**
+
 1. Open the downloaded `.dmg`, drag **Obsidian** into the **Applications** folder, then open it from Applications.
 2. On first launch, click **Open** if macOS warns about an app from the internet.
 3. Click **Create new vault**; give it a name and pick a folder (e.g. `Documents/My Vault`); click **Create**.
 
 **Windows**
+
 1. Run the downloaded `.exe` installer and click through it, then open **Obsidian** from the Start menu.
 2. Click **Create new vault**; name it and choose a folder; click **Create**.
 
 **Linux**
+
 1. Download the **AppImage**, or use your software store (Flatpak/Snap).
 2. For the AppImage: right-click the file → **Properties** → **Permissions** → tick **Allow executing file as a program**, then double-click it.
 3. Click **Create new vault**; name it and choose a folder; click **Create**.
@@ -169,8 +172,7 @@ BRAT checks for updates automatically; you can force one from BRAT's settings (*
    - **macOS:** in Finder, press `Cmd` + `Shift` + `.` (dot)
    - **Windows:** File Explorer → **View** → **Show** → tick **Hidden items**
    - **Linux:** in Files, press `Ctrl` + `H`
-4. Create this folder structure if it doesn't exist: `<your vault>/.obsidian/plugins/scholar-weft/`
-   — then put the three downloaded files inside that `scholar-weft` folder.
+4. Create this folder structure if it doesn't exist: `<your vault>/.obsidian/plugins/scholar-weft/` — then put the three downloaded files inside that `scholar-weft` folder.
 5. In Obsidian: **Settings → Community plugins** and **Enable “ScholarWeft”**. If it doesn't appear, click the **Reload plugins** (⟳) button.
 
 ---
@@ -197,12 +199,14 @@ brew install python
 python3 -m venv ~/ScholarWeft/venv
 ~/ScholarWeft/venv/bin/pip install lxml python-docx requests
 ```
+
 ```bash
 # Windows (PowerShell) — install Python from the Microsoft Store first,
 # or from python.org with "Add python.exe to PATH" ticked during setup
 py -m venv $HOME\ScholarWeft\venv
 $HOME\ScholarWeft\venv\Scripts\pip install lxml python-docx requests
 ```
+
 ```bash
 # Linux (Debian/Ubuntu)
 sudo apt update && sudo apt install -y python3 python3-pip python3-venv
@@ -222,6 +226,7 @@ Install **Homebrew** first on macOS if you don't have it (this is the standard p
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
+
 Then follow the two commands it prints at the end to add `brew` to your PATH.
 
 #### Pandoc (needed for every import/export)
@@ -229,9 +234,11 @@ Then follow the two commands it prints at the end to add `brew` to your PATH.
 ```bash
 brew install pandoc        # macOS
 ```
+
 ```bash
 winget install --id JohnMacFarlane.Pandoc -e   # Windows (PowerShell)
 ```
+
 ```bash
 sudo apt install -y pandoc   # Linux (Debian/Ubuntu)
 ```
@@ -241,9 +248,11 @@ sudo apt install -y pandoc   # Linux (Debian/Ubuntu)
 ```bash
 brew install --cask libreoffice      # macOS
 ```
+
 ```bash
 winget install --id TheDocumentFoundation.LibreOffice -e   # Windows
 ```
+
 ```bash
 sudo apt install -y libreoffice      # Linux
 ```
@@ -255,9 +264,11 @@ brew install --cask mactex-no-gui    # macOS — full TeX Live, large (~5 GB)
 # …or the smaller BasicTeX:
 brew install --cask basictex
 ```
+
 ```bash
 winget install --id MiKTeX.MiKTeX -e   # Windows
 ```
+
 ```bash
 sudo apt install -y texlive-luatex texlive-latex-recommended texlive-fonts-recommended   # Linux
 ```
@@ -269,12 +280,14 @@ The default `.tex` templates use **Noto Serif**, **Noto Sans**, **Noto Emoji** (
 ```bash
 brew install --cask font-noto-serif font-noto-sans font-noto-emoji font-scheherazade-new   # macOS
 ```
+
 ```bash
 # Windows/Linux: download from Google Fonts (https://fonts.google.com)
 # — Noto Serif, Noto Sans, Noto Emoji — and Scheherazade New from
 # https://software.sil.org/scheherazade/ ; then install them by
 # double-clicking each file ("Install") or copying to ~/.fonts on Linux.
 ```
+
 After installing fonts, refresh TeX's font cache:
 
 ```bash

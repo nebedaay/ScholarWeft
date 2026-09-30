@@ -212,7 +212,7 @@ export class DataExplorerView extends ItemView {
       if (this.selected !== citekey) return;
       if (!templateSource) {
         this.setPreview(
-          'Note template not found. Check Settings → Literature note import → Template file, or the plugin\u2019s own sw-note-templates/sw-note.eta.md.',
+          'Note template not found. Check Settings → Literature note import → Template file, or the plugin\u2019s own sw-literature-note-templates/sw-note.eta.md.',
           true
         );
         return;

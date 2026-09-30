@@ -94,7 +94,7 @@ The heading text for a linked note comes from the note's `title:` property, else
   - **Endnotes (as body paragraphs in the Notes section)** — a visible `# Notes` section whose notes are ordinary paragraphs, with superscript note numbers in the body. With per-chapter numbering they are grouped under their chapters (`## <chapter>`, styled as **Heading 2 - exclude from TOC** so the groups don't clutter the TOC); with continuous numbering they form one list. Each note's citations are rendered inline within it (no page-bottom footnotes remain). Used by **DOCX/ODT** and **Markdown**.
   - In all cases the notes keep their original order, and nothing is left as a page-bottom footnote.
 
-  A PDF follows whatever its intermediate format supports (DOCX/ODT endnote objects, or a `.tex` Notes section).
+A PDF follows whatever its intermediate format supports (DOCX/ODT endnote objects, or a `.tex` Notes section).
 
 - **Include a bibliography** — on by default. On, a bibliography is emitted whenever the document has references; off, it is kept only for author-date citation styles (a note/footnote style omits it, since each citation already carries the reference in its note). A document with no references never gets a bibliography. Set by the note's `include-bibliography` property (default `true`).
 
@@ -105,6 +105,7 @@ The settings the note can specify in YAML — `template`, `csl`/`citation-style`
 3. The built-in default above.
 
 **Reset to note properties** (a button in the dialogue) re-reads the note's YAML for those settings and forgets the value remembered from the last export for each one it finds, leaving any setting with no such property at its current value. Use it to discard a last-used override and go back to what the note's frontmatter says.
+
 - **Apply a citation style, overriding the template's** — pick an installed Zotero style; used for PDF and written into the exported DOCX/ODT's Zotero document preferences so a later "Refresh" in Word/LibreOffice uses it.
 - **Keep intermediate files** — the compiled markdown and, for PDF, the intermediate ODT/DOCX/TeX.
 - **Skip recompilation and use the already compiled markdown** — shown only when a compiled markdown (`<note> - compiled.md`) already exists in the output folder. When checked, the export runs from that file instead of recompiling the outline, so several formats (e.g. DOCX and ODT) can be produced from one compile. Not remembered between exports.

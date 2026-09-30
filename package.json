@@ -1,6 +1,6 @@
 {
   "name": "scholar-weft",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "ScholarWeft for Obsidian — weaves Zotero references into Obsidian's linked-note universe with linked citations, a live reference sidebar, and a book compiler that exports to Word.",
   "main": "main.js",
   "scripts": {
@@ -13,6 +13,9 @@
     "prettier": "prettier --write \"./src/**/*.{ts,tsx}\"",
     "clean": "npm run prettier && npm run lint:fix",
     "test": "jest",
+    "check-wraps": "python3 ../../scripts/unwrap-md.py --check README.md NOTICE.md release-notes.md CLAUDE.md HANDOFF.md backlog.md flicker-notes.md scripts/ARCHITECTURE.md docs/*.md",
+    "fix-wraps": "python3 ../../scripts/unwrap-md.py README.md NOTICE.md release-notes.md CLAUDE.md HANDOFF.md backlog.md flicker-notes.md scripts/ARCHITECTURE.md docs/*.md",
+    "fix-blanks": "python3 ../../scripts/blankline-md.py README.md NOTICE.md release-notes.md CLAUDE.md HANDOFF.md backlog.md flicker-notes.md scripts/ARCHITECTURE.md docs/*.md",
     "rlnotes": "node release-notes.mjs && git add release-notes.md",
     "bump": "node version-bump.mjs && git add -A && npm run rlnotes",
     "release": "version=$(node -p \"require('./manifest.json').version\") && git commit -m \"$version\" && git tag \"$version\" && git push && git push --tags"

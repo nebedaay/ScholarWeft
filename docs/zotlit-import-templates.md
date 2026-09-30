@@ -17,4 +17,4 @@ The templates follow ScholarWeft's "link everything" philosophy and assume you c
 - Rectangular and ink annotations are imported as attachments and displayed as images.
 - A comment beginning with `+` marks the highlighted text as a continuation of the previous highlight, appended after " … ", so you can combine quotes that span pages or parts of a longer passage.
 
-Requires ZotLit (and Zotero); it is the alternative to ScholarWeft's own default import. See [Literature Notes](./literature-notes.md) and [Dependencies](./dependencies.md).
+This optional feature requires ZotLit (and Zotero) — it is the alternative to ScholarWeft's own default import, which needs neither. See [Literature Notes](./literature-notes.md) and [Dependencies](./dependencies.md).

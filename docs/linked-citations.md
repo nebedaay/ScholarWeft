@@ -29,21 +29,19 @@ See the [pandoc citation syntax](https://pandoc.org/demo/example33/8.20-citation
 
 Writing citations next to each other — separated only by spaces or a single line break — renders them as **one** compound citation:
 
-    [[@a]] [[@b]]        → (Author A Year; Author B Year)
+[[@a]] [[@b]]        → (Author A Year; Author B Year)
 
 This is the normal and simplest way to cite several works at once, and it is what pandoc's `[@a; @b]` means. A **blank line**, or any text between the citations, keeps them separate. A narrative citation (`[[@key|@ -]]`) is never combined with its neighbour.
 
 The older container form still works and is not deprecated:
 
-    [ [[@a]] [[@b]] ]    → the same compound citation
+[ [[@a]] [[@b]] ]    → the same compound citation
 
 It offers no advantage over simply placing the citations together, so new writing can use the plain contiguous form. (The `⟦…⟧` form is accepted too, for compatibility.)
 
 ## Inserting full references
 
-For reading lists and syllabi, you can insert the formatted bibliography entry
-itself, rather than an in-text citation, by using the alias `reference` (or the
-abbreviation `ref`; both are case-insensitive):
+For reading lists and syllabi, you can insert the formatted bibliography entry itself, rather than an in-text citation, by using the alias `reference` (or the abbreviation `ref`; both are case-insensitive):
 
 | Wikilink form                          | Rendered as                            |
 | -------------------------------------- | -------------------------------------- |
@@ -53,29 +51,10 @@ abbreviation `ref`; both are case-insensitive):
 | <code>[ [[@a&#124;reference]] [[@b]] [[@c]] ]</code>  | the three entries, one below the other |
 | <code>⟦[[@a&#124;reference]]; [[@b]]⟧</code>          | the two entries, one below the other   |
 
-Give each entry the `reference`/`ref` alias and place them next to each other to
-build a list (they sit one below the other). Alternatively use a container,
-where a **single** `reference` marker on any member makes the whole list
-references — a list is either all citations or all references, so only one member
-needs the marker. Both container forms work exactly as they do for citations: the
-outer-bracket form (`[ … ]`, members separated by whitespace or `;`) and the
-`⟦…⟧` form (members separated by `;`). Text outside the `[[…]]`
-links inside the container is discarded, and each entry renders as its own
-paragraph (a single `[[@key|reference]]` can also sit inside a paragraph).
+Give each entry the `reference`/`ref` alias and place them next to each other to build a list (they sit one below the other). Alternatively use a container, where a **single** `reference` marker on any member makes the whole list references — a list is either all citations or all references, so only one member needs the marker. Both container forms work exactly as they do for citations: the outer-bracket form (`[ … ]`, members separated by whitespace or `;`) and the `⟦…⟧` form (members separated by `;`). Text outside the `[[…]]` links inside the container is discarded, and each entry renders as its own paragraph (a single `[[@key|reference]]` can also sit inside a paragraph).
 
-References are still citations: the works are collected in the reference sidebar
-alongside the note’s other citations. In Obsidian the entries are live — they
-re-render with your bibliography and citation style, and any DOI/URL in an entry
-stays a link. (Unlike the sidebar, the inline entry omits the literature-note /
-Zotero / PDF buttons.)
+References are still citations: the works are collected in the reference sidebar alongside the note’s other citations. In Obsidian the entries are live — they re-render with your bibliography and citation style, and any DOI/URL in an entry stays a link. (Unlike the sidebar, the inline entry omits the literature-note / Zotero / PDF buttons.)
 
-Pandoc and Zotero have no equivalent for a full reference in the body of the
-text, so on export the plugin pre-renders each entry from its own citation engine
-and writes it as plain (formatted) text. The exported document therefore contains
-the reference as ordinary text, not as a Zotero field.
+Pandoc and Zotero have no equivalent for a full reference in the body of the text, so on export the plugin pre-renders each entry from its own citation engine and writes it as plain (formatted) text. The exported document therefore contains the reference as ordinary text, not as a Zotero field.
 
-To set the reference apart from the surrounding text, exports use a dedicated
-reference style: in Obsidian the entry carries a hanging indent and slightly
-smaller type; in DOCX/ODT it uses the **Bibliographic reference - body** paragraph
-style (a 1cm first line with a 0.75cm hanging indent); and in LaTeX the same
-indents come from the `swrefbody` environment.
+To set the reference apart from the surrounding text, exports use a dedicated reference style: in Obsidian the entry carries a hanging indent and slightly smaller type; in DOCX/ODT it uses the **Bibliographic reference - body** paragraph style (a 1cm first line with a 0.75cm hanging indent); and in LaTeX the same indents come from the `swrefbody` environment.

@@ -32,7 +32,7 @@ import {
 /**
  * Variable name our note templates read their data from.
  *
- * Our own templates (`sw-note-templates/`) use `item.…`. The ZotLit-compatible
+ * Our own templates (`sw-literature-note-templates/`) use `item.…`. The ZotLit-compatible
  * set (`sw-zotlit-templates/`, rendered by ZotLit itself) uses `zt`, so the root
  * is a parameter of the render, not a fixed constant — callers pass whichever
  * their template set expects.

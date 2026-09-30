@@ -10,7 +10,7 @@ jest.mock(
 import { readTemplate, copyDefaultTemplateToVault } from '../note-template-io';
 
 const PLUG = '.obsidian/plugins/scholar-weft';
-const BUNDLED = `${PLUG}/sw-note-templates/sw-note.eta.md`;
+const BUNDLED = `${PLUG}/sw-literature-note-templates/sw-note.eta.md`;
 
 /** A plugin whose adapter serves the given vault-relative files. */
 function makePlugin(

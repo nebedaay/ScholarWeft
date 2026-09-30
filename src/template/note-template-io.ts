@@ -9,7 +9,7 @@ import type ReferenceList from '../main';
 import { customNoteTemplatePath, templateCopyPath } from './note-template';
 
 /** Where the bundled template is extracted, relative to the plugin directory. */
-export const TEMPLATE_ASSET = 'sw-note-templates/sw-note.eta.md';
+export const TEMPLATE_ASSET = 'sw-literature-note-templates/sw-note.eta.md';
 
 /** Read the bundled template extracted into the plugin folder. */
 async function readBundledTemplate(

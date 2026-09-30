@@ -1,8 +1,6 @@
 # Export pipeline architecture (`scripts/`)
 
-The DOCX/ODT export & import pipeline is Python, invoked by `src/exportCompiler.ts`
-/ `src/importCompiler.ts` via `child_process` (desktop only; needs `python3` with
-`lxml` + `python-docx`, plus `pandoc`).
+The DOCX/ODT export & import pipeline is Python, invoked by `src/exportCompiler.ts` / `src/importCompiler.ts` via `child_process` (desktop only; needs `python3` with `lxml` + `python-docx`, plus `pandoc`).
 
 ```
 outline / note.md
@@ -35,17 +33,11 @@ output
 
 ## The rule (this is why the shared layer exists)
 
-Past work repeatedly forked DOCX and ODT into divergent logic — one format would
-gain a feature the other silently lacked. So:
+Past work repeatedly forked DOCX and ODT into divergent logic — one format would gain a feature the other silently lacked. So:
 
-- A substantive content/structure decision goes in `sw_merge_helpers.py`, **never**
-  in a single merge script.
-- Before adding a function to a merge script, check whether the other format
-  already implements the same idea. If it does, lift the shared logic into
-  `sw_merge_helpers.py` first, then call it from both.
-- Shared functions stay format-neutral: they take **accessor callbacks**
-  (`get_style` / `set_style` / `get_text`, element builders) rather than importing
-  OOXML or ODF constants.
+- A substantive content/structure decision goes in `sw_merge_helpers.py`, **never** in a single merge script.
+- Before adding a function to a merge script, check whether the other format already implements the same idea. If it does, lift the shared logic into `sw_merge_helpers.py` first, then call it from both.
+- Shared functions stay format-neutral: they take **accessor callbacks** (`get_style` / `set_style` / `get_text`, element builders) rather than importing OOXML or ODF constants.
 
 ## Shared functions and their per-format callers
 
@@ -64,19 +56,11 @@ gain a feature the other silently lacked. So:
 
 ## Deliberately per-format (irreducible)
 
-- **`_fill_title_block`** — DOCX detects title/author/date by placeholder text +
-  position; ODT by style name (+ book.odt's P1/P2 convention). The *abstract*
-  policy (drop every placeholder slot, re-inject via `append_extra_sections`) is
-  now identical.
-- **Chapter numbering** — DOCX adds `<w:numPr>` (template numId); ODT wraps the
-  heading in `<text:list style="WWNum13">`. Same trigger (`Chapter N:` prefix,
-  stripped by the shared helper), same gate (template must define the mechanism).
+- **`_fill_title_block`** — DOCX detects title/author/date by placeholder text + position; ODT by style name (+ book.odt's P1/P2 convention). The *abstract* policy (drop every placeholder slot, re-inject via `append_extra_sections`) is now identical.
+- **Chapter numbering** — DOCX adds `<w:numPr>` (template numId); ODT wraps the heading in `<text:list style="WWNum13">`. Same trigger (`Chapter N:` prefix, stripped by the shared helper), same gate (template must define the mechanism).
 - **Page-break / section-break mechanics**, **footnote restart**, **field XML**.
 
 ## Open feature work (not consolidation)
 
-- Format-agnostic page numbering: roman frontmatter → arabic at
-  Introduction/Chapter 1, driven by settings + document structure, independent of
-  the template. book.odt does this with per-heading `style:master-page-name`.
-- ODT book figure captions render "Figure 1" not "Figure C.N" — `display-outline-level`
-  can't see the `<text:list>` chapter numbers.
+- Format-agnostic page numbering: roman frontmatter → arabic at Introduction/Chapter 1, driven by settings + document structure, independent of the template. book.odt does this with per-heading `style:master-page-name`.
+- ODT book figure captions render "Figure 1" not "Figure C.N" — `display-outline-level` can't see the `<text:list>` chapter numbers.

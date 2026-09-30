@@ -1,4 +1,5 @@
 import { App, TFile, requestUrl } from 'obsidian';
+import { debugLog } from './helpers';
 import { promoteShortFirstLine } from './template/markdown';
 
 /** Zotero's local REST API port (same default as `bib/helpers.ts`; inlined so
@@ -284,7 +285,7 @@ export async function insertZoteroNotesForFiles(
       const notes = await fetchChildNotes(port, key);
       const r = await insertIntoNote(app, file, notes, opts.notesHeadingLevel ?? 3);
       if (r === 'inserted') {
-        console.log(`ScholarWeft: inserted ${notes.length} Zotero note(s) into ${file.path}`);
+        debugLog(`ScholarWeft: inserted ${notes.length} Zotero note(s) into ${file.path}`);
       }
       if (r === 'inserted') result.inserted++;
       else if (r === 'skipped') result.skipped.push(file.path);

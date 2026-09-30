@@ -1,5 +1,6 @@
 <%/*
-  sw-note.eta.md — OUR single-file literature-note template.
+  sw-note.eta.md — ScholarWeft's single-file literature-note template.
+  Source: ScholarWeft (installed and maintained by the ScholarWeft plugin).
 
   One copy-pasteable file: it emits BOTH the frontmatter and the body. It mirrors
   the user's ZotLit setup — the frontmatter fields and order match

@@ -3053,6 +3053,23 @@ export class BibManager {
     }, 2500);
   }
 
+  /**
+   * Drop one item's cached children snapshot so the NEXT render re-fetches it.
+   *
+   * The cache is keyed by the parent item's `_version`, but annotation edits do
+   * NOT bump that version — so a version match can otherwise serve a stale tag
+   * set or annotation text. The sync delta already force-fetches the render it
+   * triggers (`skipChildCache`); evicting here also protects a manual update or
+   * re-import that lands before the next poll. Cheap: the next read refetches.
+   */
+  evictChildrenCache(stableKey: string): void {
+    if (!stableKey || !(stableKey in this.childrenCache)) return;
+    const next = { ...this.childrenCache };
+    delete next[stableKey];
+    this.childrenCache = next;
+    this.scheduleChildrenCacheSave();
+  }
+
   /** Load the template timeline (once at startup). */
   async loadTemplateHistory(): Promise<void> {
     try {
@@ -3109,7 +3126,7 @@ export class BibManager {
     if (changed) {
       this.templateTimeline = timeline;
       await this.saveTemplateHistory();
-      console.log('[sw:template] template changed → hash', hash);
+      debugLog('[sw:template] template changed → hash', hash);
     }
     return changed;
   }
@@ -3199,7 +3216,12 @@ export class BibManager {
         versions: { ...state.versions, [gid]: delta.version || since },
       };
       for (const itemKey of changedItemKeys) {
-        const ck = this.findCitekeyByStableKey(stableKeyFor(itemKey, group.id));
+        // Annotation/attachment edits don't bump the parent `_version`, so evict
+        // the snapshot: the delta-triggered render force-fetches anyway, but a
+        // manual update before the next poll must not render stale children.
+        const stable = stableKeyFor(itemKey, group.id);
+        this.evictChildrenCache(stable);
+        const ck = this.findCitekeyByStableKey(stable);
         if (ck) citekeys.add(ck);
       }
     }

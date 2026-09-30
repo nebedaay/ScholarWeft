@@ -24,7 +24,7 @@ import { prepareTemplateData } from '../note-helpers';
 import { renderNote } from '../render';
 
 const template = readFileSync(
-  join(__dirname, '../../../sw-note-templates/sw-note.eta.md'),
+  join(__dirname, '../../../sw-literature-note-templates/sw-note.eta.md'),
   'utf8'
 );
 

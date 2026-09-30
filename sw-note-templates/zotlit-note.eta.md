@@ -1,3 +1,0 @@
-## Notes
-
-<%~ include("content", item) %>

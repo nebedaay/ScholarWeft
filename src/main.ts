@@ -235,7 +235,7 @@ export default class ReferenceList extends Plugin {
       if (await adapter.exists(next)) return;
       if (!(await adapter.exists(prev))) return;
       await adapter.rename(prev, next);
-      console.log(`ScholarWeft: migrated cache folder ${prev} → ${next}`);
+      debugLog(`ScholarWeft: migrated cache folder ${prev} → ${next}`);
     } catch (e) {
       console.warn('ScholarWeft: cache folder migration failed', e);
     }
@@ -1810,7 +1810,7 @@ export default class ReferenceList extends Plugin {
     const { byGroup, staleFolders, diagnostic } = await this.planGroupNoteMove(base);
     // Diagnostic: dump the actual decision so a failed scan can be diagnosed
     // from the console rather than by guessing. Includes the child-folder list.
-    console.log('[sw:move] DIAGNOSTIC\n' + diagnostic);
+    debugLog('[sw:move] DIAGNOSTIC\n' + diagnostic);
     try {
       await this.app.vault.adapter.write('tmp/sw-move-diagnostic.txt', diagnostic);
     } catch {
@@ -1996,7 +1996,7 @@ export default class ReferenceList extends Plugin {
     for (const { from, to } of staleFolders) {
       try {
         const folder = this.app.vault.getAbstractFileByPath(from);
-        console.log('[sw:move] rename folder', from, '->', to, 'found=', !!folder);
+        debugLog('[sw:move] rename folder', from, '->', to, 'found=', !!folder);
         if (folder) {
           await fm.renameFile(folder as never, to);
           renamed++;
@@ -2150,7 +2150,7 @@ export default class ReferenceList extends Plugin {
         this._notesPerMinute,
         updated / (elapsedMs / 60000)
       );
-      console.log(
+      debugLog(
         `[sw:template] measured ${this._notesPerMinute.toFixed(0)} notes/min`
       );
     }

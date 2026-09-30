@@ -17,10 +17,7 @@ Open the command palette with `Cmd/Ctrl+P` and type "ScholarWeft". The names bel
 
 See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 
-> The two **vault-wide** conversion commands skip `docs`, `src` and
-> `node_modules`, plus any folders you name under **Settings → Citation and
-> reference searching and formatting → Folders excluded from vault-wide
-> conversion**, so documentation and archived material are never rewritten.
+> The two **vault-wide** conversion commands skip `docs`, `src` and `node_modules`, plus any folders you name under **Settings → Citation and reference searching and formatting → Folders excluded from vault-wide conversion**, so documentation and archived material are never rewritten.
 
 ## Literature notes
 
