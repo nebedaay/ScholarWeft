@@ -19,6 +19,19 @@ ScholarWeft can watch Zotero and refresh a literature note whenever its item cha
 - **It also updates when the template changes.** Update the note template and ScholarWeft offers to re-render the notes that were made with the older one. Notes carry an `updated` stamp, so it can tell which are stale, and the affected count is shown before anything runs.
 - All of this is **non-destructive** — a re-import reconciles the managed fields and the region between `%%sw-managed%%` and `%%/sw-managed%%`, and leaves everything else exactly as you wrote it.
 
+### Citekey changes update every citation
+
+Rename a citekey in Zotero — change your Better BibTeX formula, or pin a cleaner key — and ScholarWeft now updates **every citation of that work across your vault**, including works you cite but never imported as literature notes.
+
+- **Notes and their citations.** A literature note is matched to its item by its stable `zotero-key`, so it is renamed to the new citekey and re-rendered; Obsidian rewrites its resolved `[[@old]]` links, and ScholarWeft rewrites the rest — plain `[@old]` citations and any link that could not follow the rename.
+- **Citations with no literature note.** These have no note to record the old key, so ScholarWeft detects the change by comparing its saved database against a Zotero refresh (matched by the same stable item key) and rewrites those citations too. The change is remembered until it is applied, so deferring, or quitting and reopening Obsidian, does not lose it.
+- **Citations are rewritten before any file is renamed**, so Obsidian never briefly sees a citation pointing at a name that no longer exists.
+- **Keys are matched whole.** A key with internal punctuation (`smith.2005`, `al-Bakr_2020`) is recognised in full, `@smith2005` never matches inside `@smith2005a`, and an `@` inside an email address is left alone. (The recommended Better BibTeX formula still produces plain alphanumeric keys.)
+
+One caveat: a citekey that changed **before** this update cannot be recovered automatically, because the old key is no longer recorded anywhere — fix those by hand.
+
+Nothing is changed until you confirm: the first time a citekey change is detected ScholarWeft asks, and your answer becomes the **Update citekeys automatically** setting on the Literature note import page. **Review and update citekeys from Zotero** applies it on demand.
+
 ### Add Literature Notes from Zotero — a search-and-filter window
 
 Finding the references to import is now a proper dialogue inside Obsidian, not just Zotero's own picker. **ScholarWeft: Add Literature Notes from Zotero (search and filter)** opens a search box over your whole library with the results rendered as full references — the same formatted entry the sidebar shows, so book and journal titles are italicised, not asterisked.
