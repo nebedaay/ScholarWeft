@@ -400,8 +400,8 @@ if (Ask "Set Zotero's local connection and the Better BibTeX citekey formula? (C
       Pass "Enabled Zotero's local connection (start Zotero again to apply)"
     }
     if ((Get-Content $ZPrefs.FullName -Raw) -match 'better-bibtex\.citekeyFormat"') {
-      Set-Pref 'extensions.zotero.translators.better-bibtex.citekeyFormat' '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
-      Set-Pref 'extensions.zotero.translators.better-bibtex.citekeyFormatEditing' '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
+      Set-Pref 'extensions.zotero.translators.better-bibtex.citekeyFormat' '"(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '''')"'
+      Set-Pref 'extensions.zotero.translators.better-bibtex.citekeyFormatEditing' '"(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '''')"'
       Pass 'Set the Better BibTeX citekey formula'
     }
   }

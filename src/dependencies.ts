@@ -62,7 +62,7 @@ export type DepKey = keyof typeof DEPENDENCIES;
  * Keep in sync with docs/setup.md and the install scripts.
  */
 export const BBT_CITEKEY_FORMULA =
-  'auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct';
+  "(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '')";
 
 export const DEPENDENCIES_DOC_URL =
   'https://github.com/nebedaay/ScholarWeft/blob/main/docs/dependencies.md';

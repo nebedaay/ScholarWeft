@@ -2586,7 +2586,10 @@ export default class ReferenceList extends Plugin {
       return false;
     }
 
-    const actionable = plan.renames.length > 0 || plan.derived.length > 0;
+    const actionable =
+      plan.renames.length > 0 ||
+      plan.derived.length > 0 ||
+      plan.citeOnly.length > 0;
     if (!actionable) {
       if (interactive) {
         // Nothing to apply, but there may be notes to resolve by hand.
@@ -2641,6 +2644,7 @@ export default class ReferenceList extends Plugin {
 
     if (
       !plan.renames.length &&
+      !plan.citeOnly.length &&
       !plan.derived.length &&
       !plan.blocked.length &&
       !plan.unresolved.length
@@ -2671,14 +2675,28 @@ export default class ReferenceList extends Plugin {
       }
     }
 
-    let msg =
-      `Updated ${res.notesRenamed} literature note${res.notesRenamed !== 1 ? 's' : ''}` +
-      (res.derivedRenamed
-        ? ` and ${res.derivedRenamed} associated file${res.derivedRenamed !== 1 ? 's' : ''}`
-        : '');
-    if (res.filesWithCitations) {
-      msg += `; citations updated in ${res.filesWithCitations} file${res.filesWithCitations !== 1 ? 's' : ''}`;
+    const parts: string[] = [];
+    if (res.notesRenamed) {
+      parts.push(
+        `Updated ${res.notesRenamed} literature note${res.notesRenamed !== 1 ? 's' : ''}`
+      );
     }
+    if (res.derivedRenamed) {
+      parts.push(
+        `renamed ${res.derivedRenamed} associated file${res.derivedRenamed !== 1 ? 's' : ''}`
+      );
+    }
+    if (res.citeOnlyRewritten) {
+      parts.push(
+        `updated ${res.citeOnlyRewritten} cite-only key${res.citeOnlyRewritten !== 1 ? 's' : ''} (no literature note)`
+      );
+    }
+    if (res.filesWithCitations) {
+      parts.push(
+        `citations updated in ${res.filesWithCitations} file${res.filesWithCitations !== 1 ? 's' : ''}`
+      );
+    }
+    let msg = parts.length ? parts.join('; ') : 'No citekey changes applied';
     if (refreshed) msg += `; refreshed ${refreshed}`;
     if (res.skipped.length) {
       msg += `\nSkipped ${res.skipped.length} name${res.skipped.length !== 1 ? 's' : ''} already in use.`;

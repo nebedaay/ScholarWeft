@@ -757,8 +757,8 @@ if ask "Set Zotero's local connection and the Better BibTeX citekey formula? (Cl
         pass "Enabled Zotero's local connection (start Zotero again to apply)"
       fi
       if grep -q 'better-bibtex.citekeyFormat"' "$ZPROFILE/prefs.js"; then
-        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormat" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
-        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormatEditing" '"auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct"'
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormat" "\"(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '')\""
+        set_pref "$ZPROFILE/prefs.js" "extensions.zotero.translators.better-bibtex.citekeyFormatEditing" "\"(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '')\""
         pass "Set the Better BibTeX citekey formula"
       fi
     else

@@ -7,7 +7,7 @@ ScholarWeft treats each source's literature note as the graph node its citations
 Before importing and linking literature notes, you need an effective way to generate citekeys that you’ll use as linked citations. For concise, stable, and consistent citekeys with no punctuation, install the Better BibTeX add-on in Zotero and set its Citation key formula (Zotero → Settings → Better BibTeX) to:
 
 ```
-auth(15).lower.alphanum.nopunct + shorttitle(2,2).nopunct.alphanum + year.alphanum.nopunct
+(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '')
 ```
 
 This gives every item `firstauthor + two-word short title + year` (e.g. `smithNewTrends2020`). See [Setup, Step 3](./setup.md#3-better-bibtex-recommended).
@@ -103,7 +103,7 @@ Three separate switches, all on the **Literature note import** settings page, ea
 | Setting | What it does |
 |---|---|
 | **Update literature notes automatically** | When a Zotero item changes — its metadata, one of its annotations, an attachment, a tag — re-render its literature note. |
-| **Update citekeys automatically** | When Zotero gives a reference a new citekey, rename its literature note (and its derived files) and update the citations across the vault. |
+| **Update citekeys automatically** | When Zotero gives a reference a new citekey, rename its literature note (if any) and its derived files, and update the citations across the vault — including citations of items that have no literature note. |
 | **Update notes when the template changes** | When your note **template** changes, re-render the notes that were made with the older one. |
 
 **Nothing changes until you answer.** While a switch is unselected, ScholarWeft asks the first time that kind of change is detected, and your answer becomes the setting — so there is no after-the-fact surprise. All three are non-destructive: only the managed frontmatter fields and the `%%sw-managed%%` region are rewritten, never your own writing.
@@ -115,8 +115,9 @@ A Zotero item's citekey can change (for example, when you change your Better Bib
 - The literature note is renamed to `@<new citekey>.md`; Obsidian rewrites its resolved `[[@old]]` links automatically, and ScholarWeft rewrites the rest (plain `[@old]` citations and unresolved links).
 - Files derived from the old key — transcriptions and translations named `@<old> - …` — are renamed alongside it.
 - With the own template, the renamed note is re-rendered, so its excerpt images (`@<citekey>_p…_<annotationKey>.png`) follow too.
+- **Citations of items that have no literature note** are updated too. There is no note to record the old key, so ScholarWeft detects the change by diffing its saved Zotero library against a refresh (matched by the stable item key), records the old → new key so a deferred or restarted update is not lost, and rewrites those citations across the vault. (A rename made *before* this feature existed — with the library cache already refreshed — cannot be recovered automatically; re-import the item or fix the citation by hand.)
 
-This runs automatically after a Zotero refresh when a change is found, and can be run on demand with **Review and update citekeys from Zotero**. Nothing is changed until you confirm the preview.
+ScholarWeft rewrites the citations *before* it renames any file, so Obsidian never sees a mismatch. This runs automatically after a Zotero refresh when a change is found, and can be run on demand with **Review and update citekeys from Zotero**. Nothing is changed until you confirm the preview.
 
 ## Note template
 

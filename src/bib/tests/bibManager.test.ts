@@ -1546,3 +1546,35 @@ describe('evictChildrenCache', () => {
     expect(save).not.toHaveBeenCalled();
   });
 });
+
+describe('pending citekey renames', () => {
+  it('resolves rename chains transitively (a→b then b→c gives a→c)', () => {
+    const { manager } = makeManager([]);
+    manager.syncState = {
+      ...manager.syncState,
+      pendingCitekeyRenames: { a: 'b', b: 'c' },
+    };
+    const pending = manager.pendingCitekeyRenames();
+    expect(pending.get('a')).toBe('c');
+    expect(pending.get('b')).toBe('c');
+  });
+
+  it('records new pairs and clears applied ones', async () => {
+    const { manager } = makeManager([]);
+    const save = jest.fn().mockResolvedValue(undefined);
+    (manager as any).saveSyncState = save;
+
+    await (manager as any).recordPendingCitekeyRenames(
+      new Map([
+        ['old', 'new'],
+        ['same', 'same'],
+      ])
+    );
+    expect(manager.pendingCitekeyRenames().get('old')).toBe('new');
+    expect(manager.pendingCitekeyRenames().has('same')).toBe(false);
+    expect(save).toHaveBeenCalled();
+
+    await (manager as any).clearPendingCitekeyRenames(['old']);
+    expect(manager.pendingCitekeyRenames().size).toBe(0);
+  });
+});

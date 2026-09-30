@@ -92,8 +92,11 @@ import {
   type RecentKeysMap,
 } from 'src/template/recent-keys';
 import {
+  citeOnlyPairs,
   derivedRenameFor,
   planCitekeyReconcile,
+  replaceCitekeys,
+  scanCitekeys,
   type CitekeyReconcilePlan,
   type DerivedRename,
   type NoteReconcile,
@@ -1680,6 +1683,12 @@ export class BibManager {
         }
       }
 
+      // Persist citekey renames detected by THIS diff (old cache vs fresh
+      // fetch, matched by `_zoteroKey`). The cache is overwritten below, so this
+      // is the last moment the old key exists for a cite-only key; the pending
+      // record lets the vault rewrite survive a decline, deferral, or restart.
+      if (renamed.size) await this.recordPendingCitekeyRenames(renamed);
+
       // Reconcile the search caches with the refreshed library NOW, so search
       // never has to vet: remap renamed citekeys, drop ones that no longer
       // resolve. Done once per refresh, not per keystroke.
@@ -1739,47 +1748,41 @@ export class BibManager {
    * in `renameMap` (old → new) and return a plan describing every file and
    * line that needs to change.
    *
-   * The boundary regex `@key(?![…])` matches only when the character after the
-   * key is NOT a citekey-valid character, preventing partial-key matches
-   * (e.g. `@smithA` from matching `@smith`).
+   * Keys are matched by {@link scanCitekeys} (Pandoc's grammar: the maximal key
+   * run with trailing punctuation stripped), so `@smith2005` never matches
+   * inside `@smith2005a`, an `@` glued to a word (an email) is skipped, and
+   * sentence-final `@smith2005.` is matched. The same scan drives the replace,
+   * so the plan and the edit can never disagree.
    */
   async findCitekeyUsagesInVault(
     renameMap: Record<string, string>
   ): Promise<Map<TFile, import('../modals/citekeyRenameModal').CitekeyChange[]>> {
     const { vault } = this.plugin.app;
-    // Boundary: NOT a citekey-valid char.  Matches Pandoc's own citekey charset.
-    const NC = '(?![\\p{L}\\p{N}:.#$%&\\-+?<>~_\\/])';
-
-    // Pre-compile one regex per old key.
-    const patterns: Array<{ oldKey: string; newKey: string; re: RegExp }> = [];
-    for (const [oldKey, newKey] of Object.entries(renameMap)) {
-      const escaped = oldKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      patterns.push({
-        oldKey,
-        newKey,
-        re: new RegExp(`@${escaped}${NC}`, 'gu'),
-      });
-    }
-
     const plan: Map<TFile, import('../modals/citekeyRenameModal').CitekeyChange[]> = new Map();
 
     for (const file of vault.getMarkdownFiles()) {
       const content = await vault.read(file);
       const lines = content.split('\n');
-      const changes: import('../modals/citekeyRenameModal').CitekeyChange[] = [];
-
-      for (const { oldKey, newKey, re } of patterns) {
-        const hitLines: number[] = [];
-        for (let i = 0; i < lines.length; i++) {
-          re.lastIndex = 0;
-          if (re.test(lines[i])) hitLines.push(i + 1); // 1-based
-        }
-        if (hitLines.length) {
-          changes.push({ oldKey, newKey, lines: hitLines });
+      const byKey = new Map<string, number[]>();
+      for (let i = 0; i < lines.length; i++) {
+        for (const hit of scanCitekeys(lines[i])) {
+          const to = renameMap[hit.key];
+          if (!to || to === hit.key) continue;
+          const arr = byKey.get(hit.key) ?? [];
+          arr.push(i + 1); // 1-based
+          byKey.set(hit.key, arr);
         }
       }
-
-      if (changes.length) plan.set(file, changes);
+      if (byKey.size) {
+        plan.set(
+          file,
+          [...byKey].map(([oldKey, lineNumbers]) => ({
+            oldKey,
+            newKey: renameMap[oldKey],
+            lines: lineNumbers,
+          }))
+        );
+      }
     }
 
     return plan;
@@ -1787,25 +1790,19 @@ export class BibManager {
 
   /**
    * Apply a rename plan produced by `findCitekeyUsagesInVault` to the vault.
-   * Each file is read, all matching `@oldKey` occurrences are replaced with
-   * `@newKey` (respecting the same boundary), and the file is written back.
+   * Each file is read, every matching citekey is replaced, and the file is
+   * written back atomically with `vault.process` — so Obsidian's own link
+   * cascade, or a user edit, landing in the read-modify-write gap cannot be
+   * clobbered.
    */
   async applyRenames(
     plan: Map<TFile, import('../modals/citekeyRenameModal').CitekeyChange[]>
   ): Promise<void> {
     const { vault } = this.plugin.app;
-    const NC = '(?![\\p{L}\\p{N}:.#$%&\\-+?<>~_\\/])';
-
     for (const [file, changes] of plan) {
-      let content = await vault.read(file);
-      for (const { oldKey, newKey } of changes) {
-        const escaped = oldKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Lookahead doesn't consume, so replacing the whole match with
-        // `@newKey` leaves the following character untouched.
-        const re = new RegExp(`@${escaped}${NC}`, 'gu');
-        content = content.replace(re, `@${newKey}`);
-      }
-      await vault.modify(file, content);
+      const renameMap: Record<string, string> = {};
+      for (const { oldKey, newKey } of changes) renameMap[oldKey] = newKey;
+      await vault.process(file, (content) => replaceCitekeys(content, renameMap));
     }
   }
 
@@ -1904,26 +1901,62 @@ export class BibManager {
       }
     }
 
-    return { renames, blocked, unresolved, derived, conflicts };
+    // Cite-only renames: detected from the persisted library cache diff
+    // (`pendingCitekeyRenames`), for items with NO literature note. The note
+    // pass above cannot see them — there is no note to record the old key.
+    // Blocked notes are EXCLUDED too: their file keeps its old name, so
+    // rewriting their citations would leave the links pointing at a name that
+    // does not exist.
+    const noteFromKeys = new Set(
+      [...renames, ...blocked]
+        .map((r) => r.fromKey)
+        .filter((k): k is string => !!k)
+    );
+    const citeOnly = citeOnlyPairs(this.pendingCitekeyRenames(), noteFromKeys);
+
+    return { renames, citeOnly, blocked, unresolved, derived, conflicts };
   }
 
   /**
-   * Apply a reconcile plan: rename the notes (Obsidian rewrites their resolved
-   * `[[…]]` links as they move), rename the derived files, write the `citekey:`
-   * frontmatter, then rewrite any remaining `@old` citations the rename could
-   * not reach (plain `[@old]`, unresolved links). Own-template notes are
-   * re-rendered by the caller so annotations and excerpt images follow too.
+   * Apply a reconcile plan. Citations are rewritten FIRST, across the whole
+   * vault, so Obsidian never sees a mismatch: by the time a note file is
+   * renamed, its links already read the new key and the rename cascade has
+   * nothing left to do. Then the notes, their derived files, and the `citekey:`
+   * frontmatter follow. Own-template notes are re-rendered by the caller so
+   * annotations and excerpt images follow too.
+   *
+   * `citeOnly` pairs (items with no literature note) go through the same
+   * rewrite, and their pending records are cleared once it succeeds.
    */
   async applyCitekeyReconcile(plan: CitekeyReconcilePlan): Promise<{
     notesRenamed: number;
     derivedRenamed: number;
     skipped: string[];
     filesWithCitations: number;
+    citeOnlyRewritten: number;
   }> {
     const { vault, fileManager } = this.plugin.app;
     let notesRenamed = 0;
     let derivedRenamed = 0;
     const skipped: string[] = [];
+
+    // ONE rewrite map for note-covered and cite-only renames alike.
+    const renameMap: Record<string, string> = {};
+    for (const r of plan.renames) {
+      if (r.fromKey && r.fromKey !== r.toKey) renameMap[r.fromKey] = r.toKey;
+    }
+    for (const c of plan.citeOnly) {
+      if (c.fromKey && c.fromKey !== c.toKey) renameMap[c.fromKey] = c.toKey;
+    }
+
+    // Rewrite citations BEFORE any rename, so Obsidian's link cascade is a no-op.
+    let filesWithCitations = 0;
+    if (Object.keys(renameMap).length) {
+      const citePlan = await this.findCitekeyUsagesInVault(renameMap);
+      await this.applyRenames(citePlan);
+      filesWithCitations = citePlan.size;
+      await this.clearPendingCitekeyRenames(Object.keys(renameMap));
+    }
 
     for (const r of plan.renames) {
       const file = vault.getAbstractFileByPath(r.path);
@@ -1962,18 +1995,13 @@ export class BibManager {
       }
     }
 
-    const renameMap: Record<string, string> = {};
-    for (const r of plan.renames) {
-      if (r.fromKey && r.fromKey !== r.toKey) renameMap[r.fromKey] = r.toKey;
-    }
-    let filesWithCitations = 0;
-    if (Object.keys(renameMap).length) {
-      const citePlan = await this.findCitekeyUsagesInVault(renameMap);
-      await this.applyRenames(citePlan);
-      filesWithCitations = citePlan.size;
-    }
-
-    return { notesRenamed, derivedRenamed, skipped, filesWithCitations };
+    return {
+      notesRenamed,
+      derivedRenamed,
+      skipped,
+      filesWithCitations,
+      citeOnlyRewritten: plan.citeOnly.length,
+    };
   }
 
   // Build (or rebuild) the global CSL engine from the current bibCache.
@@ -3178,6 +3206,58 @@ export class BibManager {
     } catch (e) {
       console.warn('[sw] saveSyncState failed:', e);
     }
+  }
+
+  /**
+   * old→new citekey pairs awaiting a vault rewrite. Chains are resolved
+   * transitively (a→b then b→c yields a→c), since only the final key exists.
+   */
+  pendingCitekeyRenames(): Map<string, string> {
+    const raw = this.syncState?.pendingCitekeyRenames ?? {};
+    const out = new Map<string, string>();
+    for (const from of Object.keys(raw)) {
+      let to = raw[from];
+      const seen = new Set([from]);
+      while (to && raw[to] !== undefined && !seen.has(to)) {
+        seen.add(to);
+        to = raw[to];
+      }
+      if (to && to !== from) out.set(from, to);
+    }
+    return out;
+  }
+
+  /** Merge detected renames into the pending set and persist immediately. */
+  private async recordPendingCitekeyRenames(
+    renamed: Map<string, string>
+  ): Promise<void> {
+    const pending = { ...(this.syncState.pendingCitekeyRenames ?? {}) };
+    let changed = false;
+    for (const [from, to] of renamed) {
+      if (!from || !to || from === to || pending[from] === to) continue;
+      pending[from] = to;
+      changed = true;
+    }
+    if (!changed) return;
+    this.syncState = { ...this.syncState, pendingCitekeyRenames: pending };
+    await this.saveSyncState();
+  }
+
+  /** Drop pairs once their citations have been rewritten. */
+  private async clearPendingCitekeyRenames(
+    applied: Iterable<string>
+  ): Promise<void> {
+    const pending = { ...(this.syncState.pendingCitekeyRenames ?? {}) };
+    let changed = false;
+    for (const from of applied) {
+      if (from in pending) {
+        delete pending[from];
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    this.syncState = { ...this.syncState, pendingCitekeyRenames: pending };
+    await this.saveSyncState();
   }
 
   /**

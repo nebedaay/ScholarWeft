@@ -11,7 +11,7 @@
 
 ScholarWeft's unique **linked citations** weave every work you cite into your interconnected Obsidian thought universe. The citation `[[@sanchez2009|see @, p. 25]]` is simultaneously a formatted inline citation — "(see Sanchez 2009, 25)" — *and* an Obsidian wikilink to that source’s literature note. Other citation plugins can either link to a literature note (`[[@sanchez2009]]`) or render pandoc-formatted citations (`[see @sanchez2009, p. 25]`) but don’t allow you to integrate publication-ready citations as nodes in Obsidian's note network visualized in backlinks and graphs.
 
-Beyond linking your scholarly notes and references, ScholarWeft links your writing process inside Obsidian to and from the world beyond Obsidian. Move previous writing into Obsidian’s link network by importing DOCX and ODT documents as Obsidian notes with linked citations and literature notes for each cited work. Export an Obsidian note or compile a series of notes as a publication-ready DOCX, ODT, or PDF document with formatted, live Zotero citations.
+Beyond linking your scholarly notes and references, ScholarWeft allows you to keep your writing process in Obsidian while connecting it to the world beyond Obsidian. Bring your word processor documents into Obsidian’s link network by importing DOCX and ODT documents to Obsidian notes with linked citations and literature notes for each cited work. Export an Obsidian note or compile a series of notes as a publication-ready DOCX, ODT, or PDF document with formatted, live Zotero citations.
 
 ## Documentation
 
@@ -35,24 +35,25 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 ### Citations
 
 - **Linked citations** — `[[@smith1992|see @, p. 6]]` → (see Smith 1992, 6): real Obsidian wikilinks *and* publication-ready formatted citations. Cite several works by placing them together — `[[@a]] [[@b]]` → (Author A Year; Author B Year). See [Linked Citations](./docs/linked-citations.md).
-
-- **Full references in the text** — `[[@key|reference]]` (place several such links together for a list), or a container like `[ [[@a|reference]] [[@b]] [[@c]] ]`, inserts the formatted bibliography entry (or a list of them) — for reading lists and syllabi. They render live in Obsidian and export as plain formatted text. See [Inserting full references](./docs/linked-citations.md#inserting-full-references).
-
+- **Insert full dynamic references in body text** — `[[@key|reference]]` or `[[@key|ref]]` inserts the formatted bibliography entry. Several citations in a row, like `[[@a|reference]] [[@b]] [[@c]]`, yields a reading list. They render live in Obsidian and become plain formatted text when exported. See [Inserting full references](./docs/linked-citations.md#inserting-full-references).
 - **Conventional pandoc citations** — `[@key]`, `[see @key, p. 25]` render too, and commands convert between formats losslessly.
 - **Live reference sidebar** — a searchable list of every citation in the current note, with copy and jump buttons.
 - **Insert bibliography at cursor** and **bibliography snapshot** (save a note's citations as a `.bib`, colour-coded by sync status).
-- **Search that finds the work, ranked by meaning** — `@` searches citekey, author and title; `@@` adds abstracts, publisher and containing work. Every word must be present, words may sit in different fields, word *beginnings* count (`soccri` → *soc*ial *cri*tique), and accents are ignored. Results are ordered by how meaningfully they match — an exact citekey, then author-with-title, then an exact title phrase, then title words, then the `@@` fields — so a title match is never buried by an abstract one. The popup shows the result count and, for `@@`, an excerpt of the abstract where your terms were found. See [Searching for References](./docs/searching.md).
+- **Search Zotero for references to cite while type, ranked by meaning** — while typing, entering `@` searches citekey, author and title; `@@` adds abstracts, publisher and containing work. Search is case- and accent-insensitive, and terms can be in different fields. Search whole terms or beginnings of multiple terms (`soccri` → *soc*ial *cri*tique). Results are ordered by how meaningfully they match — an exact citekey, then author-with-title, then an exact title phrase, then title words, then the `@@` fields — so a title match is never buried by an abstract one. The popup shows the result count and, for `@@`, an excerpt of the abstract where your terms were found. See [Searching for References](./docs/searching.md).
 - **Quick insertion** — in the search popup, **Enter** inserts a linked citation (`[[@key]]`) and **⌘/Ctrl+Enter** a Pandoc one (`[@key]`); inside an open bracket only the closer you still need is added.
 - **Citation decoration and tooltips** — colour-coded status; hover for a formatted preview, literature-note link, and Zotero link.
 - **Mobile support** — tap citations in reading mode, long-press in the editor. See [Mobile](./docs/mobile.md).
 
-### References and literature notes
+### Literature notes from Zotero items
 
-- **Import and update from Zotero** — **Add Literature Notes from Zotero (search and filter)** opens a search-and-filter window over your whole library inside Obsidian (item types, collections, child presence, ordering), or pick items in Zotero's own dialog; then create or refresh their notes. Update the current note, or every note in the vault, in place. Re-imports update only the managed annotations region and metadata, leaving your own writing untouched. See [Literature Notes](./docs/literature-notes.md#importing-and-updating).
-- **Literature note creation** — create notes for cited works from the sidebar, tooltip, or command palette. ScholarWeft's default template provides comprehensive bibliographic data in the note’s frontmatter (every item type's own fields, its Zotero collections) and rich annotation callouts. See [Literature Notes](./docs/literature-notes.md).
-- **Multiple bibliography sources** — any number of `.bib`/CSL-JSON/CSL-YAML files plus Zotero, merged; Zotero wins on conflicts. See [Bibliography](./docs/bibliography.md).
+- **Import and update from Zotero** — The command **Add Literature Notes from Zotero (search and filter)** opens a search-and-filter window that searches all your enabled libraries inside Obsidian using the same search methods used to locate citations (see above). You can filter for items of a certain type; in a collection; containing notes, attachments, or annotations; and only notes not previously imported to Obsidian. You can order by search ranking or ascending or descending alphabetical order. See [Literature Notes](./docs/literature-notes.md#importing-and-updating).
+- **Literature note creation** — While editing, create notes for cited works from the sidebar, tooltip, or command palette. ScholarWeft's default template provides comprehensive bibliographic data in the note’s frontmatter (every item type's own fields, its Zotero collections) and rich annotation callouts. See [Literature Notes](./docs/literature-notes.md).
+
+### Zotero and file-based bibliographies
+
 - **Native Zotero 7/8 API** — no Better BibTeX needed to resolve and format citations (BBT still required for Zotero 6, and still the easiest way to auto-generate citekeys). See [Zotero](./docs/zotero.md).
-- **Citekey sync** — update citations and literature notes across the vault if your citekeys change; images attached from annotations are also renamed.
+- **Multiple bibliography sources** — any number of `.bib`/CSL-JSON/CSL-YAML files plus Zotero, merged; Zotero wins on conflicts. See [Bibliography](./docs/bibliography.md).
+- **Citekey and li sync** — update citations and literature notes across the vault if your citekeys change; images attached from annotations are also renamed.
 
 ### Document import and export (desktop only)
 

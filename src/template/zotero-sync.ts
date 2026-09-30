@@ -34,10 +34,24 @@ export interface SyncState {
    * deltas fills it; a `_version` guards staleness.
    */
   presence?: Record<string, import('./child-presence').ChildPresence>;
+  /**
+   * oldCitekey → newCitekey pairs detected by diffing the persisted library
+   * cache against a refresh (matched by `_zoteroKey`). Kept until the vault
+   * rewrite succeeds, so a declined prompt, a crash, or a deferral cannot lose
+   * a rename — the library cache is already overwritten by then. Cite-only keys
+   * (no literature note) have no other record of their old key.
+   */
+  pendingCitekeyRenames?: Record<string, string>;
 }
 
 export function emptySyncState(): SyncState {
-  return { versions: {}, attachments: {}, libraryFolders: {}, presence: {} };
+  return {
+    versions: {},
+    attachments: {},
+    libraryFolders: {},
+    presence: {},
+    pendingCitekeyRenames: {},
+  };
 }
 
 /**

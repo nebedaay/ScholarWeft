@@ -42,8 +42,9 @@ export class CitekeyReconcileModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    const { renames, derived, blocked, unresolved } = this.plan;
-    const actionable = renames.length > 0 || derived.length > 0;
+    const { renames, citeOnly, derived, blocked, unresolved } = this.plan;
+    const actionable =
+      renames.length > 0 || derived.length > 0 || citeOnly.length > 0;
 
     setModalTitle(
       this,
@@ -53,9 +54,13 @@ export class CitekeyReconcileModal extends Modal {
     if (actionable) {
       contentEl.createEl('p', {
         text:
-          `Zotero has a new citekey for ${renames.length} reference` +
-          `${renames.length !== 1 ? 's' : ''}. ScholarWeft will update the ` +
-          `matching literature note${renames.length !== 1 ? 's' : ''}` +
+          `Zotero has new citekeys for ${renames.length + citeOnly.length} reference` +
+          `${renames.length + citeOnly.length !== 1 ? 's' : ''}` +
+          (citeOnly.length
+            ? ` (${citeOnly.length} with no literature note)`
+            : '') +
+          `. ScholarWeft will update the matching literature note` +
+          `${renames.length !== 1 ? 's' : ''}` +
           (derived.length
             ? ` and ${derived.length} associated file${derived.length !== 1 ? 's' : ''}`
             : '') +
@@ -69,6 +74,21 @@ export class CitekeyReconcileModal extends Modal {
           text: `${r.fromKey ? `@${r.fromKey}` : r.path.split('/').pop()}  →  @${r.toKey}   `,
         });
         this.link(li, r.path, r.path.split('/').pop());
+      }
+
+      if (citeOnly.length) {
+        const details = contentEl.createEl('details', {
+          cls: 'sw-rename-details',
+        });
+        details.createEl('summary', {
+          text: `Citations with no literature note (${citeOnly.length})`,
+        }).style.cursor = 'pointer';
+        const ul = details.createEl('ul');
+        ul.style.maxHeight = '200px';
+        ul.style.overflowY = 'auto';
+        for (const c of citeOnly) {
+          ul.createEl('li', { text: `@${c.fromKey}  →  @${c.toKey}` });
+        }
       }
 
       if (derived.length) {

@@ -177,6 +177,12 @@ export interface DerivedRename {
 export interface CitekeyReconcilePlan {
   /** Notes that will be renamed/re-keyed. */
   renames: NoteReconcile[];
+  /**
+   * Old → new citekeys for items that have NO literature note (detected by
+   * diffing the persisted library cache against a refresh, matched by
+   * `_zoteroKey`). Their citations are rewritten, but there is no note to
+   * rename. */
+  citeOnly: Array<{ fromKey: string; toKey: string }>;
   /** Notes whose new name is already taken (reported, not acted on). */
   blocked: NoteReconcile[];
   /** Notes whose `zotero-key` is not in the loaded library (reported, not acted on). */
@@ -184,6 +190,24 @@ export interface CitekeyReconcilePlan {
   derived: DerivedRename[];
   /** Derived-file target names already taken; those renames are skipped. */
   conflicts: string[];
+}
+
+/**
+ * Cite-only pairs: every detected rename (`pending`) whose old key is NOT the
+ * `fromKey` of a note rename (those are handled by the note pass). Pure, so the
+ * partition is testable.
+ */
+export function citeOnlyPairs(
+  pending: ReadonlyMap<string, string>,
+  noteFromKeys: ReadonlySet<string>
+): Array<{ fromKey: string; toKey: string }> {
+  const out: Array<{ fromKey: string; toKey: string }> = [];
+  for (const [fromKey, toKey] of pending) {
+    if (fromKey && toKey && fromKey !== toKey && !noteFromKeys.has(fromKey)) {
+      out.push({ fromKey, toKey });
+    }
+  }
+  return out;
 }
 
 /**
@@ -232,3 +256,14 @@ export function planCitekeyReconcile(
 
   return { renames, unresolved };
 }
+
+// The citekey parser lives in ONE dependency-free module so every detection
+// site is identical (reconcile, the converters, the migration tools). Re-export
+// it here so existing importers of `note-lookup` keep working.
+export {
+  CITEKEY_BODY,
+  replaceCitekeys,
+  scanCitekeys,
+  transformBareCitekeys,
+  type CitekeyHit,
+} from './citekey-grammar';

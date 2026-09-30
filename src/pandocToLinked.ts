@@ -1,6 +1,7 @@
 import { Notice, TFile } from 'obsidian';
 import type ReferenceList from './main';
 import { getCitationSegments } from 'src/parser/parser';
+import { transformBareCitekeys } from 'src/template/citekey-grammar';
 import { convertExcludedFolders } from './linkedToPandoc';
 import { filesToConvert } from './template/convert-scope';
 
@@ -211,19 +212,20 @@ export function rewritePandocToLinked(
     return members.join(' ');
   });
 
-  // 2. Bare @citekey in prose (not inside [[...]] or [@...] already)
-  //    Match @key where key is alphanumeric (no brackets/punct). Exclude
-  //    emails (name@example.com), hashtags, URL handles (/@nikalie), and
-  //    anything preceded by '|' (inside a wikilink alias) or '[' / ']'.
+  // 2. Bare @citekey in prose (not inside [[...]] or [@...] already).
+  //    Detection is the SHARED citekey parser (`transformBareCitekeys`), so it
+  //    matches the full Pandoc key grammar (internal punctuation allowed,
+  //    trailing punctuation stripped) and skips an `@` that is part of an email
+  //    or handle, a URL, a wikilink alias, or `[[…]]` / `[@…]` syntax.
   //    A bare @key in prose is an in-text (narrative) citation, so its linked
   //    form is [[@key|@ -]] — target @key, alias "@ -" where @ expands to
   //    the link's own citekey and the trailing dash = narrative flag. (NOT
   //    [[@key -]], which would link to a note literally named "@key -".)
-  const bareRe = /(?<![\w@[\]/|])@([a-zA-Z][a-zA-Z0-9]{2,})(?![\w@.])/g;
-  out = out.replace(bareRe, (m, key: string) => {
+  out = transformBareCitekeys(out, (key) => {
+    if (key.length < 3) return null; // too short to be a citekey
     if (!resolvable.has(key)) {
-      report.skipped.push({ text: m, reason: 'unresolved bare citekey' });
-      return m;
+      report.skipped.push({ text: `@${key}`, reason: 'unresolved bare citekey' });
+      return null;
     }
     changed = true;
     return `[[@${key}|@ -]]`;
