@@ -96240,9 +96240,56 @@ function sameVariantWord(a3, b3) {
   const bv = VARIANT_INDEX.get(b3);
   return !!av && !!bv && av.canon === bv.canon;
 }
-function spellingVariants(term) {
-  const v3 = VARIANT_INDEX.get(term);
-  return v3 ? [v3.counterpart] : [];
+var PREFIX_SEGMENTS = new Map();
+for (const [us, uk] of Object.entries(STEM_PAIRS)) {
+  const usForms = [us, us.replace(/e$/, "")];
+  const ukForms = [uk, uk.replace(/e$/, "")];
+  for (let i3 = 0; i3 < 2; i3++) {
+    const stripped = i3 === 1;
+    if (!PREFIX_SEGMENTS.has(usForms[i3])) {
+      PREFIX_SEGMENTS.set(usForms[i3], { us: usForms[i3], uk: ukForms[i3], stripped });
+    }
+    if (!PREFIX_SEGMENTS.has(ukForms[i3])) {
+      PREFIX_SEGMENTS.set(ukForms[i3], { us: usForms[i3], uk: ukForms[i3], stripped });
+    }
+  }
+}
+var MAX_SEGMENT = Math.max(...Array.from(PREFIX_SEGMENTS.keys(), (s3) => s3.length));
+function replaceLeadingStem(word, side) {
+  const max = Math.min(word.length, MAX_SEGMENT);
+  for (let len = max; len > 0; len--) {
+    const hit = PREFIX_SEGMENTS.get(word.slice(0, len));
+    if (!hit)
+      continue;
+    const rest = word.slice(len);
+    if (hit.stripped && !/^[aeiou]/.test(rest))
+      continue;
+    return hit[side] + rest;
+  }
+  return word;
+}
+function canonicalStemPrefix(word) {
+  return replaceLeadingStem(word, "us");
+}
+function britishStemPrefix(word) {
+  return replaceLeadingStem(word, "uk");
+}
+var NEEDLE_CACHE = new Map();
+function spellingNeedles(term) {
+  const cached = NEEDLE_CACHE.get(term);
+  if (cached)
+    return cached;
+  const us = canonicalStemPrefix(term);
+  const uk = britishStemPrefix(term);
+  const out = [term];
+  if (us !== term)
+    out.push(us);
+  if (uk !== term)
+    out.push(uk);
+  if (NEEDLE_CACHE.size > 2e3)
+    NEEDLE_CACHE.clear();
+  NEEDLE_CACHE.set(term, out);
+  return out;
 }
 
 // src/template/search-match.ts
@@ -96347,27 +96394,36 @@ function trailingPartIs(word, term) {
     return false;
   return PREFIXES.some((p4) => word.startsWith(p4) && word.length - p4.length === term.length);
 }
-function startAlignedIn(word, term) {
+function startAlignedAt(word, term) {
   if (!term || term.length > word.length)
-    return false;
+    return -1;
   if (word.startsWith(term))
-    return true;
+    return 0;
   if (term.length < MIN_INTERIOR_TERM)
-    return false;
+    return -1;
   if (trailingPartIs(word, term))
-    return true;
-  return PREFIXES.some((p4) => word.startsWith(p4) && word.slice(p4.length).startsWith(term));
+    return word.length - term.length;
+  const p4 = PREFIXES.find((pf) => word.startsWith(pf) && word.slice(pf.length).startsWith(term));
+  return p4 ? p4.length : -1;
+}
+function startAlignedAny(word, needles) {
+  for (const n2 of needles)
+    if (startAlignedAt(word, n2) >= 0)
+      return true;
+  return false;
 }
 function matchTerm(text2, term) {
   const q4 = normTerm(term);
   if (!q4)
     return null;
+  const needles = spellingNeedles(q4);
   const joined = q4.replace(/-/g, "");
+  const joinedNeedles = needles.map((n2) => n2.replace(/-/g, ""));
   let best = null;
   for (const w4 of hyphenWords(text2)) {
     const wJoined = w4.replace(/-/g, "");
     const exactWord = w4 === q4 || wJoined === joined;
-    const prefixHit = !exactWord && (w4.startsWith(q4) || wJoined.startsWith(joined));
+    const prefixHit = !exactWord && (needles.some((n2) => w4.startsWith(n2)) || joinedNeedles.some((n2) => wJoined.startsWith(n2)));
     if (exactWord)
       return { strength: "word" };
     if (prefixHit) {
@@ -96377,12 +96433,12 @@ function matchTerm(text2, term) {
   for (const w4 of words(text2)) {
     if (sameWord(w4, q4))
       return { strength: "word" };
-    if (w4.startsWith(q4)) {
+    if (needles.some((n2) => w4.startsWith(n2))) {
       if (!best)
         best = { strength: "prefix" };
       continue;
     }
-    if (!best && startAlignedIn(w4, q4))
+    if (!best && startAlignedAny(w4, needles))
       best = { strength: "interior" };
   }
   return best;
@@ -96412,9 +96468,10 @@ function adjacentChain(text2, terms) {
     return 0;
   const ws = words(text2);
   const first = normTerm(terms[0]);
+  const firstNeedles = spellingNeedles(first);
   let best = 0;
   for (let i3 = 0; i3 < ws.length - 1; i3++) {
-    if (!(sameWord(ws[i3], first) || ws[i3].startsWith(first)))
+    if (!(sameWord(ws[i3], first) || firstNeedles.some((n2) => ws[i3].startsWith(n2))))
       continue;
     let chain = 1;
     for (let t4 = 1; t4 < terms.length; t4++) {
@@ -96422,7 +96479,8 @@ function adjacentChain(text2, terms) {
       if (!next)
         break;
       const q4 = normTerm(terms[t4]);
-      if (next.startsWith(q4) || sameWord(next, q4) || trailingPartIs(next, q4)) {
+      const qNeedles = spellingNeedles(q4);
+      if (sameWord(next, q4) || qNeedles.some((n2) => next.startsWith(n2) || trailingPartIs(next, n2))) {
         chain++;
       } else {
         break;
@@ -97775,8 +97833,7 @@ var BibManager = class {
           continue;
         if (a3.hyphenated && hay.includes(a3.text.replace(/-/g, "")))
           continue;
-        const variants = spellingVariants(a3.text);
-        if (variants.some((v3) => hay.includes(v3)))
+        if (spellingNeedles(a3.text).some((v3) => hay.includes(v3)))
           continue;
         return false;
       }

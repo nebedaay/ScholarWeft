@@ -20,7 +20,7 @@
  * `colonisation` ≡ `colonization`) — deterministic, not fuzzy.
  */
 
-import { sameVariantWord } from './search-variants';
+import { sameVariantWord, spellingNeedles } from './search-variants';
 
 /** Terms shorter than this never match interiorly (too much noise). */
 export const MIN_INTERIOR_TERM = 4;
@@ -145,16 +145,29 @@ export function trailingPartIs(word: string, term: string): boolean {
   );
 }
 
+/** The offset at which `term` is start-aligned inside `word`, or -1.
+ *  (Word start, after a known prefix, or the trailing part of a compound.) */
+export function startAlignedAt(word: string, term: string): number {
+  if (!term || term.length > word.length) return -1;
+  if (word.startsWith(term)) return 0;
+  if (term.length < MIN_INTERIOR_TERM) return -1;
+  if (trailingPartIs(word, term)) return word.length - term.length;
+  const p = PREFIXES.find(
+    (pf) => word.startsWith(pf) && word.slice(pf.length).startsWith(term)
+  );
+  return p ? p.length : -1;
+}
+
 /** Is `term` start-aligned inside `word` (word start, after a prefix, or the
  *  trailing part of a compound)? */
 export function startAlignedIn(word: string, term: string): boolean {
-  if (!term || term.length > word.length) return false;
-  if (word.startsWith(term)) return true;
-  if (term.length < MIN_INTERIOR_TERM) return false;
-  if (trailingPartIs(word, term)) return true;
-  return PREFIXES.some(
-    (p) => word.startsWith(p) && word.slice(p.length).startsWith(term)
-  );
+  return startAlignedAt(word, term) >= 0;
+}
+
+/** Start-alignment against ANY of a term's spelling needles (variant-aware). */
+function startAlignedAny(word: string, needles: readonly string[]): boolean {
+  for (const n of needles) if (startAlignedAt(word, n) >= 0) return true;
+  return false;
 }
 
 export interface WordMatch {
@@ -179,13 +192,22 @@ export function matchTerm(text: string, term: string): WordMatch | null {
   //   `anticolonial`   matches "anticolonial" AND "anti-colonial"
   //   `anti-colonial`  matches "anti-colonial" AND "anticolonial"
   // and neither matches `anti` + `colonial` belonging to unrelated words.
+  // The spellings `q` may match by PREFIX: itself plus its stem rotated to the
+  // other spelling (`color` → also `colour`). Whole-word equality is separate
+  // (sameWord); the needles close the prefix/interior asymmetry that made
+  // `color` and `colour` return different sets of derived words.
+  const needles = spellingNeedles(q);
   const joined = q.replace(/-/g, '');
+  const joinedNeedles = needles.map((n) => n.replace(/-/g, ''));
+
   let best: WordMatch | null = null;
   for (const w of hyphenWords(text)) {
     const wJoined = w.replace(/-/g, '');
     const exactWord = w === q || wJoined === joined;
     const prefixHit =
-      !exactWord && (w.startsWith(q) || wJoined.startsWith(joined));
+      !exactWord &&
+      (needles.some((n) => w.startsWith(n)) ||
+        joinedNeedles.some((n) => wJoined.startsWith(n)));
     if (exactWord) return { strength: 'word' };
     if (prefixHit) {
       // A prefix is a prefix whether or not the word carries a hyphen.
@@ -194,11 +216,11 @@ export function matchTerm(text: string, term: string): WordMatch | null {
   }
   for (const w of words(text)) {
     if (sameWord(w, q)) return { strength: 'word' };
-    if (w.startsWith(q)) {
+    if (needles.some((n) => w.startsWith(n))) {
       if (!best) best = { strength: 'prefix' };
       continue;
     }
-    if (!best && startAlignedIn(w, q)) best = { strength: 'interior' };
+    if (!best && startAlignedAny(w, needles)) best = { strength: 'interior' };
   }
   return best;
 }
@@ -241,15 +263,26 @@ export function adjacentChain(text: string, terms: string[]): number {
   if (terms.length < 2) return 0;
   const ws = words(text);
   const first = normTerm(terms[0]);
+  const firstNeedles = spellingNeedles(first);
   let best = 0;
   for (let i = 0; i < ws.length - 1; i++) {
-    if (!(sameWord(ws[i], first) || ws[i].startsWith(first))) continue;
+    if (
+      !(
+        sameWord(ws[i], first) ||
+        firstNeedles.some((n) => ws[i].startsWith(n))
+      )
+    )
+      continue;
     let chain = 1;
     for (let t = 1; t < terms.length; t++) {
       const next = ws[i + t];
       if (!next) break;
       const q = normTerm(terms[t]);
-      if (next.startsWith(q) || sameWord(next, q) || trailingPartIs(next, q)) {
+      const qNeedles = spellingNeedles(q);
+      if (
+        sameWord(next, q) ||
+        qNeedles.some((n) => next.startsWith(n) || trailingPartIs(next, n))
+      ) {
         chain++;
       } else {
         break;
@@ -277,20 +310,26 @@ export function matchSpans(
     const w = normTerm(m[0]);
     for (const q of qs) {
       if (!q) continue;
+      const needles = spellingNeedles(q);
       let at = -1;
-      if (sameWord(w, q) || w.startsWith(q)) at = 0;
-      else if (startAlignedIn(w, q)) {
-        if (w.startsWith(q)) at = 0;
-        else if (trailingPartIs(w, q)) at = w.length - q.length;
-        else {
-          const p = PREFIXES.find(
-            (pf) => w.startsWith(pf) && w.slice(pf.length).startsWith(q)
-          );
-          at = p ? p.length : -1;
+      let len = q.length;
+      if (sameWord(w, q)) {
+        at = 0;
+        // Bold the spelling the FIELD actually uses, so `color` emphasises all
+        // of `colour` rather than its first five characters.
+        len = needles.find((n) => n === w)?.length ?? q.length;
+      } else {
+        for (const n of needles) {
+          const off = startAlignedAt(w, n);
+          if (off >= 0) {
+            at = off;
+            len = n.length;
+            break;
+          }
         }
       }
       if (at >= 0) {
-        spans.push({ start: m.index + at, end: m.index + at + q.length });
+        spans.push({ start: m.index + at, end: m.index + at + len });
       }
     }
   }

@@ -116,9 +116,9 @@ function register(form: string, canon: string, counterpart: string): void {
   VARIANT_INDEX.set(form, { canon, counterpart });
 }
 
-/** Is `word` a known variant spelling, in any inflection? */
+/** Does `word` have a known other spelling (registered or stem-derived)? */
 export function isVariantWord(word: string): boolean {
-  return VARIANT_INDEX.has(word);
+  return spellingVariants(word).length > 0;
 }
 
 /** The canonical spelling a word folds to (itself when not a known variant). */
@@ -140,6 +140,101 @@ export function sameVariantWord(a: string, b: string): boolean {
  * of the query (`colour` for `color`) is not discarded before the scorer runs.
  */
 export function spellingVariants(term: string): string[] {
-  const v = VARIANT_INDEX.get(term);
-  return v ? [v.counterpart] : [];
+  const out = new Set<string>();
+  for (const v of spellingNeedles(term)) if (v !== term) out.add(v);
+  const reg = VARIANT_INDEX.get(term);
+  if (reg && reg.counterpart !== term) out.add(reg.counterpart);
+  return [...out];
+}
+
+/* --------------------------------------------------------------------------
+ * LEADING-STEM folding for PREFIX / INTERIOR matches.
+ *
+ * Whole words fold through {@link VARIANT_INDEX}. A term also matches a field
+ * word by PREFIX, though, and that comparison used to be spelling-blind:
+ * `colour` prefixed `colours`/`coloured`/`colourful`, but `color` did not — so
+ * the two spellings returned different sets. The fix is to rotate the LEADING
+ * stem between its American and British spellings and test both needles, so
+ * `color` matches `colourful` exactly as `colour` matches `colorful`.
+ *
+ * A stem is registered in two forms, with and without its final `e`, because
+ * English drops it before a vowel-initial suffix (`analyse`+`ing` →
+ * `analysing`). An e-stripped form is only allowed before a vowel, so the noun
+ * `emphasis` is NOT read as a form of `emphasise`.
+ * ------------------------------------------------------------------------ */
+
+interface StemSegment {
+  /** The American spelling of this leading segment. */
+  us: string;
+  /** The British spelling of this leading segment. */
+  uk: string;
+  /** True for the e-dropped variant (`analys` from `analyse`). */
+  stripped: boolean;
+}
+
+/** Longest-first index of every stem segment → its two spellings. */
+const PREFIX_SEGMENTS = new Map<string, StemSegment>();
+
+for (const [us, uk] of Object.entries(STEM_PAIRS)) {
+  const usForms = [us, us.replace(/e$/, '')];
+  const ukForms = [uk, uk.replace(/e$/, '')];
+  for (let i = 0; i < 2; i++) {
+    const stripped = i === 1;
+    if (!PREFIX_SEGMENTS.has(usForms[i])) {
+      PREFIX_SEGMENTS.set(usForms[i], { us: usForms[i], uk: ukForms[i], stripped });
+    }
+    if (!PREFIX_SEGMENTS.has(ukForms[i])) {
+      PREFIX_SEGMENTS.set(ukForms[i], { us: usForms[i], uk: ukForms[i], stripped });
+    }
+  }
+}
+
+const MAX_SEGMENT = Math.max(
+  ...Array.from(PREFIX_SEGMENTS.keys(), (s) => s.length)
+);
+
+/** Replace the longest leading stem segment with the requested spelling. */
+function replaceLeadingStem(word: string, side: 'us' | 'uk'): string {
+  const max = Math.min(word.length, MAX_SEGMENT);
+  for (let len = max; len > 0; len--) {
+    const hit = PREFIX_SEGMENTS.get(word.slice(0, len));
+    if (!hit) continue;
+    const rest = word.slice(len);
+    // An e-dropped stem is only valid before a vowel-initial suffix.
+    if (hit.stripped && !/^[aeiou]/.test(rest)) continue;
+    return hit[side] + rest;
+  }
+  return word;
+}
+
+/** `colourful` → `colorful`, `analysing` → `analyzing`; unrelated words are unchanged. */
+export function canonicalStemPrefix(word: string): string {
+  return replaceLeadingStem(word, 'us');
+}
+
+/** `colorful` → `colourful`, `analyzing` → `analysing`; unrelated words are unchanged. */
+export function britishStemPrefix(word: string): string {
+  return replaceLeadingStem(word, 'uk');
+}
+
+/** Cached: needles are computed once per query term and reused for every entry. */
+const NEEDLE_CACHE = new Map<string, string[]>();
+
+/**
+ * The spellings a QUERY TERM may match a field by PREFIX: the term itself plus
+ * the American and British rotations of its leading stem. Matching a field word
+ * that starts with ANY needle is what makes `color` and `colour` return the
+ * same set. The cache keeps this off the per-entry hot path.
+ */
+export function spellingNeedles(term: string): string[] {
+  const cached = NEEDLE_CACHE.get(term);
+  if (cached) return cached;
+  const us = canonicalStemPrefix(term);
+  const uk = britishStemPrefix(term);
+  const out = [term];
+  if (us !== term) out.push(us);
+  if (uk !== term) out.push(uk);
+  if (NEEDLE_CACHE.size > 2000) NEEDLE_CACHE.clear();
+  NEEDLE_CACHE.set(term, out);
+  return out;
 }

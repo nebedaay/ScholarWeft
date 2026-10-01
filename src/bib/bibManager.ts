@@ -83,7 +83,7 @@ import {
 } from 'src/template/children-cache';
 import { buildChildPresence } from 'src/template/child-presence';
 import { containsLiteral, queryAtoms, normTerm } from 'src/template/search-match';
-import { spellingVariants } from 'src/template/search-variants';
+import { spellingNeedles } from 'src/template/search-variants';
 import {
   recordQuery,
   recordRecentKey,
@@ -1085,11 +1085,12 @@ export class BibManager {
         if (hay.includes(a.text)) continue;
         // A hyphenated term may be present only in its JOINED spelling.
         if (a.hyphenated && hay.includes(a.text.replace(/-/g, ''))) continue;
-        // The field may hold the OTHER spelling of a variant pair
-        // (`color`/`colour`, `polarised`/`polarized`). The scorer accepts those,
-        // so the pre-filter must admit them rather than reject the entry first.
-        const variants = spellingVariants(a.text);
-        if (variants.some((v) => hay.includes(v))) continue;
+        // The field may hold the OTHER spelling of a variant pair — as a whole
+        // word OR as the stem of a longer word (`color`/`colourful`). The scorer
+        // accepts both, so the pre-filter must admit them rather than reject the
+        // entry first. `spellingNeedles` covers the term itself and both stem
+        // spellings; a prefix match implies the needle is a substring.
+        if (spellingNeedles(a.text).some((v) => hay.includes(v))) continue;
         // Otherwise no field contains this term in any spelling: no match.
         return false;
       }
