@@ -96100,137 +96100,149 @@ var SimpleLRU = class {
 init_collections();
 
 // src/template/search-variants.ts
-var RULES = [
-  [/([a-z])isation\b/g, "$1ization"],
-  [/([a-z])ise\b/g, "$1ize"],
-  [/([a-z])iser\b/g, "$1izer"],
-  [/our\b/g, "or"],
-  [/ae/g, "e"],
-  [/oe/g, "e"]
+var STEM_PAIRS = {
+  color: "colour",
+  flavor: "flavour",
+  favor: "favour",
+  honor: "honour",
+  humor: "humour",
+  labor: "labour",
+  neighbor: "neighbour",
+  rumor: "rumour",
+  behavior: "behaviour",
+  endeavor: "endeavour",
+  harbor: "harbour",
+  rigor: "rigour",
+  vigor: "vigour",
+  splendor: "splendour",
+  odor: "odour",
+  valor: "valour",
+  armor: "armour",
+  ardor: "ardour",
+  candor: "candour",
+  demeanor: "demeanour",
+  parlor: "parlour",
+  savior: "saviour",
+  tumor: "tumour",
+  vapor: "vapour",
+  organize: "organise",
+  recognize: "recognise",
+  analyze: "analyse",
+  paralyze: "paralyse",
+  catalyze: "catalyse",
+  civilize: "civilise",
+  realize: "realise",
+  modernize: "modernise",
+  globalize: "globalise",
+  secularize: "secularise",
+  standardize: "standardise",
+  characterize: "characterise",
+  categorize: "categorise",
+  theorize: "theorise",
+  legitimize: "legitimise",
+  emphasize: "emphasise",
+  criticize: "criticise",
+  colonize: "colonise",
+  polarize: "polarise",
+  mobilize: "mobilise",
+  normalize: "normalise",
+  marginalize: "marginalise",
+  institutionalize: "institutionalise",
+  nationalize: "nationalise",
+  privatize: "privatise",
+  radicalize: "radicalise",
+  summarize: "summarise",
+  minimize: "minimise",
+  maximize: "maximise",
+  optimize: "optimise",
+  prioritize: "prioritise",
+  rationalize: "rationalise",
+  visualize: "visualise",
+  conceptualize: "conceptualise",
+  contextualize: "contextualise",
+  problematize: "problematise",
+  democratize: "democratise",
+  industrialize: "industrialise",
+  urbanize: "urbanise",
+  aestheticize: "aestheticise",
+  materialize: "materialise",
+  mechanize: "mechanise",
+  stigmatize: "stigmatise",
+  medieval: "mediaeval",
+  encyclopedia: "encyclopaedia",
+  aesthetic: "esthetic",
+  estrogen: "oestrogen",
+  edema: "oedema",
+  esophagus: "oesophagus",
+  diarrhea: "diarrhoea",
+  apnea: "apnoea",
+  anemia: "anaemia",
+  anesthesia: "anaesthesia",
+  hemorrhage: "haemorrhage",
+  archaeology: "archeology",
+  pediatric: "paediatric",
+  orthopedics: "orthopaedics",
+  paleontology: "palaeontology"
+};
+var TAILS = [
+  "ations",
+  "ation",
+  "ing",
+  "ings",
+  "ed",
+  "es",
+  "s",
+  "er",
+  "ers",
+  "al",
+  "ally",
+  "ic",
+  "ical",
+  "ive",
+  "ives",
+  "able",
+  "ably",
+  "ity",
+  "ities",
+  "ism",
+  "isms",
+  "ist",
+  "ists",
+  "ment",
+  "ments",
+  ""
 ];
-var VARIANT_WORDS = new Set([
-  "color",
-  "colour",
-  "colors",
-  "colours",
-  "colored",
-  "coloured",
-  "behavior",
-  "behaviour",
-  "behaviors",
-  "behaviours",
-  "favor",
-  "favour",
-  "honor",
-  "honour",
-  "labor",
-  "labour",
-  "neighbor",
-  "neighbour",
-  "rumor",
-  "rumour",
-  "humor",
-  "humour",
-  "organize",
-  "organise",
-  "organized",
-  "organised",
-  "organizing",
-  "organising",
-  "organization",
-  "organisation",
-  "organizations",
-  "organisations",
-  "colonize",
-  "colonise",
-  "colonized",
-  "colonised",
-  "colonization",
-  "colonisation",
-  "colonizing",
-  "colonising",
-  "recognize",
-  "recognise",
-  "recognized",
-  "recognised",
-  "recognition",
-  "analyze",
-  "analyse",
-  "analyzed",
-  "analysed",
-  "analyzing",
-  "analysing",
-  "civilize",
-  "civilise",
-  "civilized",
-  "civilised",
-  "civilization",
-  "civilisation",
-  "realize",
-  "realise",
-  "realized",
-  "realised",
-  "modernize",
-  "modernise",
-  "modernization",
-  "modernisation",
-  "globalize",
-  "globalise",
-  "globalization",
-  "globalisation",
-  "secularize",
-  "secularise",
-  "secularization",
-  "secularisation",
-  "standardize",
-  "standardise",
-  "standardization",
-  "standardisation",
-  "characterize",
-  "characterise",
-  "characterization",
-  "characterisation",
-  "categorize",
-  "categorise",
-  "categorization",
-  "categorisation",
-  "theorize",
-  "theorise",
-  "theorized",
-  "theorised",
-  "legitimize",
-  "legitimise",
-  "legitimized",
-  "legitimised",
-  "emphasize",
-  "emphasise",
-  "emphasized",
-  "emphasised",
-  "criticize",
-  "criticise",
-  "criticized",
-  "criticised",
-  "medieval",
-  "mediaeval",
-  "encyclopedia",
-  "encyclopaedia",
-  "esthetic",
-  "aesthetic",
-  "esthetics",
-  "aesthetics"
-]);
-function canonicalForm(word) {
-  let s3 = word;
-  for (const [re, to] of RULES)
-    s3 = s3.replace(re, to);
-  return s3;
+function inflect(stem, tail) {
+  return /^[aeiou]/.test(tail) ? stem.replace(/e$/, "") + tail : stem + tail;
 }
-function isVariantPair(a3, b3) {
+var VARIANT_INDEX = new Map();
+for (const [canonStem, otherStem] of Object.entries(STEM_PAIRS)) {
+  for (const tail of TAILS) {
+    const canon = inflect(canonStem, tail);
+    const other = inflect(otherStem, tail);
+    if (!canon || !other || canon === other)
+      continue;
+    register2(canon, canon, other);
+    register2(other, canon, canon);
+  }
+}
+function register2(form, canon, counterpart) {
+  const existing = VARIANT_INDEX.get(form);
+  if (existing) {
+    return;
+  }
+  VARIANT_INDEX.set(form, { canon, counterpart });
+}
+function sameVariantWord(a3, b3) {
   if (a3 === b3)
     return true;
-  if (!VARIANT_WORDS.has(a3) || !VARIANT_WORDS.has(b3))
-    return false;
-  return canonicalForm(a3) === canonicalForm(b3);
+  const av = VARIANT_INDEX.get(a3);
+  const bv = VARIANT_INDEX.get(b3);
+  return !!av && !!bv && av.canon === bv.canon;
+}
+function spellingVariants(term) {
+  const v3 = VARIANT_INDEX.get(term);
+  return v3 ? [v3.counterpart] : [];
 }
 
 // src/template/search-match.ts
@@ -96256,9 +96268,7 @@ function words(text2) {
   return out;
 }
 function sameWord(a3, b3) {
-  if (a3 === b3)
-    return true;
-  return isVariantPair(a3, b3) && canonicalForm(a3) === canonicalForm(b3);
+  return sameVariantWord(a3, b3);
 }
 function queryAtoms(query) {
   var _a, _b;
@@ -97764,6 +97774,9 @@ var BibManager = class {
         if (hay.includes(a3.text))
           continue;
         if (a3.hyphenated && hay.includes(a3.text.replace(/-/g, "")))
+          continue;
+        const variants = spellingVariants(a3.text);
+        if (variants.some((v3) => hay.includes(v3)))
           continue;
         return false;
       }

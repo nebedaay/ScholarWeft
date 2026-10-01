@@ -1,6 +1,6 @@
 import { matchTerm, adjacentChain, interiorWeight, queryAtoms, containsLiteral } from '../search-match';
 import { scoreEntry, passesCoverage, queryTerms, compoundWordScore, isCompoundQuery } from '../search-score';
-import { isVariantPair } from '../search-variants';
+import { sameVariantWord } from '../search-variants';
 import { matchesWord } from '../search-score';
 
 describe('matchTerm — whole / prefix / start-aligned interior', () => {
@@ -65,15 +65,15 @@ describe('adjacentChain — phrase adjacency', () => {
 
 describe('orthographic variants', () => {
   it('treats colour/color and colonisation/colonization as equal', () => {
-    expect(isVariantPair('colour', 'color')).toBe(true);
-    expect(isVariantPair('colonisation', 'colonization')).toBe(true);
+    expect(sameVariantWord('colour', 'color')).toBe(true);
+    expect(sameVariantWord('colonisation', 'colonization')).toBe(true);
     expect(matchesWord('The Color of Law', 'colour')).toBe(true);
     expect(matchesWord('Colonisation and its Legacies', 'colonization')).toBe(true);
   });
 
   it('does not fold unrelated words', () => {
-    expect(isVariantPair('color', 'collar')).toBe(false);
-    expect(isVariantPair('labor', 'label')).toBe(false);
+    expect(sameVariantWord('color', 'collar')).toBe(false);
+    expect(sameVariantWord('labor', 'label')).toBe(false);
   });
 });
 

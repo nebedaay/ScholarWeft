@@ -20,10 +20,7 @@
  * `colonisation` ≡ `colonization`) — deterministic, not fuzzy.
  */
 
-import {
-  canonicalForm,
-  isVariantPair,
-} from './search-variants';
+import { sameVariantWord } from './search-variants';
 
 /** Terms shorter than this never match interiorly (too much noise). */
 export const MIN_INTERIOR_TERM = 4;
@@ -60,8 +57,7 @@ export function words(text: string): string[] {
 
 /** Do two whole words match, allowing a known orthographic variant pair? */
 function sameWord(a: string, b: string): boolean {
-  if (a === b) return true;
-  return isVariantPair(a, b) && canonicalForm(a) === canonicalForm(b);
+  return sameVariantWord(a, b);
 }
 
 /**
