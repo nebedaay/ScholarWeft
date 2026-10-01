@@ -13,6 +13,8 @@
  * Pure, so the layout rules are testable without rendering.
  */
 
+import { spellingNeedles } from './search-variants';
+
 /** Rough characters that fit one suggestion line. */
 export const EXCERPT_WIDTH = 90;
 
@@ -109,19 +111,17 @@ function normaliseWithMap(text: string): { text: string; map: number[] } {
 }
 
 /**
- * The ORIGINAL-text span of `term` inside `text`, or null.
- *
- * `from` is where searching may begin in the original string, so every
- * occurrence can be found rather than just the first.
+ * The ORIGINAL-text span of one spelling `needleTerm` inside `text`, or null.
+ * `from` is where searching may begin, so every occurrence can be found.
  */
-function findTermIn(
+function findNeedleIn(
   text: string,
-  term: string,
+  needleTerm: string,
   from: number
 ): { start: number; length: number } | null {
   // Fold the term's hyphens too, so `anti-colonial` and `anticolonial` both
   // search as `anticolonial` against the hyphen-folded text.
-  const needle = norm(term).replace(/[-\u2010\u2011]/g, '');
+  const needle = norm(needleTerm).replace(/[-\u2010\u2011]/g, '');
   if (!needle) return null;
   const source = text.slice(from);
   const { text: normalised, map } = normaliseWithMap(source);
@@ -138,6 +138,28 @@ function findTermIn(
   if (end < text.length && /[-\u2010\u2011]/.test(text[end])) end++;
   if (end <= start) return null;
   return { start, length: end - start };
+}
+
+/**
+ * The ORIGINAL-text span of `term` inside `text`, or null.
+ *
+ * The term may have been MATCHED in the other spelling (`color` finding
+ * `colour`): the emphasis must find that spelling too, or a variant result
+ * renders un-highlighted (and gets no excerpt) and reads like an exact-only
+ * match. Every spelling needle is searched and the EARLIEST hit wins, so
+ * occurrences of either spelling are all found in order.
+ */
+function findTermIn(
+  text: string,
+  term: string,
+  from: number
+): { start: number; length: number } | null {
+  let best: { start: number; length: number } | null = null;
+  for (const needle of spellingNeedles(term)) {
+    const hit = findNeedleIn(text, needle, from);
+    if (hit && (!best || hit.start < best.start)) best = hit;
+  }
+  return best;
 }
 
 export interface TermSpan {

@@ -6,6 +6,7 @@ import {
 } from '../search-variants';
 import { matchTerm } from '../search-match';
 import { passesCoverage, scoreEntry } from '../search-score';
+import { buildExcerpts, findTermSpans } from '../search-excerpt';
 
 const entry = (title: string) => ({
   citekey: 'x',
@@ -163,6 +164,47 @@ describe('search-variants — prefix symmetry (color vs colour)', () => {
   it('still refuses the aegean/caesar look-alikes', () => {
     expect(matchTerm('Aegean Civilisation', 'color')).toBeNull();
     expect(matchTerm('Caesar and Rome', 'colour')).toBeNull();
+  });
+});
+
+describe('search-variants — partial stems (polariz / polaris)', () => {
+  it('folds the e-dropped stem without its final e', () => {
+    expect(matchTerm('Polarised Light', 'polariz')).not.toBeNull();
+    expect(matchTerm('Polarized Light', 'polaris')).not.toBeNull();
+    expect(spellingVariants('polariz')).toContain('polaris');
+    expect(spellingVariants('polaris')).toContain('polariz');
+  });
+
+  it('does not fold the noun `emphasis` into `emphasise`', () => {
+    expect(spellingVariants('emphasis')).toEqual([]);
+    expect(sameVariantWord('emphasis', 'emphasise')).toBe(false);
+    expect(matchTerm('Their Emphasis on Colour', 'emphasise')).toBeNull();
+  });
+});
+
+describe('search-variants — highlighting and excerpts find the other spelling', () => {
+  it('emphasises a variant match', () => {
+    const spans = findTermSpans('Marriage in colour: race and religion', ['color']);
+    expect(spans.length).toBeGreaterThan(0);
+    const s = spans[0];
+    expect('Marriage in colour: race and religion'.slice(s.start, s.start + s.length)).toBe(
+      'colour'
+    );
+  });
+
+  it('finds the earliest occurrence of either spelling', () => {
+    const spans = findTermSpans('colour first, color later', ['color']);
+    expect(spans.length).toBe(2);
+    expect(spans[0].start).toBe(0);
+    expect(spans[0].length).toBe(6);
+  });
+
+  it('builds an abstract excerpt around the variant match', () => {
+    const excerpt = buildExcerpts('A study of the colour of law', ['color'], {
+      maxLines: 1,
+    })[0];
+    expect(excerpt.text).toContain('colour');
+    expect(excerpt.matches.length).toBeGreaterThan(0);
   });
 });
 

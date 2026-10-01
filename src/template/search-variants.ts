@@ -193,15 +193,29 @@ const MAX_SEGMENT = Math.max(
   ...Array.from(PREFIX_SEGMENTS.keys(), (s) => s.length)
 );
 
+/**
+ * E-dropped stems that are themselves real words and must NOT be folded:
+ * `emphasis` is a noun, not a form of `emphasise`. Only the BARE form is
+ * exempt — `emphasising` is a verb form and does fold.
+ */
+const STRIPPED_EXCEPTIONS = new Set(['emphasis']);
+
 /** Replace the longest leading stem segment with the requested spelling. */
 function replaceLeadingStem(word: string, side: 'us' | 'uk'): string {
   const max = Math.min(word.length, MAX_SEGMENT);
   for (let len = max; len > 0; len--) {
-    const hit = PREFIX_SEGMENTS.get(word.slice(0, len));
+    const seg = word.slice(0, len);
+    const hit = PREFIX_SEGMENTS.get(seg);
     if (!hit) continue;
     const rest = word.slice(len);
-    // An e-dropped stem is only valid before a vowel-initial suffix.
-    if (hit.stripped && !/^[aeiou]/.test(rest)) continue;
+    if (hit.stripped) {
+      // The bare e-dropped stem is a needle too, so a partially typed
+      // `polariz` matches `polarised` exactly as `polaris` matches `polarized`.
+      if (rest === '' && STRIPPED_EXCEPTIONS.has(seg)) continue;
+      // Before a suffix, the e is only dropped before a vowel (`analysing`),
+      // never before a consonant (`analyzs` is not a word).
+      if (rest !== '' && !/^[aeiou]/.test(rest)) continue;
+    }
     return hit[side] + rest;
   }
   return word;

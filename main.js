@@ -21153,6 +21153,210 @@ var init_collections = __esm({
   }
 });
 
+// src/template/search-variants.ts
+function inflect(stem, tail) {
+  return /^[aeiou]/.test(tail) ? stem.replace(/e$/, "") + tail : stem + tail;
+}
+function register2(form, canon, counterpart) {
+  const existing = VARIANT_INDEX.get(form);
+  if (existing) {
+    return;
+  }
+  VARIANT_INDEX.set(form, { canon, counterpart });
+}
+function sameVariantWord(a3, b3) {
+  if (a3 === b3)
+    return true;
+  const av = VARIANT_INDEX.get(a3);
+  const bv = VARIANT_INDEX.get(b3);
+  return !!av && !!bv && av.canon === bv.canon;
+}
+function replaceLeadingStem(word, side) {
+  const max = Math.min(word.length, MAX_SEGMENT);
+  for (let len = max; len > 0; len--) {
+    const seg = word.slice(0, len);
+    const hit = PREFIX_SEGMENTS.get(seg);
+    if (!hit)
+      continue;
+    const rest = word.slice(len);
+    if (hit.stripped) {
+      if (rest === "" && STRIPPED_EXCEPTIONS.has(seg))
+        continue;
+      if (rest !== "" && !/^[aeiou]/.test(rest))
+        continue;
+    }
+    return hit[side] + rest;
+  }
+  return word;
+}
+function canonicalStemPrefix(word) {
+  return replaceLeadingStem(word, "us");
+}
+function britishStemPrefix(word) {
+  return replaceLeadingStem(word, "uk");
+}
+function spellingNeedles(term) {
+  const cached = NEEDLE_CACHE.get(term);
+  if (cached)
+    return cached;
+  const us = canonicalStemPrefix(term);
+  const uk = britishStemPrefix(term);
+  const out = [term];
+  if (us !== term)
+    out.push(us);
+  if (uk !== term)
+    out.push(uk);
+  if (NEEDLE_CACHE.size > 2e3)
+    NEEDLE_CACHE.clear();
+  NEEDLE_CACHE.set(term, out);
+  return out;
+}
+var STEM_PAIRS, TAILS, VARIANT_INDEX, PREFIX_SEGMENTS, MAX_SEGMENT, STRIPPED_EXCEPTIONS, NEEDLE_CACHE;
+var init_search_variants = __esm({
+  "src/template/search-variants.ts"() {
+    STEM_PAIRS = {
+      color: "colour",
+      flavor: "flavour",
+      favor: "favour",
+      honor: "honour",
+      humor: "humour",
+      labor: "labour",
+      neighbor: "neighbour",
+      rumor: "rumour",
+      behavior: "behaviour",
+      endeavor: "endeavour",
+      harbor: "harbour",
+      rigor: "rigour",
+      vigor: "vigour",
+      splendor: "splendour",
+      odor: "odour",
+      valor: "valour",
+      armor: "armour",
+      ardor: "ardour",
+      candor: "candour",
+      demeanor: "demeanour",
+      parlor: "parlour",
+      savior: "saviour",
+      tumor: "tumour",
+      vapor: "vapour",
+      organize: "organise",
+      recognize: "recognise",
+      analyze: "analyse",
+      paralyze: "paralyse",
+      catalyze: "catalyse",
+      civilize: "civilise",
+      realize: "realise",
+      modernize: "modernise",
+      globalize: "globalise",
+      secularize: "secularise",
+      standardize: "standardise",
+      characterize: "characterise",
+      categorize: "categorise",
+      theorize: "theorise",
+      legitimize: "legitimise",
+      emphasize: "emphasise",
+      criticize: "criticise",
+      colonize: "colonise",
+      polarize: "polarise",
+      mobilize: "mobilise",
+      normalize: "normalise",
+      marginalize: "marginalise",
+      institutionalize: "institutionalise",
+      nationalize: "nationalise",
+      privatize: "privatise",
+      radicalize: "radicalise",
+      summarize: "summarise",
+      minimize: "minimise",
+      maximize: "maximise",
+      optimize: "optimise",
+      prioritize: "prioritise",
+      rationalize: "rationalise",
+      visualize: "visualise",
+      conceptualize: "conceptualise",
+      contextualize: "contextualise",
+      problematize: "problematise",
+      democratize: "democratise",
+      industrialize: "industrialise",
+      urbanize: "urbanise",
+      aestheticize: "aestheticise",
+      materialize: "materialise",
+      mechanize: "mechanise",
+      stigmatize: "stigmatise",
+      medieval: "mediaeval",
+      encyclopedia: "encyclopaedia",
+      aesthetic: "esthetic",
+      estrogen: "oestrogen",
+      edema: "oedema",
+      esophagus: "oesophagus",
+      diarrhea: "diarrhoea",
+      apnea: "apnoea",
+      anemia: "anaemia",
+      anesthesia: "anaesthesia",
+      hemorrhage: "haemorrhage",
+      archaeology: "archeology",
+      pediatric: "paediatric",
+      orthopedics: "orthopaedics",
+      paleontology: "palaeontology"
+    };
+    TAILS = [
+      "ations",
+      "ation",
+      "ing",
+      "ings",
+      "ed",
+      "es",
+      "s",
+      "er",
+      "ers",
+      "al",
+      "ally",
+      "ic",
+      "ical",
+      "ive",
+      "ives",
+      "able",
+      "ably",
+      "ity",
+      "ities",
+      "ism",
+      "isms",
+      "ist",
+      "ists",
+      "ment",
+      "ments",
+      ""
+    ];
+    VARIANT_INDEX = new Map();
+    for (const [canonStem, otherStem] of Object.entries(STEM_PAIRS)) {
+      for (const tail of TAILS) {
+        const canon = inflect(canonStem, tail);
+        const other = inflect(otherStem, tail);
+        if (!canon || !other || canon === other)
+          continue;
+        register2(canon, canon, other);
+        register2(other, canon, canon);
+      }
+    }
+    PREFIX_SEGMENTS = new Map();
+    for (const [us, uk] of Object.entries(STEM_PAIRS)) {
+      const usForms = [us, us.replace(/e$/, "")];
+      const ukForms = [uk, uk.replace(/e$/, "")];
+      for (let i3 = 0; i3 < 2; i3++) {
+        const stripped = i3 === 1;
+        if (!PREFIX_SEGMENTS.has(usForms[i3])) {
+          PREFIX_SEGMENTS.set(usForms[i3], { us: usForms[i3], uk: ukForms[i3], stripped });
+        }
+        if (!PREFIX_SEGMENTS.has(ukForms[i3])) {
+          PREFIX_SEGMENTS.set(ukForms[i3], { us: usForms[i3], uk: ukForms[i3], stripped });
+        }
+      }
+    }
+    MAX_SEGMENT = Math.max(...Array.from(PREFIX_SEGMENTS.keys(), (s3) => s3.length));
+    STRIPPED_EXCEPTIONS = new Set(["emphasis"]);
+    NEEDLE_CACHE = new Map();
+  }
+});
+
 // src/template/search-excerpt.ts
 function excerptsForResult(item, queryTerms3, opts = {}) {
   if (queryTerms3.length === 0)
@@ -21185,8 +21389,8 @@ function normaliseWithMap(text2) {
   }
   return { text: out, map };
 }
-function findTermIn(text2, term, from) {
-  const needle = norm3(term).replace(/[-\u2010\u2011]/g, "");
+function findNeedleIn(text2, needleTerm, from) {
+  const needle = norm3(needleTerm).replace(/[-\u2010\u2011]/g, "");
   if (!needle)
     return null;
   const source = text2.slice(from);
@@ -21204,6 +21408,15 @@ function findTermIn(text2, term, from) {
   if (end <= start)
     return null;
   return { start, length: end - start };
+}
+function findTermIn(text2, term, from) {
+  let best = null;
+  for (const needle of spellingNeedles(term)) {
+    const hit = findNeedleIn(text2, needle, from);
+    if (hit && (!best || hit.start < best.start))
+      best = hit;
+  }
+  return best;
 }
 function findTermSpans(text2, terms) {
   if (!text2 || terms.length === 0)
@@ -21347,6 +21560,7 @@ function buildExcerpts(text2, terms, opts = {}) {
 var EXCERPT_WIDTH, CONTEXT_WORDS;
 var init_search_excerpt = __esm({
   "src/template/search-excerpt.ts"() {
+    init_search_variants();
     EXCERPT_WIDTH = 90;
     CONTEXT_WORDS = 6;
   }
@@ -96115,200 +96329,8 @@ var SimpleLRU = class {
 // src/bib/bibManager.ts
 init_collections();
 
-// src/template/search-variants.ts
-var STEM_PAIRS = {
-  color: "colour",
-  flavor: "flavour",
-  favor: "favour",
-  honor: "honour",
-  humor: "humour",
-  labor: "labour",
-  neighbor: "neighbour",
-  rumor: "rumour",
-  behavior: "behaviour",
-  endeavor: "endeavour",
-  harbor: "harbour",
-  rigor: "rigour",
-  vigor: "vigour",
-  splendor: "splendour",
-  odor: "odour",
-  valor: "valour",
-  armor: "armour",
-  ardor: "ardour",
-  candor: "candour",
-  demeanor: "demeanour",
-  parlor: "parlour",
-  savior: "saviour",
-  tumor: "tumour",
-  vapor: "vapour",
-  organize: "organise",
-  recognize: "recognise",
-  analyze: "analyse",
-  paralyze: "paralyse",
-  catalyze: "catalyse",
-  civilize: "civilise",
-  realize: "realise",
-  modernize: "modernise",
-  globalize: "globalise",
-  secularize: "secularise",
-  standardize: "standardise",
-  characterize: "characterise",
-  categorize: "categorise",
-  theorize: "theorise",
-  legitimize: "legitimise",
-  emphasize: "emphasise",
-  criticize: "criticise",
-  colonize: "colonise",
-  polarize: "polarise",
-  mobilize: "mobilise",
-  normalize: "normalise",
-  marginalize: "marginalise",
-  institutionalize: "institutionalise",
-  nationalize: "nationalise",
-  privatize: "privatise",
-  radicalize: "radicalise",
-  summarize: "summarise",
-  minimize: "minimise",
-  maximize: "maximise",
-  optimize: "optimise",
-  prioritize: "prioritise",
-  rationalize: "rationalise",
-  visualize: "visualise",
-  conceptualize: "conceptualise",
-  contextualize: "contextualise",
-  problematize: "problematise",
-  democratize: "democratise",
-  industrialize: "industrialise",
-  urbanize: "urbanise",
-  aestheticize: "aestheticise",
-  materialize: "materialise",
-  mechanize: "mechanise",
-  stigmatize: "stigmatise",
-  medieval: "mediaeval",
-  encyclopedia: "encyclopaedia",
-  aesthetic: "esthetic",
-  estrogen: "oestrogen",
-  edema: "oedema",
-  esophagus: "oesophagus",
-  diarrhea: "diarrhoea",
-  apnea: "apnoea",
-  anemia: "anaemia",
-  anesthesia: "anaesthesia",
-  hemorrhage: "haemorrhage",
-  archaeology: "archeology",
-  pediatric: "paediatric",
-  orthopedics: "orthopaedics",
-  paleontology: "palaeontology"
-};
-var TAILS = [
-  "ations",
-  "ation",
-  "ing",
-  "ings",
-  "ed",
-  "es",
-  "s",
-  "er",
-  "ers",
-  "al",
-  "ally",
-  "ic",
-  "ical",
-  "ive",
-  "ives",
-  "able",
-  "ably",
-  "ity",
-  "ities",
-  "ism",
-  "isms",
-  "ist",
-  "ists",
-  "ment",
-  "ments",
-  ""
-];
-function inflect(stem, tail) {
-  return /^[aeiou]/.test(tail) ? stem.replace(/e$/, "") + tail : stem + tail;
-}
-var VARIANT_INDEX = new Map();
-for (const [canonStem, otherStem] of Object.entries(STEM_PAIRS)) {
-  for (const tail of TAILS) {
-    const canon = inflect(canonStem, tail);
-    const other = inflect(otherStem, tail);
-    if (!canon || !other || canon === other)
-      continue;
-    register2(canon, canon, other);
-    register2(other, canon, canon);
-  }
-}
-function register2(form, canon, counterpart) {
-  const existing = VARIANT_INDEX.get(form);
-  if (existing) {
-    return;
-  }
-  VARIANT_INDEX.set(form, { canon, counterpart });
-}
-function sameVariantWord(a3, b3) {
-  if (a3 === b3)
-    return true;
-  const av = VARIANT_INDEX.get(a3);
-  const bv = VARIANT_INDEX.get(b3);
-  return !!av && !!bv && av.canon === bv.canon;
-}
-var PREFIX_SEGMENTS = new Map();
-for (const [us, uk] of Object.entries(STEM_PAIRS)) {
-  const usForms = [us, us.replace(/e$/, "")];
-  const ukForms = [uk, uk.replace(/e$/, "")];
-  for (let i3 = 0; i3 < 2; i3++) {
-    const stripped = i3 === 1;
-    if (!PREFIX_SEGMENTS.has(usForms[i3])) {
-      PREFIX_SEGMENTS.set(usForms[i3], { us: usForms[i3], uk: ukForms[i3], stripped });
-    }
-    if (!PREFIX_SEGMENTS.has(ukForms[i3])) {
-      PREFIX_SEGMENTS.set(ukForms[i3], { us: usForms[i3], uk: ukForms[i3], stripped });
-    }
-  }
-}
-var MAX_SEGMENT = Math.max(...Array.from(PREFIX_SEGMENTS.keys(), (s3) => s3.length));
-function replaceLeadingStem(word, side) {
-  const max = Math.min(word.length, MAX_SEGMENT);
-  for (let len = max; len > 0; len--) {
-    const hit = PREFIX_SEGMENTS.get(word.slice(0, len));
-    if (!hit)
-      continue;
-    const rest = word.slice(len);
-    if (hit.stripped && !/^[aeiou]/.test(rest))
-      continue;
-    return hit[side] + rest;
-  }
-  return word;
-}
-function canonicalStemPrefix(word) {
-  return replaceLeadingStem(word, "us");
-}
-function britishStemPrefix(word) {
-  return replaceLeadingStem(word, "uk");
-}
-var NEEDLE_CACHE = new Map();
-function spellingNeedles(term) {
-  const cached = NEEDLE_CACHE.get(term);
-  if (cached)
-    return cached;
-  const us = canonicalStemPrefix(term);
-  const uk = britishStemPrefix(term);
-  const out = [term];
-  if (us !== term)
-    out.push(us);
-  if (uk !== term)
-    out.push(uk);
-  if (NEEDLE_CACHE.size > 2e3)
-    NEEDLE_CACHE.clear();
-  NEEDLE_CACHE.set(term, out);
-  return out;
-}
-
 // src/template/search-match.ts
+init_search_variants();
 var MIN_INTERIOR_TERM = 4;
 var PARITY_LEN = 6;
 var WORD_RE = /[\p{L}\p{N}]+/gu;
@@ -97152,6 +97174,9 @@ function buildChildPresence(input) {
   }
   return out;
 }
+
+// src/bib/bibManager.ts
+init_search_variants();
 
 // src/template/recent-keys.ts
 var RECENT_KEYS_LIMIT = 200;
