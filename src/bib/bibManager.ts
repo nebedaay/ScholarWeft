@@ -30,7 +30,7 @@ import {
   queryTerms,
   tierWeights,
 } from 'src/template/search-tier';
-import { passesCoverage, scoreEntry } from 'src/template/search-score';
+import { passesCoverage, compoundWordScore, isCompoundQuery, scoreEntry } from 'src/template/search-score';
 import {
   interpretationsFor,
   isSearchableQuery,
@@ -78,9 +78,11 @@ import {
 } from 'src/template/template-history';
 import {
   emptyChildrenCache,
+  readChildren,
   type ChildrenCacheData,
 } from 'src/template/children-cache';
 import { buildChildPresence } from 'src/template/child-presence';
+import { containsLiteral, queryAtoms, normTerm } from 'src/template/search-match';
 import {
   recordQuery,
   recordRecentKey,
@@ -969,8 +971,17 @@ export class BibManager {
       // Just rebuild the engine over what's already loaded.
       this.initPromise = new PromiseCapability();
       this.fileCache.clear();
+      // The render inputs (style/lang) changed, so a re-render is NOT the same
+      // content as before — even for an unchanged note the output differs. Clear
+      // the per-path dispatch hashes or `dispatchResult` sees a match and skips
+      // re-dispatching, leaving the open view showing the OLD style.
+      this.dispatchedHashes.clear();
       await this.buildGlobalEngine();
       this.initPromise.resolve();
+      // Re-render the open views NOW so the new style is visible immediately
+      // (without this it only took effect after a reload, e.g. toggling the
+      // plugin).
+      void this.plugin.processReferences().catch(console.error);
       return;
     }
     await this.loadAllSources({ fromCache: false });
@@ -1034,7 +1045,62 @@ export class BibManager {
     /** The interpretation terms that matched each entry (for excerpts). */
     const matchedTerms = new Map<string, string[]>();
 
+    const atoms = queryAtoms(query);
+
+    /**
+     * Cheap necessary condition: the entry's searched text must contain every
+     * query term as a SUBSTRING (case/diacritic-insensitive) before the scorer
+     * runs. Every real match is a substring of some field, so this can only
+     * drop entries the scorer would reject — but it drops them without running
+     * the interpretation machinery, which is where the time went.
+     *
+     * A joined run (`soccri`, `bourdieucritique`) is the one shape whose parts
+     * are NOT substrings of the field (`soc` is not in "Social"? it is — but
+     * `crit` is not in "Critique"... it is). To stay safe for runs, a single
+     * unbroken run is tested with the run's own leading chunk only, and any
+     * failure falls through to the full scorer rather than rejecting.
+     */
+    /**
+     * Cheap necessary condition: every query atom must occur in the entry's
+     * searched text as a SUBSTRING (case/diacritic-insensitive) before the
+     * scorer runs. Every real match IS a substring of some field, so this can
+     * only drop entries the scorer would reject.
+     *
+     * The one exception is a SINGLE unbroken run (`soccri`, `bourdieucritique`):
+     * its middle pieces need not be substrings (`crit` is in "critique", but a
+     * run like `brdcri` is not), so a single-atom query is allowed through when
+     * the atom is not found — the scorer decides via chunk alignment. Multi-atom
+     * queries have no such reading, so a missing atom rejects.
+     */
+    const preFilter = (entry: PartialCSLEntry): boolean => {
+      const fields = [
+        entry.title ?? '',
+        authorTextOf(entry),
+        ...(includeAbstract ? [(entry as { abstract?: string }).abstract ?? ''] : []),
+        ...(includeVenue ? [venueTextOf(entry)] : []),
+      ];
+      const hay = normTerm(fields.join(' \u0001 '));
+      for (const a of atoms) {
+        if (hay.includes(a.text)) continue;
+        // A hyphenated term may be present only in its JOINED spelling.
+        if (a.hyphenated && hay.includes(a.text.replace(/-/g, ''))) continue;
+        // Every real match is a substring of some field, so an atom absent from
+        // all of them cannot match. (Chunked search is gone, so there is no
+        // "unbroken run" exception any more.)
+        return false;
+      }
+      return true;
+    };
+
+    // A query containing a QUOTED term is matched LITERALLY, which the scorer
+    // handles itself — but the interpretation machinery strips the quotes
+    // (`queryTerms` drops punctuation), so its re-joined terms lose the
+    // literal signal. Score the RAW query once, up front, and use that result
+    // when it is a literal query; interpretations are for unquoted queries.
+    const hasQuote = /["']/.test(query);
+
     for (const entry of this.bibCache.values()) {
+      if (!preFilter(entry)) continue;
       const target = {
         citekey: entry.id ?? null,
         title: entry.title ?? null,
@@ -1042,6 +1108,33 @@ export class BibManager {
         abstract: (entry as { abstract?: string }).abstract ?? null,
         venueText: venueTextOf(entry),
       };
+
+      if (hasQuote) {
+        const s = scoreEntry(target, query, { includeAbstract, includeVenue });
+        if (passesCoverage(s)) {
+          scored.set(entry.id, s.value);
+          ranked.set(entry.id, entry);
+          matchedTerms.set(entry.id, s.matchedTerms);
+        }
+        continue;
+      }
+
+      // A COMPOUND whole-word match wins outright and must not be undercut by a
+      // split reading (`anticolonial` vs "anti" + "colonial" in unrelated
+      // words). `anti-colonial` and `anticolonial` are the SAME term, so both
+      // spellings are found and ranked together, exact spelling first.
+      const compound = compoundWordScore(target, query, { includeAbstract, includeVenue });
+      if (compound !== null) {
+        scored.set(entry.id, compound.value);
+        ranked.set(entry.id, entry);
+        matchedTerms.set(entry.id, compound.terms);
+        continue;
+      }
+
+      // A compound-word query that this entry does NOT contain as a compound,
+      // but DOES contain as separate words ("anti … colonial"), is exactly the
+      // false positive to reject: the user wrote one compound, not two terms.
+      if (isCompoundQuery(query)) continue;
 
       // Every way this query could read against THIS entry.
       let best = Number.POSITIVE_INFINITY;
@@ -3261,6 +3354,43 @@ export class BibManager {
   }
 
   /**
+   * Is a child delta a SUBSTANTIVE change to what a note imports?
+   *
+   * Zotero bumps an item's version for changes a note does not care about —
+   * most commonly an attachment's `lastRead`, set the moment a PDF is opened.
+   * That bumps the version without touching `dateModified`, so a delta whose
+   * `dateModified` matches the snapshot we already rendered changed nothing the
+   * note imports. When there is no snapshot to compare against (the note was
+   * never rendered), err on the side of updating.
+   */
+  private childDeltaSubstantive(
+    kind: 'attachment' | 'annotation',
+    key: string,
+    parentItem: string,
+    dateModified: string | undefined,
+    groupID: number
+  ): boolean {
+    if (!dateModified) return true;
+    // Owning top-level item: an attachment points at it; an annotation points
+    // at its attachment, resolved through the map.
+    const itemKey =
+      kind === 'attachment' ? parentItem : this.syncState.attachments[parentItem];
+    if (!itemKey) return true;
+    const cached = readChildren<{ attachments?: unknown[]; annotations?: unknown[] }>(
+      this.childrenCache,
+      stableKeyFor(itemKey, groupID)
+    );
+    if (!cached) return true;
+    const list = (kind === 'attachment' ? cached.attachments : cached.annotations) ?? [];
+    const prev = (list as any[]).find(
+      (c) => String(c?.key ?? c?.data?.key ?? '') === key
+    );
+    const prevModified = prev?.data?.dateModified;
+    if (typeof prevModified !== 'string' || !prevModified) return true;
+    return prevModified !== dateModified;
+  }
+
+  /**
    * Citekeys whose NOTE content changed in Zotero since the last watermark —
    * from annotation/attachment child deltas. (Metadata changes come from the
    * refresh's `modified` map and are added by the caller.)
@@ -3285,10 +3415,33 @@ export class BibManager {
       }
       const delta = await fetchChildDeltaNative(port, group.id, since);
       if (!delta) continue;
+      // Ignore version-only bumps (e.g. an attachment's `lastRead` set by
+      // opening a PDF): they change nothing the note imports. The delta still
+      // refreshes the attachment→item map, it just does not mark the item.
+      const attachments = delta.attachments.map((a) => ({
+        ...a,
+        substantive: this.childDeltaSubstantive(
+          'attachment',
+          a.key,
+          a.parentItem,
+          a.dateModified,
+          group.id
+        ),
+      }));
+      const annotations = delta.annotations.map((an) => ({
+        ...an,
+        substantive: this.childDeltaSubstantive(
+          'annotation',
+          an.key,
+          an.parentItem,
+          an.dateModified,
+          group.id
+        ),
+      }));
       const { state, changedItemKeys } = await collectChangedItemKeys(
         this.syncState,
-        delta.attachments,
-        delta.annotations,
+        attachments,
+        annotations,
         (attachmentKey) => fetchItemParentNative(port, group.id, attachmentKey)
       );
       this.syncState = {
@@ -3609,8 +3762,13 @@ export class BibManager {
   async createLiteratureNote(
     citekey: string,
     sourceFile: TFile,
-    opts: { open?: boolean; stableKey?: string; skipChildCache?: boolean } = {}
-  ) {
+    opts: {
+      open?: boolean;
+      stableKey?: string;
+      skipChildCache?: boolean;
+      force?: boolean;
+    } = {}
+  ): Promise<{ ok: boolean; changed: boolean }> {
     // Prefer the note's OWN item (by `zotero-key`) over the citekey slot, so a
     // duplicate citekey in another library cannot decide the render.
     const entry = (opts.stableKey
@@ -3620,11 +3778,12 @@ export class BibManager {
     // Our own single-file template path, when the user selected it. Falls
     // through to the ZotLit/basic paths only if the template asset is missing.
     if (this.plugin.settings.useOwnNoteTemplate === true) {
-      const ok = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
+      const res = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
         open: opts.open !== false,
         skipChildCache: opts.skipChildCache === true,
+        force: opts.force === true,
       });
-      if (ok) return;
+      if (res.ok) return res;
       console.warn('[sw:import] own note template unavailable; using the fallback path');
     }
 
@@ -3647,7 +3806,7 @@ export class BibManager {
           // note itself. ZotLit creates asynchronously, so wait briefly, then
           // fold in its child notes — SW drove the import, so SW finishes it.
           void this.fillZoteroNotesForCitekey(citekey, sourceFile);
-          return;
+          return { ok: true, changed: true };
         }
 
         // ZotLit failed. Do NOT silently substitute our own template: a user
@@ -3656,7 +3815,7 @@ export class BibManager {
         // they never asked for — which is what made this look like the setting
         // was being ignored. Ask instead, and say WHY it failed.
         const useFallback = await promptZotLitFallback(res.reason);
-        if (!useFallback) return;
+        if (!useFallback) return { ok: false, changed: false };
       }
     }
 
@@ -3692,7 +3851,7 @@ export class BibManager {
 
     if (await app.vault.adapter.exists(notePath)) {
       await app.workspace.openLinkText(notePath, sourceFile.path, true);
-      return;
+      return { ok: true, changed: false };
     }
 
     const lines = [
@@ -3720,6 +3879,7 @@ export class BibManager {
     // Zotero child notes rather than leaving "Insert Zotero notes" as a step
     // the user has to know about.
     void this.fillZoteroNotesForCitekey(citekey, sourceFile);
+    return { ok: true, changed: true };
   }
 
   /**
@@ -4051,7 +4211,11 @@ export class BibManager {
         settings?.style ?? '',
         settings?.lang ?? '',
         settings?.bibliography?.join('|') ?? '',
+        // EVERY input the engine is built from must be here, or a change to it
+        // replays a stale render. `cslStylePath` (the custom-style field and
+        // "Browse Zotero styles…") is as much a style input as `cslStyleURL`.
         plugin.cslStyleURL ?? '',
+        plugin.cslStylePath ?? '',
         plugin.cslLang ?? '',
         bibFp,
         `e:${this.bibEpoch}`,

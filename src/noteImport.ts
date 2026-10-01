@@ -44,6 +44,7 @@ import {
   zotLitChoice,
   type ZotLitHandling,
 } from './template/note-lookup';
+import { substantiveContentDiffers } from './template/merge';
 import {
   childrenCacheHit,
   readChildren,
@@ -377,11 +378,11 @@ export async function createOrUpdateOwnNote(
   citekey: string,
   entry: CachedEntry | undefined,
   sourceFile: TFile,
-  opts: { open?: boolean; skipChildCache?: boolean } = {}
-): Promise<boolean> {
+  opts: { open?: boolean; skipChildCache?: boolean; force?: boolean } = {}
+): Promise<{ ok: boolean; changed: boolean }> {
   const app = plugin.app;
   const templateSource = await readTemplate(plugin);
-  if (!templateSource) return false;
+  if (!templateSource) return { ok: false, changed: false };
 
   // PRINCIPLE — use what we already have. Children are re-fetched ONLY when the
   // item's `_version` changed (a cache miss); a template update or any re-render
@@ -460,7 +461,7 @@ export async function createOrUpdateOwnNote(
     const name = notePath.split('/').pop() ?? notePath;
     if ((await resolveZotLitHandling(plugin, name)) === 'leave') {
       debugLog('[sw:import] leaving the ZotLit-managed note alone:', notePath);
-      return true;
+      return { ok: true, changed: false };
     }
     debugLog('[sw:import] converting ZotLit note', notePath);
   }
@@ -490,6 +491,13 @@ export async function createOrUpdateOwnNote(
   }
 
   if (existing != null) {
+    // A re-render of UNCHANGED data must not rewrite the file: the only
+    // difference would be the `updated` stamp. `force` is set by the
+    // template-update pass, which must advance that stamp.
+    if (!opts.force && !substantiveContentDiffers(existing, content)) {
+      debugLog('[sw:import] no substantive change; leaving note as is:', notePath);
+      return { ok: true, changed: false };
+    }
     // Update in place; do NOT reopen — the user may be looking at their edits.
     // Prefer `vault.modify` on a known TFile so Obsidian's metadata cache
     // (frontmatter) refreshes; fall back to the adapter for an unindexed path.
@@ -501,7 +509,7 @@ export async function createOrUpdateOwnNote(
     }
     // Only record the transfer once the note is actually on disk.
     if (migrateRelated) plugin.markRelatedMigrationDone(stableKey);
-    return true;
+    return { ok: true, changed: true };
   }
 
   await app.vault.create(notePath, content);
@@ -510,5 +518,5 @@ export async function createOrUpdateOwnNote(
   if (opts.open !== false) {
     await app.workspace.openLinkText(notePath, sourceFile.path, true);
   }
-  return true;
+  return { ok: true, changed: true };
 }

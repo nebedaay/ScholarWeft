@@ -69,8 +69,19 @@ describe('detectCitationTrigger()', () => {
     expect(detectCitationTrigger('[[@ab', { minChars: 2 })).toMatchObject({ query: 'ab' });
   });
 
-  it('does not trigger once a space ends the token', () => {
-    expect(detectCitationTrigger('@key ')).toBeNull();
+  it('does not trigger once a space ends the token (spaces disabled)', () => {
+    expect(detectCitationTrigger('@key ', { allowSpaces: false })).toBeNull();
+  });
+
+  it('keeps the query open across a space by default', () => {
+    const t = detectCitationTrigger('@bourdieu dist');
+    expect(t).not.toBeNull();
+    expect(t!.query).toBe('bourdieu dist');
+  });
+
+  it('ends the query at sentence punctuation even with spaces allowed', () => {
+    expect(detectCitationTrigger('see @bourdieu dist.')).toBeNull();
+    expect(detectCitationTrigger('@smith,')).toBeNull();
   });
 });
 

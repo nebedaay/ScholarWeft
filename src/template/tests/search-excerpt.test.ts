@@ -332,18 +332,18 @@ describe('matchedTerms reflect what the scorer interpreted', () => {
     abstract: 'This article examines women and authority in Senegal.',
   };
 
-  it('reports the WORDS the entry was matched against', () => {
-    const s = scoreEntry(entry, 'womenauthoritysenegal', { includeAbstract: false });
+  it('reports the terms the entry was matched against', () => {
+    const s = scoreEntry(entry, 'women authority senegal', { includeAbstract: false });
     expect(s.matchedTerms).toEqual(['women', 'authority', 'senegal']);
   });
 
   it('does the same for a truncated final word', () => {
-    const s = scoreEntry(entry, 'womenauthoritysenega', { includeAbstract: false });
+    const s = scoreEntry(entry, 'women authority senega', { includeAbstract: false });
     expect(s.matchedTerms).toEqual(['women', 'authority', 'senega']);
   });
 
   it('lets every matched term be highlighted in the title', () => {
-    for (const q of ['womenauthoritysenega', 'womenauthoritysenegal']) {
+    for (const q of ['women authority senega', 'women authority senegal']) {
       const s = scoreEntry(entry, q, { includeAbstract: false });
       const shown = findTermSpans(entry.title, s.matchedTerms).map((x) =>
         entry.title.slice(x.start, x.start + x.length)

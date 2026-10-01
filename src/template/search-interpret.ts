@@ -1,71 +1,17 @@
 /**
  * What could this query MEAN?
  *
- * One query produces an ordered list of **interpretations**. Every interpretation
- * is searched and the results are merged and ranked — there is no separate code
- * path for spaced and unspaced queries. The space only asserts the word
- * boundaries, so it promotes the explicit split to the top of the list; the same
- * candidate interpretations remain available either way.
+ * After the removal of chunked search, a query means exactly its own terms:
+ * each is matched as a word, a word prefix, or a start-aligned morpheme (and
+ * orthographic variants), and quoted runs are matched literally. There is no
+ * longer any "this unbroken run might secretly be several words" reading —
+ * `soccrit` is just a word nobody has, while `soc crit` is two terms.
  *
- * This replaces the earlier design where `@@bourdieu critique` and
- * `@@bourdieucritique` took different routes: the spaced form generated
- * per-term searches while the unspaced form generated none, so the two returned
- * systematically different result SETS (the joined form searched a strictly
- * smaller interpretation space).
- *
- * Priority, following the governing principle — always try the coherent option
- * first, then abbreviations, then chunks:
- *
- *   1. explicit words        — the query as typed when it is already spaced
- *   2. coherent split        — the run split into real words of this entry
- *   3. chunk alignment       — prefixes of successive words (soccri)
- *
- * Interpretation 2 and 3 depend on the entry (only the entry's own words can
- * tell us how a run splits), so `interpretationsFor(entry, query)` is per-entry
- * while `queryShape()` describes the query alone.
+ * This module is kept as the single place that reports a query's terms and
+ * shape, so the scorer and callers agree on what is being searched.
  */
 
-import {
-  MIN_CHUNK,
-  hasCoherentSplit,
-  prefixChunks,
-  queryTerms,
-} from './search-score';
-import { matchesWord } from './search-score';
-
-/**
- * Decompose `run` into pieces that each prefix SOME word of `phrase`, ignoring
- * order. Returns the pieces, or null when no full decomposition exists.
- *
- * Why this is separate from `prefixChunks`: that aligns against SUCCESSIVE
- * words, so `soccrit` only matches "Social Critique ...", never
- * "Critique and Social Order". A wildcard search must be at least as broad as
- * the terms it abbreviates, so order must not disqualify an entry whose words
- * are simply in a different order.
- *
- * Greedy longest-first, which is what a person typing an abbreviation means:
- * `soccrit` → `socc`+`rit` is rejected because only a full decomposition of the
- * whole run counts (each piece must prefix a real word).
- */
-export function splitIntoWordPrefixes(
-  run: string,
-  phrase: string
-): string[] | null {
-  const pieces: string[] = [];
-  const search = (from: number): boolean => {
-    if (from >= run.length) return true;
-    // Longest piece first, so `soccrit` prefers `soc`+`crit` over `socc`+`rit`.
-    for (let len = run.length - from; len >= MIN_CHUNK; len--) {
-      const piece = run.slice(from, from + len);
-      if (!matchesWord(phrase, piece)) continue;
-      pieces.push(piece);
-      if (search(from + len)) return true;
-      pieces.pop();
-    }
-    return false;
-  };
-  return search(0) && pieces.length > 1 ? [...pieces] : null;
-}
+import { queryTerms } from './search-score';
 
 /** How a query was written, independent of any entry. */
 export interface QueryShape {
@@ -83,127 +29,48 @@ export function queryShape(query: string): QueryShape {
   return { words, spaced, run: words.join('') };
 }
 
-export type InterpretationKind =
-  | 'words' // the spaced words, or a single word
-  | 'split' // the run split into coherent words of this entry
-  | 'chunks' // the run aligned as prefixes of SUCCESSIVE words (order-bound)
-  | 'prefixes'; // the run split into pieces each prefixing SOME word, any order
+export type InterpretationKind = 'words'; // the query's own terms
 
 export interface Interpretation {
   /** Terms to match, in order. */
   terms: string[];
   kind: InterpretationKind;
   /**
-   * A small penalty added to the score so a lower-priority interpretation
-   * cannot outrank a higher one that matched equally well. Never large enough
-   * to reorder genuinely different matches.
+   * A small penalty added to the score so a lower-priority reading cannot
+   * outrank a higher one. Only the unspaced form is nudged.
    */
   penalty: number;
 }
 
-/**
- * Every interpretation of `query` for a given entry, best first.
- *
- * Always includes the query's own words (so a spaced query and a joined query
- * both start from the words they contain), then adds the entry-dependent
- * readings. Returning a LIST rather than picking one is the point: the caller
- * searches all of them and ranks the union, so the two query forms see the same
- * interpretations.
- */
+/** The interpretation of a query for an entry — always the query's own terms. */
 export function interpretationsFor(
-  entry: {
+  _entry: {
     title?: string | null;
     authorText?: string | null;
     abstract?: string | null;
     venueText?: string | null;
   },
   query: string,
-  opts: { includeAbstract?: boolean; includeVenue?: boolean } = {}
+  _opts: { includeAbstract?: boolean; includeVenue?: boolean } = {}
 ): Interpretation[] {
   const shape = queryShape(query);
   if (shape.words.length === 0) return [];
-
-  const title = entry.title ?? '';
-  const author = entry.authorText ?? '';
-  // The `@@` tier searches the abstract, so an abbreviation may be resolved
-  // against it too — otherwise `soccrit` would never find an item whose only
-  // "social critique" is in its abstract.
-  const abstract = opts.includeAbstract ? (entry.abstract ?? '') : '';
-  // Publication fields are searched by `@@` only, matching the scorer.
-  const venue = opts.includeVenue ? (entry.venueText ?? '') : '';
-  const combined = `${author} ${title} ${venue} ${abstract}`.trim();
-
-  const out: Interpretation[] = [];
-
-  // 1. The words as typed. A spaced query's words ARE its interpretation; a
-  //    single unbroken run is one opaque term here and is refined below.
-  out.push({
-    terms: shape.words,
-    kind: 'words',
-    // The spaced form is trusted slightly more: the space asserts boundaries.
-    penalty: shape.spaced ? 0 : 0.02,
-  });
-
-  // The remaining readings apply to an UNBROKEN run — the case where the words
-  // are not yet known. A spaced query already has them.
-  if (!shape.spaced || shape.words.length === 1) {
-    // 2. Coherent split: the run is real words this entry contains, possibly
-    //    spanning fields (`bourdieucritique` = bourdieu + critique).
-    const split = hasCoherentSplit(combined, shape.run);
-    if (split && split.length > 1) {
-      out.push({ terms: split, kind: 'split', penalty: 0.05 });
-    }
-
-    // 3. Chunk alignment: prefixes of successive words (`soccri`).
-    //
-    // Always offered, RANKED BELOW a coherent split rather than suppressed by
-    // it. Suppressing was wrong: a coherent split that does not fully match
-    // killed every other reading, so `womenauthoritysenegal` — where the split
-    // is real but the words must all be found — lost the abstract matches that
-    // `womenauthoritysenega` found via chunks. One character changed the
-    // interpretation set, and results vanished for no defensible reason.
-    const best = [
-      prefixChunks(title, shape.run),
-      prefixChunks(author, shape.run),
-      prefixChunks(combined, shape.run),
-    ].reduce((a, b) => (b.words > a.words ? b : a));
-    // A coherent split is preferred (smaller penalty); chunks are the fallback.
-    const chunkPenalty = split ? 1.4 : 0.9;
-    if (best.full && best.words > 1) {
-      out.push({ terms: best.chunks, kind: 'chunks', penalty: chunkPenalty });
-    }
-
-    // 4. WORD PREFIXES, order-independent. `prefixChunks` above requires the
-    //    words to appear in the same order as the run, so `soccrit` fails
-    //    against "Critique and Social Order" even though both words are there
-    //    — which made a wildcard search NARROWER than the full term. Splitting
-    //    the run into any pieces that each prefix SOME word of the entry lets
-    //    coverage (which is order-independent) do the work.
-    const unordered = splitIntoWordPrefixes(shape.run, combined);
-    if (unordered && unordered.length > 1) {
-      out.push({ terms: unordered, kind: 'prefixes', penalty: chunkPenalty });
-    }
-  }
-
-  // De-duplicate identical term lists, keeping the best (lowest) penalty.
-  const seen = new Map<string, Interpretation>();
-  for (const interp of out) {
-    const key = interp.terms.join('\u0000');
-    const prior = seen.get(key);
-    if (!prior || interp.penalty < prior.penalty) seen.set(key, interp);
-  }
-  return [...seen.values()].sort((a, b) => a.penalty - b.penalty);
+  return [
+    {
+      terms: shape.words,
+      kind: 'words',
+      // The spaced form is trusted slightly more: the space asserts boundaries.
+      penalty: shape.spaced ? 0 : 0.02,
+    },
+  ];
 }
 
 /**
  * Is this query worth searching at all?
  *
- * A bare run shorter than `MIN_CHUNK` cannot be interpreted as words, a split,
- * or chunks, so it has nothing to match.
+ * Any query with at least one term is searchable now: a term matches as a word,
+ * a prefix, or a morpheme, so even a single short word can match.
  */
 export function isSearchableQuery(query: string): boolean {
-  const shape = queryShape(query);
-  if (shape.words.length === 0) return false;
-  if (shape.words.length > 1) return true;
-  return shape.run.length >= MIN_CHUNK;
+  return queryShape(query).words.length > 0;
 }

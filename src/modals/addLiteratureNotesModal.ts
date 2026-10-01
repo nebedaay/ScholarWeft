@@ -27,7 +27,7 @@ import {
   membershipTokens,
 } from '../template/collections';
 import type { CollectionNode } from '../template/collections';
-import { excerptForResult } from '../template/search-excerpt';
+import { excerptsForResult } from '../template/search-excerpt';
 import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
 import { formatImportSummary } from '../template/import-summary';
 import { setModalTitle } from './modalTitle';
@@ -45,6 +45,16 @@ import { setModalTitle } from './modalTitle';
 
 /** Rows rendered per batch; more load on scroll (Obsidian has no virtual list). */
 const PAGE = 100;
+
+/**
+ * Most results the search will rank. The list renders a page at a time, so a
+ * cap comfortably larger than any realistic scroll keeps the visible ordering
+ * identical while avoiding scoring/mapping the entire library on every search.
+ */
+const MAX_RESULTS = 2000;
+
+/** Wait after the last keystroke before re-running the full-library search. */
+const SEARCH_DEBOUNCE_MS = 120;
 
 /** UI labels for the type groups (keys into the locale table). */
 const TYPE_GROUP_LABELS: Record<ImportTypeGroup, string> = {
@@ -137,7 +147,10 @@ export class AddLiteratureNotesModal extends Modal {
     this.searchInput.addEventListener('input', () => {
       this.query = this.searchInput.value;
       this.persistSearch();
-      this.refresh();
+      // The query scores the WHOLE library synchronously, so running it on every
+      // keystroke is what made typing feel like a freeze on a few thousand
+      // items. Coalesce: render the first result quickly, then the settled one.
+      this.scheduleRefresh();
     });
     const absLabel = searchRow.createEl('label', { cls: 'sw-add-notes__abstract' });
     const absBox = absLabel.createEl('input', { type: 'checkbox' });
@@ -234,8 +247,12 @@ export class AddLiteratureNotesModal extends Modal {
     this.searchInput.focus();
     // A restored query is selected so typing replaces it in one go.
     if (this.query) this.searchInput.select();
-    this.buildLitNoteIndex();
-    this.refresh();
+    // Over 10k files in a large vault, walking every markdown file's metadata
+    // synchronously is what made opening the modal pause. Build it on the FIRST
+    // open and keep it (the vault's note set rarely changes mid-session), then
+    // let the modal paint before the first (potentially long) render.
+    void this.ensureLitNoteIndex();
+    requestAnimationFrame(() => this.refresh());
     // Build the library-wide presence index in the background (first open only),
     // then re-run the filters so the has-notes/PDF/annotations boxes are usable.
     if (!this.plugin.bibManager.presenceReady) {
@@ -513,6 +530,23 @@ export class AddLiteratureNotesModal extends Modal {
     }
   }
 
+  /** Session flag: the note index is built once, not on every modal open. */
+  private litNotesBuilt = false;
+
+  /**
+   * Build the note index on the FIRST open, off the paint path, and keep it:
+   * the vault's note set rarely changes mid-session, while walking 10k+ files
+   * per open is what stalled the modal. `buildLitNoteIndex` itself is fast when
+   * it does run — the cost was doing it synchronously on every open.
+   */
+  private async ensureLitNoteIndex(): Promise<void> {
+    if (this.litNotesBuilt) return;
+    this.litNotesBuilt = true;
+    await new Promise((r) => setTimeout(r, 0));
+    this.buildLitNoteIndex();
+    if (this.containerEl.isConnected) this.refresh();
+  }
+
   private stableKeyFor(entry: PartialCSLEntry): string {
     if (typeof entry._zoteroKey !== 'string') return '';
     const gid = entry.groupID && entry.groupID !== 1 ? entry.groupID : null;
@@ -556,24 +590,44 @@ export class AddLiteratureNotesModal extends Modal {
     return sortImportEntries(entries, this.sortMode, this.sortDir);
   }
 
+  private _refreshSeq = 0;
+
   private refresh(): void {
+    const seq = ++this._refreshSeq;
     const q = this.query.trim();
     const searching = !!q;
+    // Yield once so the browser can PAINT the modal (and accept typing) before
+    // the synchronous compute below. Without this the open blocks on 10k+ items
+    // and the caret cannot even follow your keystrokes.
+    window.setTimeout(() => {
+      if (seq !== this._refreshSeq || !this.containerEl.isConnected) return;
+      this.computeAndRender(q, searching);
+    }, 0);
+  }
+
+  private computeAndRender(q: string, searching: boolean): void {
     let filtered: PartialCSLEntry[];
     if (q) {
+      // Ask for only as many results as the list will render (plus a page of
+      // slack). Asking for the whole library scored every entry AND built a map
+      // entry for each; `orderMatches` is a stable sort, so the first N of the
+      // ranked list are the same either way.
       const { entries } = this.plugin.bibManager.searchTier(
         this.searchAbstract ? 'abstract' : 'title',
         q,
-        100000
+        MAX_RESULTS
       );
       filtered = entries
         .map((e) => e.entry)
         .filter((e) => passesImportFilters(this.flagsFor(e), this.filters));
       this.termsByKey = new Map(entries.map((e) => [e.entry.id, e.terms]));
     } else {
-      filtered = Array.from(this.plugin.bibManager.bibCache.values()).filter(
-        (e) => passesImportFilters(this.flagsFor(e), this.filters)
-      );
+      // No query: the list is ordered by author/date. Only a page at a time is
+      // rendered, so cap the set before sorting — sorting the whole library to
+      // show the first page is the pause felt just after opening.
+      filtered = Array.from(this.plugin.bibManager.bibCache.values())
+        .filter((e) => passesImportFilters(this.flagsFor(e), this.filters))
+        .slice(0, MAX_RESULTS);
       this.termsByKey = new Map();
     }
     this.matches = this.orderMatches(filtered, searching);
@@ -581,6 +635,22 @@ export class AddLiteratureNotesModal extends Modal {
     this.listEl.empty();
     this.renderMore();
     this.updateStatus();
+  }
+
+  private _refreshTimer: number | null = null;
+
+  /**
+   * Coalesce rapid input into ONE deferred render. Each keystroke resets the
+   * timer; the search then runs once the typing settles (and the modal has had
+   * a chance to paint), instead of blocking every keypress on a full-library
+   * scan. `refresh()` itself yields before the compute.
+   */
+  private scheduleRefresh(): void {
+    if (this._refreshTimer != null) window.clearTimeout(this._refreshTimer);
+    this._refreshTimer = window.setTimeout(() => {
+      this._refreshTimer = null;
+      if (this.containerEl.isConnected) this.refresh();
+    }, SEARCH_DEBOUNCE_MS);
   }
 
   private renderedRefs = new Map<string, HTMLElement>();
@@ -671,12 +741,15 @@ export class AddLiteratureNotesModal extends Modal {
       appendHighlighted(ref, entry.title ?? '', terms);
     }
 
-    // An abstract excerpt around the matched terms, when searching.
-    const excerpt = excerptForResult(
+    // Abstract excerpts around the matched terms, when searching. Same render
+    // as the `@@` popup: up to three lines, so several matched terms can each
+    // be shown rather than one line hiding the rest.
+    const excerpts = excerptsForResult(
       entry as { abstract?: string | null },
-      terms
+      terms,
+      { maxLines: 3 }
     );
-    if (excerpt) {
+    for (const excerpt of excerpts) {
       const line = info.createDiv({ cls: 'sw-add-notes__excerpt' });
       appendHighlighted(line, excerpt.text, terms);
     }

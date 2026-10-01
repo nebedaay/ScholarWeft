@@ -9,6 +9,7 @@ import {
   mergeNote,
   parseFrontmatter,
   splitNote,
+  substantiveContentDiffers,
   ZOTLIT_MANAGED_CLOSE,
   ZOTLIT_MANAGED_OPEN,
 } from '../merge';
@@ -318,5 +319,25 @@ describe('fillEmptyNotesSection', () => {
       '## Notes\n\n'
     );
     expect(fillEmptyNotesSection('# T\n\nx\n', rendered)).toBe('# T\n\nx\n');
+  });
+});
+
+describe('substantiveContentDiffers()', () => {
+  const note = (updated: string, body = 'body') =>
+    `---\ntitle: X\nupdated: ${updated}\n---\n\n${body}\n`;
+
+  it('ignores a changed `updated` timestamp', () => {
+    expect(
+      substantiveContentDiffers(
+        note('2026-01-01 00:00:00.000'),
+        note('2026-10-01 12:54:14.276')
+      )
+    ).toBe(false);
+  });
+
+  it('detects a real change', () => {
+    expect(
+      substantiveContentDiffers(note('2026-01-01', 'a'), note('2026-01-01', 'b'))
+    ).toBe(true);
   });
 });

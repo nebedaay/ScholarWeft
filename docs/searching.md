@@ -13,7 +13,7 @@ ScholarWeft's search and autocomplete popup is how you find a work to cite. The 
 
 Type the level. **The popup opens as soon as you type `@`** — leading with the last search you used in this note (within the last five minutes); otherwise the references you recently cited **in this note**, then references you recently cited **anywhere else** (so a fresh note still shows something). So you can pick straight away, and reuse a search to cite several related works without retyping it. One or two characters narrow to citekeys that start with them; three or more runs the full ranked search.
 
-A **space ends a bare `@` search**, so you can type a citation and keep writing. Use an **underscore for a space** inside a single token (`@social_theory` = `@social theory`), or `@@`, when you want several words. A **period closes the popup** too. Pushing enter/return or clicking on a search result inserts the selected search result and encloses it in brackets.
+A bare `@` search keeps the popup open **across spaces**, so `@bourdieu dist` searches those words together. A **period, comma, or question mark ends it**, which is how you close the citation and carry on writing — as does pressing **Escape** or moving the cursor off it. Prefer the old behavior, where a space ends the search? Turn off **Allow spaces in @ searches** (Settings → ScholarWeft → Citation and reference searching and formatting). Pushing enter/return or clicking a result inserts the selected reference.
 
 If the popup feels intrusive, raise **Characters after @ before searching** (Settings → ScholarWeft → Citation and reference searching and formatting) to 1 or 2 so it waits for that many characters. At 0 it opens immediately.
 
@@ -31,16 +31,20 @@ Recents and the last search are kept **per note**: notes are about different thi
 
 **Words may be in different fields.** `@@bourdieu critique` finds a work *by* Bourdieu whose *title* contains "critique" — the words do not need to sit together.
 
-**Word beginnings count, endings do not.** `@@soc cri` finds "**Soc**ial **Cri**tique" and “Society of Crickets”. A word must start with what you typed; a fragment of the middle of a word is ignored. You can type as little as three letters per word when you are abbreviating.
+**Word beginnings count, and whole compounds count.** `@@soc cri` finds "**Soc**ial **Cri**tique" and “Society of Crickets”. A word must start with what you typed; a fragment of the middle of a word is ignored. A **hyphenated compound** is one word, matched either way: `@@anti-colonial` finds "anti-colonial" *and* "anticolonial", and `@@anticolonial` finds both too.
 
 **Accents do not matter.** `cesaire` finds "Césaire" and `Césaire` finds "cesaire", in titles, names and abstracts alike.
+
+**Spelling variants are matched.** `color` finds "colour", `colonization` finds "colonisation".
 
 **Creator names are fully searched** — first name, family name, and single-field names like a corporate author or "Aristotle". It also searches **editors**, so a work is findable by the person who compiled it.
 
 ## Tips
 
-- **Space your words.** `@@bergson memory` is the same search as `@@bergsonmemory` when both words are found: the unspaced form additionally tries to read the run as abbreviations, so it can match *more*, never a different thing. Typing spaces is still better — it says exactly what you mean and is marginally preferred when ranking.
-- **Abbreviate by beginnings.** `@@soccri` finds "Social Critique"; `@@socthe` finds "Social Theory". This works because a person abbreviates words by their starts, so `soccri` is understood as *soc*ial *cri*tique. Typing the *middle* of words (`oci que`) matches nothing.
+- **Space your words.** Each term is matched on its own, so `@@bergson memory` finds works with both words. Write abbreviations the same way: `soc crit` for *Soc*ial *Cri*tique.
+- **A term matches where a word begins.** `@@soc cri` finds "**Soc**ial **Cri**tique". A fragment from the middle of a word is ignored.
+- **A citekey is matched whole, spaces or not.** `@@bourdieudist`, `@@bourdieu dist`, and `@@bourdieu dist 1984` all find `bourdieuDistinctionSocial1984` and put it first.
+- **Quote to search a literal string.** `"anti-colonial"` matches that exact string anywhere (case-insensitive), so it will not be split into separate words.
 - **Add an author to narrow fast.** A surname plus one title word is the most precise search there is: `@@bourdieu critique` beats `@@critique` by a wide margin.
 - **Try `@@` when `@` finds nothing.** If you are sure the work should be there, the word may be in its abstract, or its journal or publisher.
 - **`@@` results show an excerpt** of the abstract where your terms were found, so you can see *why* an item matched when the title gives no clue. If your terms appear in different parts of the abstract you get a line for each.
@@ -61,24 +65,22 @@ The footer along the bottom of the popup names exactly what Enter will insert.
 
 Results are ordered by how meaningfully they match, not by a single score:
 
-1. **An exact citekey**, or the query being the beginning of one — typing `@smithTitleYear` puts that work first.
+1. **A citekey** — an exact match, or the query reading onto the key (spaces ignored): `@smithTitleYear`, `@smith title year`, and `@smith title` all put that work first.
 2. **An author *and* a title word** — the most precise field match.
 3. **The exact phrase in the title** — searching `social critique` finds "A *Social Critique* of …" ahead of a title containing the words apart.
-4. **The words in the title**, whole words ahead of abbreviations.
+4. **The words in the title**, whole words ahead of partial ones.
 5. **The words in the abstract**, journal, or publisher (the `@@` extra).
 
 A word appearing earlier in a title ranks above the same word later in it. **Nothing is ever dropped for appearing late, or for being in a long field** — ranking only affects the order, never whether a work is found.
 
-## Abbreviations
+## Abbreviating
 
-An abbreviation is understood by its beginnings:
+Write each abbreviation as its own word:
 
-- `soccri` → *soc*ial *cri*tique
-- `socthe` → *soc*ial *the*ory
+- `soc crit` → *soc*ial *cri*tique
+- `berg mem` → *Berg*son on *mem*ory
 
-Three letters minimum per part, because two are ambiguous (`socr` is as likely to be Socrates).
-
-A coherent reading is tried **first and ranks highest**: `socialcritique` is understood as "social critique", never as "**Soc**cer **is** almost **cri**ing…". When no coherent reading exists, word-prefix readings are tried instead and rank below real words — so an abbreviation adds possibilities without displacing a genuine whole-word match.
+Two letters is usually enough per term; a term matches wherever a word *begins* with it. A hyphenated compound (`anti-colonial`) is matched whole, either spelling.
 
 ## If you also use ZotLit
 

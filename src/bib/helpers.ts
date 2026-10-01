@@ -774,22 +774,33 @@ export async function fetchChildDeltaNative(
   libraryID: number,
   since: number
 ): Promise<{
-  attachments: Array<{ key: string; parentItem: string }>;
-  annotations: Array<{ key: string; parentItem: string }>;
+  attachments: Array<{ key: string; parentItem: string; dateModified: string }>;
+  annotations: Array<{ key: string; parentItem: string; dateModified: string }>;
   version: number;
 } | null> {
   if (!(await isZoteroRunningNative(port))) return null;
   try {
     const att = await fetchItemsSinceNative(port, libraryID, 'attachment', since);
     const ann = await fetchItemsSinceNative(port, libraryID, 'annotation', since);
-    const toItem = (it: any): { key: string; parentItem: string } | null => {
+    const toItem = (
+      it: any
+    ): { key: string; parentItem: string; dateModified: string } | null => {
       const key = String(it?.key ?? it?.data?.key ?? '');
       const parentItem = String(it?.data?.parentItem ?? '');
-      return key ? { key, parentItem } : null;
+      const dateModified = String(it?.data?.dateModified ?? '');
+      return key ? { key, parentItem, dateModified } : null;
     };
     return {
-      attachments: att.items.map(toItem).filter((x): x is { key: string; parentItem: string } => !!x),
-      annotations: ann.items.map(toItem).filter((x): x is { key: string; parentItem: string } => !!x),
+      attachments: att.items
+        .map(toItem)
+        .filter(
+          (x): x is { key: string; parentItem: string; dateModified: string } => !!x
+        ),
+      annotations: ann.items
+        .map(toItem)
+        .filter(
+          (x): x is { key: string; parentItem: string; dateModified: string } => !!x
+        ),
       version: Math.max(att.version, ann.version),
     };
   } catch {

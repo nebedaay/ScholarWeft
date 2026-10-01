@@ -728,6 +728,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     //   @key / @@text                          — full-library search
     const trigger = detectCitationTrigger(line, {
       minChars: citeSearchMinChars ?? DEFAULT_MIN_CHARS,
+      allowSpaces: this.plugin.settings.citeSearchAllowSpaces !== false,
     });
     if (!trigger) return null;
 

@@ -16,6 +16,16 @@ export interface ChildDeltaItem {
   key: string;
   /** Top-level item for an attachment; the attachment key for an annotation. */
   parentItem: string;
+  /** The child's Zotero `dateModified`. Used to tell a substantive change from
+   *  a version-only bump (e.g. an attachment's `lastRead` being set when a PDF
+   *  is opened), which changes nothing the note imports. */
+  dateModified?: string;
+  /**
+   * `false` when the caller has established this delta is NOT substantive (the
+   * child's `dateModified` matches the cached snapshot). It still refreshes the
+   * attachment→item map, but must not mark the item changed.
+   */
+  substantive?: boolean;
 }
 
 /** Persisted in `.scholar-weft/sync-state.json`. */
@@ -76,7 +86,10 @@ export async function collectChangedItemKeys(
     if (!a.key) continue;
     if (a.parentItem) {
       map[a.key] = a.parentItem;
-      changed.add(a.parentItem);
+      // A version-only bump (an attachment's `lastRead`, set by opening a PDF)
+      // changes nothing the note imports, so it updates the map but does not
+      // mark the item changed.
+      if (a.substantive !== false) changed.add(a.parentItem);
     } else {
       // Detached/removed attachment.
       delete map[a.key];
@@ -93,7 +106,7 @@ export async function collectChangedItemKeys(
         parentItem = resolved;
       }
     }
-    if (parentItem) changed.add(parentItem);
+    if (parentItem && an.substantive !== false) changed.add(parentItem);
   }
 
   return { state: { ...state, attachments: map }, changedItemKeys: changed };

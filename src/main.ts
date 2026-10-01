@@ -196,7 +196,9 @@ function updateBibliographyPath(
   return getUpdatedPath(bibliography);
 }
 
-type UpdateResult = { ok: true; reason?: undefined } | { ok: false; reason: string };
+type UpdateResult =
+  | { ok: true; changed?: boolean; reason?: undefined }
+  | { ok: false; reason: string };
 
 export default class ReferenceList extends Plugin {
   api: LinkedCitationsApi;
@@ -1494,7 +1496,7 @@ export default class ReferenceList extends Plugin {
    */
   async updateLiteratureNoteResult(
     file: TFile,
-    opts?: { confirm?: boolean; skipChildCache?: boolean }
+    opts?: { confirm?: boolean; skipChildCache?: boolean; force?: boolean }
   ): Promise<UpdateResult> {
     const stable =
       this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
@@ -1512,12 +1514,13 @@ export default class ReferenceList extends Plugin {
     }
 
     try {
-      await this.bibManager.createLiteratureNote(citekey, file, {
+      const res = await this.bibManager.createLiteratureNote(citekey, file, {
         open: false,
         stableKey: stable,
         skipChildCache: opts?.skipChildCache === true,
+        force: opts?.force === true,
       });
-      return { ok: true };
+      return { ok: true, changed: res.changed };
     } catch (e) {
       console.warn('[sw:update] failed for', file.path, e);
       return { ok: false, reason: (e as Error)?.message ?? 'update failed' };
@@ -1527,7 +1530,7 @@ export default class ReferenceList extends Plugin {
   /** Boolean convenience wrapper around {@link updateLiteratureNoteResult}. */
   async updateLiteratureNote(
     file: TFile,
-    opts?: { confirm?: boolean; skipChildCache?: boolean }
+    opts?: { confirm?: boolean; skipChildCache?: boolean; force?: boolean }
   ): Promise<boolean> {
     return (await this.updateLiteratureNoteResult(file, opts)).ok;
   }
@@ -1608,17 +1611,21 @@ export default class ReferenceList extends Plugin {
       0
     );
     let updated = 0;
+    let processed = 0;
     const skipped: Array<{ path: string; reason: string }> = [];
     const startedAt = Date.now();
     for (const file of files) {
+      processed++;
       const res = await this.updateLiteratureNoteResult(file);
-      if (res.ok) {
+      // A note whose re-render is identical (res.changed === false) is left
+      // untouched and is not counted as updated.
+      if (res.ok && res.changed !== false) {
         updated++;
-      } else {
+      } else if (!res.ok) {
         skipped.push({ path: file.path, reason: res.reason });
       }
       progress.setMessage(
-        `Updating literature notes… ${updated + skipped.length}/${files.length} (you can keep working)`
+        `Updating literature notes… ${processed}/${files.length} (you can keep working)`
       );
       // Yield so typing/scrolling stays responsive during a long pass.
       await new Promise((r) => setTimeout(r, 0));
@@ -1720,16 +1727,18 @@ export default class ReferenceList extends Plugin {
     for (const { file, citekey } of targets) {
       // Zotero told us this item CHANGED, so fetch its children even if the
       // cached snapshot's version happens to match.
-      if (
-        await this.updateLiteratureNote(file, {
-          confirm: false,
-          skipChildCache: true,
-        })
-      ) {
+      const res = await this.updateLiteratureNoteResult(file, {
+        confirm: false,
+        skipChildCache: true,
+      });
+      if (res.ok && res.changed !== false) {
         updatedKeys.push(citekey);
-      } else {
+      } else if (!res.ok) {
         skipped++;
       }
+      // res.ok && changed === false: re-rendered to identical content (e.g. a
+      // PDF's `lastRead` bumped its version) — nothing changed, so nothing to
+      // report and the note was left untouched.
       progress.setMessage(
         `Updating literature notes from Zotero… ${updatedKeys.length + skipped}/${targets.length}`
       );
@@ -2115,7 +2124,12 @@ export default class ReferenceList extends Plugin {
     const skipped: Array<{ path: string; reason: string }> = [];
     const startedAt = Date.now();
     for (const f of files) {
-      const res = await this.updateLiteratureNoteResult(f, { confirm: false });
+      // A template update must advance each note's `updated` stamp even when the
+      // output is unchanged, so `isNoteStale` stops flagging it — hence `force`.
+      const res = await this.updateLiteratureNoteResult(f, {
+        confirm: false,
+        force: true,
+      });
       if (res.ok) {
         updated++;
       } else {
@@ -2345,6 +2359,7 @@ export default class ReferenceList extends Plugin {
 
     const trigger = detectCitationTrigger(line, {
       minChars: this.settings.citeSearchMinChars ?? DEFAULT_MIN_CHARS,
+      allowSpaces: this.settings.citeSearchAllowSpaces !== false,
     });
     if (!trigger) return false;
 

@@ -61,10 +61,16 @@ describe('citekey matches record the interpreted TERMS', () => {
     authorText: 'Certeau',
   };
 
-  it('a citekey PREFIX match does not bold the whole citekey', () => {
+  it('a citekey PREFIX match records the query as ONE term', () => {
     const s = scoreEntry(item, 'certeaupracticeeveryday');
     expect(s.value).toBeLessThan(0); // the citekey band still wins
-    expect(s.matchedTerms).toEqual(['certeau', 'practice', 'everyday']);
+    // The joined run is no longer split into words.
+    expect(s.matchedTerms).toEqual(['certeaupracticeeveryday']);
+  });
+
+  it('a SPACED citekey phrase is still a citekey match', () => {
+    const s = scoreEntry(item, 'certeau practice everyday');
+    expect(s.value).toBeLessThan(0);
   });
 
   it('an EXACT citekey match records the query term', () => {

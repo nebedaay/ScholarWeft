@@ -184,6 +184,9 @@ export interface ReferenceListSettings {
    *  0 (default) opens it immediately with the most recent references; 1 or 2
    *  wait for that many characters. Shown only when reference search is on. */
   citeSearchMinChars?: number;
+  /** Allow SPACES inside a bare `@` search (`@bourdieu dist`). Default true;
+   *  when off, a space ends the query so prose can follow the citation. */
+  citeSearchAllowSpaces?: boolean;
   prioritizeCiteKeyCompletion?: boolean;
   renderCitations?: boolean;
   renderCitationsReadingMode?: boolean;
@@ -725,6 +728,22 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(String(this.plugin.settings.citeSearchMinChars ?? 0))
             .onChange((value) => {
               this.plugin.settings.citeSearchMinChars = Number(value) || 0;
+              this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName(t('Allow spaces in @ searches'))
+        .setDesc(
+          t(
+            'Search several words from one @: with this on, “@bourdieu dist” keeps the popup open across the space and closes at a period, question mark, or when you press Escape or move the cursor. Turn it off if you would rather a space end the search.'
+          )
+        )
+        .addToggle((toggle) =>
+          toggle
+            .setValue(this.plugin.settings.citeSearchAllowSpaces !== false)
+            .onChange((value) => {
+              this.plugin.settings.citeSearchAllowSpaces = value;
               this.plugin.saveSettings();
             })
         );

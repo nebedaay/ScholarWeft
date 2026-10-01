@@ -51,3 +51,26 @@ describe('collectChangedItemKeys()', () => {
     expect(stableKeyFor('ABC', 42)).toBe('ABCg42');
   });
 });
+
+describe('collectChangedItemKeys() — substantive flag', () => {
+  it('a non-substantive attachment still refreshes the map but changes nothing', async () => {
+    const r = await collectChangedItemKeys(
+      emptySyncState(),
+      [{ key: 'ATT1', parentItem: 'ITEM1', substantive: false }],
+      [],
+      noLookup
+    );
+    expect([...r.changedItemKeys]).toEqual([]);
+    expect(r.state.attachments.ATT1).toBe('ITEM1');
+  });
+
+  it('a non-substantive annotation does not mark its item changed', async () => {
+    const r = await collectChangedItemKeys(
+      { versions: {}, attachments: { ATT1: 'ITEM1' } },
+      [],
+      [{ key: 'ANN1', parentItem: 'ATT1', substantive: false }],
+      noLookup
+    );
+    expect([...r.changedItemKeys]).toEqual([]);
+  });
+});

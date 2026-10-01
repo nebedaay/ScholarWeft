@@ -31,9 +31,14 @@ export const DEFAULT_MIN_CHARS = 0;
 /** Below this many characters the ranked scorer is bypassed for recency/prefix. */
 export const MIN_SEARCH_CHARS = 3;
 
-// Single-@ trigger: an optional citekey token (no spaces). The tail is `*`
+// Single-@ trigger: an optional citekey token, no spaces. The tail is `*`
 // (allowing a bare `@`); the word-start boundary is enforced separately.
 const singleAtRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]*)$/u;
+
+// Single-@ trigger WITH SPACES allowed: the query runs to the end of the line
+// but stops at sentence punctuation (`.`, `,`, `;`, `!`, `?`), which is how a
+// reader signals "the citation ends here". The leading boundary stays.
+const singleAtSpaceRE = /(^|[^\p{L}\p{N}@])(@)([^.,;!?\n]*)$/u;
 
 // Double-@ trigger: `@@` followed by any text up to a period. A period ends the
 // trigger so normal sentence punctuation closes the popup.
@@ -60,6 +65,13 @@ export interface CitationTrigger {
 export interface TriggerOptions {
   /** Characters required after the marker before the popup opens. */
   minChars?: number;
+  /**
+   * Allow SPACES inside a bare `@` query (`@bourdieu dist`). Default true: the
+   * popup then stays open while you type several words, closing at sentence
+   * punctuation or on Esc / cursor movement. Turn it off to have a space end the
+   * query (the older default), letting you keep writing prose after the citation.
+   */
+  allowSpaces?: boolean;
 }
 
 /**
@@ -71,7 +83,10 @@ export function detectCitationTrigger(
   opts: TriggerOptions = {}
 ): CitationTrigger | null {
   const minChars = Math.max(0, opts.minChars ?? DEFAULT_MIN_CHARS);
+  const allowSpaces = opts.allowSpaces !== false;
 
+  // `@@` is always space-tolerant, so check it first (its `@` also matches the
+  // single-`@` patterns).
   const doubleMatch = line.match(doubleAtRE);
   if (doubleMatch) {
     const atPos = doubleMatch.index + doubleMatch[1].length;
@@ -80,7 +95,9 @@ export function detectCitationTrigger(
     return { atPos, query: DOUBLE_AT_PREFIX + doubleMatch[3], isDoubleAt: true };
   }
 
-  const match = line.match(singleAtRE);
+  const match = allowSpaces
+    ? line.match(singleAtSpaceRE) ?? line.match(singleAtRE)
+    : line.match(singleAtRE);
   if (!match) return null;
   const atPos = match.index + match[1].length;
   if (!isWordStartBefore(line[atPos - 1])) return null;
@@ -94,10 +111,9 @@ export function triggerQueryText(trigger: CitationTrigger): string {
 }
 
 /**
- * Normalise a query for SEARCHING: an underscore stands in for a space, so a
- * single unbroken token can express several words — `@social_theory` searches
- * "social theory". Spaces themselves still END a bare `@` query, which is what
- * lets you type a citation and keep writing prose.
+ * Normalise a query for SEARCHING. With spaces allowed in a bare `@` query the
+ * underscore stand-in is no longer needed, but it is still honoured so
+ * `@social_theory` keeps working for anyone used to it.
  */
 export function normalizeQueryText(query: string): string {
   return query.replace(/_+/g, ' ').trim();

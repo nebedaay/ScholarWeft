@@ -115,7 +115,7 @@ A Zotero item's citekey can change (for example, when you change your Better Bib
 - The literature note is renamed to `@<new citekey>.md`; Obsidian rewrites its resolved `[[@old]]` links automatically, and ScholarWeft rewrites the rest (plain `[@old]` citations and unresolved links).
 - Files derived from the old key — transcriptions and translations named `@<old> - …` — are renamed alongside it.
 - With the own template, the renamed note is re-rendered, so its excerpt images (`@<citekey>_p…_<annotationKey>.png`) follow too.
-- **Citations of items that have no literature note** are updated too. There is no note to record the old key, so ScholarWeft detects the change by diffing its saved Zotero library against a refresh (matched by the stable item key), records the old → new key so a deferred or restarted update is not lost, and rewrites those citations across the vault. (A rename made *before* this feature existed — with the library cache already refreshed — cannot be recovered automatically; re-import the item or fix the citation by hand.)
+- **Citations of items that have no literature note** are updated too. ScholarWeft matches the change by the stable item key and rewrites those citations across the vault — including after a deferred or restarted update. If a citation still points at an old key (for example one edited by hand), re-import the item or fix the citation.
 
 ScholarWeft rewrites the citations *before* it renames any file, so Obsidian never sees a mismatch. This runs automatically after a Zotero refresh when a change is found, and can be run on demand with **Review and update citekeys from Zotero**. Nothing is changed until you confirm the preview.
 

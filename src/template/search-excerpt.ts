@@ -94,6 +94,11 @@ function normaliseWithMap(text: string): { text: string; map: number[] } {
   const map: number[] = [];
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
+    // A HYPHEN is folded away so a search term matches either spelling:
+    // `anticolonial` finds "anti-colonial" and vice versa. The original index
+    // is still recorded, so a span can be mapped back (and widened over the
+    // hyphen) for emphasis.
+    if (ch === '-' || ch === '\u2010' || ch === '\u2011') continue;
     const n = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     for (let k = 0; k < n.length; k++) {
       out += n[k];
@@ -114,7 +119,9 @@ function findTermIn(
   term: string,
   from: number
 ): { start: number; length: number } | null {
-  const needle = norm(term);
+  // Fold the term's hyphens too, so `anti-colonial` and `anticolonial` both
+  // search as `anticolonial` against the hyphen-folded text.
+  const needle = norm(term).replace(/[-\u2010\u2011]/g, '');
   if (!needle) return null;
   const source = text.slice(from);
   const { text: normalised, map } = normaliseWithMap(source);
@@ -126,6 +133,9 @@ function findTermIn(
   // Extend over any COMBINING MARKS that follow, so a decomposed character is
   // emphasised whole rather than bolded up to its accent.
   while (end < text.length && /[\u0300-\u036f]/.test(text[end])) end++;
+  // Extend over a hyphen the fold removed, so the WHOLE "anti-colonial" is
+  // emphasised rather than just the parts around it.
+  if (end < text.length && /[-\u2010\u2011]/.test(text[end])) end++;
   if (end <= start) return null;
   return { start, length: end - start };
 }

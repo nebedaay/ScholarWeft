@@ -413,3 +413,24 @@ export function mergeNote(
   }
   return joinNote(frontmatter, body);
 }
+
+/**
+ * The `updated:` frontmatter line, which the template rewrites to the CURRENT
+ * time on every render. It is therefore not a substantive difference between an
+ * existing note and a re-render of the same data.
+ */
+const UPDATED_LINE = /^updated:[^\n]*\n?/m;
+
+/**
+ * Do an existing note and a fresh render differ in anything EXCEPT the volatile
+ * `updated` timestamp? `false` means the re-render is a no-op: the caller should
+ * not write the file (and should not report the note as updated). Used by the
+ * Zotero-driven auto-update, where a version-only change (e.g. a PDF's
+ * `lastRead`) can trigger a render that changes nothing.
+ */
+export function substantiveContentDiffers(
+  existing: string,
+  rendered: string
+): boolean {
+  return existing.replace(UPDATED_LINE, '') !== rendered.replace(UPDATED_LINE, '');
+}

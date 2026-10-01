@@ -25,6 +25,16 @@
  * Pure, so the ordering for a reported case is an executable test.
  */
 
+import {
+  matchTerm,
+  interiorWeight,
+  adjacentChain,
+  containsLiteral,
+  hyphenWords,
+  normTerm,
+  queryAtoms,
+} from './search-match';
+
 export interface ScoreTarget {
   /**
    * The citekey. An exact match, or the query being a leading prefix of it,
@@ -79,10 +89,19 @@ function words(text: string): string[] {
  */
 const WORD_CACHE = new Map<string, string[]>();
 
-/** Split a query into searchable terms. */
+/** Split a query into searchable terms.
+ *
+ * A HYPHEN is a within-word marker (`anti-colonial` is one compound), so a
+ * hyphenated token is kept whole; any OTHER punctuation separates terms. The
+ * matcher treats a hyphenated term either as the hyphenated spelling or as the
+ * joined one, so it never splits into `anti` + `colonial`.
+ */
 export function queryTerms(query: string): string[] {
   return query
     .split(/[\s,;]+/)
+    .flatMap((t) =>
+      t.includes('-') ? [t] : t.split(/[^\p{L}\p{N}]+/u)
+    )
     .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
     .filter((t) => t.length > 0);
 }
@@ -96,17 +115,18 @@ function norm(s: string): string {
 }
 
 /**
- * Does `term` appear in `text` as a WHOLE WORD (or word prefix)?
+ * Does `term` appear in `text` as a WHOLE WORD, a word PREFIX, or a
+ * START-ALIGNED interior morpheme?
  *
  * A prefix is allowed so a partially typed word still matches ("bourdieuc" →
- * "Bourdieu"), but never an interior fragment: "ocial" does not match "social".
- * This is what stops scattered-letter matches counting as the same thing.
+ * "Bourdieu"). A start-aligned interior match is allowed from
+ * {@link MIN_INTERIOR_TERM} letters ("capi" → "anticapitalism", "capitalism" →
+ * "anticapitalism") but never a mid-word fragment ("loni"). Orthographic
+ * variants (`colour`/`color`) are accepted. All in `search-match.ts`, so scoring
+ * and highlighting agree.
  */
 export function matchesWord(text: string, term: string): boolean {
-  if (!term) return false;
-  const q = norm(term);
-  if (!q) return false;
-  return words(text).some((w) => w === q || w.startsWith(q));
+  return matchTerm(text, term) !== null;
 }
 
 /** Does `text` contain `term` anywhere, contiguously (fragment allowed)? */
@@ -138,8 +158,6 @@ export interface RelevanceScore {
   total: number;
   /** A term was found in the author/creator fields AND another in the title. */
   authorAndTitle: boolean;
-  /** The query matched as concatenated word prefixes (soccri → social critique). */
-  prefixChunks: boolean;
   /**
    * How many WORDS the query was interpreted as. A spaced query reports its
    * term count; a joined run reports the words it aligned to. Coverage is judged
@@ -160,93 +178,6 @@ export interface RelevanceScore {
   value: number;
 }
 
-/** Minimum characters for one chunk of a concatenated-prefix query. */
-export const MIN_CHUNK = 3;
-
-/**
- * Is this query a genuine ABBREVIATION worth matching as word-prefixes?
- *
- * A SINGLE unbroken run of letters (`soccri`, `socthe`) is how a person
- * abbreviates, so it is eligible for chunk matching. A SPACED query is an
- * explicit assertion of word boundaries — and it is still interpreted as those
- * words (by normal coverage), just with a small confidence bonus rather than
- * being rerouted into fragment matching.
- *
- * Both forms therefore land on the SAME interpretation and ranking; the space
- * only shifts weighting. See `scoreEntry`.
- */
-export function looksLikeAbbreviation(query: string): boolean {
-  const trimmed = query.trim();
-  if (!trimmed) return false;
-  // A spaced query is words, not a fragment run.
-  if (/\s/.test(trimmed)) return false;
-  return trimmed.length >= MIN_CHUNK;
-}
-
-/**
- * Does the run split into WHOLE words that the phrase actually contains?
- *
- * This is the guard that stops a coherent query being read as abbreviations.
- * `socialcritique` splits cleanly into `social` + `critique`, so it must not
- * align to "**Soc**cer **is** almost **cri**ing in **ti**me of **que**stioning"
- * — the user's rule: *"if there's a series of coherent words, they're very
- * unlikely made up of smaller chunks to look for."* Only when NO coherent split
- * exists (`soccri`) is an abbreviation reading plausible.
- *
- * Without a dictionary the practical test is the entry itself: try every split
- * of the run and, if the phrase contains each part as a real word, it is
- * coherent. Best-effort by design — a false negative just means we fall back to
- * chunk matching, which is scored below real word matches anyway.
- */
-export function hasCoherentSplit(phrase: string, run: string): string[] | null {
-  const ws = new Set(words(phrase));
-  const q = norm(run);
-  if (!q) return null;
-  // Two-way split.
-  for (let i = MIN_MEANINGFUL_TERM; i <= q.length - MIN_MEANINGFUL_TERM; i++) {
-    const a = q.slice(0, i);
-    const b = q.slice(i);
-    if (ws.has(a) && ws.has(b)) return [a, b];
-  }
-  // Three-way split.
-  for (let i = MIN_MEANINGFUL_TERM; i < q.length; i++) {
-    for (let j = i + MIN_MEANINGFUL_TERM; j < q.length; j++) {
-      const a = q.slice(0, i);
-      const b = q.slice(i, j);
-      const c = q.slice(j);
-      if (ws.has(a) && ws.has(b) && ws.has(c)) return [a, b, c];
-    }
-  }
-  return null;
-}
-
-/**
- * Would this entry be found for an UNBROKEN run (`bourdieucritique`, `soccri`)?
- *
- * Fuse cannot match such a run — it resembles no single field — so the entry
- * must be admitted as a candidate by interpretation instead. Mirrors exactly
- * what `scoreEntry` will do with it, so an admitted candidate always scores
- * rather than being admitted pointlessly:
- *
- *   1. a coherent SPLIT into real words, which may span author and title
- *      (`bourdieucritique` = bourdieu + critique);
- *   2. CHUNK alignment of word prefixes (`soccri`) when no coherent reading
- *      exists.
- */
-export function explainsUnbrokenRun(
-  target: ScoreTarget,
-  run: string
-): boolean {
-  const author = target.authorText ?? '';
-  const combined = `${author} ${target.title ?? ''}`;
-  if (hasCoherentSplit(combined, run)) return true;
-  return (
-    prefixChunks(target.title ?? '', run).full ||
-    prefixChunks(author, run).full ||
-    prefixChunks(combined, run).full
-  );
-}
-
 /**
  * Weighting difference between the two equivalent forms of a query.
  *
@@ -263,50 +194,6 @@ export function spacingConfidence(query: string): number {
 }
 
 /**
- * Match a CONCATENATED PREFIX query against a phrase, e.g. `soccri` against
- * "A Social Critique of ..." or `socthe` against "Social Theory".
- *
- * Consumes the query left to right, taking the longest run (>= MIN_CHUNK) that
- * begins a successive word. This is the ONLY legitimate fragment matching: a
- * person abbreviates words by their BEGINNINGS. An interior fragment
- * (`ocique` for "social critique") consumes nothing and is rejected — nobody
- * looks up a phrase by its third or fourth letters.
- *
- * MIN_CHUNK is 3, not 2: `socr` is more plausibly Socrates, so nobody types a
- * two-letter start.
- *
- * Returns whether the WHOLE query was consumed, and how many words it spanned.
- */
-export function prefixChunks(
-  phrase: string,
-  query: string
-): { full: boolean; words: number; chunks: string[] } {
-  const q = norm(query);
-  if (!q) return { full: false, words: 0, chunks: [] };
-  const ws = words(phrase);
-  let qi = 0;
-  let wi = 0;
-  let used = 0;
-  const chunks: string[] = [];
-  while (qi < q.length && wi < ws.length) {
-    let matched = 0;
-    for (let len = q.length - qi; len >= MIN_CHUNK; len--) {
-      if (ws[wi].startsWith(q.slice(qi, qi + len))) {
-        matched = len;
-        break;
-      }
-    }
-    if (matched) {
-      chunks.push(q.slice(qi, qi + matched));
-      qi += matched;
-      used++;
-    }
-    wi++;
-  }
-  return { full: used > 0 && qi === q.length, words: used, chunks };
-}
-
-/**
  * Score one entry against the query terms.
  *
  * `value` is a sort key, lower = better. Bands are separated widely, so a
@@ -320,6 +207,115 @@ export function prefixChunks(
  *   4. full coverage              → 1.0–2.9
  *   5. partial coverage           → 3.0+
  */
+/**
+ * Does the query, as ONE compound word, match a word of `title`?
+ *
+ * `anticolonial` matches "anticolonial" and "anti-colonial"; `anti-colonial`
+ * matches both too. Either way the compound is the SAME term, so the two
+ * spellings rank together (exact spelling only breaks the tie) and any split
+ * reading is suppressed. Returns the occurrence's strength or null.
+ */
+function compoundWordMatch(
+  title: string,
+  terms: string[]
+): 'exact' | 'variant' | null {
+  if (!title || terms.length !== 1) return null;
+  const q = normTerm(terms[0]);
+  if (!q) return null;
+  const joined = q.replace(/-/g, '');
+  // Only meaningful for a compound-looking query (has a hyphen, or is long
+  // enough to be one joined word).
+  let best: 'exact' | 'variant' | null = null;
+  for (const w of hyphenWords(title)) {
+    const wJoined = w.replace(/-/g, '');
+    if (w === q) return 'exact';
+    if (w.startsWith(q) && w.includes('-')) best = best ?? 'exact';
+    if (wJoined === joined || wJoined.startsWith(joined)) best = best ?? 'variant';
+  }
+  return best;
+}
+
+export function isCompoundQuery(query: string): boolean {
+  const terms = queryTerms(query);
+  if (terms.length !== 1) return false;
+  const q = normTerm(terms[0]);
+  return q.includes('-') || q.length >= 8;
+}
+
+/**
+ * Score a query that is ONE compound word against the entry, or null when it is
+ * not a compound-word query or does not match as a compound.
+ *
+ * Used by the search TIER (before interpretations) so a compound strong match
+ * cannot be outranked by a split reading: `anticolonial` must place "anti-
+ * colonial" and "anticolonial" above "anti … colonial" in unrelated words. Both
+ * spellings match both spellings; the exact spelling wins by a hair.
+ */
+export function compoundWordScore(
+  target: ScoreTarget,
+  query: string,
+  opts: ScoreOptions = {}
+): { value: number; terms: string[] } | null {
+  const terms = queryTerms(query);
+  if (terms.length !== 1) return null;
+  const q = normTerm(terms[0]);
+  // Only a compound-looking term: hyphenated, or a long single word that could
+  // be a joined compound. A short plain word is handled by the normal path.
+  if (!q.includes('-') && q.length < 8) return null;
+
+  const fields: Array<[string, number]> = [[target.title ?? '', 0]];
+  if (target.authorText) fields.push([target.authorText, 0.15]);
+  if (opts.includeVenue && target.venueText) fields.push([target.venueText, 0.2]);
+  if (opts.includeAbstract && target.abstract) fields.push([target.abstract, 0.35]);
+
+  const joined = q.replace(/-/g, '');
+  let best: { value: number; terms: string[] } | null = null;
+  for (const [text, fieldPenalty] of fields) {
+    if (!text) continue;
+    for (const w of hyphenWords(text)) {
+      const wJoined = w.replace(/-/g, '');
+      // "Exact" = the field word has the SAME spelling as the query (either
+      // both hyphenated or both joined). "Variant" = the other spelling of the
+      // same compound. Both are the same term; the exact spelling breaks ties.
+      const sameSpelling =
+        (w.includes('-') === q.includes('-')) &&
+        (w === q || w.startsWith(q) || wJoined === joined || wJoined.startsWith(joined));
+      const otherSpelling =
+        (wJoined === joined || wJoined.startsWith(joined)) && !sameSpelling;
+      if (!sameSpelling && !otherSpelling) continue;
+      // Hyphenated spelling preferred at equal fit (tie-breaker only).
+      const hyphenBonus = w.includes('-') && q.includes('-') ? 0 : 0.01;
+      const value = (sameSpelling ? 0.05 : 0.08) + hyphenBonus + fieldPenalty;
+      if (!best || value < best.value) best = { value, terms: terms };
+    }
+  }
+  return best;
+}
+
+/**
+ * Do the query terms appear IN ORDER in the citekey, each as a substring of the
+ * key (no separators in a BBT key: `authorShortTitleYear`)?
+ *
+ * `bourdieu dist 1984` → bourdieu·dist·1984 of `bourdieuDistinctionSocial1984`.
+ * Returns the covered span (for ranking: more of the key covered is better), or
+ * null. Terms too short to be meaningful are ignored so `d 1984` cannot qualify
+ * on a single letter.
+ */
+function citekeyOrderedMatch(
+  key: string,
+  terms: string[]
+): { span: number } | null {
+  const meaningful = terms.filter((t) => t.length >= 2);
+  if (meaningful.length < 2) return null;
+  let pos = 0;
+  for (const t of meaningful) {
+    const at = key.indexOf(t, pos);
+    if (at < 0) return null;
+    pos = at + t.length;
+  }
+  return { span: pos };
+}
+
 export function scoreEntry(
   target: ScoreTarget,
   query: string,
@@ -332,7 +328,6 @@ export function scoreEntry(
       covered: 0,
       total: 0,
       authorAndTitle: false,
-      prefixChunks: false,
       interpretedWords: 0,
       matchedTerms: [],
       value: 0,
@@ -345,75 +340,108 @@ export function scoreEntry(
   if (opts.includeAbstract) haystacksAll.push(target.abstract ?? '');
   if (opts.includeVenue) haystacksAll.push(target.venueText ?? '');
 
-  // A JOINED run (`bourdieusocialcritique`) is interpreted as the words it was
-  // built from, so it goes through the SAME ranking as the spaced form.
-  //
-  // Two ways to recover those words, in priority order:
-  //   1. A COHERENT SPLIT — the run is made of real words this entry contains,
-  //      so `bourdieusocialcritique` = `bourdieu + social + critique`. This is
-  //      the user's rule: a series of coherent words is not an abbreviation.
-  //   2. CHUNK ALIGNMENT — no coherent reading exists (`soccri`), so word
-  //      prefixes are the only way to interpret it.
-  let effective = terms;
-  if (looksLikeAbbreviation(query) && terms.length === 1) {
-    const coherent = hasCoherentSplit(`${author} ${title}`, terms[0]);
-    if (coherent) {
-      effective = coherent;
-    } else {
-      const candidates = [
-        prefixChunks(title, terms[0]),
-        prefixChunks(author, terms[0]),
-        prefixChunks(`${author} ${title}`, terms[0]),
-      ];
-      const best = candidates.reduce((a, b) => (b.words > a.words ? b : a));
-      if (best.full && best.words > 1) {
-        // A MULTI-word alignment is a genuinely different reading (soccri →
-        // soc + cri). A single-chunk "alignment" is just the term itself, so
-        // there is nothing to reinterpret.
-        effective = best.chunks;
-      }
-      // Otherwise KEEP the term as typed and search it normally. An
-      // abbreviation reading is an ADDITIONAL interpretation, never a
-      // replacement: failing to align says nothing about whether the term
-      // itself matches. Rejecting here is what made a plain word return
-      // nothing — a plain word was treated as an unexplained abbreviation.
+  // QUOTED terms are LITERAL: match the substring in any searched field
+  // (case/diacritic-insensitive). They do not go through word-boundary or
+  // morpheme logic — `"anticolonial"` matches "anticolonial*" but not
+  // "anti-witchcraft … colonialism". A quoted run may also be multi-word.
+  const atoms = queryAtoms(query);
+  const literalAtoms = atoms.filter((a) => a.literal);
+  if (literalAtoms.length) {
+    let coveredTotal = 0;
+    let hits = 0;
+    for (const a of atoms) {
+      coveredTotal++;
+      // `containsLiteral` lowercases the FIELD; normalize the atom too so an
+      // unquoted mixed-case term ("Africa") still matches.
+      if (haystacksAll.some((h) => containsLiteral(h, a.text))) hits++;
     }
+    if (hits > 0) {
+      const full = hits >= coveredTotal;
+      return {
+        exactPhrase: full,
+        covered: hits,
+        total: coveredTotal,
+        authorAndTitle: false,
+        interpretedWords: coveredTotal,
+        matchedTerms: atoms.map((a) => a.text),
+        // A full literal match ranks just above a plain phrase; a partial one
+        // sits with normal term matches. Always beats a fragmented match.
+        value: full ? 0.2 + spacingConfidence(query) : 1.5 + spacingConfidence(query),
+      };
+    }
+    // No literal hit at all → not a match.
+    return {
+      exactPhrase: false,
+      covered: 0,
+      total: coveredTotal,
+      authorAndTitle: false,
+      interpretedWords: coveredTotal,
+      matchedTerms: atoms.map((a) => a.text),
+      value: Number.POSITIVE_INFINITY,
+    };
   }
+
+  // The query's own terms, verbatim. (Chunked/run reinterpretation was removed:
+  // `soccrit` is no longer read as `soc` + `crit`; write `soc crit`.)
+  const effective = terms;
 
   // 0. CITEKEY: an exact match, or the query being a LEADING PREFIX of it,
   //    ranks above everything. Someone typing a citekey wants that work — this
   //    is why the `@` level stays useful once it also searches titles.
+  //
+  //    Spaces and a leading `@` are IGNORED for this test, so all of these hit
+  //    the same band: `@bourdieudist1984`, `bourdieudist`, `bourdieu dist`,
+  //    `bourdieu dist 1984`. Typing `bourdieu dist` is not a coincidence — it
+  //    is the citekey, and it belongs at the top, not merely in the results.
   const citekey = target.citekey ?? '';
   if (citekey && query.trim()) {
     const key = citekey.toLowerCase();
     const q = query.trim().toLowerCase().replace(/^@+/, '');
-    // The matched TERMS (not the whole citekey) drive highlighting, so a query
-    // that happens to prefix a citekey still bolds the same words in the title
-    // and abstract. Recording `[citekey]` bolded the entire key and suppressed
-    // every other field.
-    if (q && key === q) {
+    const qJoined = q.replace(/\s+/g, '');
+    if (qJoined && (key === q || key === qJoined)) {
       return {
         exactPhrase: true,
         covered: 1,
         total: 1,
         authorAndTitle: false,
-        prefixChunks: false,
         interpretedWords: 1,
         matchedTerms: effective,
         value: -2,
       };
     }
-    if (q && key.startsWith(q)) {
+    // A contiguous join (`bourdieudist`) is the strongest prefix reading.
+    if (qJoined && key.startsWith(qJoined)) {
       return {
         exactPhrase: false,
         covered: 1,
         total: 1,
         authorAndTitle: false,
-        prefixChunks: false,
         interpretedWords: 1,
         matchedTerms: effective,
-        // Still ahead of every other band (0.0+), behind an exact match.
-        value: -1 + Math.min(citekey.length - q.length, 99) / 1000,
+        // Still ahead of every other band (0.0+), behind an exact match. A
+        // SHORTER query (a looser prefix, matching more keys) ranks below a
+        // longer, more specific one, so `bourdieu dist` beats `bourdieu d`.
+        value: -1 + Math.min(citekey.length - qJoined.length, 99) / 1000,
+      };
+    }
+    // The terms appear IN ORDER in the key, each as a substring of a key
+    // segment: `bourdieu dist 1984` → bourdieu···dist···1984 of
+    // `bourdieuDistinctionSocial1984`. A citekey is `author+shorttitle+year`
+    // with no separators, so a spaced phrase that reads onto the key in order
+    // IS that work — it belongs at the top, just below a contiguous match, and
+    // above any entry that merely contains the terms somewhere.
+    const inOrder = citekeyOrderedMatch(key, q.split(/\s+/).filter(Boolean));
+    if (inOrder) {
+      return {
+        exactPhrase: false,
+        covered: 1,
+        total: 1,
+        authorAndTitle: false,
+        interpretedWords: 1,
+        matchedTerms: effective,
+        // Ahead of every content band, behind a contiguous citekey prefix, and
+        // ordered among themselves by how much of the key they cover.
+        value: -0.9 + Math.min(citekey.length - inOrder.span, 99) / 1000,
       };
     }
   }
@@ -430,6 +458,26 @@ export function scoreEntry(
   for (const term of forCoverage) {
     if (haystacksAll.some((h) => matchesWord(h, term))) covered++;
   }
+
+  // How much of the query is a CONTIGUOUS PHRASE in the title: the word a term
+  // matched immediately followed by the next term's word ("cultural critique"
+  // for `cultural cri`). This is what a multi-term query usually means.
+  const adjacent = Math.max(
+    adjacentChain(title, forCoverage),
+    adjacentChain(author, forCoverage)
+  );
+  // A term matched only as a start-aligned INTERIOR morpheme is weaker than a
+  // whole word, scaled by its length (parity at ~6 letters).
+  const interiorPenalty = (termsToCheck: string[], hay: string): number => {
+    let penalty = 0;
+    for (const t of termsToCheck) {
+      const m = matchTerm(hay, t);
+      if (m?.strength === 'interior') {
+        penalty += 1 - interiorWeight(t.length);
+      }
+    }
+    return penalty;
+  };
 
   // 1. Author + title: a surname (or similar) AND another term in the title.
   //    This is the most meaningful search there is — see the governing
@@ -451,7 +499,6 @@ export function scoreEntry(
       covered,
       total: forCoverage.length,
       authorAndTitle: true,
-      prefixChunks: false,
       interpretedWords: forCoverage.length,
     matchedTerms: forCoverage,
       value: (startsTitle ? 0.0 : 0.1) + inAuthor.length * 0.01 + spacing,
@@ -462,13 +509,24 @@ export function scoreEntry(
   let wordHits = 0;
   let fragmentOnly = 0;
   let startBonus = 0;
+  // Does the WHOLE query match as a single compound WORD of the title
+  // (`anticolonial` or `anti-colonial`, either spelling)? If so, that IS the
+  // match, and any split reading must not compete with it.
+  const compoundExact = compoundWordMatch(title, effective);
   for (const term of meaningful) {
-    if (matchesWord(title, term)) {
-      wordHits++;
+    const m = matchTerm(title, term);
+    if (m) {
+      if (m.strength === 'interior') {
+        // Start-aligned interior morpheme (capitalism in anticapitalism): a
+        // partial, length-scaled hit — not a whole word.
+        fragmentOnly++;
+      } else {
+        wordHits++;
+      }
       const at = firstWordOffset(title, term);
       if (at === 0) startBonus++;
     } else if (containsFragment(title, term)) {
-      // Present in the title, but only as a fragment of a larger word: weak.
+      // Present in the title as a non-aligned fragment ("loni"): very weak.
       fragmentOnly++;
     }
   }
@@ -482,49 +540,70 @@ export function scoreEntry(
       covered,
       total: forCoverage.length,
       authorAndTitle: false,
-      prefixChunks: false,
       interpretedWords: forCoverage.length,
     matchedTerms: forCoverage,
-      value: 0.3 + pos + spacing,
+      // A contiguous phrase beats a merely-adjacent chain.
+      value: 0.3 + pos + spacing - (adjacent > 1 ? 0.06 : 0),
     };
   }
 
-  // 3. Concatenated prefixes (soccri → social critique). Legitimate but weaker
-  //    than whole words, and ONLY when the query is a genuine abbreviation —
-  //    a spaced query of real words must not chunk-match (see
-  //    looksLikeAbbreviation), and an interior fragment (ocique) consumes
-  //    nothing at all.
-  const chunked = looksLikeAbbreviation(query)
-    ? prefixChunks(title, terms.join(''))
-    : { full: false, words: 0 };
-  if (chunked.full && chunked.words >= 1) {
+  // 2b. The terms are a contiguous PHRASE in the title but not a substring
+  //     (one term is a prefix/interior: `cultural cri` → "cultural critique").
+  if (adjacent >= forCoverage.length && forCoverage.length >= 2) {
     return {
-      exactPhrase: false,
+      exactPhrase,
       covered,
       total: forCoverage.length,
       authorAndTitle: false,
-      prefixChunks: true,
       interpretedWords: forCoverage.length,
-    matchedTerms: forCoverage,
-      value: 0.9 + (fragmentOnly > 0 ? 0.05 : 0) + spacing,
+      matchedTerms: forCoverage,
+      value: 0.75 + spacing,
     };
   }
 
+  // 3. Concatenated prefixes (soccri → social critique) were REMOVED: a joined
+  //    abbreviation is no longer interpreted. Write the terms separately
+  //    (`soc crit`), which matches the same entries through coverage.
+
   const fullCoverage = covered >= forCoverage.length ? 1 : 3;
   const penalty = fragmentOnly * 0.15;
+  const interiorPen = interiorPenalty(forCoverage, title);
+  // An adjacent pair is a meaningfully better match than the same two terms
+  // scattered across the title.
+  const adjacencyBonus = adjacent >= forCoverage.length ? 0.3 : adjacent > 1 ? 0.12 : 0;
   const quality = 1.0 - Math.min(wordHits / Math.max(forCoverage.length, 1), 1) * 0.6;
+
+  // A COMPOUND WORD match is the strongest form: the query IS a word of the
+  // title. Rank it above everything else, and place the two spellings together
+  // (exact spelling wins the tie by a hair, not by a band).
+  if (compoundExact) {
+    return {
+      exactPhrase: compoundExact === 'exact',
+      covered,
+      total: forCoverage.length,
+      authorAndTitle: false,
+      interpretedWords: forCoverage.length,
+      matchedTerms: forCoverage,
+      value:
+        (compoundExact === 'exact' ? 0.05 : 0.08) +
+        (interiorPen > 0 ? 0.02 : 0) +
+        spacing,
+    };
+  }
+
   return {
     exactPhrase,
     covered,
     total: forCoverage.length,
     authorAndTitle: false,
-    prefixChunks: false,
     interpretedWords: forCoverage.length,
     matchedTerms: forCoverage,
     value:
       fullCoverage +
       Math.max(quality, 0) +
-      penalty -
+      penalty +
+      interiorPen -
+      adjacencyBonus -
       Math.min(startBonus, 2) * 0.1 +
       spacing,
   };
