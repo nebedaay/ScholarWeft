@@ -22040,13 +22040,16 @@ var init_addLiteratureNotesModal = __esm({
         window.setTimeout(() => {
           if (seq !== this._refreshSeq || !this.containerEl.isConnected)
             return;
-          this.computeAndRender(q4, searching);
+          void this.computeAndRender(q4, searching, seq);
         }, 0);
       }
-      computeAndRender(q4, searching) {
+      async computeAndRender(q4, searching, seq) {
         let filtered;
         if (q4) {
-          const { entries } = this.plugin.bibManager.searchTier(this.searchAbstract ? "abstract" : "title", q4, MAX_RESULTS);
+          const res = await this.plugin.bibManager.searchTierAsync(this.searchAbstract ? "abstract" : "title", q4, MAX_RESULTS, 0, () => seq !== this._refreshSeq || !this.containerEl.isConnected);
+          if (res.cancelled || seq !== this._refreshSeq || !this.containerEl.isConnected)
+            return;
+          const { entries } = res;
           filtered = entries.map((e3) => e3.entry).filter((e3) => passesImportFilters(this.flagsFor(e3), this.filters));
           this.termsByKey = new Map(entries.map((e3) => [e3.entry.id, e3.terms]));
         } else {
@@ -22074,14 +22077,27 @@ var init_addLiteratureNotesModal = __esm({
           this.renderRow(entry);
         this.rendered += slice.length;
         const unrendered = slice.map((e3) => e3.id).filter((id) => !this.renderedRefs.has(id));
-        if (unrendered.length) {
+        if (!unrendered.length)
+          return;
+        const token = this._refreshSeq;
+        this.whenIdle(() => {
+          if (token !== this._refreshSeq || !this.containerEl.isConnected)
+            return;
           void this.plugin.bibManager.renderEntryElements(unrendered, { suppressUrls: true }).then((map) => {
+            if (token !== this._refreshSeq || !this.containerEl.isConnected)
+              return;
             for (const [k4, v3] of map)
               this.renderedRefs.set(k4, v3);
-            if (this.containerEl.isConnected)
-              this.fillReferences();
+            this.fillReferences();
           }).catch((e3) => console.warn("[sw:add-notes] reference render failed", e3));
-        }
+        });
+      }
+      whenIdle(fn2) {
+        const ric = window.requestIdleCallback;
+        if (typeof ric === "function")
+          ric(fn2, { timeout: 300 });
+        else
+          window.setTimeout(fn2, 30);
       }
       fillReferences() {
         var _a;
@@ -96304,12 +96320,13 @@ function splitWords(text2) {
   return (_a = normTerm(text2).match(WORD_RE)) != null ? _a : [];
 }
 var WORD_CACHE = new Map();
+var wordCacheLimit = 4e3;
 function words(text2) {
   const cached = WORD_CACHE.get(text2);
   if (cached)
     return cached;
   const out = splitWords(text2);
-  if (WORD_CACHE.size > 4e3)
+  if (WORD_CACHE.size > wordCacheLimit)
     WORD_CACHE.clear();
   WORD_CACHE.set(text2, out);
   return out;
@@ -96451,10 +96468,15 @@ function hyphenWords(text2) {
   if (cached)
     return cached;
   const out = (_a = normTerm(text2).match(HYPHEN_WORD_RE)) != null ? _a : [];
-  if (HYPHEN_CACHE.size > 4e3)
+  if (HYPHEN_CACHE.size > wordCacheLimit)
     HYPHEN_CACHE.clear();
   HYPHEN_CACHE.set(text2, out);
   return out;
+}
+function setWordCacheLimit(fields) {
+  wordCacheLimit = Math.max(1e3, Math.floor(fields));
+  WORD_CACHE.clear();
+  HYPHEN_CACHE.clear();
 }
 function interiorWeight(len) {
   if (len >= PARITY_LEN)
@@ -97608,6 +97630,7 @@ var BibManager = class {
     this.watchedBibPaths = new Set();
     this.globalWatchedBibPaths = new Set();
     this.scopedWatchedBibPaths = new Map();
+    this.hayCache = new WeakMap();
     this.presenceReady = false;
     this.collectionNodes = [];
     this.collectionsReady = false;
@@ -97790,6 +97813,8 @@ var BibManager = class {
     this.setFuse(Array.from(this.bibCache.values()));
   }
   setFuse(data = []) {
+    setWordCacheLimit(Math.min(6e4, data.length * 4 + 2e3));
+    this.hayCache = new WeakMap();
     if (!this.fuse) {
       this.fuse = new Fuse(data, fuseSettings);
     } else {
@@ -97806,8 +97831,25 @@ var BibManager = class {
       this.fuseAbstract.setCollection(data);
     }
   }
+  searchHay(entry, includeAbstract, includeVenue) {
+    var _a, _b;
+    let parts = this.hayCache.get(entry);
+    if (!parts) {
+      parts = {
+        core: normTerm(`${(_a = entry.title) != null ? _a : ""}  ${authorTextOf(entry)}`),
+        abstract: normTerm((_b = entry.abstract) != null ? _b : ""),
+        venue: normTerm(venueTextOf(entry))
+      };
+      this.hayCache.set(entry, parts);
+    }
+    let hay = parts.core;
+    if (includeAbstract)
+      hay += "  " + parts.abstract;
+    if (includeVenue)
+      hay += "  " + parts.venue;
+    return hay;
+  }
   searchTier(tier, query, limit, offset = 0) {
-    var _a, _b, _c;
     const fuse = this.fuseForTier(tier);
     if (!fuse)
       return { entries: [], total: 0 };
@@ -97819,80 +97861,106 @@ var BibManager = class {
     const ranked = new Map();
     const matchedTerms = new Map();
     const atoms = queryAtoms(query);
-    const preFilter = (entry) => {
-      var _a2, _b2;
-      const fields = [
-        (_a2 = entry.title) != null ? _a2 : "",
-        authorTextOf(entry),
-        ...includeAbstract ? [(_b2 = entry.abstract) != null ? _b2 : ""] : [],
-        ...includeVenue ? [venueTextOf(entry)] : []
-      ];
-      const hay = normTerm(fields.join("  "));
-      for (const a3 of atoms) {
-        if (hay.includes(a3.text))
-          continue;
-        if (a3.hyphenated && hay.includes(a3.text.replace(/-/g, "")))
-          continue;
-        if (spellingNeedles(a3.text).some((v3) => hay.includes(v3)))
-          continue;
-        return false;
-      }
-      return true;
-    };
     const hasQuote = /["']/.test(query);
     for (const entry of this.bibCache.values()) {
-      if (!preFilter(entry))
+      const hit = this.scoreForTier(entry, atoms, query, hasQuote, includeAbstract, includeVenue);
+      if (!hit)
         continue;
-      const target = {
-        citekey: (_a = entry.id) != null ? _a : null,
-        title: (_b = entry.title) != null ? _b : null,
-        authorText: authorTextOf(entry),
-        abstract: (_c = entry.abstract) != null ? _c : null,
-        venueText: venueTextOf(entry)
-      };
-      if (hasQuote) {
-        const s3 = scoreEntry(target, query, { includeAbstract, includeVenue });
-        if (passesCoverage(s3)) {
-          scored.set(entry.id, s3.value);
-          ranked.set(entry.id, entry);
-          matchedTerms.set(entry.id, s3.matchedTerms);
-        }
-        continue;
-      }
-      const compound = compoundWordScore(target, query, { includeAbstract, includeVenue });
-      if (compound !== null) {
-        scored.set(entry.id, compound.value);
+      scored.set(entry.id, hit.value);
+      ranked.set(entry.id, entry);
+      matchedTerms.set(entry.id, hit.terms);
+    }
+    return this.finishTier(scored, ranked, matchedTerms, limit, offset);
+  }
+  async searchTierAsync(tier, query, limit, offset = 0, cancel) {
+    const fuse = this.fuseForTier(tier);
+    if (!fuse)
+      return { entries: [], total: 0 };
+    if (!isSearchableQuery(query))
+      return { entries: [], total: 0 };
+    const includeAbstract = tier === "abstract";
+    const includeVenue = includeAbstract;
+    const scored = new Map();
+    const ranked = new Map();
+    const matchedTerms = new Map();
+    const atoms = queryAtoms(query);
+    const hasQuote = /["']/.test(query);
+    let n2 = 0;
+    for (const entry of this.bibCache.values()) {
+      if (cancel == null ? void 0 : cancel())
+        return { entries: [], total: 0, cancelled: true };
+      const hit = this.scoreForTier(entry, atoms, query, hasQuote, includeAbstract, includeVenue);
+      if (hit) {
+        scored.set(entry.id, hit.value);
         ranked.set(entry.id, entry);
-        matchedTerms.set(entry.id, compound.terms);
-        continue;
+        matchedTerms.set(entry.id, hit.terms);
       }
-      if (isCompoundQuery(query))
+      if (++n2 % 400 === 0)
+        await new Promise((r3) => setTimeout(r3, 0));
+    }
+    if (cancel == null ? void 0 : cancel())
+      return { entries: [], total: 0, cancelled: true };
+    return this.finishTier(scored, ranked, matchedTerms, limit, offset);
+  }
+  scoreForTier(entry, atoms, query, hasQuote, includeAbstract, includeVenue) {
+    var _a, _b, _c;
+    const hay = this.searchHay(entry, includeAbstract, includeVenue);
+    for (const a3 of atoms) {
+      if (hay.includes(a3.text))
         continue;
-      let best = Number.POSITIVE_INFINITY;
-      let bestTerms = [];
-      for (const interp of interpretationsFor(target, query, { includeAbstract, includeVenue })) {
-        const s3 = scoreEntry(target, interp.terms.join(" "), { includeAbstract, includeVenue });
-        if (!passesCoverage(s3))
-          continue;
-        const value = s3.value + interp.penalty;
-        if (value < best) {
-          best = value;
-          bestTerms = s3.matchedTerms.length > 0 ? s3.matchedTerms : interp.terms;
-        }
-      }
-      if (Number.isFinite(best)) {
-        scored.set(entry.id, best);
-        ranked.set(entry.id, entry);
-        matchedTerms.set(entry.id, bestTerms);
+      if (a3.hyphenated && hay.includes(a3.text.replace(/-/g, "")))
+        continue;
+      if (spellingNeedles(a3.text).some((v3) => hay.includes(v3)))
+        continue;
+      return null;
+    }
+    const target = {
+      citekey: (_a = entry.id) != null ? _a : null,
+      title: (_b = entry.title) != null ? _b : null,
+      authorText: authorTextOf(entry),
+      abstract: (_c = entry.abstract) != null ? _c : null,
+      venueText: venueTextOf(entry)
+    };
+    if (hasQuote) {
+      const s3 = scoreEntry(target, query, { includeAbstract, includeVenue });
+      return passesCoverage(s3) ? { value: s3.value, terms: s3.matchedTerms } : null;
+    }
+    const compound = compoundWordScore(target, query, {
+      includeAbstract,
+      includeVenue
+    });
+    if (compound !== null)
+      return { value: compound.value, terms: compound.terms };
+    if (isCompoundQuery(query))
+      return null;
+    let best = Number.POSITIVE_INFINITY;
+    let bestTerms = [];
+    for (const interp of interpretationsFor(target, query, {
+      includeAbstract,
+      includeVenue
+    })) {
+      const s3 = scoreEntry(target, interp.terms.join(" "), {
+        includeAbstract,
+        includeVenue
+      });
+      if (!passesCoverage(s3))
+        continue;
+      const value = s3.value + interp.penalty;
+      if (value < best) {
+        best = value;
+        bestTerms = s3.matchedTerms.length > 0 ? s3.matchedTerms : interp.terms;
       }
     }
+    return Number.isFinite(best) ? { value: best, terms: bestTerms } : null;
+  }
+  finishTier(scored, ranked, matchedTerms, limit, offset) {
     const ordered = [...scored.entries()].sort((a3, b3) => a3[1] - b3[1]);
     return {
       entries: ordered.slice(Math.max(0, offset), Math.max(0, offset) + limit).map(([id]) => {
-        var _a2;
+        var _a;
         return {
           entry: ranked.get(id),
-          terms: (_a2 = matchedTerms.get(id)) != null ? _a2 : []
+          terms: (_a = matchedTerms.get(id)) != null ? _a : []
         };
       }).filter((r3) => !!r3.entry),
       total: ordered.length
@@ -100311,6 +100379,7 @@ function normalizeQueryText(query) {
 
 // src/citeSuggest/citeSuggest.ts
 var SUGGEST_DEBUG = false;
+var SUGGEST_DEBOUNCE_MS = 50;
 var LOG = SUGGEST_DEBUG ? (...args) => console.log("[sw:suggest]", ...args) : (..._args) => {
 };
 function getEntryMeta(item) {
@@ -100349,6 +100418,8 @@ var CiteSuggest = class extends import_obsidian28.EditorSuggest {
     this.limit = 20;
     this._insertionHint = "insert [[@key]]";
     this._pandocHint = false;
+    this._searchGen = 0;
+    this._lastSuggestions = [];
     this._matchedTermsByKey = new Map();
     this.lastSelect = null;
     this.plugin = plugin;
@@ -100390,10 +100461,20 @@ var CiteSuggest = class extends import_obsidian28.EditorSuggest {
     this._pandocHint = linked && insertionKind({ beforeStart, afterCursor, afterOpenBracket }) === "bare";
   }
   async getSuggestions(context) {
-    var _a, _b, _c;
+    const gen = ++this._searchGen;
     const isDoubleAtMode = context.query.startsWith(DOUBLE_AT_PREFIX);
     const rawQuery = context.query.slice(isDoubleAtMode ? 1 : 0).trim();
     const searchQuery = normalizeQueryText(rawQuery);
+    await new Promise((r3) => setTimeout(r3, SUGGEST_DEBOUNCE_MS));
+    if (gen !== this._searchGen)
+      return this._lastSuggestions;
+    const result = await this.computeSuggestions(context, isDoubleAtMode, searchQuery, () => gen !== this._searchGen);
+    if (gen === this._searchGen)
+      this._lastSuggestions = result;
+    return result;
+  }
+  async computeSuggestions(context, isDoubleAtMode, searchQuery, isCancelled) {
+    var _a, _b, _c;
     LOG("getSuggestions query=", JSON.stringify(searchQuery), "mode=", isDoubleAtMode ? "@@" : "@");
     const useMultiField = true;
     this._matchedTermsByKey = new Map();
@@ -100422,7 +100503,10 @@ var CiteSuggest = class extends import_obsidian28.EditorSuggest {
           return items.map((item, refIndex) => ({ item, refIndex, score: 0 }));
         }
       } else {
-        const { entries, total } = bibManager.searchTier(tier, searchQuery, this.limit);
+        const res = await bibManager.searchTierAsync(tier, searchQuery, this.limit, 0, isCancelled);
+        if (res.cancelled)
+          return [];
+        const { entries, total } = res;
         const usable = entries.filter((e3) => isUsablePopupEntry(e3.entry));
         this._matchedTermsByKey = new Map(usable.map((e3) => [e3.entry.id, e3.terms]));
         this.renderCount(usable.length, total);

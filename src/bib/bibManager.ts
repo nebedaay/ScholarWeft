@@ -82,7 +82,12 @@ import {
   type ChildrenCacheData,
 } from 'src/template/children-cache';
 import { buildChildPresence } from 'src/template/child-presence';
-import { containsLiteral, queryAtoms, normTerm } from 'src/template/search-match';
+import {
+  containsLiteral,
+  queryAtoms,
+  normTerm,
+  setWordCacheLimit,
+} from 'src/template/search-match';
 import { spellingNeedles } from 'src/template/search-variants';
 import {
   recordQuery,
@@ -604,6 +609,13 @@ function promptZotLitFallback(reason?: string): Promise<boolean> {
   });
 }
 
+/** The ranked page a tier search returns; `cancelled` marks an aborted scan. */
+export interface TierSearchResult {
+  entries: Array<{ entry: PartialCSLEntry; terms: string[] }>;
+  total: number;
+  cancelled?: boolean;
+}
+
 export class BibManager {
   plugin: ReferenceList;
   fileCache: SimpleLRU<TFile, FileCache>;
@@ -995,7 +1007,22 @@ export class BibManager {
     this.setFuse(Array.from(this.bibCache.values()));
   }
 
+  /**
+   * Per-entry normalised search fields, so a keystroke does not re-normalise
+   * every title, author and (especially) abstract. Keyed by the entry OBJECT:
+   * a rebuilt library hands over new objects and the old cache is dropped.
+   */
+  private hayCache = new WeakMap<
+    object,
+    { core: string; abstract: string; venue: string }
+  >();
+
   setFuse(data: PartialCSLEntry[] = []) {
+    // Size the matcher's word caches to hold this library and drop the old
+    // haystacks (the entry objects may have changed). Capped so a pathological
+    // library cannot grow the cache without bound.
+    setWordCacheLimit(Math.min(60000, data.length * 4 + 2000));
+    this.hayCache = new WeakMap();
     if (!this.fuse) {
       this.fuse = new Fuse(data, fuseSettings);
     } else {
@@ -1011,6 +1038,31 @@ export class BibManager {
     } else {
       this.fuseAbstract.setCollection(data);
     }
+  }
+
+  /**
+   * The entry's searchable text, normalised once and reused across keystrokes.
+   * Re-normalising every abstract on every search was the bulk of the `@@`
+   * keystroke cost; the pieces are joined per tier only when the hay is needed.
+   */
+  private searchHay(
+    entry: PartialCSLEntry,
+    includeAbstract: boolean,
+    includeVenue: boolean
+  ): string {
+    let parts = this.hayCache.get(entry);
+    if (!parts) {
+      parts = {
+        core: normTerm(`${entry.title ?? ''} \u0001 ${authorTextOf(entry)}`),
+        abstract: normTerm((entry as { abstract?: string }).abstract ?? ''),
+        venue: normTerm(venueTextOf(entry)),
+      };
+      this.hayCache.set(entry, parts);
+    }
+    let hay = parts.core;
+    if (includeAbstract) hay += ' \u0001 ' + parts.abstract;
+    if (includeVenue) hay += ' \u0001 ' + parts.venue;
+    return hay;
   }
 
   /**
@@ -1048,55 +1100,6 @@ export class BibManager {
 
     const atoms = queryAtoms(query);
 
-    /**
-     * Cheap necessary condition: the entry's searched text must contain every
-     * query term as a SUBSTRING (case/diacritic-insensitive) before the scorer
-     * runs. Every real match is a substring of some field, so this can only
-     * drop entries the scorer would reject — but it drops them without running
-     * the interpretation machinery, which is where the time went.
-     *
-     * A joined run (`soccri`, `bourdieucritique`) is the one shape whose parts
-     * are NOT substrings of the field (`soc` is not in "Social"? it is — but
-     * `crit` is not in "Critique"... it is). To stay safe for runs, a single
-     * unbroken run is tested with the run's own leading chunk only, and any
-     * failure falls through to the full scorer rather than rejecting.
-     */
-    /**
-     * Cheap necessary condition: every query atom must occur in the entry's
-     * searched text as a SUBSTRING (case/diacritic-insensitive) before the
-     * scorer runs. Every real match IS a substring of some field, so this can
-     * only drop entries the scorer would reject.
-     *
-     * The one exception is a SINGLE unbroken run (`soccri`, `bourdieucritique`):
-     * its middle pieces need not be substrings (`crit` is in "critique", but a
-     * run like `brdcri` is not), so a single-atom query is allowed through when
-     * the atom is not found — the scorer decides via chunk alignment. Multi-atom
-     * queries have no such reading, so a missing atom rejects.
-     */
-    const preFilter = (entry: PartialCSLEntry): boolean => {
-      const fields = [
-        entry.title ?? '',
-        authorTextOf(entry),
-        ...(includeAbstract ? [(entry as { abstract?: string }).abstract ?? ''] : []),
-        ...(includeVenue ? [venueTextOf(entry)] : []),
-      ];
-      const hay = normTerm(fields.join(' \u0001 '));
-      for (const a of atoms) {
-        if (hay.includes(a.text)) continue;
-        // A hyphenated term may be present only in its JOINED spelling.
-        if (a.hyphenated && hay.includes(a.text.replace(/-/g, ''))) continue;
-        // The field may hold the OTHER spelling of a variant pair — as a whole
-        // word OR as the stem of a longer word (`color`/`colourful`). The scorer
-        // accepts both, so the pre-filter must admit them rather than reject the
-        // entry first. `spellingNeedles` covers the term itself and both stem
-        // spellings; a prefix match implies the needle is a substring.
-        if (spellingNeedles(a.text).some((v) => hay.includes(v))) continue;
-        // Otherwise no field contains this term in any spelling: no match.
-        return false;
-      }
-      return true;
-    };
-
     // A query containing a QUOTED term is matched LITERALLY, which the scorer
     // handles itself — but the interpretation machinery strips the quotes
     // (`queryTerms` drops punctuation), so its re-joined terms lose the
@@ -1105,81 +1108,165 @@ export class BibManager {
     const hasQuote = /["']/.test(query);
 
     for (const entry of this.bibCache.values()) {
-      if (!preFilter(entry)) continue;
-      const target = {
-        citekey: entry.id ?? null,
-        title: entry.title ?? null,
-        authorText: authorTextOf(entry),
-        abstract: (entry as { abstract?: string }).abstract ?? null,
-        venueText: venueTextOf(entry),
-      };
-
-      if (hasQuote) {
-        const s = scoreEntry(target, query, { includeAbstract, includeVenue });
-        if (passesCoverage(s)) {
-          scored.set(entry.id, s.value);
-          ranked.set(entry.id, entry);
-          matchedTerms.set(entry.id, s.matchedTerms);
-        }
-        continue;
-      }
-
-      // A COMPOUND whole-word match wins outright and must not be undercut by a
-      // split reading (`anticolonial` vs "anti" + "colonial" in unrelated
-      // words). `anti-colonial` and `anticolonial` are the SAME term, so both
-      // spellings are found and ranked together, exact spelling first.
-      const compound = compoundWordScore(target, query, { includeAbstract, includeVenue });
-      if (compound !== null) {
-        scored.set(entry.id, compound.value);
-        ranked.set(entry.id, entry);
-        matchedTerms.set(entry.id, compound.terms);
-        continue;
-      }
-
-      // A compound-word query that this entry does NOT contain as a compound,
-      // but DOES contain as separate words ("anti … colonial"), is exactly the
-      // false positive to reject: the user wrote one compound, not two terms.
-      if (isCompoundQuery(query)) continue;
-
-      // Every way this query could read against THIS entry.
-      let best = Number.POSITIVE_INFINITY;
-      // The terms of the interpretation that WON, so the caller can explain the
-      // match with the words that actually matched. The raw query is often an
-      // unbroken run (`islamwomenauthority`) that appears in no field: the item
-      // matched because the run split into real words, and an excerpt must use
-      // those words, not the run.
-      let bestTerms: string[] = [];
-      for (const interp of interpretationsFor(target, query, { includeAbstract, includeVenue })) {
-        // NO FUSE GATE HERE. Fuse supplies RECALL only — a way to SUGGEST
-        // candidates — and using its hits as a filter silently dropped entries
-        // that plainly contain the terms: Fuse's score depends on where a term
-        // sits and how long the field is, so a term late in a long title can
-        // fall outside the threshold. That is how "social critique" missed the
-        // one item whose title contained the exact phrase.
-        //
-        // The scorer alone decides membership, from the entry's own text. It is
-        // the same matching the ranking uses, so what is considered and what is
-        // ranked can never disagree.
-        const s = scoreEntry(target, interp.terms.join(' '), { includeAbstract, includeVenue });
-        if (!passesCoverage(s)) continue;
-        const value = s.value + interp.penalty;
-        if (value < best) {
-          best = value;
-          // The terms the SCORER actually matched, not `interp.terms`: for a
-          // joined query the scorer may split it further (`womenauthoritysenegal`
-          // → women + authority + senegal), and callers that explain the match
-          // must use those words. Recording `interp.terms` stored the raw string,
-          // which appears in no field, so nothing could be highlighted.
-          bestTerms = s.matchedTerms.length > 0 ? s.matchedTerms : interp.terms;
-        }
-      }
-      if (Number.isFinite(best)) {
-        scored.set(entry.id, best);
-        ranked.set(entry.id, entry);
-        matchedTerms.set(entry.id, bestTerms);
-      }
+      const hit = this.scoreForTier(
+        entry,
+        atoms,
+        query,
+        hasQuote,
+        includeAbstract,
+        includeVenue
+      );
+      if (!hit) continue;
+      scored.set(entry.id, hit.value);
+      ranked.set(entry.id, entry);
+      matchedTerms.set(entry.id, hit.terms);
     }
 
+    return this.finishTier(scored, ranked, matchedTerms, limit, offset);
+  }
+
+  /**
+   * The same search, but yielding between chunks of entries and stopping early
+   * when `cancel()` turns true. The popup and the Add-Notes dialogue use this so
+   * a large library scan never blocks a keystroke: the caller abandons the scan
+   * the moment a newer query arrives.
+   */
+  async searchTierAsync(
+    tier: 'title' | 'abstract',
+    query: string,
+    limit: number,
+    offset = 0,
+    cancel?: () => boolean
+  ): Promise<TierSearchResult> {
+    const fuse = this.fuseForTier(tier);
+    if (!fuse) return { entries: [], total: 0 };
+    if (!isSearchableQuery(query)) return { entries: [], total: 0 };
+    const includeAbstract = tier === 'abstract';
+    const includeVenue = includeAbstract;
+    const scored = new Map<string, number>();
+    const ranked = new Map<string, PartialCSLEntry>();
+    const matchedTerms = new Map<string, string[]>();
+    const atoms = queryAtoms(query);
+    const hasQuote = /["']/.test(query);
+
+    let n = 0;
+    for (const entry of this.bibCache.values()) {
+      if (cancel?.()) return { entries: [], total: 0, cancelled: true };
+      const hit = this.scoreForTier(
+        entry,
+        atoms,
+        query,
+        hasQuote,
+        includeAbstract,
+        includeVenue
+      );
+      if (hit) {
+        scored.set(entry.id, hit.value);
+        ranked.set(entry.id, entry);
+        matchedTerms.set(entry.id, hit.terms);
+      }
+      // Yield every CHUNK entries. Sized so one slice stays well under a frame
+      // on the abstract tier (~8 ms at 400 for a 9k library).
+      if (++n % 400 === 0) await new Promise<void>((r) => setTimeout(r, 0));
+    }
+    if (cancel?.()) return { entries: [], total: 0, cancelled: true };
+    return this.finishTier(scored, ranked, matchedTerms, limit, offset);
+  }
+
+  /**
+   * Score ONE entry for a tier, or null when it cannot match. Membership is
+   * defined here once, shared by the sync and chunked loops.
+   */
+  private scoreForTier(
+    entry: PartialCSLEntry,
+    atoms: ReturnType<typeof queryAtoms>,
+    query: string,
+    hasQuote: boolean,
+    includeAbstract: boolean,
+    includeVenue: boolean
+  ): { value: number; terms: string[] } | null {
+    // Cheap necessary condition: every query atom must occur in the entry's
+    // searched text as a SUBSTRING (case/diacritic-insensitive) before the
+    // scorer runs. Every real match IS a substring of some field, so this can
+    // only drop entries the scorer would reject. The haystack is normalised
+    // once per entry and cached (see `searchHay`).
+    const hay = this.searchHay(entry, includeAbstract, includeVenue);
+    for (const a of atoms) {
+      if (hay.includes(a.text)) continue;
+      // A hyphenated term may be present only in its JOINED spelling.
+      if (a.hyphenated && hay.includes(a.text.replace(/-/g, ''))) continue;
+      // The field may hold the OTHER spelling of a variant pair — as a whole
+      // word OR as the stem of a longer word (`color`/`colourful`). The scorer
+      // accepts both, so the pre-filter must admit them rather than reject the
+      // entry first. `spellingNeedles` covers the term itself and both stem
+      // spellings; a prefix match implies the needle is a substring.
+      if (spellingNeedles(a.text).some((v) => hay.includes(v))) continue;
+      // Otherwise no field contains this term in any spelling: no match.
+      return null;
+    }
+
+    const target = {
+      citekey: entry.id ?? null,
+      title: entry.title ?? null,
+      authorText: authorTextOf(entry),
+      abstract: (entry as { abstract?: string }).abstract ?? null,
+      venueText: venueTextOf(entry),
+    };
+
+    // A quoted query is matched LITERALLY. The interpretation machinery strips
+    // the quotes, so its re-joined terms lose the literal signal — score the
+    // RAW query once and use that result.
+    if (hasQuote) {
+      const s = scoreEntry(target, query, { includeAbstract, includeVenue });
+      return passesCoverage(s) ? { value: s.value, terms: s.matchedTerms } : null;
+    }
+
+    // A COMPOUND whole-word match wins outright and must not be undercut by a
+    // split reading (`anticolonial` vs "anti" + "colonial" in unrelated words).
+    const compound = compoundWordScore(target, query, {
+      includeAbstract,
+      includeVenue,
+    });
+    if (compound !== null) return { value: compound.value, terms: compound.terms };
+
+    // A compound-word query that this entry does NOT contain as a compound, but
+    // DOES contain as separate words, is the false positive to reject.
+    if (isCompoundQuery(query)) return null;
+
+    // NO FUSE GATE HERE. Fuse supplies RECALL only; using its hits as a filter
+    // silently dropped entries that plainly contain the terms. The scorer alone
+    // decides membership, from the entry's own text, so what is considered and
+    // what is ranked can never disagree.
+    let best = Number.POSITIVE_INFINITY;
+    let bestTerms: string[] = [];
+    for (const interp of interpretationsFor(target, query, {
+      includeAbstract,
+      includeVenue,
+    })) {
+      const s = scoreEntry(target, interp.terms.join(' '), {
+        includeAbstract,
+        includeVenue,
+      });
+      if (!passesCoverage(s)) continue;
+      const value = s.value + interp.penalty;
+      if (value < best) {
+        best = value;
+        // The terms the SCORER actually matched: a joined query may split
+        // further, and callers that explain the match must use those words.
+        bestTerms = s.matchedTerms.length > 0 ? s.matchedTerms : interp.terms;
+      }
+    }
+    return Number.isFinite(best) ? { value: best, terms: bestTerms } : null;
+  }
+
+  /** Sort the scored entries and slice the requested page. */
+  private finishTier(
+    scored: Map<string, number>,
+    ranked: Map<string, PartialCSLEntry>,
+    matchedTerms: Map<string, string[]>,
+    limit: number,
+    offset: number
+  ): TierSearchResult {
     const ordered = [...scored.entries()].sort((a, b) => a[1] - b[1]);
     return {
       entries: ordered

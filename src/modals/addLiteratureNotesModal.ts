@@ -601,22 +601,29 @@ export class AddLiteratureNotesModal extends Modal {
     // and the caret cannot even follow your keystrokes.
     window.setTimeout(() => {
       if (seq !== this._refreshSeq || !this.containerEl.isConnected) return;
-      this.computeAndRender(q, searching);
+      void this.computeAndRender(q, searching, seq);
     }, 0);
   }
 
-  private computeAndRender(q: string, searching: boolean): void {
+  private async computeAndRender(
+    q: string,
+    searching: boolean,
+    seq: number
+  ): Promise<void> {
     let filtered: PartialCSLEntry[];
     if (q) {
-      // Ask for only as many results as the list will render (plus a page of
-      // slack). Asking for the whole library scored every entry AND built a map
-      // entry for each; `orderMatches` is a stable sort, so the first N of the
-      // ranked list are the same either way.
-      const { entries } = this.plugin.bibManager.searchTier(
+      // The async scan yields between chunks and is abandoned if a newer
+      // keystroke lands, so typing never waits on the library scan.
+      const res = await this.plugin.bibManager.searchTierAsync(
         this.searchAbstract ? 'abstract' : 'title',
         q,
-        MAX_RESULTS
+        MAX_RESULTS,
+        0,
+        () => seq !== this._refreshSeq || !this.containerEl.isConnected
       );
+      if (res.cancelled || seq !== this._refreshSeq || !this.containerEl.isConnected)
+        return;
+      const { entries } = res;
       filtered = entries
         .map((e) => e.entry)
         .filter((e) => passesImportFilters(this.flagsFor(e), this.filters));
@@ -664,18 +671,37 @@ export class AddLiteratureNotesModal extends Modal {
     // references render (`.csl-entry`), so italics and every other CSL rule
     // appear here exactly as they do there. URLs/DOIs are suppressed: these are
     // search results, so a click-through link is noise.
+    //
+    // citeproc builds a throwaway engine (~55–97 ms for a page), so it runs at
+    // IDLE rather than in the keystroke path, and only if this search is still
+    // current. Already-rendered references are reused from `renderedRefs`.
     const unrendered = slice
       .map((e) => e.id)
       .filter((id) => !this.renderedRefs.has(id));
-    if (unrendered.length) {
+    if (!unrendered.length) return;
+    const token = this._refreshSeq;
+    this.whenIdle(() => {
+      if (token !== this._refreshSeq || !this.containerEl.isConnected) return;
       void this.plugin.bibManager
         .renderEntryElements(unrendered, { suppressUrls: true })
         .then((map) => {
+          if (token !== this._refreshSeq || !this.containerEl.isConnected) return;
           for (const [k, v] of map) this.renderedRefs.set(k, v);
-          if (this.containerEl.isConnected) this.fillReferences();
+          this.fillReferences();
         })
         .catch((e) => console.warn('[sw:add-notes] reference render failed', e));
-    }
+    });
+  }
+
+  /** Run `fn` when the main thread is idle (fallback: a short timeout). */
+  private whenIdle(fn: () => void): void {
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      }
+    ).requestIdleCallback;
+    if (typeof ric === 'function') ric(fn, { timeout: 300 });
+    else window.setTimeout(fn, 30);
   }
 
   /** Fill already-drawn rows with their rendered reference, when ready. */

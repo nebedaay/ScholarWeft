@@ -1578,3 +1578,51 @@ describe('pending citekey renames', () => {
     expect(manager.pendingCitekeyRenames().size).toBe(0);
   });
 });
+
+describe('searchTier — variant symmetry and the cancellable async scan', () => {
+  const entries: PartialCSLEntry[] = [
+    { id: 'a', title: 'The Colour of Law', author: [{ family: 'Smith' }], type: 'book' },
+    { id: 'b', title: 'Colorful Histories', author: [{ family: 'Jones' }], type: 'book' },
+    { id: 'c', title: 'Colours and Colors', author: [{ family: 'Lee' }], type: 'book' },
+    { id: 'd', title: 'An Unrelated Work', author: [{ family: 'Ng' }], type: 'book' },
+  ];
+
+  it('gives `color` and `colour` the same result set, derived forms included', () => {
+    const { manager } = makeManager(entries);
+    manager.setFuse(entries);
+    const ids = (q: string) =>
+      manager
+        .searchTier('title', q, 20)
+        .entries.map((e) => e.entry.id)
+        .sort();
+    expect(ids('color')).toEqual(['a', 'b', 'c']);
+    expect(ids('colour')).toEqual(ids('color'));
+    expect(ids('colours')).toEqual(ids('colors'));
+  });
+
+  it('searchTierAsync returns the same page as searchTier', async () => {
+    const { manager } = makeManager(entries);
+    manager.setFuse(entries);
+    const sync = manager
+      .searchTier('title', 'colour', 20)
+      .entries.map((e) => e.entry.id)
+      .sort();
+    const async = (await manager.searchTierAsync('title', 'colour', 20)).entries
+      .map((e) => e.entry.id)
+      .sort();
+    expect(async).toEqual(sync);
+    expect(async).toEqual(['a', 'b', 'c']);
+  });
+
+  it('abandons the scan when the caller cancels', async () => {
+    const { manager } = makeManager(entries);
+    manager.setFuse(entries);
+    let calls = 0;
+    const res = await manager.searchTierAsync('title', 'color', 20, 0, () => {
+      calls++;
+      return calls > 1;
+    });
+    expect(res.cancelled).toBe(true);
+    expect(res.entries).toEqual([]);
+  });
+});

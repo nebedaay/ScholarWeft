@@ -42,6 +42,14 @@ export { isZotLitSuggestActive }; // re-exported for settings.tsx
 
 // Set to true to enable verbose autocomplete logging.
 const SUGGEST_DEBUG = false;
+
+/**
+ * Wait this long before running the library scan, so a burst of keystrokes
+ * produces ONE scan and the caret paints first. Obsidian calls
+ * `getSuggestions` on every input with no debounce of its own; without this the
+ * whole library was scored synchronously on each key, freezing typing.
+ */
+const SUGGEST_DEBOUNCE_MS = 50;
 const LOG = SUGGEST_DEBUG
   ? (...args: any[]) => console.log('[sw:suggest]', ...args)
   : (..._args: any[]) => {};
@@ -173,15 +181,43 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       insertionKind({ beforeStart, afterCursor, afterOpenBracket }) === 'bare';
   }
 
+  /** Bumped on every keystroke; an older in-flight scan checks it and bows out. */
+  private _searchGen = 0;
+  /** Last suggestions returned, so a superseded scan does not flash an empty list. */
+  private _lastSuggestions: Fuse.FuseResult<PartialCSLEntry>[] = [];
+
   async getSuggestions(
     context: EditorSuggestContext
   ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
+    const gen = ++this._searchGen;
     const isDoubleAtMode = context.query.startsWith(DOUBLE_AT_PREFIX);
     const rawQuery = context.query.slice(isDoubleAtMode ? 1 : 0).trim();
     // An underscore stands in for a space in a single-token query, so
     // `@social_theory` searches "social theory" without needing `@@`.
     const searchQuery = normalizeQueryText(rawQuery);
 
+    // Yield so the keystroke PAINTS, then coalesce: if another key arrived
+    // while we waited, this scan is already stale — return the previous list
+    // rather than score text the user has moved past.
+    await new Promise<void>((r) => setTimeout(r, SUGGEST_DEBOUNCE_MS));
+    if (gen !== this._searchGen) return this._lastSuggestions;
+
+    const result = await this.computeSuggestions(
+      context,
+      isDoubleAtMode,
+      searchQuery,
+      () => gen !== this._searchGen
+    );
+    if (gen === this._searchGen) this._lastSuggestions = result;
+    return result;
+  }
+
+  private async computeSuggestions(
+    context: EditorSuggestContext,
+    isDoubleAtMode: boolean,
+    searchQuery: string,
+    isCancelled: () => boolean
+  ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
     LOG(
       'getSuggestions query=',
       JSON.stringify(searchQuery),
@@ -258,12 +294,18 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         // Nothing recent/prefix-matching: fall through to live/ZotLit/loading.
       } else {
         // searchTier ranks by exact phrase, coverage, whole words and position —
-        // and does its own AND filtering. Nothing further to re-rank here.
-        const { entries, total } = bibManager.searchTier(
+        // and does its own AND filtering. Nothing further to re-rank here. The
+        // async form yields between chunks and abandons the scan if a newer key
+        // arrives, so a large library never freezes typing.
+        const res = await bibManager.searchTierAsync(
           tier,
           searchQuery,
-          this.limit
+          this.limit,
+          0,
+          isCancelled
         );
+        if (res.cancelled) return [];
+        const { entries, total } = res;
         // No-garbage policy: an entry with no title, author or editor is never
         // offered, at any tier.
         const usable = entries.filter((e) => isUsablePopupEntry(e.entry));

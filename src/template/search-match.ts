@@ -45,12 +45,21 @@ function splitWords(text: string): string[] {
 
 const WORD_CACHE = new Map<string, string[]>();
 
+/**
+ * How many split-text entries the word caches hold before clearing. The
+ * default suits tests; the bibliography raises it to the library size on load
+ * so every field stays split between keystrokes instead of thrashing (a 4000
+ * bound cleared constantly against a 7–9k-item library, re-normalising every
+ * abstract on every search — the dominant `@@` keystroke cost).
+ */
+let wordCacheLimit = 4000;
+
 /** Split text into words (cached — search re-splits the same fields often). */
 export function words(text: string): string[] {
   const cached = WORD_CACHE.get(text);
   if (cached) return cached;
   const out = splitWords(text);
-  if (WORD_CACHE.size > 4000) WORD_CACHE.clear();
+  if (WORD_CACHE.size > wordCacheLimit) WORD_CACHE.clear();
   WORD_CACHE.set(text, out);
   return out;
 }
@@ -237,9 +246,20 @@ export function hyphenWords(text: string): string[] {
   const cached = HYPHEN_CACHE.get(text);
   if (cached) return cached;
   const out = normTerm(text).match(HYPHEN_WORD_RE) ?? [];
-  if (HYPHEN_CACHE.size > 4000) HYPHEN_CACHE.clear();
+  if (HYPHEN_CACHE.size > wordCacheLimit) HYPHEN_CACHE.clear();
   HYPHEN_CACHE.set(text, out);
   return out;
+}
+
+/**
+ * Size the word caches for a library of `fields` searchable strings and drop
+ * anything already cached (the field contents may have changed). Called from
+ * the bibliography whenever its index is rebuilt.
+ */
+export function setWordCacheLimit(fields: number): void {
+  wordCacheLimit = Math.max(1000, Math.floor(fields));
+  WORD_CACHE.clear();
+  HYPHEN_CACHE.clear();
 }
 
 /**
