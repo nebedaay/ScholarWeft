@@ -43,6 +43,30 @@ const STEM_PAIRS: Record<string, string> = {
   industrialize: 'industrialise', urbanize: 'urbanise',
   aestheticize: 'aestheticise', materialize: 'materialise',
   mechanize: 'mechanise', stigmatize: 'stigmatise',
+  // -or / -our (more)
+  clamor: 'clamour', glamor: 'glamour', fervor: 'fervour',
+  rancor: 'rancour', succor: 'succour', savor: 'savour', arbor: 'arbour',
+  // -er / -re
+  center: 'centre', theater: 'theatre', meter: 'metre', liter: 'litre',
+  fiber: 'fibre', somber: 'sombre', specter: 'spectre', caliber: 'calibre',
+  maneuver: 'manoeuvre', luster: 'lustre', reconnoiter: 'reconnoitre',
+  saber: 'sabre', miter: 'mitre', sepulcher: 'sepulchre', ocher: 'ochre',
+  meager: 'meagre',
+  // -se / -ce
+  defense: 'defence', offense: 'offence', pretense: 'pretence',
+  license: 'licence', practice: 'practise',
+  // -og / -ogue
+  catalog: 'catalogue', dialog: 'dialogue', monolog: 'monologue',
+  analog: 'analogue', program: 'programme',
+  // Doubled / single L (the British stem carries the doubled `l`)
+  travel: 'travell', cancel: 'cancell', model: 'modell', label: 'labell',
+  fuel: 'fuell', level: 'levell', tunnel: 'tunnell', dial: 'diall',
+  marvel: 'marvell', counsel: 'counsell', wool: 'wooll', signal: 'signall',
+  total: 'totall', equal: 'equall', skillful: 'skilful',
+  // Other well-known pairs
+  gray: 'grey', mold: 'mould', smolder: 'smoulder', plow: 'plough',
+  molt: 'moult', skeptic: 'sceptic', sulfur: 'sulphur',
+  jewelry: 'jewellery', aluminum: 'aluminium',
   // -ae / -e, -oe / -e where BOTH spellings are real words
   medieval: 'mediaeval', encyclopedia: 'encyclopaedia',
   aesthetic: 'esthetic', estrogen: 'oestrogen', edema: 'oedema',
@@ -50,6 +74,10 @@ const STEM_PAIRS: Record<string, string> = {
   anemia: 'anaemia', anesthesia: 'anaesthesia', hemorrhage: 'haemorrhage',
   archaeology: 'archeology', pediatric: 'paediatric',
   orthopedics: 'orthopaedics', paleontology: 'palaeontology',
+  anesthetic: 'anaesthetic', gynecology: 'gynaecology', leukemia: 'leukaemia',
+  fetus: 'foetus', homeopathy: 'homoeopathy', hemoglobin: 'haemoglobin',
+  etiology: 'aetiology', feces: 'faeces', cesarean: 'caesarean',
+  hematology: 'haematology', ischemia: 'ischaemia', eon: 'aeon',
 };
 
 /**
@@ -193,13 +221,6 @@ const MAX_SEGMENT = Math.max(
   ...Array.from(PREFIX_SEGMENTS.keys(), (s) => s.length)
 );
 
-/**
- * E-dropped stems that are themselves real words and must NOT be folded:
- * `emphasis` is a noun, not a form of `emphasise`. Only the BARE form is
- * exempt — `emphasising` is a verb form and does fold.
- */
-const STRIPPED_EXCEPTIONS = new Set(['emphasis']);
-
 /** Replace the longest leading stem segment with the requested spelling. */
 function replaceLeadingStem(word: string, side: 'us' | 'uk'): string {
   const max = Math.min(word.length, MAX_SEGMENT);
@@ -211,7 +232,6 @@ function replaceLeadingStem(word: string, side: 'us' | 'uk'): string {
     if (hit.stripped) {
       // The bare e-dropped stem is a needle too, so a partially typed
       // `polariz` matches `polarised` exactly as `polaris` matches `polarized`.
-      if (rest === '' && STRIPPED_EXCEPTIONS.has(seg)) continue;
       // Before a suffix, the e is only dropped before a vowel (`analysing`),
       // never before a consonant (`analyzs` is not a word).
       if (rest !== '' && !/^[aeiou]/.test(rest)) continue;
@@ -219,6 +239,38 @@ function replaceLeadingStem(word: string, side: 'us' | 'uk'): string {
     return hit[side] + rest;
   }
   return word;
+}
+
+/* --------------------------------------------------------------------------
+ * AUTOMATIC -ize/-ise and -yze/-yse folding.
+ *
+ * Unlike `ae`→`e` (which cannot tell `aesthetic` from `Caesar`), the American
+ * `-ize` / British `-ise` ending is a systematic morphological split: every
+ * verb in the family has both, and the rest of the word is identical. So this
+ * one does NOT need a curated list — `synthesize`/`synthesise`,
+ * `customize`/`customise`, `utilize`/`utilise` and every future or rare member
+ * fold automatically, including `-ization`/`-isation` nouns.
+ * ------------------------------------------------------------------------ */
+
+/** `...ize`/`...yze` (+ an inflection) → the same word spelled `...ise`/`...yse`. */
+const IZE_FORM =
+  /^(.*?)([iy])([sz])(ations|ation|ably|able|ings|ing|ers|er|es|ed|e)?$/;
+
+/**
+ * Words where both spellings are real but DIFFERENT words, so they must not be
+ * folded: `prize`/`prise` and `seize`/`seise`.
+ */
+const IZE_BLOCKED = new Set(['prize', 'prise', 'seize', 'seise']);
+
+/** The counterpart spelling of an -ize/-ise (or -yze/-yse) form. */
+function izeiseNeedles(term: string): string[] {
+  const m = IZE_FORM.exec(term);
+  if (!m) return [];
+  const [, prefix, vowel, sibilant, suffix = ''] = m;
+  if (term.length < 4) return [];
+  if (IZE_BLOCKED.has(prefix + vowel + sibilant + 'e')) return [];
+  const other = sibilant === 'z' ? 's' : 'z';
+  return [prefix + vowel + other + suffix];
 }
 
 /** `colourful` → `colorful`, `analysing` → `analyzing`; unrelated words are unchanged. */
@@ -243,12 +295,44 @@ const NEEDLE_CACHE = new Map<string, string[]>();
 export function spellingNeedles(term: string): string[] {
   const cached = NEEDLE_CACHE.get(term);
   if (cached) return cached;
+  const out = new Set<string>([term]);
   const us = canonicalStemPrefix(term);
   const uk = britishStemPrefix(term);
-  const out = [term];
-  if (us !== term) out.push(us);
-  if (uk !== term) out.push(uk);
+  if (us !== term) out.add(us);
+  if (uk !== term) out.add(uk);
+  // The automatic -ize/-ise rule is for words the curated stem list does NOT
+  // cover. When the leading stem already folds (`colour…` → `color…`), the
+  // stem fold supplies the counterpart (and combining both would invent a
+  // hybrid like `coloursation`).
+  if (us === term && uk === term) {
+    for (const n of izeiseNeedles(term)) out.add(n);
+  }
+  const needles = [...out];
   if (NEEDLE_CACHE.size > 2000) NEEDLE_CACHE.clear();
-  NEEDLE_CACHE.set(term, out);
-  return out;
+  NEEDLE_CACHE.set(term, needles);
+  return needles;
+}
+
+/** Cached: permissive substring forms for the pre-filter (see spellingPrefixes). */
+const PREFIX_CACHE = new Map<string, string[]>();
+
+/**
+ * Permissive forms for the cheap SUBSTRING pre-filter. The scorer matches an
+ * e-dropped inflection by stem (`analyse` + `ing` → `analysing`), whose stem is
+ * a substring of the field even though the full spelling is not — so include
+ * the e-dropped stem of every needle. This only has to be a SUPERSET of real
+ * matches; false positives are resolved by the scorer.
+ */
+export function spellingPrefixes(term: string): string[] {
+  const cached = PREFIX_CACHE.get(term);
+  if (cached) return cached;
+  const out = new Set<string>();
+  for (const n of spellingNeedles(term)) {
+    out.add(n);
+    if (n.endsWith('e')) out.add(n.slice(0, -1));
+  }
+  const forms = [...out];
+  if (PREFIX_CACHE.size > 2000) PREFIX_CACHE.clear();
+  PREFIX_CACHE.set(term, forms);
+  return forms;
 }

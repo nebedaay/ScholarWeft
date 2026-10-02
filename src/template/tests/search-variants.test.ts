@@ -116,13 +116,13 @@ describe('search-variants — spellingVariants', () => {
     expect(spellingVariants('aegean')).toEqual([]);
     expect(spellingVariants('caesar')).toEqual([]);
     expect(spellingVariants('')).toEqual([]);
-    // `emphasis` must not be read as a form of `emphasise`.
-    expect(spellingVariants('emphasis')).toEqual([]);
   });
 
-  it('never folds an e-dropped stem that is itself a word', () => {
-    // `emphasis` (from `emphasise`) and `analyses` are traps for naive folding.
-    expect(isVariantWord('emphasis')).toBe(false);
+  it('folds a bare e-dropped stem', () => {
+    // The bare stem is a needle: `emphasis` finds `emphasize`/`emphasise`.
+    expect(spellingVariants('emphasis')).toContain('emphasiz');
+    expect(isVariantWord('emphasis')).toBe(true);
+    // Whole-word equality still needs a registered pair.
     expect(sameVariantWord('emphasis', 'emphasise')).toBe(false);
   });
 });
@@ -175,10 +175,60 @@ describe('search-variants — partial stems (polariz / polaris)', () => {
     expect(spellingVariants('polaris')).toContain('polariz');
   });
 
-  it('does not fold the noun `emphasis` into `emphasise`', () => {
-    expect(spellingVariants('emphasis')).toEqual([]);
-    expect(sameVariantWord('emphasis', 'emphasise')).toBe(false);
-    expect(matchTerm('Their Emphasis on Colour', 'emphasise')).toBeNull();
+  it('does not over-fold: `analyse` stays distinct from `analysis`/`analyst`', () => {
+    // The e-drop is only allowed before a real inflection suffix, not `-is`/`-t`.
+    expect(matchTerm('A Statistical Analysis', 'analyse')).toBeNull();
+    expect(matchTerm('A Famous Analyst', 'analyse')).toBeNull();
+  });
+});
+
+describe('search-variants — automatic -ize/-ise and -yze/-yse folding', () => {
+  it('folds unlisted -ize/-ise verbs automatically', () => {
+    expect(spellingVariants('synthesize')).toContain('synthesise');
+    expect(spellingVariants('customize')).toContain('customise');
+    expect(spellingVariants('utilize')).toContain('utilise');
+    expect(spellingVariants('apologize')).toContain('apologise');
+    expect(spellingVariants('authorize')).toContain('authorise');
+  });
+
+  it('folds across the e-dropped inflections (synthesizing ↔ synthesising)', () => {
+    expect(matchTerm('Synthesising the Field', 'synthesize')).not.toBeNull();
+    expect(matchTerm('Synthesizing the Field', 'synthesise')).not.toBeNull();
+    expect(matchTerm('Customising the App', 'customize')).not.toBeNull();
+    expect(matchTerm('Utilising Resources', 'utilize')).not.toBeNull();
+    expect(matchTerm('Hydrolysing Samples', 'hydrolyze')).not.toBeNull();
+  });
+
+  it('folds -ization/-isation nouns', () => {
+    expect(matchTerm('Synthesisation of Knowledge', 'synthesization')).not.toBeNull();
+    expect(spellingVariants('synthesization')).toContain('synthesisation');
+  });
+
+  it('folds bare stems both ways (synthesiz / synthesis)', () => {
+    expect(matchTerm('Synthesis of Knowledge', 'synthesiz')).not.toBeNull();
+    expect(matchTerm('Synthesise This', 'synthesis')).not.toBeNull();
+  });
+
+  it('does not fold real but different words (prize/prise, seize/seise)', () => {
+    expect(spellingVariants('prize')).not.toContain('prise');
+    expect(spellingVariants('prise')).not.toContain('prize');
+    expect(matchTerm('A Prise Bar', 'prize')).toBeNull();
+    expect(matchTerm('Prize-winning Work', 'prise')).toBeNull();
+  });
+});
+
+describe('search-variants — widened stem list', () => {
+  const cases: Array<[string, string]> = [
+    ['center', 'centre'], ['theater', 'theatre'], ['defense', 'defence'],
+    ['catalog', 'catalogue'], ['gray', 'grey'], ['skeptic', 'sceptic'],
+    ['mold', 'mould'], ['traveling', 'travelling'], ['canceled', 'cancelled'],
+    ['marvelous', 'marvellous'], ['jewelry', 'jewellery'], ['skillful', 'skilful'],
+  ];
+  it('folds each added pair in both directions', () => {
+    for (const [us, uk] of cases) {
+      expect(matchTerm(`The ${uk} Story`, us)).not.toBeNull();
+      expect(matchTerm(`The ${us} Story`, uk)).not.toBeNull();
+    }
   });
 });
 

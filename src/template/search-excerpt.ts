@@ -149,15 +149,30 @@ function findNeedleIn(
  * match. Every spelling needle is searched and the EARLIEST hit wins, so
  * occurrences of either spelling are all found in order.
  */
+/** E-drop suffixes, so a stem match can be widened over the inflection. */
+const E_DROP_TAIL = /^(ing|ings|ed|es|er|ers|ation|ations|able|ably)/;
+
 function findTermIn(
   text: string,
   term: string,
   from: number
 ): { start: number; length: number } | null {
   let best: { start: number; length: number } | null = null;
-  for (const needle of spellingNeedles(term)) {
-    const hit = findNeedleIn(text, needle, from);
+  const consider = (hit: { start: number; length: number } | null) => {
     if (hit && (!best || hit.start < best.start)) best = hit;
+  };
+  for (const needle of spellingNeedles(term)) {
+    consider(findNeedleIn(text, needle, from));
+    // `analyse` + `ing` → `analysing`: the stem is in the text even though the
+    // full spelling is not. Widen over the inflection so the whole word bolds.
+    if (needle.endsWith('e')) {
+      const stem = needle.slice(0, -1);
+      const hit = findNeedleIn(text, stem, from);
+      if (hit) {
+        const tail = E_DROP_TAIL.exec(text.slice(hit.start + hit.length));
+        consider(tail ? { start: hit.start, length: hit.length + tail[0].length } : hit);
+      }
+    }
   }
   return best;
 }

@@ -88,7 +88,7 @@ import {
   normTerm,
   setWordCacheLimit,
 } from 'src/template/search-match';
-import { spellingNeedles } from 'src/template/search-variants';
+import { spellingPrefixes } from 'src/template/search-variants';
 import {
   recordQuery,
   recordRecentKey,
@@ -1196,11 +1196,10 @@ export class BibManager {
       // A hyphenated term may be present only in its JOINED spelling.
       if (a.hyphenated && hay.includes(a.text.replace(/-/g, ''))) continue;
       // The field may hold the OTHER spelling of a variant pair — as a whole
-      // word OR as the stem of a longer word (`color`/`colourful`). The scorer
-      // accepts both, so the pre-filter must admit them rather than reject the
-      // entry first. `spellingNeedles` covers the term itself and both stem
-      // spellings; a prefix match implies the needle is a substring.
-      if (spellingNeedles(a.text).some((v) => hay.includes(v))) continue;
+      // word OR as the stem of a longer word (`color`/`colourful`, including
+      // e-dropped inflections like `analyse`/`analysing`). The scorer accepts
+      // them, so the pre-filter must admit them rather than reject first.
+      if (spellingPrefixes(a.text).some((v) => hay.includes(v))) continue;
       // Otherwise no field contains this term in any spelling: no match.
       return null;
     }

@@ -21180,14 +21180,24 @@ function replaceLeadingStem(word, side) {
       continue;
     const rest = word.slice(len);
     if (hit.stripped) {
-      if (rest === "" && STRIPPED_EXCEPTIONS.has(seg))
-        continue;
       if (rest !== "" && !/^[aeiou]/.test(rest))
         continue;
     }
     return hit[side] + rest;
   }
   return word;
+}
+function izeiseNeedles(term) {
+  const m3 = IZE_FORM.exec(term);
+  if (!m3)
+    return [];
+  const [, prefix, vowel, sibilant, suffix = ""] = m3;
+  if (term.length < 4)
+    return [];
+  if (IZE_BLOCKED.has(prefix + vowel + sibilant + "e"))
+    return [];
+  const other = sibilant === "z" ? "s" : "z";
+  return [prefix + vowel + other + suffix];
 }
 function canonicalStemPrefix(word) {
   return replaceLeadingStem(word, "us");
@@ -21199,19 +21209,40 @@ function spellingNeedles(term) {
   const cached = NEEDLE_CACHE.get(term);
   if (cached)
     return cached;
+  const out = new Set([term]);
   const us = canonicalStemPrefix(term);
   const uk = britishStemPrefix(term);
-  const out = [term];
   if (us !== term)
-    out.push(us);
+    out.add(us);
   if (uk !== term)
-    out.push(uk);
+    out.add(uk);
+  if (us === term && uk === term) {
+    for (const n2 of izeiseNeedles(term))
+      out.add(n2);
+  }
+  const needles = [...out];
   if (NEEDLE_CACHE.size > 2e3)
     NEEDLE_CACHE.clear();
-  NEEDLE_CACHE.set(term, out);
-  return out;
+  NEEDLE_CACHE.set(term, needles);
+  return needles;
 }
-var STEM_PAIRS, TAILS, VARIANT_INDEX, PREFIX_SEGMENTS, MAX_SEGMENT, STRIPPED_EXCEPTIONS, NEEDLE_CACHE;
+function spellingPrefixes(term) {
+  const cached = PREFIX_CACHE.get(term);
+  if (cached)
+    return cached;
+  const out = new Set();
+  for (const n2 of spellingNeedles(term)) {
+    out.add(n2);
+    if (n2.endsWith("e"))
+      out.add(n2.slice(0, -1));
+  }
+  const forms = [...out];
+  if (PREFIX_CACHE.size > 2e3)
+    PREFIX_CACHE.clear();
+  PREFIX_CACHE.set(term, forms);
+  return forms;
+}
+var STEM_PAIRS, TAILS, VARIANT_INDEX, PREFIX_SEGMENTS, MAX_SEGMENT, IZE_FORM, IZE_BLOCKED, NEEDLE_CACHE, PREFIX_CACHE;
 var init_search_variants = __esm({
   "src/template/search-variants.ts"() {
     STEM_PAIRS = {
@@ -21282,6 +21313,63 @@ var init_search_variants = __esm({
       materialize: "materialise",
       mechanize: "mechanise",
       stigmatize: "stigmatise",
+      clamor: "clamour",
+      glamor: "glamour",
+      fervor: "fervour",
+      rancor: "rancour",
+      succor: "succour",
+      savor: "savour",
+      arbor: "arbour",
+      center: "centre",
+      theater: "theatre",
+      meter: "metre",
+      liter: "litre",
+      fiber: "fibre",
+      somber: "sombre",
+      specter: "spectre",
+      caliber: "calibre",
+      maneuver: "manoeuvre",
+      luster: "lustre",
+      reconnoiter: "reconnoitre",
+      saber: "sabre",
+      miter: "mitre",
+      sepulcher: "sepulchre",
+      ocher: "ochre",
+      meager: "meagre",
+      defense: "defence",
+      offense: "offence",
+      pretense: "pretence",
+      license: "licence",
+      practice: "practise",
+      catalog: "catalogue",
+      dialog: "dialogue",
+      monolog: "monologue",
+      analog: "analogue",
+      program: "programme",
+      travel: "travell",
+      cancel: "cancell",
+      model: "modell",
+      label: "labell",
+      fuel: "fuell",
+      level: "levell",
+      tunnel: "tunnell",
+      dial: "diall",
+      marvel: "marvell",
+      counsel: "counsell",
+      wool: "wooll",
+      signal: "signall",
+      total: "totall",
+      equal: "equall",
+      skillful: "skilful",
+      gray: "grey",
+      mold: "mould",
+      smolder: "smoulder",
+      plow: "plough",
+      molt: "moult",
+      skeptic: "sceptic",
+      sulfur: "sulphur",
+      jewelry: "jewellery",
+      aluminum: "aluminium",
       medieval: "mediaeval",
       encyclopedia: "encyclopaedia",
       aesthetic: "esthetic",
@@ -21296,7 +21384,19 @@ var init_search_variants = __esm({
       archaeology: "archeology",
       pediatric: "paediatric",
       orthopedics: "orthopaedics",
-      paleontology: "palaeontology"
+      paleontology: "palaeontology",
+      anesthetic: "anaesthetic",
+      gynecology: "gynaecology",
+      leukemia: "leukaemia",
+      fetus: "foetus",
+      homeopathy: "homoeopathy",
+      hemoglobin: "haemoglobin",
+      etiology: "aetiology",
+      feces: "faeces",
+      cesarean: "caesarean",
+      hematology: "haematology",
+      ischemia: "ischaemia",
+      eon: "aeon"
     };
     TAILS = [
       "ations",
@@ -21352,8 +21452,10 @@ var init_search_variants = __esm({
       }
     }
     MAX_SEGMENT = Math.max(...Array.from(PREFIX_SEGMENTS.keys(), (s3) => s3.length));
-    STRIPPED_EXCEPTIONS = new Set(["emphasis"]);
+    IZE_FORM = /^(.*?)([iy])([sz])(ations|ation|ably|able|ings|ing|ers|er|es|ed|e)?$/;
+    IZE_BLOCKED = new Set(["prize", "prise", "seize", "seise"]);
     NEEDLE_CACHE = new Map();
+    PREFIX_CACHE = new Map();
   }
 });
 
@@ -21411,10 +21513,20 @@ function findNeedleIn(text2, needleTerm, from) {
 }
 function findTermIn(text2, term, from) {
   let best = null;
-  for (const needle of spellingNeedles(term)) {
-    const hit = findNeedleIn(text2, needle, from);
+  const consider = (hit) => {
     if (hit && (!best || hit.start < best.start))
       best = hit;
+  };
+  for (const needle of spellingNeedles(term)) {
+    consider(findNeedleIn(text2, needle, from));
+    if (needle.endsWith("e")) {
+      const stem = needle.slice(0, -1);
+      const hit = findNeedleIn(text2, stem, from);
+      if (hit) {
+        const tail = E_DROP_TAIL.exec(text2.slice(hit.start + hit.length));
+        consider(tail ? { start: hit.start, length: hit.length + tail[0].length } : hit);
+      }
+    }
   }
   return best;
 }
@@ -21557,12 +21669,13 @@ function buildExcerpts(text2, terms, opts = {}) {
     };
   });
 }
-var EXCERPT_WIDTH, CONTEXT_WORDS;
+var EXCERPT_WIDTH, CONTEXT_WORDS, E_DROP_TAIL;
 var init_search_excerpt = __esm({
   "src/template/search-excerpt.ts"() {
     init_search_variants();
     EXCERPT_WIDTH = 90;
     CONTEXT_WORDS = 6;
+    E_DROP_TAIL = /^(ing|ings|ed|es|er|ers|ation|ations|able|ably)/;
   }
 });
 
@@ -96356,6 +96469,18 @@ function words(text2) {
 function sameWord(a3, b3) {
   return sameVariantWord(a3, b3);
 }
+var E_DROP_SUFFIXES = /^(ing|ings|ed|es|er|ers|ation|ations|able|ably)$/;
+function startsWithSpelling(word, needle) {
+  if (word.startsWith(needle))
+    return true;
+  if (needle.endsWith("e")) {
+    const stem = needle.slice(0, -1);
+    if (word.startsWith(stem) && E_DROP_SUFFIXES.test(word.slice(stem.length))) {
+      return true;
+    }
+  }
+  return false;
+}
 function queryAtoms(query) {
   var _a, _b;
   const atoms = [];
@@ -96436,13 +96561,13 @@ function trailingPartIs(word, term) {
 function startAlignedAt(word, term) {
   if (!term || term.length > word.length)
     return -1;
-  if (word.startsWith(term))
+  if (startsWithSpelling(word, term))
     return 0;
   if (term.length < MIN_INTERIOR_TERM)
     return -1;
   if (trailingPartIs(word, term))
     return word.length - term.length;
-  const p4 = PREFIXES.find((pf) => word.startsWith(pf) && word.slice(pf.length).startsWith(term));
+  const p4 = PREFIXES.find((pf) => word.startsWith(pf) && startsWithSpelling(word.slice(pf.length), term));
   return p4 ? p4.length : -1;
 }
 function startAlignedAny(word, needles) {
@@ -96462,7 +96587,7 @@ function matchTerm(text2, term) {
   for (const w4 of hyphenWords(text2)) {
     const wJoined = w4.replace(/-/g, "");
     const exactWord = w4 === q4 || wJoined === joined;
-    const prefixHit = !exactWord && (needles.some((n2) => w4.startsWith(n2)) || joinedNeedles.some((n2) => wJoined.startsWith(n2)));
+    const prefixHit = !exactWord && (needles.some((n2) => startsWithSpelling(w4, n2)) || joinedNeedles.some((n2) => startsWithSpelling(wJoined, n2)));
     if (exactWord)
       return { strength: "word" };
     if (prefixHit) {
@@ -96472,7 +96597,7 @@ function matchTerm(text2, term) {
   for (const w4 of words(text2)) {
     if (sameWord(w4, q4))
       return { strength: "word" };
-    if (needles.some((n2) => w4.startsWith(n2))) {
+    if (needles.some((n2) => startsWithSpelling(w4, n2))) {
       if (!best)
         best = { strength: "prefix" };
       continue;
@@ -96515,7 +96640,7 @@ function adjacentChain(text2, terms) {
   const firstNeedles = spellingNeedles(first);
   let best = 0;
   for (let i3 = 0; i3 < ws.length - 1; i3++) {
-    if (!(sameWord(ws[i3], first) || firstNeedles.some((n2) => ws[i3].startsWith(n2))))
+    if (!(sameWord(ws[i3], first) || firstNeedles.some((n2) => startsWithSpelling(ws[i3], n2))))
       continue;
     let chain = 1;
     for (let t4 = 1; t4 < terms.length; t4++) {
@@ -96524,7 +96649,7 @@ function adjacentChain(text2, terms) {
         break;
       const q4 = normTerm(terms[t4]);
       const qNeedles = spellingNeedles(q4);
-      if (sameWord(next, q4) || qNeedles.some((n2) => next.startsWith(n2) || trailingPartIs(next, n2))) {
+      if (sameWord(next, q4) || qNeedles.some((n2) => startsWithSpelling(next, n2) || trailingPartIs(next, n2))) {
         chain++;
       } else {
         break;
@@ -97935,7 +98060,7 @@ var BibManager = class {
         continue;
       if (a3.hyphenated && hay.includes(a3.text.replace(/-/g, "")))
         continue;
-      if (spellingNeedles(a3.text).some((v3) => hay.includes(v3)))
+      if (spellingPrefixes(a3.text).some((v3) => hay.includes(v3)))
         continue;
       return null;
     }

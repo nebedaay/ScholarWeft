@@ -70,6 +70,26 @@ function sameWord(a: string, b: string): boolean {
 }
 
 /**
+ * E-dropped inflections. Before a vowel-initial suffix English drops a final
+ * `e` (`synthesise` + `ing` → `synthesising`), so a needle ending in `e` also
+ * matches its e-dropped form — but only before a real inflection suffix, not
+ * any vowel, or `analyse` would match `analysis`/`analyst`.
+ */
+const E_DROP_SUFFIXES = /^(ing|ings|ed|es|er|ers|ation|ations|able|ably)$/;
+
+/** Does `word` start with `needle`, allowing a drop of a final `-e`? */
+function startsWithSpelling(word: string, needle: string): boolean {
+  if (word.startsWith(needle)) return true;
+  if (needle.endsWith('e')) {
+    const stem = needle.slice(0, -1);
+    if (word.startsWith(stem) && E_DROP_SUFFIXES.test(word.slice(stem.length))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * A quoted term in a query (`"anticolonial"`, `'anticolonial'`) is a LITERAL
  * substring match: case- and diacritic-insensitive, not word-boundary-bound,
  * and not morpheme-aware. `"anticolonial"` therefore matches "anticolonial*"
@@ -158,11 +178,11 @@ export function trailingPartIs(word: string, term: string): boolean {
  *  (Word start, after a known prefix, or the trailing part of a compound.) */
 export function startAlignedAt(word: string, term: string): number {
   if (!term || term.length > word.length) return -1;
-  if (word.startsWith(term)) return 0;
+  if (startsWithSpelling(word, term)) return 0;
   if (term.length < MIN_INTERIOR_TERM) return -1;
   if (trailingPartIs(word, term)) return word.length - term.length;
   const p = PREFIXES.find(
-    (pf) => word.startsWith(pf) && word.slice(pf.length).startsWith(term)
+    (pf) => word.startsWith(pf) && startsWithSpelling(word.slice(pf.length), term)
   );
   return p ? p.length : -1;
 }
@@ -215,8 +235,8 @@ export function matchTerm(text: string, term: string): WordMatch | null {
     const exactWord = w === q || wJoined === joined;
     const prefixHit =
       !exactWord &&
-      (needles.some((n) => w.startsWith(n)) ||
-        joinedNeedles.some((n) => wJoined.startsWith(n)));
+      (needles.some((n) => startsWithSpelling(w, n)) ||
+        joinedNeedles.some((n) => startsWithSpelling(wJoined, n)));
     if (exactWord) return { strength: 'word' };
     if (prefixHit) {
       // A prefix is a prefix whether or not the word carries a hyphen.
@@ -225,7 +245,7 @@ export function matchTerm(text: string, term: string): WordMatch | null {
   }
   for (const w of words(text)) {
     if (sameWord(w, q)) return { strength: 'word' };
-    if (needles.some((n) => w.startsWith(n))) {
+    if (needles.some((n) => startsWithSpelling(w, n))) {
       if (!best) best = { strength: 'prefix' };
       continue;
     }
@@ -289,7 +309,7 @@ export function adjacentChain(text: string, terms: string[]): number {
     if (
       !(
         sameWord(ws[i], first) ||
-        firstNeedles.some((n) => ws[i].startsWith(n))
+        firstNeedles.some((n) => startsWithSpelling(ws[i], n))
       )
     )
       continue;
@@ -301,7 +321,9 @@ export function adjacentChain(text: string, terms: string[]): number {
       const qNeedles = spellingNeedles(q);
       if (
         sameWord(next, q) ||
-        qNeedles.some((n) => next.startsWith(n) || trailingPartIs(next, n))
+        qNeedles.some(
+          (n) => startsWithSpelling(next, n) || trailingPartIs(next, n)
+        )
       ) {
         chain++;
       } else {
