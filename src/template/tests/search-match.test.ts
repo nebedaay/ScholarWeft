@@ -83,7 +83,7 @@ describe('quoted literal terms', () => {
   it('parses quoted and unquoted atoms', () => {
     expect(queryAtoms('"anticolon" Africa')).toEqual([
       { text: 'anticolon', literal: true },
-      { text: 'Africa', literal: false },
+      { text: 'africa', literal: false },
     ]);
     expect(queryAtoms("'anti witch' colony")).toEqual([
       { text: 'anti witch', literal: true },
@@ -95,6 +95,15 @@ describe('quoted literal terms', () => {
     expect(containsLiteral(title, 'anticolonial')).toBe(true);
     // "anti-witchcraft … colonialism" — the literal string is absent.
     expect(containsLiteral(title, 'anti-witchcraft colonialism')).toBe(false);
+  });
+
+  it('normalises case and diacritics in unquoted terms', () => {
+    expect(queryAtoms('Café')).toEqual([{ text: 'cafe', literal: false }]);
+    expect(queryAtoms('José María')).toEqual([
+      { text: 'jose', literal: false },
+      { text: 'maria', literal: false },
+    ]);
+    expect(queryAtoms('"Café"')).toEqual([{ text: 'cafe', literal: true }]);
   });
 });
 

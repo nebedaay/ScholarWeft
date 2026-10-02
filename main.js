@@ -96500,7 +96500,7 @@ function queryAtoms(query) {
         continue;
       }
       for (const piece of raw.split(/[^\p{L}\p{N}]+/u)) {
-        const text2 = piece.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+        const text2 = normTerm(piece.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""));
         if (text2)
           atoms.push({ text: text2, literal: false });
       }

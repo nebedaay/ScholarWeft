@@ -136,7 +136,12 @@ export function queryAtoms(query: string): QueryAtom[] {
         continue;
       }
       for (const piece of raw.split(/[^\p{L}\p{N}]+/u)) {
-        const text = piece.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+        // Normalise case AND diacritics, like the field text does. Without this
+        // a typed `café` stayed `café` while the haystack was folded to `cafe`,
+        // so the pre-filter rejected the entry before the scorer ever saw it.
+        const text = normTerm(
+          piece.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+        );
         if (text) atoms.push({ text, literal: false });
       }
     }

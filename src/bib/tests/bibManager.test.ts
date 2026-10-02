@@ -1614,6 +1614,20 @@ describe('searchTier — variant symmetry and the cancellable async scan', () =>
     expect(async).toEqual(['a', 'b', 'c']);
   });
 
+  it('matches a diacritic query and a plain query against either spelling', () => {
+    const accented: PartialCSLEntry[] = [
+      { id: 'e', title: 'Café Society', author: [{ family: 'Pérez' }], type: 'book' },
+    ];
+    const { manager } = makeManager(accented);
+    manager.setFuse(accented);
+    const ids = (q: string) =>
+      manager.searchTier('title', q, 20).entries.map((x) => x.entry.id);
+    expect(ids('café')).toEqual(['e']);
+    expect(ids('cafe')).toEqual(['e']);
+    expect(ids('perez')).toEqual(['e']);
+    expect(ids('pérez')).toEqual(['e']);
+  });
+
   it('abandons the scan when the caller cancels', async () => {
     const { manager } = makeManager(entries);
     manager.setFuse(entries);
