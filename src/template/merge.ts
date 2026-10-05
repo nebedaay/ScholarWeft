@@ -253,10 +253,18 @@ export function findManagedRegion(body: string): ManagedRegion | null {
  * How a re-import treats the generated `## Notes` (child notes):
  *  - `ifEmpty` (default) — refill ONLY when the section has no content
  *    (whitespace doesn't count); a section with any real content is left alone.
+ *  - `append` — keep the existing content and add the rendered child notes
+ *    after it, separated by a blank line, so a note imported without child
+ *    notes (e.g. by ZotLit) that has since gained the user's own notes still
+ *    receives the Zotero notes without losing that writing.
  *  - `replace` — always replace the section content with the render.
  *  - `firstImportOnly` — never touch it after the first import.
  */
-export type NotesReimport = 'replace' | 'ifEmpty' | 'firstImportOnly';
+export type NotesReimport =
+  | 'replace'
+  | 'append'
+  | 'ifEmpty'
+  | 'firstImportOnly';
 
 export interface ManagedRegionMergeOptions {
   /**
@@ -349,8 +357,11 @@ function spliceNotesSection(
  *  - `ifEmpty` (default) — fill it from the render ONLY when it has no content
  *    (whitespace doesn't count), matching the after-the-fact ZotLit insertion
  *    path (`insertIntoNote`). A section with real content is never overwritten
- *    (replace loses user edits) or appended to (append duplicates); only a
- *    human or AI can judge whether content is redundant.
+ *    (replace loses user edits); only a human or AI can judge whether content
+ *    is redundant.
+ *  - `append` — keep the existing content and add the rendered content after it
+ *    (blank-line separated), so the user's own notes survive a conversion that
+ *    also pulls in Zotero child notes.
  *  - `replace` — always put the rendered content there.
  *
  * Section end stops at the next heading or managed marker, so the empty test
@@ -369,13 +380,20 @@ export function reconcileNotesSection(
   const rendered = notesSection(renderedBody);
   if (!rendered) return existingBody;
 
-  if (strategy === 'ifEmpty') {
-    if (existing.content.trim()) return existingBody; // user content — leave it
-    if (!rendered.content.trim()) return existingBody; // nothing to add
+  const add = rendered.content.replace(/^\n+|\n+$/g, '');
+  if (strategy === 'append') {
+    if (!add) return existingBody; // nothing to add
+    const prior = existing.content.replace(/^\n+|\n+$/g, '');
+    const content = prior ? `${prior}\n\n${add}` : add;
+    return spliceNotesSection(existingBody, existing, content);
   }
 
-  const content = rendered.content.replace(/^\n+|\n+$/g, '');
-  return spliceNotesSection(existingBody, existing, content);
+  if (strategy === 'ifEmpty') {
+    if (existing.content.trim()) return existingBody; // user content — leave it
+    if (!add) return existingBody; // nothing to add
+  }
+
+  return spliceNotesSection(existingBody, existing, add);
 }
 
 /** `ifEmpty` alias kept for callers that only want the default behaviour. */

@@ -45,6 +45,7 @@ import {
 import { debugLog } from './helpers';
 import { zotlitIsNoteImportPath } from './template/import-path';
 import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
+import type { MissingLinkedNoteAction } from './template/missing-notes';
 
 export const DEFAULT_SETTINGS: ReferenceListSettings = {
   pathToPandoc: '',
@@ -90,6 +91,15 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   ownNoteImageFolder: 'Attachments',
   /** Open the note when exactly ONE literature note is imported (default on). */
   openImportedNote: true,
+  /** How missing literature notes for linked citations are filled in:
+   *  `all` / `onInsert` / `never` (default). */
+  missingLinkedNoteAction: 'never',
+  /** Whether keyed notes found outside the import folder are moved into it on
+   *  update. Opt-in (default off). */
+  moveKeyedNotesToImportFolder: false,
+  /** Set after the one-time automatic review of keyed notes, so it does not
+   *  nag on every startup. */
+  keyedNotesReviewed: false,
   /** How to treat an existing ZotLit note when our template renders it. */
   ownNoteZotLitHandling: 'ask',
   // autoUpdateNotes is intentionally NOT set: undefined means "not yet chosen",
@@ -269,6 +279,23 @@ export interface ReferenceListSettings {
    * Default on; turn off to import quietly.
    */
   openImportedNote?: boolean;
+  /**
+   * How missing literature notes for linked citations are filled in:
+   * `all` (ensure them whenever the plugin sees a linked citation),
+   * `onInsert` (only when a linked citation is inserted in the editor), or
+   * `never` (default). The legacy boolean `addNoteForLinkedCitations` is
+   * migrated to `onInsert` on load.
+   */
+  missingLinkedNoteAction?: MissingLinkedNoteAction;
+  /** @deprecated superseded by `missingLinkedNoteAction`. */
+  addNoteForLinkedCitations?: boolean;
+  /**
+   * When true, a keyed literature note found outside the configured import
+   * folder is moved into it when it is next updated. Opt-in (default off).
+   */
+  moveKeyedNotesToImportFolder?: boolean;
+  /** Set after the one-time automatic review of keyed notes. */
+  keyedNotesReviewed?: boolean;
   /**
    * How to treat a note that ZotLit created when our own template renders it:
    * `ask` (prompt, default), `convert` (replace ZotLit's region with ours), or
@@ -1217,6 +1244,42 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           }
         })
       );
+
+    new Setting(containerEl)
+      .setName(t('Insert literature notes for linked citations'))
+      .setDesc(
+        t(
+          'What to do when a linked citation ([[@key]]) has no literature note yet. Notes are created quietly from Zotero — never opened.'
+        )
+      )
+      .then((setting) => {
+        const makeRadio = (label: string, value: MissingLinkedNoteAction) => {
+          const wrap = setting.controlEl.createEl('label', {
+            cls: 'sw-auto-update-radio',
+          });
+          const input = wrap.createEl('input', { type: 'radio' });
+          input.name = 'sw-radio-missing-linked-notes';
+          input.checked =
+            (this.plugin.settings.missingLinkedNoteAction ?? 'never') === value;
+          input.addEventListener('change', () => {
+            this.plugin.settings.missingLinkedNoteAction = value;
+            this.plugin.saveSettings();
+          });
+          wrap.appendText(' ' + label);
+        };
+        makeRadio(
+          t('Ensure literature notes exist for all linked citations'),
+          'all'
+        );
+        makeRadio(
+          t('Insert a literature note whenever a linked citation is inserted'),
+          'onInsert'
+        );
+        makeRadio(
+          t("Don't insert missing literature notes for linked citations"),
+          'never'
+        );
+      });
 
     new Setting(containerEl)
       .setName(t('Import literature notes with ScholarWeft'))

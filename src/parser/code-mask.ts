@@ -5,7 +5,7 @@
  * Returns a string of the SAME LENGTH as `text`, with every fenced-code-block
  * and inline-code-span character replaced by a space. Callers scan the returned
  * string while slicing their ORIGINAL text with the same offsets — a code region
- * contains no `@`, `[` or `⟦`, so no citation can be detected inside one.
+ * contains no `@` or `[`, so no citation can be detected inside one.
  *
  * Covered:
  *  - fenced code blocks: a line opening with 3+ backticks or 3+ tildes, closed

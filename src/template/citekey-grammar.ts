@@ -14,6 +14,11 @@
 // character (kept even trailing); every other punctuation character may appear
 // internally but is trailing-only. A negative lookbehind excludes an `@` glued
 // to a word (an email or a handle) — Pandoc's own `notAfterString` guard.
+//
+// Pandoc's EXPLICIT-key escape `@{…}` is also recognized: the content is the
+// key VERBATIM (braces are not key characters and trailing punctuation is
+// kept). That is how a key with a trailing period or a non-identifier
+// character is written; `formatCitekey`/`needsKeyBraces` produce it.
 
 /** Characters that may appear inside a citekey: letters, digits, `_`, and the
  *  punctuation Pandoc permits internally. */
@@ -23,9 +28,17 @@ export const CITEKEY_BODY = '[\\p{L}\\p{N}_.:#$%&+?<>~\\/-]';
 const TRAILING_PUNCT = /[:.#$%&+?<>~/\-]+$/;
 
 /** One compiled scanner. Draining it is synchronous, so its `lastIndex` cannot
- *  be clobbered by an interleaved call across an `await`. */
+ *  be clobbered by an interleaved call across an `await`.
+ *
+ *  Alternative 1 is Pandoc's EXPLICIT KEY form `@{…}` — the braces are not part
+ *  of the key, and their content is taken VERBATIM (trailing punctuation kept),
+ *  which is how a key that would otherwise be split (`@smith2005.`) or that
+ *  contains non-identifier characters is written. Alternative 2 is the bare
+ *  form, whose trailing punctuation is stripped. `@{}` (the empty forced-suffix
+ *  marker) matches neither: the explicit alternative needs 1+ chars and the bare
+ *  one cannot start with `{`. */
 const CITEKEY_SCAN = new RegExp(
-  `(?<![\\p{L}\\p{N}_])@(${CITEKEY_BODY}+)`,
+  `(?<![\\p{L}\\p{N}_])@(?:\\{([^{}\\n]+)\\}|(${CITEKEY_BODY}+))`,
   'gu'
 );
 
@@ -37,32 +50,73 @@ const NOT_A_CITEKEY_BEFORE = /[\p{L}\p{N}_@[\]/|]/u;
 export interface CitekeyHit {
   /** Index of the `@`. */
   start: number;
-  /** Index just past `@` + the key (any trailing punctuation excluded). */
+  /** Index just past the whole occurrence — past `}` for a braced key, past the
+   *  key (trailing punctuation excluded) for a bare one. */
   end: number;
-  /** The parsed citekey, trailing punctuation stripped. */
+  /** The parsed citekey: verbatim inside `{…}`, trailing punctuation stripped
+   *  for the bare form. */
   key: string;
+  /** True when the source used Pandoc's explicit `@{…}` form. */
+  braced?: boolean;
+  /** True when the key is a `[[…]]` wikilink target (a filename, not Pandoc
+   *  citation text), so replacement must not add braces. */
+  inWikilink?: boolean;
 }
 
 /**
  * Find every citekey in `text` with Pandoc's rules. Offset-stable, so the same
  * scan drives detection, planning, and replacement — they can never disagree
- * about what a key is.
+ * about what a key is. Handles both the bare and the explicit `@{…}` form.
  */
 export function scanCitekeys(text: string): CitekeyHit[] {
   const hits: CitekeyHit[] = [];
   CITEKEY_SCAN.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = CITEKEY_SCAN.exec(text))) {
-    const key = m[1].replace(TRAILING_PUNCT, '');
+    const braced = m[1] !== undefined;
+    const raw = braced ? m[1] : m[2];
+    // A WIKILINK target (`[[@key]]`) is a filename and is authoritative, so it
+    // is verbatim too — `[[@smith2005.]]` cites the note `@smith2005.`, unlike
+    // Pandoc's bare `@smith2005.` (which drops the period). An explicit key is
+    // verbatim by definition; only a bare key loses its trailing punctuation.
+    const wikilinkTarget = text[m.index - 2] === '[' && text[m.index - 1] === '[';
+    const verbatim = braced || wikilinkTarget;
+    const key = verbatim ? raw : raw.replace(TRAILING_PUNCT, '');
     if (!key) continue;
-    hits.push({ start: m.index, end: m.index + 1 + key.length, key });
+    hits.push({
+      start: m.index,
+      end: verbatim ? m.index + m[0].length : m.index + 1 + key.length,
+      key,
+      braced,
+      inWikilink: wikilinkTarget || undefined,
+    });
   }
   return hits;
 }
 
 /**
- * Replace `@old` with `@new` for every key in `renameMap`, leaving the trailing
- * punctuation of each occurrence untouched. One pass (no index invalidation).
+ * Would a key survive a bare `@key` round-trip under Pandoc's grammar? A key
+ * needs braces when `@key` parses to something else — e.g. a trailing `.` or a
+ * character outside the key body. Used both to write a citation in the form
+ * Pandoc will read and to decide whether an existing bare occurrence was even
+ * the key it looks like.
+ */
+export function needsKeyBraces(key: string): boolean {
+  if (!key) return true;
+  const hits = scanCitekeys('@' + key);
+  return hits.length !== 1 || hits[0].start !== 0 || hits[0].key !== key;
+}
+
+/** Render a citekey as it must appear in text: `@key`, or `@{key}` when the
+ *  bare form would be misread (or `forceBraces`). */
+export function formatCitekey(key: string, forceBraces = false): string {
+  return forceBraces || needsKeyBraces(key) ? '@{' + key + '}' : '@' + key;
+}
+
+/**
+ * Replace `@old` with the correctly-formed `@new` for every key in
+ * `renameMap`, in one pass (no index invalidation). A key that needs braces
+ * (e.g. a trailing `.`) is written as `@{new}` so the result stays parseable.
  */
 export function replaceCitekeys(
   text: string,
@@ -73,7 +127,14 @@ export function replaceCitekeys(
   for (const h of scanCitekeys(text)) {
     const to = renameMap[h.key];
     if (!to || to === h.key) continue;
-    out += text.slice(cursor, h.start) + '@' + to;
+    // A wikilink target is a filename: rewrite it verbatim (braces would become
+    // part of the target). Pandoc citation text uses `@{new}` when required.
+    const replacement = h.inWikilink
+      ? h.braced
+        ? '@{' + to + '}'
+        : '@' + to
+      : formatCitekey(to);
+    out += text.slice(cursor, h.start) + replacement;
     cursor = h.end;
   }
   if (!cursor) return text;

@@ -54,7 +54,12 @@ import {
 import { CitekeyRenameModal } from './modals/citekeyRenameModal';
 import { CitekeyReconcileModal } from './modals/citekeyReconcileModal';
 import type { CitekeyReconcilePlan } from './template/note-lookup';
-import { isZotLitManaged } from './template/note-lookup';
+import {
+  isZotLitManaged,
+  noteNameMatchesCitekey,
+  stableKeyGroupID,
+} from './template/note-lookup';
+import { moveNoteIntoFolder } from './noteImport';
 import { ConflictModal } from './modals/conflictModal';
 import {
   SW_ZOTLIT_FOLDER,
@@ -73,6 +78,7 @@ import {
 } from './template/related-migration';
 import {
   DEFAULT_LITERATURE_NOTE_FOLDER,
+  isInFolder,
   lastFolderName,
   literatureNoteFolderFor,
   rememberFolderName,
@@ -216,6 +222,13 @@ export default class ReferenceList extends Plugin {
   cacheDir = SW_CACHE_DIR;
   _initPromise: PromiseCapability<void>;
   private processReferencesRun = 0;
+  /**
+   * Paths already asked to build their render cache from a reading-mode
+   * post-process that ran before the cache existed. Guards against a render
+   * loop (the triggered build re-dispatches the note, which post-processes it
+   * again) — the entry is cleared once the build settles.
+   */
+  private postProcessRenderRequested = new Set<string>();
 
   get initPromise() {
     if (!this._initPromise) {
@@ -439,8 +452,8 @@ export default class ReferenceList extends Plugin {
       // live-preview link widget. Both decorate the same [[@key]] range; CM
       // renders only the higher-precedence one. Without this, Obsidian's link
       // widget takes precedence and our rendered citations stay invisible in
-      // live preview (plain brackets and ⟦…⟧ containers have no competing
-      // Obsidian decoration, so they always worked).
+      // live preview (plain bracket citations have no competing Obsidian
+      // decoration, so they always worked).
       Prec.highest(citeKeyPlugin),
       editorTooltipHandler(this.tooltipManager),
     ]);
@@ -497,7 +510,7 @@ export default class ReferenceList extends Plugin {
 
     this.addCommand({
       id: 'add-literature-notes',
-      name: t('Add Literature Notes from Zotero (search and filter)'),
+      name: t('Add Literature Notes/Citations (search and filter)'),
       callback: async () => {
         const { AddLiteratureNotesModal } = await import(
           './modals/addLiteratureNotesModal'
@@ -2309,6 +2322,15 @@ export default class ReferenceList extends Plugin {
       delete saved.pathToBibliography;
     }
 
+    // The linked-note auto-insert setting became a three-way radio. A saved
+    // `true` from the brief boolean version means "insert on insertion".
+    if (
+      saved.missingLinkedNoteAction === undefined &&
+      saved.addNoteForLinkedCitations === true
+    ) {
+      saved.missingLinkedNoteAction = 'onInsert';
+    }
+
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
   }
 
@@ -2561,6 +2583,8 @@ export default class ReferenceList extends Plugin {
 
   /** Set while an automatic reconcile pass is queued. */
   private _reconcileQueued = false;
+  private _keyedNotesReviewQueued = false;
+  private _keyedNotesReviewed = false;
 
   /**
    * Queue a citekey reconcile pass after a Zotero load/refresh. Debounced and
@@ -2575,6 +2599,111 @@ export default class ReferenceList extends Plugin {
       this._reconcileQueued = false;
       void this.reviewCitekeyChanges(false).catch(console.error);
     }, 2000);
+  }
+
+  /**
+   * Debounced, once-per-session review of every `zotero-key` note. Runs after
+   * the library loads (same trigger as citekey reconcile), so it costs nothing
+   * until there is a library to match against.
+   */
+  scheduleKeyedNotesReview(): void {
+    if (this._keyedNotesReviewQueued || this._keyedNotesReviewed) return;
+    if (this.settings.keyedNotesReviewed === true) return;
+    this._keyedNotesReviewQueued = true;
+    setTimeout(() => {
+      this._keyedNotesReviewQueued = false;
+      void this.reviewKeyedNotes().catch(console.error);
+    }, 2500);
+  }
+
+  /**
+   * One-time (per session) pass over every note carrying a `zotero-key`:
+   *
+   *  - a note whose filename is NEITHER its current citekey NOR its own recorded
+   *    `citekey:` (a known past citekey) is offered the same convert / new /
+   *    cancel prompt the import path uses. Known past citekeys are left to the
+   *    normal citekey-update path, so no merge question is asked for them.
+   *  - notes outside the configured import folder trigger a one-time offer to
+   *    move them into it on their next update.
+   *
+   * Cheap: only the in-memory metadata cache is read — no Zotero fetch, no file
+   * reads. Most users never see either prompt, because most notes already match
+   * and already live in the import folder.
+   */
+  async reviewKeyedNotes(): Promise<void> {
+    if (this._keyedNotesReviewed) return;
+    if (this.bibManager.isBackendLoading) return;
+    if (this.settings.useOwnNoteTemplate !== true) return;
+    this._keyedNotesReviewed = true;
+
+    const folder = this.bibManager.resolveBaseNoteFolder();
+    const foreign: TFile[] = [];
+    const misplaced: TFile[] = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const stable = fm?.['zotero-key'];
+      if (typeof stable !== 'string' || !stable) continue;
+      const citekey = this.findCitekeyByStableKey(stable);
+      if (!citekey) continue;
+
+      // A group note belongs in the subfolder named after its library — the
+      // group NAME, not the id, so a renamed group moves the note to the new
+      // folder. Structural, so no opt-in; only when the name is known (never an
+      // id-based `Group N`).
+      const gid = stableKeyGroupID(stable);
+      const groupName =
+        gid && gid !== 1 ? this.bibManager.libraryNameFor(gid) : null;
+      if (groupName) {
+        const groupFolder = literatureNoteFolderFor({
+          base: folder,
+          groupID: gid!,
+          groupName,
+        });
+        if (groupFolder && !isInFolder(file.path, groupFolder)) {
+          await moveNoteIntoFolder(this.app, file.path, groupFolder);
+        }
+      }
+
+      const recorded = typeof fm?.citekey === 'string' ? fm.citekey : null;
+      const nameMatches =
+        noteNameMatchesCitekey(file.path, citekey) ||
+        (!!recorded && noteNameMatchesCitekey(file.path, recorded));
+      if (!nameMatches) foreign.push(file);
+      // A library subfolder (any name) is INSIDE the import tree — never
+      // "misplaced", so it is not offered for a move.
+      if (folder && !isInFolder(file.path, folder)) misplaced.push(file);
+    }
+
+    // Offer the folder move FIRST, so the foreign-note updates below (which are
+    // updates) can carry misplaced notes into the import folder in the same
+    // pass.
+    if (
+      misplaced.length &&
+      this.settings.moveKeyedNotesToImportFolder !== true
+    ) {
+      const { MoveNotesModal } = await import('./modals/moveNotesModal');
+      const move = await new Promise<boolean>((resolve) =>
+        new MoveNotesModal(this.app, {
+          count: misplaced.length,
+          folder,
+          onChoose: resolve,
+        }).open()
+      );
+      if (move) {
+        this.settings.moveKeyedNotesToImportFolder = true;
+        await this.saveSettings();
+      }
+    }
+
+    // Ask about each foreign-named note (the import path shows the same modal).
+    for (const file of foreign) {
+      await this.updateLiteratureNoteResult(file, { confirm: false });
+    }
+
+    // One-time only: the manual "Update all literature notes" still catches any
+    // note that appears later, so this migration pass never nags again.
+    this.settings.keyedNotesReviewed = true;
+    await this.saveSettings();
   }
 
   /**
@@ -2745,6 +2874,38 @@ export default class ReferenceList extends Plugin {
     ).open();
   }
 
+  /**
+   * Reading mode can post-process a note before `bibManager` has built that
+   * note's citation cache (it only builds the ACTIVE view's file). When the
+   * post-processor sees no cache for its source path, it calls this to build
+   * the cache for that SPECIFIC file; `dispatchResult` then re-renders any
+   * preview showing it, so the note's citations format on the next pass.
+   *
+   * Fire-and-forget and idempotent: a per-path guard prevents a build storm and
+   * breaks the render loop (the rebuild re-post-processes the note). Only files
+   * whose source actually contains `@` are rendered, so a plain note never
+   * triggers a needless engine pass.
+   */
+  requestPostProcessRender = (filePath: string): void => {
+    if (this.postProcessRenderRequested.has(filePath)) return;
+    this.postProcessRenderRequested.add(filePath);
+    void this.renderNoteForPostProcess(filePath).finally(() => {
+      this.postProcessRenderRequested.delete(filePath);
+    });
+  };
+
+  private renderNoteForPostProcess = async (filePath: string) => {
+    try {
+      const file = this.app.vault.getAbstractFileByPath(filePath);
+      if (!(file instanceof TFile)) return;
+      const content = await this.app.vault.cachedRead(file);
+      if (!content.includes('@')) return;
+      await this.bibManager.getReferenceList(file, content);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   processReferences = async () => {
     const run = ++this.processReferencesRun;
     const isCurrent = () => run === this.processReferencesRun;
@@ -2753,6 +2914,12 @@ export default class ReferenceList extends Plugin {
     const scopedSettings = activeView
       ? getScopedSettings(activeView.file)
       : null;
+
+    // A settings save can re-trigger this while the plugin is being re-created
+    // (saveSettings → refreshGlobalZBib → refreshOnAppRefocus), so `bibManager`
+    // may already be detached. Bail rather than reaching into a half-torn-down
+    // manager.
+    if (!this.bibManager?.plugin) return;
 
     if (
       !settings.bibliographyPaths?.length &&
@@ -2768,7 +2935,11 @@ export default class ReferenceList extends Plugin {
 
     if (activeView) {
       try {
-        const fileContent = await this.app.vault.cachedRead(activeView.file);
+        // Prefer the EDITOR's current text over `vault.cachedRead`: an unsaved
+        // programmatic edit (e.g. the Add-notes modal inserting citations) can
+        // be ahead of the vault cache, and reading the stale cache renders the
+        // OLD content — leaving the new citations as literal links.
+        const fileContent = activeView.editor.getValue();
         if (!isCurrent()) return;
         const bib = await this.bibManager.getReferenceList(
           activeView.file,

@@ -14,6 +14,27 @@ export interface CiteprocCite {
   properties: CiteProps;
 }
 
+/**
+ * Render the inline Markdown pandoc allows in a citation prefix/suffix
+ * (`[see *also* @doe, p. 30 and *passim*]`) as HTML. citeproc-js passes
+ * `<em>`/`<strong>` in a prefix/suffix straight through, but it does not parse
+ * Markdown itself, so without this the asterisks/underscores show literally.
+ * Only emphasis and strong are handled — the common cases in a citation; the
+ * export path needs none of this because pandoc parses the aliases natively.
+ */
+export function renderInlineMarkdown(text: string): string {
+  if (!text || (!text.includes('*') && !text.includes('_'))) return text;
+  return text
+    .replace(
+      /\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__/g,
+      (_m, a, b) => `<strong>${a ?? b}</strong>`
+    )
+    .replace(
+      /\*(?=\S)([\s\S]*?\S)\*|(?<![\w])_(?=\S)([\s\S]*?\S)_(?![\w])/g,
+      (_m, a, b) => `<em>${a ?? b}</em>`
+    );
+}
+
 function genUid(length: number): string {
   const array = [];
   for (let i = 0; i < length; i++) {
@@ -58,8 +79,10 @@ export function getCiteprocCites(
     const transferProps = (from: Citation, to: Citation) => {
       if (from.label) to.label = from.label;
       if (from.locator) to.locator = from.locator;
-      if (from.prefix) to.prefix = from.prefix;
-      if (from.suffix) to.suffix = from.suffix;
+      // Prefix/suffix are free text in the source and may carry Markdown
+      // emphasis; citeproc renders them verbatim, so convert it to HTML here.
+      if (from.prefix) to.prefix = renderInlineMarkdown(from.prefix);
+      if (from.suffix) to.suffix = renderInlineMarkdown(from.suffix);
     };
 
     group.citations.forEach((g, i) => {
@@ -112,7 +135,7 @@ export function getCiteprocCites(
     };
 
     if (mode) properties.mode = mode;
-    if (infix) properties.infix = infix;
+    if (infix) properties.infix = renderInlineMarkdown(infix);
 
     idToGroup[id] = gIdx;
     output.push({

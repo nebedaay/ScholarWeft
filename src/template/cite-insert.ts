@@ -19,8 +19,15 @@
  * case, where it forces the Pandoc form. The kinds are decided by ONE function
  * (`insertionKind`) so the footer hint can never disagree with the insertion.
  *
+ * A citekey that a bare `@key` cannot represent — e.g. one ending in `.` —
+ * is written in Pandoc's explicit form `@{key}`. The WIKILINK context is the
+ * exception: there the key is the note FILENAME, so braces would become part
+ * of the target and break resolution (`[[@{key}]]` ≠ the note `@key`).
+ *
  * Pure, so every context is a test rather than a hope.
  */
+import { formatCitekey } from './citekey-grammar';
+
 export interface InsertContext {
   /** Text on the line before the popup's start position. */
   beforeStart: string;
@@ -164,22 +171,25 @@ export function computeInsertion(
   ctx: InsertContext,
   opts: InsertOptions
 ): InsertResult {
-  const key = `@${citekey}`;
+  // Wikilink targets are filenames, so they never take braces; Pandoc citation
+  // text uses the explicit form when a bare `@key` would be misread.
+  const linkKey = `@${citekey}`;
+  const pandocKey = formatCitekey(citekey);
 
   switch (insertionKind(ctx)) {
     case 'bare': {
       const linked = opts.linked && !opts.forcePandoc;
-      return { text: linked ? `[[${key}]]` : `[${key}]` };
+      return { text: linked ? `[[${linkKey}]]` : `[${pandocKey}]` };
     }
     case 'wikilink':
       // `[[@del` → `[[@key]]`: the '@' is part of the replaced span, so it must
       // be re-emitted alongside the closing `]]`.
-      return { text: `${key}]]` };
+      return { text: `${linkKey}]]` };
     case 'bracket':
       // `[@del` → `[@key]`
-      return { text: `${key}]` };
+      return { text: `${pandocKey}]` };
     case 'member':
       // `[@a; @b` or `[see @b` — the surrounding closer is the user's.
-      return { text: key };
+      return { text: pandocKey };
   }
 }

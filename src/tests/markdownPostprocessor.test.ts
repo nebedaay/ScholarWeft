@@ -182,7 +182,7 @@ describe('reading-mode postprocessor anchor handling', () => {
     expect(span!.parentElement).toBe(p);
   });
 
-  it('leaves the anchor in place when renderCitationsAsLinks is off', () => {
+  it('replaces the anchor (parity with live preview) when renderCitationsAsLinks is off', () => {
     const p = document.createElement('p');
     p.innerHTML =
       '<a class="internal-link" data-href="@key" href="@key">see also @@, 10</a>';
@@ -212,64 +212,10 @@ describe('reading-mode postprocessor anchor handling', () => {
 
     const span = p.querySelector('span.sw-citation');
     expect(span).not.toBeNull();
-    // No is-link, and the outer Obsidian anchor survives (kept as the link).
+    // No is-link, and — matching live preview — the source wikilink is REPLACED
+    // by the citation span (not kept as an outer anchor).
     expect(span!.className).not.toContain('is-link');
-    expect(p.querySelector('a.internal-link')).not.toBeNull();
-  });
-
-  it('merges a ⟦…⟧ container into ONE citation span (no leftover ⟦⟧, no corruption)', () => {
-    // Reading-mode DOM for: ⟦[[@a]]; [[@b]]⟧ (plain wikilinks, no aliases).
-    // Regression: plain [[@key]] previously fell through to the base parser
-    // with segments from index 1, so the container pre-pass could not match
-    // the merged container in sectionCites — the container stayed as raw
-    // ⟦…⟧ text and the second link corrupted to `[@@key4]`.
-    const p = document.createElement('p');
-    p.innerHTML =
-      'text ⟦<a class="internal-link" data-href="@a" href="@a">@a</a>; ' +
-      '<a class="internal-link" data-href="@b" href="@b">@b</a>⟧ more';
-    // The pre-pass skips text nodes where !isConnected — in real Obsidian the
-    // element is attached to the preview, so attach it here too.
-    document.body.appendChild(p);
-
-    const plugin = makePlugin();
-    // sectionCites entry matching the MERGED container [@a; @b]
-    const containerSegs = [
-      { type: 'bracket', val: '[' },
-      { type: 'at', val: '@' },
-      { type: 'key', val: 'a' },
-      { type: 'separator', val: ';' },
-      { type: 'prefix', val: ' ' },
-      { type: 'at', val: '@' },
-      { type: 'key', val: 'b' },
-      { type: 'bracket', val: ']' },
-    ];
-    plugin.bibManager.getCitationsForSection.mockReturnValue([
-      {
-        data: containerSegs,
-        citations: [{ id: 'a' }, { id: 'b' }],
-        from: 0,
-        to: 0,
-        val: '(A; B)',
-      },
-    ]);
-
-    processCiteKeys(plugin)(p, {
-      sourcePath: 'test.md',
-      getSectionInfo: () => ({ lineStart: 0, lineEnd: 1 }),
-    } as any);
-
-    // The container must be a SINGLE citation span, directly in the paragraph.
-    const spans = p.querySelectorAll('span.sw-citation');
-    expect(spans.length).toBe(1);
-    expect(spans[0].parentElement).toBe(p);
-    // No leftover ⟦ ⟧ or raw anchors.
-    expect(p.textContent).not.toContain('⟦');
-    expect(p.textContent).not.toContain('⟧');
-    expect(p.querySelectorAll('a.internal-link').length).toBeLessThanOrEqual(1);
-    // The span carries both citekeys.
-    expect(spans[0].getAttribute('data-citekey')).toBe('a|b');
-    // The walker must not have corrupted anything into @@… patterns.
-    expect(p.textContent).not.toContain('@@');
+    expect(p.querySelector('a.internal-link')).toBeNull();
   });
 
   it('merges an outer-bracket container [ [[@a]]; [[@b]] ] into ONE span (no leftover brackets)', () => {
@@ -486,51 +432,6 @@ describe('reading-mode postprocessor with callout sectionInfo', () => {
 });
 
 describe('multi-work container inside a callout', () => {
-  it('merges a ⟦…⟧ container inside a callout when getSectionInfo is null', () => {
-    const root = document.createElement('div');
-    root.className = 'callout';
-    root.setAttribute('data-callout', 'note');
-    root.innerHTML = `
-      <div class="callout-content"><blockquote>
-        <p>⟦<a class="internal-link" data-href="@a" href="@a">@a</a>; ` +
-      `<a class="internal-link" data-href="@b" href="@b">@b</a>⟧</p>
-      </blockquote></div>`;
-    document.body.appendChild(root);
-
-    const plugin = makePlugin();
-    const containerSegs = [
-      { type: 'bracket', val: '[' },
-      { type: 'at', val: '@' },
-      { type: 'key', val: 'a' },
-      { type: 'separator', val: ';' },
-      { type: 'prefix', val: ' ' },
-      { type: 'at', val: '@' },
-      { type: 'key', val: 'b' },
-      { type: 'bracket', val: ']' },
-    ];
-    plugin.bibManager.getCacheForPath.mockReturnValue({
-      citations: [
-        {
-          data: containerSegs,
-          citations: [{ id: 'a' }, { id: 'b' }],
-          from: 0,
-          to: 0,
-          val: '(A; B)',
-        },
-      ],
-    });
-
-    processCiteKeys(plugin)(root, {
-      sourcePath: 'test.md',
-      getSectionInfo: () => null as never,
-    } as any);
-
-    const spans = root.querySelectorAll('span.sw-citation');
-    expect(spans.length).toBe(1);
-    expect(spans[0].getAttribute('data-citekey')).toBe('a|b');
-    expect(root.textContent).not.toContain('⟦');
-  });
-
   it('merges an outer-bracket container inside a callout with no stray ]', () => {
     // Obsidian renders [ [[@a]]; [[@b]] ] in a callout body as:
     // text "[ ", <a>@a</a>, text "; ", <a>@b</a>, text " ]"
@@ -984,16 +885,11 @@ describe('reading-mode full-reference insertion', () => {
     expect(span!.textContent).toContain('Entry B.');
   });
 
-  // Round-trip against the REAL parser output (regression: the ⟦…⟧ container
-  // previously never merged, so the second member rendered as a citation).
+  // Round-trip against the REAL parser output.
   it.each([
     [
       '[ [[@a|reference]] [[@b]] ]',
       '[ <a class="internal-link" data-href="@a" href="@a">reference</a> <a class="internal-link" data-href="@b" href="@b">@b</a> ]',
-    ],
-    [
-      '⟦[[@a|reference]]; [[@b]]⟧',
-      '⟦<a class="internal-link" data-href="@a" href="@a">reference</a>; <a class="internal-link" data-href="@b" href="@b">@b</a>⟧',
     ],
     // Stray text between the links is discarded.
     [

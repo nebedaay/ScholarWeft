@@ -14,6 +14,7 @@
  */
 
 import { spellingNeedles } from './search-variants';
+import { foldWithMap } from './search-match';
 
 /** Rough characters that fit one suggestion line. */
 export const EXCERPT_WIDTH = 90;
@@ -72,43 +73,14 @@ function tokens(text: string): Array<{ word: string; start: number }> {
   return out;
 }
 
+/** The folded search form of a term (needle), identical to `normTerm` except
+ *  that hyphens are also dropped (matching the text fold in `findNeedleIn`). */
 function norm(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+  return foldWithMap(s, { dropHyphens: true }).text;
 }
 
-/** Case/diacritic-insensitive first offset of `term` in `text`, or -1. */
-/**
- * Normalise `text`, remembering which ORIGINAL index each normalised character
- * came from.
- *
- * Assuming the two agree in length is wrong: `norm()` strips combining marks,
- * so an already-decomposed sequence (`u` + U+0304) becomes one character
- * shorter and every later offset shifts. The match is then FOUND on the
- * normalised string but the emphasis is applied at the wrong place in the
- * original — which is why a diacritic match could be located and yet not
- * visibly bolded.
- */
-function normaliseWithMap(text: string): { text: string; map: number[] } {
-  let out = '';
-  const map: number[] = [];
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    // A HYPHEN is folded away so a search term matches either spelling:
-    // `anticolonial` finds "anti-colonial" and vice versa. The original index
-    // is still recorded, so a span can be mapped back (and widened over the
-    // hyphen) for emphasis.
-    if (ch === '-' || ch === '\u2010' || ch === '\u2011') continue;
-    const n = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    for (let k = 0; k < n.length; k++) {
-      out += n[k];
-      map.push(i);
-    }
-  }
-  return { text: out, map };
-}
+/** A combining mark, for widening a span over a decomposed accent. */
+const COMBINING_MARK = /\p{Mn}/u;
 
 /**
  * The ORIGINAL-text span of one spelling `needleTerm` inside `text`, or null.
@@ -119,20 +91,22 @@ function findNeedleIn(
   needleTerm: string,
   from: number
 ): { start: number; length: number } | null {
-  // Fold the term's hyphens too, so `anti-colonial` and `anticolonial` both
-  // search as `anticolonial` against the hyphen-folded text.
-  const needle = norm(needleTerm).replace(/[-\u2010\u2011]/g, '');
+  // `norm` already folds hyphens away, so `anti-colonial` and `anticolonial`
+  // both search as `anticolonial` against the hyphen-folded text.
+  const needle = norm(needleTerm);
   if (!needle) return null;
   const source = text.slice(from);
-  const { text: normalised, map } = normaliseWithMap(source);
+  const { text: normalised, chars } = foldWithMap(source, { dropHyphens: true });
   const at = normalised.indexOf(needle);
   if (at === -1) return null;
-  const lastIndex = Math.min(at + needle.length - 1, map.length - 1);
-  const start = from + map[at];
-  let end = from + map[lastIndex] + 1; // inclusive → exclusive
-  // Extend over any COMBINING MARKS that follow, so a decomposed character is
-  // emphasised whole rather than bolded up to its accent.
-  while (end < text.length && /[\u0300-\u036f]/.test(text[end])) end++;
+  const last = Math.min(at + needle.length - 1, chars.length - 1);
+  const start = from + chars[at].start;
+  // `chars[last].end` already covers a collapsed repeated vowel at the end of
+  // the match; the loop extends over any combining marks that follow, so a
+  // decomposed character is emphasised whole rather than bolded up to its
+  // accent.
+  let end = from + chars[last].end + 1;
+  while (end < text.length && COMBINING_MARK.test(text[end])) end++;
   // Extend over a hyphen the fold removed, so the WHOLE "anti-colonial" is
   // emphasised rather than just the parts around it.
   if (end < text.length && /[-\u2010\u2011]/.test(text[end])) end++;

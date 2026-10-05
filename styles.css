@@ -1132,6 +1132,16 @@ body.sw-decorations .markdown-preview-view .sw-citation.is-unresolved {
   width: 95vw;
 }
 
+/* Keep the suggestion list's scroll from chaining to the editor. Once the list
+   is at its end, a further wheel would otherwise scroll the note away and
+   Obsidian would dismiss the popup; `contain` stops it at the list edge. The
+   JS wheel guard in CiteSuggest (`installScrollGuard`) is the primary fix —
+   this backs it up where `overscroll-behavior` is supported. */
+.suggestion-container.sw-suggest,
+.suggestion-container.sw-suggest .suggestion {
+  overscroll-behavior: contain;
+}
+
 /* ── SearchSelect component (replaces react-select) ─────────────────────── */
 
 .sw-search-select {

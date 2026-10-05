@@ -1,5 +1,6 @@
 import {
   folderNameSnapshot,
+  isInFolder,
   lastFolderName,
   libraryDisplayName,
   literatureNoteFolderFor,
@@ -109,5 +110,28 @@ describe('folder-name record (rename detection)', () => {
   it('snapshots for persistence', () => {
     rememberFolderName(1234, 'X');
     expect(folderNameSnapshot()['1234']).toBe('X');
+  });
+});
+
+describe('isInFolder()', () => {
+  const base = '_2 Bibliographic notes';
+
+  it('accepts the folder itself and any subfolder, however named', () => {
+    expect(isInFolder(`${base}/@smith2020.md`, base)).toBe(true);
+    expect(isInFolder(`${base}/Andrea Lickacz readings/@smith2020.md`, base)).toBe(
+      true
+    );
+    expect(
+      isInFolder(`${base}/Andrea Lickacz readings/nested/@smith2020.md`, base)
+    ).toBe(true);
+  });
+
+  it('rejects a note outside the import tree', () => {
+    expect(isInFolder('Zotero notes/@smith2020.md', base)).toBe(false);
+    expect(isInFolder('_2 Bibliographic notes extra/@x.md', base)).toBe(false);
+  });
+
+  it('treats an empty folder (vault root) as containing everything', () => {
+    expect(isInFolder('anything/at/all/@x.md', '')).toBe(true);
   });
 });

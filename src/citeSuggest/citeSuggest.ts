@@ -36,6 +36,7 @@ import {
   prefixMatches,
 } from 'src/template/recent-keys';
 import { PartialCSLEntry } from 'src/bib/types';
+import { insertsNoteOnInsertion } from 'src/template/missing-notes';
 import ReferenceList from 'src/main';
 import { isZotLitSuggestActive } from 'src/zotlit';
 export { isZotLitSuggestActive }; // re-exported for settings.tsx
@@ -90,6 +91,48 @@ function isLoadingSuggestion(s: Fuse.FuseResult<PartialCSLEntry>): boolean {
   return (s as any)?.loading === true || s?.item?.id === LOADING_ITEM_ID;
 }
 
+// A non-selectable placeholder shown when a non-empty query matches nothing.
+//
+// WHY: Obsidian's EditorSuggest CLOSES the popup the moment `getSuggestions`
+// returns an empty array. A multi-term query is an AND, so while you type the
+// second word (`@jawāhir al-…`) there is a real interval where nothing matches
+// yet; the popup vanished mid-search and the remaining keystrokes went into the
+// note. Returning one placeholder keeps it open so the query can be finished.
+const NO_RESULTS_ITEM_ID = '__scholarweft_no_results__';
+function noResultsSuggestion(): Fuse.FuseResult<PartialCSLEntry>[] {
+  return [
+    {
+      item: { id: NO_RESULTS_ITEM_ID } as PartialCSLEntry,
+      refIndex: -1,
+      score: 0,
+      noResults: true,
+    } as any,
+  ];
+}
+function isNoResultsSuggestion(s: Fuse.FuseResult<PartialCSLEntry>): boolean {
+  return (s as any)?.noResults === true || s?.item?.id === NO_RESULTS_ITEM_ID;
+}
+/** A row that renders a message and can never be inserted. */
+function isPlaceholderSuggestion(
+  s: Fuse.FuseResult<PartialCSLEntry>
+): boolean {
+  return isLoadingSuggestion(s) || isNoResultsSuggestion(s);
+}
+
+/**
+ * What to return when nothing matched. A non-empty query gets a "no results"
+ * row so the popup stays open long enough to finish typing (see
+ * `noResultsSuggestion`); an empty query has nothing to type toward, so the
+ * popup may close. While the index is still warming up, say so instead.
+ */
+function terminalSuggestion(
+  searchQuery: string,
+  indexReady: boolean
+): Fuse.FuseResult<PartialCSLEntry>[] {
+  if (!indexReady) return loadingSuggestion();
+  return searchQuery ? noResultsSuggestion() : [];
+}
+
 export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>> {
   private plugin: ReferenceList;
 
@@ -103,6 +146,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     this.plugin = plugin;
 
     (this as any).suggestEl.addClass('sw-suggest');
+    this.installScrollGuard();
     (this as any).scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
       (this as any).suggestions.useSelectedItem(evt);
       return false;
@@ -120,6 +164,51 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       // renderCount): the closer inside a bracket, or the full citation form.
       { command: '↵', purpose: 'insert [[@key]]' },
     ]);
+  }
+
+  /**
+   * Keep wheel scrolling INSIDE the popup.
+   *
+   * Obsidian's suggestion list is a scroll container nested in the editor. When
+   * it reaches its end, the wheel event chains to the editor: the note scrolls
+   * away, the popup's anchor is invalidated, and Obsidian dismisses it. This
+   * happened only sometimes because it needs the list to actually be scrollable
+   * AND already at the boundary. A wheel listener on the suggest container
+   * stops the event reaching the editor; `preventDefault` at the top/bottom
+   * edges stops the chained scroll so the popup stays put. Scrolling within the
+   * list still works (the default action is only suppressed at the boundary),
+   * and the matching CSS `overscroll-behavior: contain` backs it up.
+   */
+  private installScrollGuard(): void {
+    const suggestEl = (this as any).suggestEl as HTMLElement | undefined;
+    if (!suggestEl) return;
+    suggestEl.addEventListener(
+      'wheel',
+      (evt: WheelEvent) => {
+        // Obsidian puts the scrollable list in `.suggestion`; use whichever of
+        // the list / container is actually scrollable, so the boundary test is
+        // right even if the DOM shape changes.
+        const candidates = [
+          suggestEl.querySelector('.suggestion') as HTMLElement | null,
+          suggestEl,
+        ].filter(Boolean) as HTMLElement[];
+        const scroller =
+          candidates.find((el) => el.scrollHeight > el.clientHeight) ??
+          candidates[0] ??
+          suggestEl;
+        const goingUp = evt.deltaY < 0;
+        const atTop = scroller.scrollTop <= 0;
+        const atBottom =
+          scroller.scrollTop + scroller.clientHeight >=
+          scroller.scrollHeight - 1;
+        // Never let the wheel bubble out to the editor (that is what scrolls
+        // the note and dismisses the popup).
+        evt.stopPropagation();
+        // At the edge, also suppress the default chain-scroll.
+        if ((goingUp && atTop) || (!goingUp && atBottom)) evt.preventDefault();
+      },
+      { passive: false }
+    );
   }
 
   /**
@@ -208,7 +297,16 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       searchQuery,
       () => gen !== this._searchGen
     );
-    if (gen === this._searchGen) this._lastSuggestions = result;
+    // A newer keystroke superseded this scan WHILE it ran (the 50 ms debounce
+    // above only catches supersession during the wait). Do NOT hand back the
+    // cancelled/empty result it produced: Obsidian applies results as each
+    // promise resolves, so an empty array from a stale generation can clear a
+    // popup that already showed the newer query's results — the "popup times
+    // out just after rendering" symptom. Return the last good list instead.
+    if (gen !== this._searchGen) {
+      return this._lastSuggestions.length ? this._lastSuggestions : result;
+    }
+    this._lastSuggestions = result;
     return result;
   }
 
@@ -276,7 +374,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         }
         const zotlitResults = await this.zotlitFallback(searchQuery);
         if (zotlitResults.length) return zotlitResults;
-        return indexReady ? [] : loadingSuggestion();
+        return terminalSuggestion(searchQuery, indexReady);
       }
 
       LOG(`tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
@@ -344,7 +442,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       }
       const zotlitResults = await this.zotlitFallback(searchQuery);
       if (zotlitResults.length) return zotlitResults;
-      return indexReady ? [] : loadingSuggestion();
+      return terminalSuggestion(searchQuery, indexReady);
     }
   }
 
@@ -486,6 +584,10 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       el.setText(
         'ScholarWeft: still loading your library — citekey search will be complete shortly.'
       );
+      return;
+    }
+    if (isNoResultsSuggestion(suggestion)) {
+      el.setText('No matches yet — keep typing to narrow the search.');
       return;
     }
     const frag = createFragment();
@@ -637,7 +739,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     suggestion: Fuse.FuseResult<PartialCSLEntry>,
     event: KeyboardEvent | MouseEvent
   ): void {
-    if (isLoadingSuggestion(suggestion)) return;
+    if (isPlaceholderSuggestion(suggestion)) return;
     const { context } = this;
     if (!context) return;
 
@@ -664,18 +766,43 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // closing delimiter must match the opening one, or a `[[@key]` wikilink is
     // silently broken. A bare `@` inserts a linked citation when the "Process
     // linked citations" setting is on; ⌘/Ctrl+Enter forces the Pandoc form.
-    const { text: replaceStr } = computeInsertion(
-      id,
-      { beforeStart, afterCursor, charBefore, afterOpenBracket },
-      {
-        linked: this.plugin.settings.renderLinkCitations !== false,
-        forcePandoc: !!(event.metaKey || event.ctrlKey),
-      }
-    );
+    const insertCtx = { beforeStart, afterCursor, charBefore, afterOpenBracket };
+    const linked = this.plugin.settings.renderLinkCitations !== false;
+    const forcePandoc = !!(event.metaKey || event.ctrlKey);
+    const { text: replaceStr } = computeInsertion(id, insertCtx, {
+      linked,
+      forcePandoc,
+    });
 
     context.editor.replaceRange(replaceStr, context.start, context.end);
     this.lastSelect = { ch: context.start.ch + replaceStr.length, line: context.start.line };
     this.close();
+
+    // Optional: a linked citation for an item with no literature note quietly
+    // creates the note from Zotero (never opened). Only the linked forms count;
+    // a `[@key]` bracket insertion is not a link, and a forced Pandoc citation
+    // is deliberately not one either.
+    const kind = insertionKind(insertCtx);
+    const insertedLinked =
+      linked && ((kind === 'bare' && !forcePandoc) || kind === 'wikilink');
+    const missingNoteAction =
+      this.plugin.settings.missingLinkedNoteAction ??
+      (this.plugin.settings.addNoteForLinkedCitations === true
+        ? 'onInsert'
+        : 'never');
+    if (insertedLinked && insertsNoteOnInsertion(missingNoteAction)) {
+      const activeFile = this.plugin.app.workspace.getActiveFile();
+      if (activeFile) {
+        void this.plugin.bibManager
+          .ensureLitNoteForCitekey(id, activeFile)
+          .then((created) => {
+            if (created) this.plugin.processReferences();
+          })
+          .catch((e) =>
+            console.warn('[sw:suggest] could not add a literature note for', id, e)
+          );
+      }
+    }
   }
 
   /**

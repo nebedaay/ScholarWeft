@@ -76,7 +76,7 @@ export interface NoteImportOptions {
   annotation?: AnnotationCalloutOptions;
   /**
    * Re-import strategy for the generated `## Notes` section:
-   * `ifEmpty` (default) / `replace` / `firstImportOnly`.
+   * `ifEmpty` (default) / `append` / `replace` / `firstImportOnly`.
    */
   notesReimport?: NotesReimport;
 }

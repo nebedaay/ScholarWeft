@@ -1,4 +1,4 @@
-import { passesCoverage, queryTerms, scoreEntry } from '../search-score';
+import { citekeyMatch, passesCoverage, queryTerms, scoreEntry } from '../search-score';
 
 const items = [
   {
@@ -76,5 +76,31 @@ describe('citekey matches record the interpreted TERMS', () => {
   it('an EXACT citekey match records the query term', () => {
     const s = scoreEntry(item, 'certeaupracticeeverydaylife1984');
     expect(s.matchedTerms).toEqual(['certeaupracticeeverydaylife1984']);
+  });
+});
+
+describe('citekeyMatch() — literal citekey prefixes', () => {
+  const key = 'smithMemory2020';
+
+  it('matches an exact key, ignoring a leading @', () => {
+    expect(citekeyMatch(key, 'smithMemory2020')?.exact).toBe(true);
+    expect(citekeyMatch(key, '@smithMemory2020')?.exact).toBe(true);
+    expect(citekeyMatch(key, 'SMITHMEMORY2020')?.exact).toBe(true);
+  });
+
+  it('matches any leading prefix of the key', () => {
+    for (const q of ['s', 'smi', 'smithMemory', 'smithMemory202', '@smithMemory202']) {
+      expect(citekeyMatch(key, q)).not.toBeNull();
+      expect(citekeyMatch(key, q)!.value).toBeLessThan(0); // the citekey band
+    }
+  });
+
+  it('matches the terms IN ORDER, each as a key substring', () => {
+    expect(citekeyMatch('bourdieuDistinctionSocial1984', 'bourdieu dist 1984')).not.toBeNull();
+  });
+
+  it('does not match an unrelated key', () => {
+    expect(citekeyMatch(key, 'jonesRitual')).toBeNull();
+    expect(citekeyMatch(key, 'memorysmith')).toBeNull();
   });
 });

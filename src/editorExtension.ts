@@ -23,7 +23,12 @@ import {
   getCitationSegments,
 } from './parser/parser';
 import { BibManager, FileCache } from './bib/bibManager';
-import equal from 'fast-deep-equal';
+import { matchRendered, onlyValType } from './citationMatch';
+import {
+  citationSpanClass,
+  citationSpanAttributes,
+  renderCitationContent,
+} from './citationRender';
 import { TooltipManager } from './tooltip';
 import { getLitNoteForCitekey } from './zotlit';
 
@@ -112,45 +117,11 @@ class CiteWidget extends WidgetType {
   }
 
   toDOM() {
-    const attr: Record<string, string> = {
-      'data-citekey': this.cite.citations.map((c) => c.id).join('|'),
-      'data-source': this.sourcePath,
-    };
-
-    if (this.cite.note) {
-      attr['data-note-index'] = this.cite.noteIndex.toString();
-    }
-
-    return createSpan(
-      {
-        cls: this.cite.reference
-          ? 'sw-reference' + (this.cite.citations.length > 1 ? ' is-list' : '')
-          : 'sw-citation is-resolved',
-        attr,
-      },
-      (span) => {
-        if (this.cite.reference) {
-          this.cite.citations.forEach((c, i) => {
-            const item = document.createElement('span');
-            item.className = 'sw-reference-entry';
-            item.setAttribute('data-citekey', c.id);
-            const html = this.referenceHtml[i];
-            const parsed = html
-              ? new DOMParser().parseFromString(html, 'text/html')
-              : null;
-            const entry =
-              parsed?.querySelector('.csl-entry') ??
-              parsed?.body.firstElementChild;
-            if (entry) {
-              item.appendChild(entry.cloneNode(true));
-            } else {
-              item.classList.add('is-unresolved');
-              item.textContent = c.id;
-            }
-            span.appendChild(item);
-          });
-          return;
-        }
+    const cls = citationSpanClass(this.cite);
+    const attr = citationSpanAttributes(this.cite, this.sourcePath);
+    return createSpan({ cls, attr }, (span) => {
+      // Reference insertions are not links and carry no link/note classes.
+      if (!this.cite.reference) {
         if (this.linkText) {
           span.addClass('is-link');
           // Use mousedown instead of click: in live preview CM synchronously
@@ -169,54 +140,21 @@ class CiteWidget extends WidgetType {
           });
         }
         // "is-wikilink": the citation is a [[@key]] wikilink (vs a plain
-        // [@citekey] bracket). "has-lit-note": a real literature note exists
-        // for the citekey (same lookup the tooltip uses for view/create).
-        // Together they drive the three-state styling:
-        //   linked     = is-wikilink && has-lit-note
-        //   unlinked   = !is-wikilink
-        //   unimported = is-wikilink && !has-lit-note
+        // [@citekey] bracket). "has-lit-note": a real literature note exists.
         if (this.isWikilink) span.addClass('is-wikilink');
         if (this.hasLitNote) span.addClass('has-lit-note');
-
-        if (/</.test(this.cite.val)) {
-          const parsed = new DOMParser().parseFromString(
-            this.cite.val,
-            'text/html'
-          );
-          span.append(...Array.from(parsed.body.childNodes));
-        } else if (
-          this.memberStates.length > 1 &&
-          this.memberStates.length === this.cite.citations.length
-        ) {
-          // Multi-work container: split the rendered string per member so each
-          // work carries its own is-wikilink / has-lit-note classes (and thus
-          // its own underline color). Citeproc joins members with "; " inside
-          // the surrounding parentheses; split on "; " only when the part count
-          // matches the member count (fall back to a single span otherwise).
-          const parts = this.cite.val.split(/;\s+/);
-          if (parts.length === this.memberStates.length) {
-            parts.forEach((part, i) => {
-              const m = this.memberStates[i];
-              const cls = ['sw-citation-member'];
-              if (m.isWikilink) cls.push('is-wikilink');
-              if (m.hasLitNote) cls.push('has-lit-note');
-              const ms = document.createElement('span');
-              ms.className = cls.join(' ');
-              ms.textContent = part;
-              span.appendChild(ms);
-              // Re-insert the "; " separator after every member but the last.
-              if (i < parts.length - 1) {
-                span.appendChild(document.createTextNode('; '));
-              }
-            });
-          } else {
-            span.setText(this.cite.val);
-          }
-        } else {
-          span.setText(this.cite.val);
-        }
       }
-    );
+
+      // Content (rendered value / reference entries / per-member split) comes
+      // from the SHARED `citationRender` module — identical to reading mode.
+      span.appendChild(
+        renderCitationContent({
+          cite: this.cite,
+          referenceHtml: this.referenceHtml,
+          memberStates: this.memberStates,
+        })
+      );
+    });
   }
 
   ignoreEvent(): boolean {
@@ -244,10 +182,6 @@ const citeDeco = (
       referenceHtml
     ),
   });
-
-function onlyValType(segs: Segment[]) {
-  return segs.map((s) => ({ type: s.type, val: s.val }));
-}
 
 function getCitationSignature(view: EditorView) {
   const {
@@ -282,14 +216,24 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
     }
     mkDeco(): DecorationSet {
       const view = this.view;
+      const bibManager = view.state.field(bibManagerField);
       const {
         plugin: { settings },
-      } = view.state.field(bibManagerField);
+      } = bibManager;
 
       const obsView = view.state.field(editorInfoField);
       const citekeyCache = view.state.field(citeKeyCacheField);
       const isLivePreview =
         settings.renderCitations && view.state.field(editorLivePreviewField);
+
+      // No cache for this file yet → live preview would paint per-segment
+      // "raw" marks until the library finishes loading (several seconds).
+      // Request a per-file render NOW (the same loop-guarded trigger reading
+      // mode uses), so the active note builds its cache first — the user is
+      // looking at it and may have just changed it.
+      if (!citekeyCache && obsView?.file) {
+        bibManager?.plugin?.requestPostProcessRender?.(obsView.file.path);
+      }
 
       const b = new RangeSetBuilder<Decoration>();
 
@@ -308,10 +252,9 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
 
         for (const match of segments) {
           if (!tree) tree = syntaxTree(view.state);
-          const rendered = citekeyCache?.citations.find(
-            (c) =>
-              !matched.has(c) &&
-              equal(onlyValType(c?.data || []), onlyValType(match))
+          const rendered = matchRendered(
+            (citekeyCache?.citations ?? []).filter((c) => !matched.has(c)),
+            match
           );
 
           if (rendered) {

@@ -31,19 +31,6 @@ export const DEFAULT_MIN_CHARS = 0;
 /** Below this many characters the ranked scorer is bypassed for recency/prefix. */
 export const MIN_SEARCH_CHARS = 3;
 
-// Single-@ trigger: an optional citekey token, no spaces. The tail is `*`
-// (allowing a bare `@`); the word-start boundary is enforced separately.
-const singleAtRE = /(^|[^\p{L}\p{N}@])(@)([\p{L}\p{N}:.#$%&\-+?<>~_/]*)$/u;
-
-// Single-@ trigger WITH SPACES allowed: the query runs to the end of the line
-// but stops at sentence punctuation (`.`, `,`, `;`, `!`, `?`), which is how a
-// reader signals "the citation ends here". The leading boundary stays.
-const singleAtSpaceRE = /(^|[^\p{L}\p{N}@])(@)([^.,;!?\n]*)$/u;
-
-// Double-@ trigger: `@@` followed by any text up to a period. A period ends the
-// trigger so normal sentence punctuation closes the popup.
-const doubleAtRE = /(^|[^\p{L}\p{N}@])(@@)([^.]*)$/u;
-
 /**
  * Characters that may precede an `@` for it to begin a citation. Everything
  * else (a letter or number, or symbols such as `%$#`) means the `@` is part of
@@ -85,24 +72,40 @@ export function detectCitationTrigger(
   const minChars = Math.max(0, opts.minChars ?? DEFAULT_MIN_CHARS);
   const allowSpaces = opts.allowSpaces !== false;
 
-  // `@@` is always space-tolerant, so check it first (its `@` also matches the
-  // single-`@` patterns).
-  const doubleMatch = line.match(doubleAtRE);
-  if (doubleMatch) {
-    const atPos = doubleMatch.index + doubleMatch[1].length;
-    if (!isWordStartBefore(line[atPos - 1])) return null;
-    if (doubleMatch[3].trim().length < minChars) return null;
-    return { atPos, query: DOUBLE_AT_PREFIX + doubleMatch[3], isDoubleAt: true };
+  // Find the RIGHTMOST valid trigger, not the first `@` on the line. A line can
+  // hold several `@`s (e.g. a citation followed by a new one: `[[@smith2005]] @`
+  // or `@smith2005 @`), and a greedy, start-anchored regex would match the OLD
+  // `@` and never trigger on the one just typed. Scan from the end so the `@`
+  // under the cursor wins.
+  for (let i = line.length - 1; i >= 0; i--) {
+    if (line[i] !== '@') continue;
+
+    // `@@` (the second `@` forms a pair with the previous char).
+    if (i > 0 && line[i - 1] === '@') {
+      const atPos = i - 1;
+      if (!isWordStartBefore(line[atPos - 1])) {
+        i = atPos; // skip the pair; nothing valid starts here
+        continue;
+      }
+      const query = line.slice(i + 1);
+      // `@@`: a period closes the trigger; spaces are always allowed.
+      if (query.includes('.')) continue;
+      if (query.trim().length < minChars) return null;
+      return { atPos, query: DOUBLE_AT_PREFIX + query, isDoubleAt: true };
+    }
+
+    // Single `@`.
+    if (!isWordStartBefore(line[i - 1])) continue;
+    const query = line.slice(i + 1);
+    // Sentence punctuation ends the citation. With spaces allowed, only
+    // `.,;!?` stop it; without, a space also ends the token.
+    const stop = allowSpaces ? /[.,;!?\n]/ : /[\s.,;!?\n]/;
+    if (stop.test(query)) continue;
+    if (query.trim().length < minChars) return null;
+    return { atPos: i, query, isDoubleAt: false };
   }
 
-  const match = allowSpaces
-    ? line.match(singleAtSpaceRE) ?? line.match(singleAtRE)
-    : line.match(singleAtRE);
-  if (!match) return null;
-  const atPos = match.index + match[1].length;
-  if (!isWordStartBefore(line[atPos - 1])) return null;
-  if (match[3].trim().length < minChars) return null;
-  return { atPos, query: match[3], isDoubleAt: false };
+  return null;
 }
 
 /** The effective query text (strips the `@@` sentinel and trims). */

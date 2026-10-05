@@ -7,6 +7,8 @@
 
 import { normalizePath } from 'obsidian';
 
+import type { NotesReimport } from './merge';
+
 export interface NoteCandidate {
   path: string;
   /** The note's `zotero-key` frontmatter value, if any. */
@@ -26,6 +28,70 @@ export function matchNoteByZoteroKey(
     if (c.zoteroKey === zoteroKey) return c.path;
   }
   return null;
+}
+
+/**
+ * True when a note's filename is the conventional `@<citekey>` for `citekey`.
+ *
+ * Anything else is "under a different name": a note imported by another plugin
+ * with its own naming scheme, or one still carrying an obsolete citekey. Such a
+ * note IS this item's note (its `zotero-key` matches), so importing/updating it
+ * asks what to do rather than silently reworking a file the user may not expect
+ * us to touch. `path` may be a path or a bare basename.
+ */
+export function noteNameMatchesCitekey(path: string, citekey: string): boolean {
+  if (!citekey) return false;
+  const base = (path.split('/').pop() ?? '').replace(/\.md$/i, '');
+  return base === `@${citekey}`;
+}
+
+/**
+ * The group id encoded in a stable `zotero-key` (`KEYg<groupID>`), or null for
+ * a My Library key. The suffix is a lowercase `g` + digits; Zotero item keys
+ * are uppercase, so this cannot be confused with an ordinary key.
+ */
+export function stableKeyGroupID(stable: string): number | null {
+  const m = /g(\d+)$/.exec(stable ?? '');
+  return m ? Number(m[1]) : null;
+}
+
+/** What to do when the item's note is found under a different filename. */
+export type ForeignNoteChoice =
+  | 'convert'
+  | 'convertIfEmpty'
+  | 'new'
+  | 'cancel';
+
+/**
+ * Map the foreign-note prompt's choice to what the importer does. Pure, so the
+ * policy is testable: `convert*` reworks the found note in place (and renames
+ * it), `new` leaves it and writes a fresh note, `cancel` changes nothing.
+ *
+ * The two convert choices differ only in how Zotero child notes meet the
+ * existing `## Notes` section:
+ *  - `convert` APPENDS them, so a note that arrived without child notes (e.g.
+ *    from ZotLit) and has since gained the user's own notes keeps that writing
+ *    and gains the Zotero notes below it;
+ *  - `convertIfEmpty` adds them only when the section is empty — the normal
+ *    import behaviour.
+ */
+export function foreignNoteAction(choice: ForeignNoteChoice): {
+  convert: boolean;
+  /** The `## Notes` re-import strategy the conversion uses. */
+  notesReimport: NotesReimport;
+  createNew: boolean;
+} {
+  switch (choice) {
+    case 'convert':
+      return { convert: true, notesReimport: 'append', createNew: false };
+    case 'convertIfEmpty':
+      return { convert: true, notesReimport: 'ifEmpty', createNew: false };
+    case 'new':
+      return { convert: false, notesReimport: 'ifEmpty', createNew: true };
+    case 'cancel':
+    default:
+      return { convert: false, notesReimport: 'ifEmpty', createNew: false };
+  }
 }
 
 /**
@@ -262,6 +328,8 @@ export function planCitekeyReconcile(
 // it here so existing importers of `note-lookup` keep working.
 export {
   CITEKEY_BODY,
+  formatCitekey,
+  needsKeyBraces,
   replaceCitekeys,
   scanCitekeys,
   transformBareCitekeys,

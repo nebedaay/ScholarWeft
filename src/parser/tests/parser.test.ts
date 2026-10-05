@@ -1,10 +1,16 @@
-import { CiteprocCite, cite, getCiteprocCites } from '../citeproc';
+import {
+  CiteprocCite,
+  cite,
+  getCiteprocCites,
+  renderInlineMarkdown,
+} from '../citeproc';
 import CSL from 'citeproc';
 import { locales, styles } from './styles';
 import {
   CitationGroup,
   Segment,
   SegmentType,
+  expandAlias,
   getCitationSegments,
   getCitations,
 } from '../parser';
@@ -284,10 +290,8 @@ const segmentFixtures: Record<string, Segment[][]> = {
       { from: 28, to: 33, val: 'smith', type: SegmentType.key },
       { from: 33, to: 34, val: '{', type: SegmentType.curlyBracket },
       { from: 34, to: 35, val: '}', type: SegmentType.curlyBracket },
-      { from: 35, to: 37, val: ', ', type: SegmentType.locatorSuffix },
-      { from: 37, to: 39, val: '99', type: SegmentType.locator },
-      { from: 39, to: 39, val: 'page', type: SegmentType.locatorLabel },
-      { from: 39, to: 51, val: ' years later', type: SegmentType.suffix },
+      // `{}` forces the rest to be a suffix: `99` is NOT a page locator.
+      { from: 35, to: 51, val: ', 99 years later', type: SegmentType.suffix },
       { from: 51, to: 52, val: ']', type: SegmentType.bracket },
     ],
   ],
@@ -682,28 +686,24 @@ describe('getCitationSegments(expandLinkAliases = true)', () => {
     ]));
 
   it('merges a multi-work container into one citation group', () =>
-    expect(
-      getCitationSegments('⟦[[@key]]; [[@key2]]⟧', false, true)
-    ).toEqual([
+    expect(getCitationSegments('[ [[@key]]; [[@key2]] ]', false, true)).toEqual(
       [
-        { from: 0, to: 1, val: '[', ...bracket },
-        { from: 0, to: 1, val: '@', ...at },
-        { from: 0, to: 1, val: 'key', ...key },
-        { from: 0, to: 1, val: ';', ...separator },
-        { from: 0, to: 1, val: ' ', ...prefix },
-        { from: 0, to: 1, val: '@', ...at },
-        { from: 0, to: 1, val: 'key2', ...key },
-        { from: 20, to: 21, val: ']', ...bracket },
-      ],
-    ]));
+        [
+          { from: 0, to: 1, val: '[', ...bracket },
+          { from: 0, to: 1, val: '@', ...at },
+          { from: 0, to: 1, val: 'key', ...key },
+          { from: 0, to: 1, val: ';', ...separator },
+          { from: 0, to: 1, val: ' ', ...prefix },
+          { from: 0, to: 1, val: '@', ...at },
+          { from: 0, to: 1, val: 'key2', ...key },
+          { from: 22, to: 23, val: ']', ...bracket },
+        ],
+      ]
+    ));
 
   it('applies alias rules inside a container and merges it', () =>
     expect(
-      getCitationSegments(
-        '⟦[[@key|see also @@, 3]]; [[@key2]]⟧',
-        false,
-        true
-      )
+      getCitationSegments('[ [[@key|see also @@, 3]]; [[@key2]] ]', false, true)
     ).toEqual([
       [
         { from: 0, to: 1, val: '[', ...bracket },
@@ -717,13 +717,13 @@ describe('getCitationSegments(expandLinkAliases = true)', () => {
         { from: 0, to: 1, val: ' ', ...prefix },
         { from: 0, to: 1, val: '@', ...at },
         { from: 0, to: 1, val: 'key2', ...key },
-        { from: 35, to: 36, val: ']', ...bracket },
+        { from: 37, to: 38, val: ']', ...bracket },
       ],
     ]));
 
   it('merges an in-text first member in a container as narrative', () =>
     expect(
-      getCitationSegments('⟦[[@key|@key -]]; [[@key2]]⟧', false, true)
+      getCitationSegments('[ [[@key|@key -]]; [[@key2]] ]', false, true)
     ).toEqual([
       [
         { from: 0, to: 1, val: '[', ...bracket },
@@ -734,51 +734,32 @@ describe('getCitationSegments(expandLinkAliases = true)', () => {
         { from: 0, to: 1, val: ' ', ...prefix },
         { from: 0, to: 1, val: '@', ...at },
         { from: 0, to: 1, val: 'key2', ...key },
-        { from: 27, to: 28, val: ']', ...bracket },
+        { from: 29, to: 30, val: ']', ...bracket },
       ],
     ]));
 
-  it('leaves invalid containers (single member, plain labels) alone', () =>
+  it('collapses a single-member container and merges a plain-label member', () =>
     expect(
       getCitationSegments(
-        '⟦[[@key]]⟧ and ⟦[[@key|Just a label]]; [[@key2]]⟧',
+        '[ [[@key]] ] and [ [[@key|Just a label]]; [[@key2]] ]',
         false,
         true
       )
     ).toEqual([
       [
-        { from: 1, to: 2, val: '[', ...bracket },
-        { from: 3, to: 4, val: '@', ...at },
-        { from: 4, to: 7, val: 'key', ...key },
-        { from: 7, to: 8, val: ']', ...bracket },
+        { from: 0, to: 1, val: '[', ...bracket },
+        { from: 0, to: 1, val: '@', ...at },
+        { from: 0, to: 1, val: 'key', ...key },
+        { from: 11, to: 12, val: ']', ...bracket },
       ],
       [
-        { from: 39, to: 40, val: '[', ...bracket },
-        { from: 41, to: 42, val: '@', ...at },
-        { from: 42, to: 46, val: 'key2', ...key },
-        { from: 46, to: 47, val: ']', ...bracket },
-      ],
-    ]));
-
-  it('merges a container that follows a parenthetical ⟦…⟧ on the same line', () =>
-    // The parenthetical's ⟦…⟧ shares a text node with the real container's ⟦;
-    // the walker/parser must skip it and merge the actual container.
-    expect(
-      getCitationSegments(
-        '8. Multi-work container (⟦…⟧): ⟦[[@key]]; [[@key2]]⟧',
-        false,
-        true
-      )
-    ).toEqual([
-      [
-        { from: 31, to: 32, val: '[', ...bracket },
-        { from: 31, to: 32, val: '@', ...at },
-        { from: 31, to: 32, val: 'key', ...key },
-        { from: 31, to: 32, val: ';', ...separator },
-        { from: 31, to: 32, val: ' ', ...prefix },
-        { from: 31, to: 32, val: '@', ...at },
-        { from: 31, to: 32, val: 'key2', ...key },
-        { from: 51, to: 52, val: ']', ...bracket },
+        { from: 17, to: 18, val: '[', ...bracket },
+        { from: 17, to: 18, val: 'Just a label', ...prefix },
+        { from: 17, to: 18, val: ';', ...separator },
+        { from: 17, to: 18, val: ' ', ...prefix },
+        { from: 17, to: 18, val: '@', ...at },
+        { from: 17, to: 18, val: 'key2', ...key },
+        { from: 52, to: 53, val: ']', ...bracket },
       ],
     ]));
 
@@ -941,9 +922,9 @@ const citationFixtures: Record<string, CitationGroup> = {
     citations: [
       {
         id: 'smith',
-        locator: '99',
-        label: 'page',
-        suffix: 'years later',
+        // `{}` (pandoc's explicit not-locator) keeps ", 99 years later" as a
+        // suffix rather than turning `99` into a page locator.
+        suffix: ', 99 years later',
       },
     ],
     from: 26,
@@ -1094,9 +1075,7 @@ const citeprocCites: Record<string, CiteprocCite[]> = {
       citationItems: [
         {
           id: 'smith',
-          locator: '99',
-          label: 'page',
-          suffix: 'years later',
+          suffix: ', 99 years later',
         },
       ],
       properties: {
@@ -1138,7 +1117,28 @@ const citeprocFixtures: Record<string, string[]> = {
   '[@schureetal2008; @brownetal2013; @lemberger-trueloveetal2018]': [
     '(Brown et al., 2013; Lemberger-Truelove et al., 2018; Schure et al., 2008)',
   ],
+  // Markdown emphasis in the free-text prefix/suffix (pandoc parses these as
+  // inlines; citeproc-js does not, so the parser converts them to HTML).
+  '[@iversetal2021, p. 30 and *passim*]': [
+    '(Ivers et al., 2021, p. 30 and <em>passim</em>)',
+  ],
+  '[*see* also @iversetal2021, p. 30 and **strong**]': [
+    '(<em>see</em> also Ivers et al., 2021, p. 30 and <strong>strong</strong>)',
+  ],
 };
+
+describe('renderInlineMarkdown()', () => {
+  it('converts emphasis and strong, leaving intraword underscores alone', () => {
+    expect(renderInlineMarkdown('see *also* and **bold**')).toBe(
+      'see <em>also</em> and <strong>bold</strong>'
+    );
+    expect(renderInlineMarkdown('_passim_ and __strong__')).toBe(
+      '<em>passim</em> and <strong>strong</strong>'
+    );
+    expect(renderInlineMarkdown('foo_bar_baz')).toBe('foo_bar_baz');
+    expect(renderInlineMarkdown('plain text')).toBe('plain text');
+  });
+});
 
 describe('cite', () => {
   const lib = new Map<string, any>();
@@ -1177,5 +1177,262 @@ describe('cite', () => {
         ).map((c) => c.val)
       ).toEqual(citeprocFixtures[k]);
     });
+  });
+});
+
+describe('pandoc curly-brace forms (forced locator / forced suffix)', () => {
+  const cites = (t: string) =>
+    getCitationSegments(t, false, true).map((s) => getCitations(s).citations);
+
+  it('{...} forces a locator (no explicit label; citeproc defaults to page)', () => {
+    expect(cites('[@smith{ii, A, D-Z}, with a suffix]')).toEqual([
+      [{ id: 'smith', locator: 'ii, A, D-Z', suffix: ', with a suffix' }],
+    ]);
+  });
+
+  it('{label ...} forces a locator with its label', () => {
+    expect(cites('[@smith, {pp. iv, vi-xi, (xv)-(xvii)} with suffix here]')).toEqual([
+      [
+        {
+          id: 'smith',
+          locator: 'iv, vi-xi, (xv)-(xvii)',
+          label: 'page',
+          suffix: 'with suffix here',
+        },
+      ],
+    ]);
+  });
+
+  it('{} forces the following text to stay a SUFFIX (not a page locator)', () => {
+    expect(cites('[@smith{}, 99 years later]')).toEqual([
+      [{ id: 'smith', suffix: ', 99 years later' }],
+    ]);
+  });
+
+  it('the linked equivalents carry the braces through the alias', () => {
+    // `@{}` (no space) and `@ {}` (space) both reach the same forced-suffix.
+    expect(cites('[[@smith|@{}, 99 years later]]')).toEqual([
+      [{ id: 'smith', suffix: ', 99 years later' }],
+    ]);
+    expect(cites('[[@smith|@ {}, 99 years later]]')).toEqual([
+      [{ id: 'smith', suffix: ', 99 years later' }],
+    ]);
+    expect(cites('[[@smith|@ {ii, A, D-Z}, with a suffix]]')).toEqual([
+      [{ id: 'smith', locator: 'ii, A, D-Z', suffix: ', with a suffix' }],
+    ]);
+  });
+
+  it('expandAlias keeps `{}` after the proxy key', () => {
+    expect(expandAlias('@{}, 99 years later', 'smith')).toBe('@smith{}, 99 years later');
+    expect(expandAlias('@ {}, 99 years later', 'smith')).toBe('@smith {}, 99 years later');
+  });
+});
+
+describe('multi-part locators: every volume synonym combines identically', () => {
+  // Regression: `v. 2, p. 200–201` used to fall through as label "verse" plus a
+  // literal suffix, so citeproc rendered ", v. 2, p. 200–201" instead of the
+  // Chicago volume:page form. Every spelling of "volume" must combine to the
+  // single locator "2:200–201" with label "page" — this is what Zotero accepts
+  // (one locator per item).
+  const variants = [
+    '[[@key|@, v. 2, p. 200–201]]',
+    '[[@key|@, vv. 2, p. 200–201]]',
+    '[[@key|@, vol. 2, p. 200–201]]',
+    '[[@key|@, vols. 2, p. 200–201]]',
+    '[[@key|@, volume 2, p. 200–201]]',
+    '[[@key|@, volumes 2, p. 200–201]]',
+    '[[@key|@, Bd. 2, p. 200–201]]',
+  ];
+
+  variants.forEach((text) => {
+    it(text, () => {
+      const seg = getCitationSegments(text, false, true)[0];
+      expect(getCitations(seg).citations).toEqual([
+        { id: 'key', locator: '2:200–201', label: 'page' },
+      ]);
+    });
+  });
+
+  it('leaves a standalone "vol. 2" with its volume label', () => {
+    const seg = getCitationSegments('[[@key|@, vol. 2]]', false, true)[0];
+    expect(getCitations(seg).citations).toEqual([
+      { id: 'key', locator: '2', label: 'volume' },
+    ]);
+  });
+
+  it('a lone "v. 2" keeps its CSL verse label (nothing to combine)', () => {
+    // `v.` is verse in CSL; only the volume+page pair is disambiguated to
+    // volume, because a volume token directly followed by a page is never a
+    // verse reference. On its own there is no evidence to override verse.
+    const seg = getCitationSegments('[[@key|@, v. 2]]', false, true)[0];
+    expect(getCitations(seg).citations).toEqual([
+      { id: 'key', locator: '2', label: 'verse' },
+    ]);
+  });
+
+  it('still treats a bare page locator as page', () => {
+    const seg = getCitationSegments('[[@key|@, p. 60]]', false, true)[0];
+    expect(getCitations(seg).citations).toEqual([
+      { id: 'key', locator: '60', label: 'page' },
+    ]);
+  });
+});
+
+describe('multi-part locator chains (volume:page + explicit third)', () => {
+  const cites = (t: string) =>
+    getCitationSegments(t, false, true).map((s) => getCitations(s).citations);
+
+  it('combines volume:page and names the third EXPLICITLY in the suffix', () => {
+    expect(cites('[@smith, vol. 2, p. 69, line 35]')).toEqual([
+      [{ id: 'smith', locator: '2:69', label: 'page', suffix: ', line 35' }],
+    ]);
+  });
+
+  it('does not split "vol." into "v" + "ol." on a comma chain', () => {
+    // Regression: the roman-numeral alternative in `locatorRe` matched the `v`
+    // of `vol.` and left `ol. …` in the suffix ("v ol." in live preview).
+    // page then vol is non-adjacent in the volume→page sense, so only the page
+    // remains a locator and the rest is an explicit suffix (no contraction).
+    expect(
+      cites(
+        '[@foucaultSubjectPower2000, p. i–iv, vol. 2–6, chapter 10–13 and *passim*]'
+      )
+    ).toEqual([
+      [
+        {
+          id: 'foucaultSubjectPower2000',
+          locator: 'i–iv',
+          label: 'page',
+          suffix: ', vol. 2–6, chapter 10–13 and *passim*',
+        },
+      ],
+    ]);
+  });
+
+  it('leaves a page+line pair uncontracted (no volume:page)', () => {
+    expect(cites('[@smith, p. 15, line 10]')).toEqual([
+      [{ id: 'smith', locator: '15', label: 'page', suffix: ', line 10' }],
+    ]);
+  });
+
+  it('does not corrupt a chapter+verse chain (no volume:page pair)', () => {
+    expect(cites('[@smith, chap. 4, v. 1]')).toEqual([
+      [{ id: 'smith', locator: '4', label: 'chapter', suffix: ', v. 1' }],
+    ]);
+  });
+
+  it('does NOT contract volume:page when a part intervenes', () => {
+    // `vol. 2, chap. 4, p. 69` must not become `2:69, chap. 4` (a volume+chapter
+    // shown like volume+page). Non-adjacent ⇒ no contraction.
+    expect(cites('[@smith, vol. 2, chap. 4, p. 69]')).toEqual([
+      [
+        {
+          id: 'smith',
+          locator: '2',
+          label: 'volume',
+          suffix: ', chap. 4, p. 69',
+        },
+      ],
+    ]);
+  });
+
+  it('works through the linked-alias form too', () => {
+    expect(
+      cites('[[@smith|@, vol. 2, p. 69, line 35]]')
+    ).toEqual([
+      [{ id: 'smith', locator: '2:69', label: 'page', suffix: ', line 35' }],
+    ]);
+  });
+
+  it('normalizes an extra locator range to an en dash', () => {
+    expect(cites('[@smith, vol. 2, p. 69, line 25-27]')).toEqual([
+      [{ id: 'smith', locator: '2:69', label: 'page', suffix: ', line 25\u201327' }],
+    ]);
+  });
+
+  it('narrative flag is applied even with a locator (dash processed first)', () => {
+    // Regression: the trailing ` -` used to be lost when a locator suffix
+    // (`vol. 2, p. 41–43 -`) was combined, so the citation was not narrative.
+    expect(cites('[[@key|@, vol. 2, p. 41–43 -]]')).toEqual([
+      [{ id: 'key', locator: '2:41–43', label: 'page', composite: true }],
+    ]);
+    expect(cites('[@key, 2:41–43 -]')).toEqual([
+      [{ id: 'key', locator: '2:41–43', label: 'page', composite: true }],
+    ]);
+  });
+
+  it('keeps braces in a linked forced-locator alias, combines, and applies narrative', () => {
+    // `@{…}` after the proxy must survive as a forced locator (the old token
+    // regex ate the `{` and left a stray `}`), and the forced block is parsed
+    // as a chain so volume:page still combines.
+    expect(expandAlias('@{, vol. 2, p. 41–43} -', 'key')).toBe(
+      '@key{, 2:41–43} -'
+    );
+    expect(cites('[[@key|@{, vol. 2, p. 41–43} -]]')).toEqual([
+      [{ id: 'key', locator: '2:41–43', label: 'page', composite: true }],
+    ]);
+    // Without the leading comma too.
+    expect(cites('[[@key|@{vol. 2, p. 41–43} -]]')).toEqual([
+      [{ id: 'key', locator: '2:41–43', label: 'page', composite: true }],
+    ]);
+    // A forced PAGE LIST stays one locator.
+    expect(cites('[[@key|@{pp. iv, vi-xi} -]]')).toEqual([
+      [{ id: 'key', locator: 'iv, vi-xi', label: 'page', composite: true }],
+    ]);
+  });
+});
+
+describe('@author [bracket] — author-in-text + bracketed citation', () => {
+  // Pandoc composition (verified against pandoc --citeproc): a bare `@key`
+  // followed by a bracket is author-in-text; a bracket with its own `@key`
+  // adds a second citation, while prose/locator before that key belongs to it.
+  const cites = (t: string) => {
+    const segs = getCitationSegments(t, false, true);
+    return segs.map((s) => getCitations(s).citations);
+  };
+
+  it('bracketed citation only', () => {
+    expect(cites('@a [@b]')).toEqual([
+      [{ id: 'a', composite: true }, { id: 'b' }],
+    ]);
+  });
+
+  it('prefix on the bracketed citation', () => {
+    expect(cites('@a [see also @b]')).toEqual([
+      [{ id: 'a', composite: true }, { id: 'b', prefix: 'see also' }],
+    ]);
+  });
+
+  it('locator on the LEADING citation, then a prefixed second', () => {
+    expect(cites('@a [p. 30; see also @b]')).toEqual([
+      [
+        { id: 'a', locator: '30', label: 'page', composite: true },
+        { id: 'b', prefix: 'see also' },
+      ],
+    ]);
+  });
+
+  it('bracketed locator with no second citation stays ONE citation', () => {
+    expect(cites('@a [p. 30]')).toEqual([
+      [{ id: 'a', locator: '30', label: 'page', composite: true }],
+    ]);
+  });
+
+  it('a same-work `-@key` inside the bracket is one citation (no split)', () => {
+    expect(cites('@a [-@a, p. 30]')).toEqual([
+      [
+        { id: 'a', 'author-only': true },
+        { id: 'a', locator: '30', label: 'page', 'suppress-author': true },
+      ],
+    ]);
+  });
+
+  it('a DIFFERENT suppressed work inside the bracket is a second citation', () => {
+    expect(cites('@a [-@b]')).toEqual([
+      [
+        { id: 'a', 'author-only': true },
+        { id: 'b', 'suppress-author': true },
+      ],
+    ]);
   });
 });

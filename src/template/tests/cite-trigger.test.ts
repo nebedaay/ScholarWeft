@@ -83,6 +83,36 @@ describe('detectCitationTrigger()', () => {
     expect(detectCitationTrigger('see @bourdieu dist.')).toBeNull();
     expect(detectCitationTrigger('@smith,')).toBeNull();
   });
+
+  it('triggers on the NEW @ after an earlier citation (rightmost wins)', () => {
+    // Regression: a greedy, start-anchored regex matched the OLD `@` on the
+    // line, so typing a fresh `@` after any citation did nothing. The trigger
+    // must use the RIGHTMOST valid `@`.
+    expect(detectCitationTrigger('[[@smith2005]] @')).toMatchObject({
+      atPos: 15,
+      query: '',
+    });
+    expect(detectCitationTrigger('[@smith2005] @')).toMatchObject({
+      atPos: 13,
+      query: '',
+    });
+    expect(detectCitationTrigger('@smith2005 @')).toMatchObject({
+      atPos: 11,
+      query: '',
+    });
+    expect(detectCitationTrigger('[[@a]] [[@b]] @')).toMatchObject({
+      atPos: 14,
+      query: '',
+    });
+    expect(detectCitationTrigger('[[@smith2005]] @smi')).toMatchObject({
+      atPos: 15,
+      query: 'smi',
+    });
+    expect(detectCitationTrigger('[[@smith2005]] @@')).toMatchObject({
+      atPos: 15,
+      isDoubleAt: true,
+    });
+  });
 });
 
 describe('normalizeQueryText()', () => {

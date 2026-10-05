@@ -320,6 +320,45 @@ describe('emphasis offsets survive normalisation', () => {
   });
 });
 
+describe('bolding uses the shared search fold (hamza / ʿayn / doubled long vowels)', () => {
+  // The title spells the word one way; the query another. The scorer matched
+  // them via the shared fold, so the emphasis must find that spelling too.
+  const title = 'Jawāhir al-rasāʾil: al-ḥāwī';
+
+  it('bolds a macron spelling for a folded or apostrophe query', () => {
+    for (const q of ['rasail', "rasa'il", 'rasāʾil', 'rasaail']) {
+      const spans = findTermSpans(title, [q]);
+      expect(spans.map((s) => title.slice(s.start, s.start + s.length))).toEqual([
+        'rasāʾil',
+      ]);
+    }
+  });
+
+  it('bolds a doubled spelling for the macron query', () => {
+    const t = 'Ziyādat al-jawaahir';
+    const spans = findTermSpans(t, ['jawāhir']);
+    expect(spans.map((s) => t.slice(s.start, s.start + s.length))).toEqual([
+      'jawaahir',
+    ]);
+  });
+
+  it('bolds a full hamza word for an apostrophe query', () => {
+    const t = 'Jawāhir al-maʿānī wa-bulūgh';
+    const spans = findTermSpans(t, ["ma'ani"]);
+    expect(spans.map((s) => t.slice(s.start, s.start + s.length))).toEqual([
+      'maʿānī',
+    ]);
+  });
+
+  it('bolds the whole word across a preserved hamza seam', () => {
+    const t = 'wa tasāʾala al-qawm';
+    const spans = findTermSpans(t, ["tasa'ala"]);
+    expect(spans.map((s) => t.slice(s.start, s.start + s.length))).toEqual([
+      'tasāʾala',
+    ]);
+  });
+});
+
 describe('matchedTerms reflect what the scorer interpreted', () => {
   // `womenauthoritysenegal` is ONE unbroken run to the tokeniser, but the scorer
   // splits it into words. Recording the run stored a string that appears in no

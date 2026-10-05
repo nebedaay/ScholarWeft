@@ -30,6 +30,21 @@ export function resolveLiteratureNoteFolder(opts: {
   return zotlitFolder || settingsFolder || DEFAULT_LITERATURE_NOTE_FOLDER;
 }
 
+/**
+ * Is `path` inside `folder` (vault-root relative), including ANY subfolder? An
+ * empty `folder` is the vault root, so everything is inside.
+ *
+ * This is what makes a library subfolder (e.g. `_2 Bibliographic notes/Andrea
+ * Lickacz readings`) count as part of the import tree: notes there are found by
+ * the folder-scoped lookup and are never treated as "outside" and moved or
+ * duplicated, whatever the subfolder is named.
+ */
+export function isInFolder(path: string, folder: string): boolean {
+  const base = (folder ?? '').replace(/\/+$/, '');
+  if (!base) return true;
+  return path === base || path.startsWith(`${base}/`);
+}
+
 /** Characters not allowed in a folder name, replaced with `-`. */
 const UNSAFE_FOLDER_CHARS = /[\\/:*?"<>|#^[\]]/g;
 

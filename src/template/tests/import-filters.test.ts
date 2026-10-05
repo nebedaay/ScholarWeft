@@ -3,6 +3,7 @@ import {
   defaultFilters,
   flagsFromChildren,
   flagsFromPresence,
+  litNoteFilterForTarget,
   passesImportFilters,
   typeGroupOf,
   type ImportFilters,
@@ -168,5 +169,17 @@ describe('countPassing()', () => {
   it('counts items satisfying the filters', () => {
     const items = [flags({ hasLitNote: false }), flags({ hasLitNote: true }), flags({})];
     expect(countPassing(items, (x) => x, defaultFilters())).toBe(2);
+  });
+});
+
+describe('litNoteFilterForTarget', () => {
+  it('keeps the saved note filter only when adding literature notes', () => {
+    expect(litNoteFilterForTarget('notes', true)).toBe(true);
+    expect(litNoteFilterForTarget('notes', false)).toBe(false);
+  });
+
+  it('releases the note filter to All for citations and both', () => {
+    expect(litNoteFilterForTarget('citations', true)).toBe(false);
+    expect(litNoteFilterForTarget('both', true)).toBe(false);
   });
 });

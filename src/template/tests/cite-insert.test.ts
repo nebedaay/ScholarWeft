@@ -125,6 +125,35 @@ describe('computeInsertion() — bracket and wikilink contexts', () => {
   });
 });
 
+describe('computeInsertion() — keys that need Pandoc braces', () => {
+  // A trailing `.` (or any character a bare `@key` would drop) must be written
+  // `@{key}` in Pandoc citation text; a wikilink TARGET is a filename and must
+  // stay brace-free so it resolves.
+  it('wraps a Pandoc citation in @{…}', () => {
+    expect(computeInsertion('smith2005.', ctx(''), PANDOC).text).toBe(
+      '[@{smith2005.}]'
+    );
+    expect(computeInsertion('smith2005.', ctx(''), FORCE).text).toBe(
+      '[@{smith2005.}]'
+    );
+    expect(computeInsertion('smith2005.', ctx('['), LINKED).text).toBe(
+      '@{smith2005.}]'
+    );
+    expect(computeInsertion('smith2005.', ctx('[@a; '), LINKED).text).toBe(
+      '@{smith2005.}'
+    );
+  });
+
+  it('leaves a wikilink target brace-free (it is a filename)', () => {
+    expect(computeInsertion('smith2005.', ctx(''), LINKED).text).toBe(
+      '[[@smith2005.]]'
+    );
+    expect(computeInsertion('smith2005.', ctx('[['), LINKED).text).toBe(
+      '@smith2005.]]'
+    );
+  });
+});
+
 describe('insertionKind() — one classifier for insertion and hints', () => {
   it('classifies every context', () => {
     expect(insertionKind(ctx(''))).toBe('bare');

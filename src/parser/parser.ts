@@ -98,7 +98,7 @@ const nonKeyPunct = /\p{P}/u;
 const space = /[ \t\v]/;
 const preKey = /[ \t\v[\-\r\n;]/;
 const locatorRe =
-  /^((?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+)(?:[ \t]*,[ \t]*(?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+))*)/iu;
+  /^((?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?(?:[–—][[(]?[a-z\p{N}]+[\])]?)?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+(?![a-z\p{L}]|\.\s*\p{N}))(?:[ \t]*,[ \t]*(?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?(?:[–—][[(]?[a-z\p{N}]+[\])]?)?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+(?![a-z\p{L}]|\.\s*\p{N})))*)/iu;
 
 function isTerminus(s?: string) {
   return !s || s === '\r' || s === '\n';
@@ -340,6 +340,14 @@ const parseExplicitLocator = (state: State) => {
       return [];
     }
   } else {
+    // Forced locator with no label (`{2:41-43}` or `{, 2:41-43}`): the whole
+    // block is the locator. Strip a leading separator so `{, 2:41-43}` yields
+    // locator `2:41-43`, not `, 2:41-43`.
+    const m = state.currentSegment.val.match(/^([ \t]*[,;]?[ \t]*)([\s\S]*)$/);
+    if (m && m[2]) {
+      state.currentSegment.from += m[1].length;
+      state.currentSegment.val = m[2];
+    }
     state.currentSegment.type = SegmentType.locator;
   }
   return segments;
@@ -373,6 +381,55 @@ export interface RenderedCitation extends CitationGroup {
   note?: string;
 }
 
+/**
+ * Split a raw locator VALUE that begins with a label into its first labeled
+ * part (`vol. 2, p. 41-43` → label `vol.`, value `2`, rest `, p. 41-43`).
+ * A forced-locator block (`{vol. 2, p. 41-43}`) reaches `getCitations` as ONE
+ * label-less locator value; this recovers the chain so volume:page can combine,
+ * exactly as it does for the unbraced form. Returns null when no leading label
+ * is present (`{ii, A, D-Z}`), leaving the value as a literal locator.
+ */
+function splitLeadingLocatorLabel(
+  value: string
+): { label: string; value: string; rest: string } | null {
+  const m = value.match(locators);
+  if (!m) return null;
+  const after = value.slice(m.index + m[0].length);
+  const lm = after.match(locatorRe);
+  if (!lm) return null;
+  return {
+    label: m[2],
+    value: lm[1],
+    rest: after.slice(lm.index + lm[0].length),
+  };
+}
+
+/**
+ * Split a raw locator VALUE at its first `, <label> <value>` continuation
+ * (`2, p. 41-43` → value `2`, rest `, p. 41-43`). Covers a forced-locator block
+ * whose content already had its leading label consumed by the state machine
+ * (`{vol. 2, p. 41-43}` → label `vol.`, value `2, p. 41-43`). A comma list
+ * WITHOUT a label (`30-33, 40-44`) has no continuation and is left intact.
+ */
+function splitLocatorValueContinuation(
+  value: string,
+  label: string | undefined
+): { value: string; rest: string } | null {
+  // Only meaningful for a VOLUME followed by a PAGE — that is the one pair
+  // combineLocators contracts. A page LIST (`pp. iv, vi-xi`) must stay intact.
+  if (!isVolumeLabel(label)) return null;
+  let i = value.indexOf(',');
+  while (i !== -1) {
+    const rest = value.slice(i);
+    const parts = parseFollowingLocatorParts(rest).parts;
+    if (parts.length && isPageLabel(parts[0].label)) {
+      return { value: value.slice(0, i).trim(), rest };
+    }
+    i = value.indexOf(',', i + 1);
+  }
+  return null;
+}
+
 export function getCitations(
   segments: Segment[],
   locale: string = 'en-US'
@@ -393,31 +450,58 @@ export function getCitations(
   let suppressAuthor = false;
   let onlyAuthor = false;
   let composite = false;
+  // True once a `;` separator has split this group — the `@author [p. 30; … @b]`
+  // form needs no further split (the separator already did it), so the inner
+  // `at` must not split again.
+  let sawSeparator = false;
 
   const push = () => {
     // A trailing whitespace-separated '-' is the author-in-text flag (the
-    // pandoc `@key -` form). On the first citation it makes the whole group
-    // narrative (composite); elsewhere it is dropped (this engine cannot
-    // render mid-group narrative). The marker itself is never shown.
-    if (suffix?.trim() === '-') {
+    // pandoc `@key -` form). Process it FIRST — before locator combination —
+    // because when the group also carries a locator the dash sits at the end of
+    // the whole suffix (`vol. 2, p. 41-43 -`), and `combineLocators` would
+    // otherwise consume that suffix and leave the dash unhandled. On the first
+    // citation it makes the whole group narrative (composite); elsewhere it is
+    // dropped. The marker itself is never shown.
+    if (suffix && /(^|\s)-\s*$/.test(suffix)) {
       if (cites.length === 0) composite = true;
-      suffix = undefined;
+      suffix = suffix.replace(/\s*-\s*$/, '');
+      if (!suffix.trim()) suffix = undefined;
+    }
+
+    // A forced-locator block (`{vol. 2, p. 41-43}`) arrives as ONE label-less
+    // locator value. Recover its leading label + value + following parts so the
+    // volume:page combination applies, exactly as for the unbraced chain.
+    if (!label && locator) {
+      const split = splitLeadingLocatorLabel(locator);
+      if (split) {
+        label = split.label;
+        locator = split.value;
+        suffix = (split.rest || '') + (suffix ?? '');
+      }
+    }
+    // A locator VALUE may still carry a `, <label> <value>` continuation
+    // (`{vol. 2, p. 41-43}` → value `2, p. 41-43`); move it to the suffix so
+    // combineLocators sees it.
+    if (locator) {
+      const cont = splitLocatorValueContinuation(locator, label);
+      if (cont) {
+        locator = cont.value;
+        suffix = cont.rest + (suffix ?? '');
+      }
     }
 
     // Combine a multi-part locator "vol. X, p. Y" into the single Chicago
     // locator "X:Y". Zotero allows only ONE locator per citation item, and
     // Chicago renders volume:page as "1:113" — so `vol. I, p. 113` becomes
     // locator "1:113" (roman volume converted to arabic), label "page".
-    if (
-      (label === 'volume' || label === 'vol.' || label === 'vols.') &&
-      locator &&
-      suffix &&
-      /^,\s*p{1,2}\.?\s*(\S+)/i.test(suffix)
-    ) {
-      const page = suffix.replace(/^,\s*p{1,2}\.?\s*/i, '');
-      locator = `${romanToArabic(locator)}:${page}`;
-      label = 'page';
-      suffix = undefined;
+    // Every volume synonym resolves to the same CSL term (see isVolumeLabel),
+    // so `v. 2, p. 200–201` behaves exactly like `vol. 2, …`.
+    const combined = combineLocators(label, locator, suffix);
+    if (combined) {
+      locator = combined.locator;
+      label = combined.label;
+      suffix = combined.suffix;
     }
 
     const cite: Citation = {
@@ -448,6 +532,39 @@ export function getCitations(
       case SegmentType.at:
         if (i === 0) {
           composite = true;
+          continue;
+        }
+        // Pandoc's `@author [bracket]` — a BARE narrative citation immediately
+        // followed by a bracketed citation (`@smith2025 [see also @jones2000]`,
+        // `@a [@b]`) — arrives as ONE segment run whose first segment is a bare
+        // `at`. Split at the FIRST inner `at` so the leading key becomes its own
+        // narrative (author-only) citation and the bracketed citation a second
+        // item. `@a [p. 30]` has no inner `at` → stays ONE citation (locator on
+        // `a`). `@a [p. 30; see also @b]` DOES have a `;` separator, which
+        // already split the group, so we must not split again (that duplicated
+        // `a`). Linked/containered groups start with `bracket:[`, never this.
+        if (
+          !sawSeparator &&
+          segments[0].type === SegmentType.at &&
+          key !== undefined &&
+          // A `-@key` inside the bracket is a suppress-author CONTINUATION of
+          // the leading citation (`@key [-@key, p. 30]` = one citation, the
+          // plugin's convention), not a second work — do not split there.
+          segments[i - 1]?.type !== SegmentType.suppressor
+        ) {
+          // Prose between the leading key and the bracket's `@key` (e.g.
+          // `[see also @b]`) is the NEW item's prefix, not the narrative's
+          // suffix — lift it off before pushing the narrative citation.
+          const carried = suffix ?? prefix;
+          suffix = undefined;
+          push();
+          prefix = carried;
+          locator = undefined;
+          label = undefined;
+          infix = undefined;
+          onlyAuthor = false;
+          suppressAuthor = false;
+          composite = false;
         }
         continue;
       case SegmentType.suppressor:
@@ -471,6 +588,7 @@ export function getCitations(
         onlyAuthor = false;
         suppressAuthor = false;
         composite = false;
+        sawSeparator = true;
         continue;
       case SegmentType.key:
         key = seg.val;
@@ -498,6 +616,176 @@ export function getCitations(
     from: segments[0].from,
     to: segments[segments.length - 1].to,
     reference: reference || undefined,
+  };
+}
+
+/**
+ * True when a parsed locator label names a VOLUME in any of its forms.
+ *
+ * The parser reads the label token verbatim ("vol.", "volume", "v.", localized
+ * spellings), and `label` here may be either a raw token or an already-mapped
+ * CSL term. Both `expandAlias` and `getCitations` must recognize the whole
+ * family so that `vol. 2, p. 3`, `volume 2, p. 3`, `v. 2, p. 3` and `vols. 2,
+ * p. 3` are all treated identically (pandoc accepts every volume abbreviation).
+ * English forms are matched directly (covering locales where the label is left
+ * unmapped); localized forms resolve through `locatorToTerm` for the locale.
+ */
+export function isVolumeLabel(label: string | undefined, locale = 'en-US'): boolean {
+  if (!label) return false;
+  const trimmed = label.trim().toLowerCase();
+  // Direct English spellings/abbreviations, singular and plural. `v.`/`vv.`
+  // are verse in CSL, but the vault writes them for volume (the two share the
+  // abbreviation); a leading volume token followed by a page locator is
+  // unambiguously a volume:page citation, so treat them as volume here.
+  if (
+    /^(v|vv|vo|vlm|vlms|vol|vols|volume|volumes|tom|tome|tomes|band|bd|bde|bind)$/.test(
+      trimmed.replace(/\.$/, '')
+    )
+  ) {
+    return true;
+  }
+  // Localized forms (e.g. "m" in ar, "جلد" in fa, "т" in uk) via the map.
+  const term = locatorToTerm[locale]?.[trimmed] ?? locatorToTerm[locale]?.[trimmed.replace(/\.$/, '')];
+  return term === 'volume';
+}
+
+/** True when a parsed label is (or defaults to) the PAGE locator. */
+function isPageLabel(label: string | undefined, locale = 'en-US'): boolean {
+  if (!label) return true; // an unlabeled locator defaults to page
+  return label === 'page' || locatorToTerm[locale]?.[label] === 'page';
+}
+
+/**
+ * Combine a volume locator followed by a page locator into the single Chicago
+ * "volume:page" locator (e.g. `vol. I, p. 113` → `locator "1:113"`, label
+ * "page"). Zotero/citeproc allow only ONE locator per citation item, and
+ * Chicago renders it as `1:113`. Accepts every volume synonym (isVolumeLabel)
+ * and `p.`/`pp.` (with or without a period) after the comma. Returns null when
+ * the shape does not match, so the caller keeps the original suffix.
+ */
+export function combineVolumePage(
+  label: string | undefined,
+  locator: string | undefined,
+  suffix: string | undefined,
+  locale = 'en-US'
+): { locator: string; label: string } | null {
+  if (!locator || !suffix || !isVolumeLabel(label, locale)) return null;
+  const m = suffix.match(/^,\s*p{1,2}\.?\s*(\S.*)$/i);
+  if (!m) return null;
+  return { locator: `${romanToArabic(locator)}:${m[1].trim()}`, label: 'page' };
+}
+
+/** One labeled locator part parsed from a citation suffix. */
+interface LocatorPart {
+  /** Raw label token as written (`vol.`, `p.`, `chapter`, or `''`). */
+  label: string;
+  value: string;
+  /** Offset in the parsed string where the part's separator starts, and just
+   *  past its value. */
+  start: number;
+  end: number;
+}
+
+/**
+ * Parse the labeled locator parts after the first in a citation suffix — the
+ * `, vol. 2–6, chapter 10–13 and *passim*` tail. Stops at the first chunk that
+ * is not `, <label> <value>` (prose such as `and *passim*`), which is returned
+ * as `tail`. Values use the same `locatorRe` as the first part, so a
+ * comma-joined number list stays one value and a following label is not
+ * swallowed.
+ */
+function parseFollowingLocatorParts(
+  suffix: string
+): { parts: LocatorPart[]; tail: string } {
+  const parts: LocatorPart[] = [];
+  let cursor = 0;
+  while (cursor < suffix.length) {
+    const rest = suffix.slice(cursor);
+    const sep = rest.match(/^[ \t]*[;,]?[ \t]*/);
+    if (!sep || !/[;,]/.test(sep[0])) break; // parts are comma/semicolon separated
+    const sepLen = sep[0].length;
+    const afterSep = rest.slice(sepLen);
+    const labelMatch = afterSep.match(locators);
+    if (!labelMatch) break;
+    const valStart = sepLen + labelMatch[0].length;
+    const valueMatch = suffix.slice(cursor + valStart).match(locatorRe);
+    if (!valueMatch) break;
+    parts.push({
+      label: labelMatch[2],
+      value: valueMatch[1],
+      start: cursor,
+      end: cursor + valStart + valueMatch[0].length,
+    });
+    cursor = cursor + valStart + valueMatch[0].length;
+  }
+  return { parts, tail: suffix.slice(cursor) };
+}
+
+/**
+ * Combine a MULTI-PART locator chain to what CSL/Zotero can hold: one colon
+ * locator plus an explicit suffix. Pandoc/CSL allow only ONE locator per
+ * citation item, so the plugin picks the volume+page pair (the only nesting
+ * pair Chicago contracts to `V:P`) and leaves every other division EXPLICIT in
+ * the suffix, in source order:
+ *
+ *   vol. 2, p. 69            -> locator "2:69",   label page
+ *   vol. 2, p. 69, line 35   -> locator "2:69",   suffix ", line 35"
+ *   p. i–iv, vol. 2–6, chapter 10–13 and *passim*
+ *                            -> locator "2–6:i–iv", suffix ", chapter 10–13 and *passim*"
+ *
+ * Returns null when there is no volume+page pair, so the caller keeps the
+ * plain single-locator + suffix parse (e.g. `p. 15, line 10`).
+ */
+export function combineLocators(
+  label: string | undefined,
+  locator: string | undefined,
+  suffix: string | undefined,
+  locale = 'en-US'
+): { locator: string; label: string; suffix?: string } | null {
+  if (!locator) return null;
+  const first: LocatorPart = {
+    label: label ?? '',
+    value: locator,
+    start: 0,
+    end: 0,
+  };
+  const parsed = suffix
+    ? parseFollowingLocatorParts(suffix)
+    : { parts: [] as LocatorPart[], tail: '' };
+  const all = [first, ...parsed.parts];
+
+  const isPage = (l: string) =>
+    !l || l === 'page' || locatorToTerm[locale]?.[l] === 'page';
+  const isVol = (l: string) => isVolumeLabel(l, locale);
+
+  // Volume:page is combined ONLY when they ADJACENT (`vol. 2, p. 69`). An
+  // intervening part makes the chain non-adjacent and is left alone
+  // (`vol. 2, chap. 4, p. 69` → `2:69, chap. 4` would be illogical — a volume
+  // and a chapter shown like a volume and a page). Pandoc/CSL have no form for
+  // three locators anyway, so the whole chain stays as parsed: page locator +
+  // explicit suffix.
+  const volIdx = all.findIndex((p) => isVol(p.label));
+  const pageIdx = all.findIndex((p) => isPage(p.label));
+  if (volIdx === -1 || pageIdx === -1 || volIdx === pageIdx) return null;
+  if (pageIdx - volIdx !== 1) return null;
+
+  const combined = `${romanToArabic(all[volIdx].value)}:${all[pageIdx].value}`;
+
+  // Any further divisions stay explicit, in source order, using the label
+  // token as written (no CSL localization — the third locator is a suffix).
+  // Normalize a numeric/roman RANGE's hyphen to an en dash, matching how
+  // citeproc/pandoc render locator ranges (`10-13` → `10–13`).
+  const enDash = (v: string) =>
+    v.replace(/(?<=[\p{L}\p{N}])-(?=[\p{L}\p{N}])/gu, '\u2013');
+  const others = all.filter((_, i) => i !== volIdx && i !== pageIdx);
+  const text = others
+    .map((p) => (p.label ? `${p.label} ${enDash(p.value)}` : enDash(p.value)))
+    .join(', ');
+  const newSuffix = (text ? ', ' + text : '') + parsed.tail;
+  return {
+    locator: combined,
+    label: 'page',
+    suffix: newSuffix.trim() ? newSuffix : undefined,
   };
 }
 
@@ -542,18 +830,23 @@ function romanToArabic(s: string): string {
  *   '-@key'           ->  '-@key'        (suppressed author survives)
  */
 export function expandAlias(alias: string, linkKey: string): string {
-  const expanded = alias.replace(/@[^\s,;]*/g, '@' + linkKey);
+  // Replace every `@`-token with the link key. `{` is EXCLUDED from the token
+  // body, so a brace immediately after the proxy survives and becomes a
+  // forced-locator block: `@{vol. 2, p. 41-43}` → `@key{vol. 2, p. 41-43}`
+  // (the proxy expands, the braces stay). The old `@[^\s,;]*` consumed the `{`
+  // and left a stray `}`. A bare `@{}` likewise becomes `@key{}`.
+  const expanded = alias.replace(/@[^\s,;{]*/g, '@' + linkKey);
   // Combine "vol. X, p. Y" / "vol. X, pp. Y-Z" into "X:Y" / "X:Y-Z".
-  // Handles both arabic and roman volume numerals (roman → arabic).
+  // Handles both arabic and roman volume numerals (roman → arabic). EVERY
+  // volume synonym (vol./vols./volume/volumes/v./vv./bd./Bd./band/bind/tome)
+  // is accepted so the alias and segment paths agree (see isVolumeLabel).
+  // The page capture stops at `}` so a forced-locator block isn't overrun.
   return expanded.replace(
-    /(^|[\s,(])vol\.\s*([IVXLCDM]+|\d+),\s*p{1,2}\.?\s*(\S+)/gi,
+    /(^|[\s,({])(?:vols?|volumes?|vv?|bd|bde|band|bind|tomes?|tom)\.?\s*([IVXLCDM]+|\d+),\s*p{1,2}\.?\s*([^\s}]+)/gi,
     (_m, pre: string, vol: string, page: string) =>
       `${pre}${romanToArabic(vol)}:${page}`
   );
 }
-
-const containerOpen = '\u27E6'; // ⟦
-const containerClose = '\u27E7'; // ⟧
 
 export interface ContainerMember {
   key: string;
@@ -580,47 +873,29 @@ const containerMemberRe =
  *
  *   [ [[@a|see also @@, 3]]; [[@b]]; [[@c]] ]
  *
- * or the multi-work form
- *
- *   ⟦[[@a|see also @@, 3]]; [[@b]]; [[@c]]⟧
- *
  * — into its members plus a merged citation expression `[see also @a, 3; @b; @c]`.
  * This is the single source of truth for container parsing: `transformLinkAliases`
  * (parsing/live preview) and the reading-mode post-processor both call it, and
  * renderers branch on `reference` rather than re-detecting the alias.
  *
  * A `reference`/`ref` member marks the whole container as a REFERENCE list.
- * Reference containers are permissive in BOTH delimiters: everything between
- * the members (`;`, labels, prose) is discarded and each member contributes its
- * own citekey, so `[[@a|reference]] [[@b]]`, `[[@a|reference]]; see [[@b]]`,
- * etc. all parse the same way. Renderers then show the full entries instead of
- * the in-text citation.
- *
- * A container with no reference member keeps its historical rules:
- *   - `[ … ]` is permissive (text between members ignored, plain `[@key]`
- *     members allowed, a single member collapses to `[@a]`);
- *   - `⟦ … ⟧` is strict (only whitespace/`;` between members, ';' required,
- *     plain-label members rejected) and returns null otherwise.
+ * Reference containers are permissive: everything between the members (`;`,
+ * labels, prose) is discarded and each member contributes its own citekey, so
+ * `[[@a|reference]] [[@b]]`, `[[@a|reference]]; see [[@b]]`, etc. all parse the
+ * same way. Renderers then show the full entries instead of the in-text
+ * citation. A container with no reference member keeps its historical rule:
+ * `[ … ]` is permissive (text between members ignored, plain `[@key]` members
+ * allowed, a single member collapses to `[@a]`).
  */
 export function mergeContainerExpression(
   containerText: string
 ): MergedContainer | null {
-  const isUnicode =
-    containerText.startsWith(containerOpen) &&
-    containerText.endsWith(containerClose);
   const isBracket =
-    !isUnicode &&
     containerText.startsWith('[') &&
     containerText.endsWith(']') &&
     containerText[1] !== '[';
-  if (!isUnicode && !isBracket) return null;
-  const strict = isUnicode;
-  const openLen = isUnicode ? containerOpen.length : 1;
-  const closeLen = isUnicode ? containerClose.length : 1;
-  const content = containerText.slice(
-    openLen,
-    containerText.length - closeLen
-  );
+  if (!isBracket) return null;
+  const content = containerText.slice(1, containerText.length - 1);
 
   // Collect the members first so a reference member can make the whole
   // container permissive regardless of what surrounds it.
@@ -656,8 +931,7 @@ export function mergeContainerExpression(
       });
     }
   }
-  const minMembers = strict ? 2 : 1;
-  if (members.length < minMembers) return null;
+  if (members.length < 1) return null;
 
   const publicMembers: ContainerMember[] = members.map((x) => ({
     key: x.key,
@@ -672,22 +946,12 @@ export function mergeContainerExpression(
 
   // Citation container.
   let expr = '';
-  let lastEnd = 0;
   for (let i = 0; i < members.length; i++) {
     const mem = members[i];
-    if (strict) {
-      const between = content.slice(lastEnd, mem.start);
-      if (!/^[\s;]*$/.test(between)) return null;
-      if (i > 0 && !/;/.test(between)) return null;
-      if (i === 0 && /;/.test(between)) return null;
-      if (mem.alias !== undefined && !mem.alias.includes('@')) return null;
-    }
     const aliasText = mem.alias ?? '@' + mem.key;
     if (i > 0) expr += '; ';
     expr += expandAlias(aliasText, mem.key);
-    lastEnd = mem.end;
   }
-  if (strict && !/^[\s;]*$/.test(content.slice(lastEnd))) return null;
   return { expr: '[' + expr + ']', members: publicMembers, reference: false };
 }
 
@@ -706,9 +970,9 @@ export function mergeContainerExpression(
  *
  *   [[@smith1992|@smith1992 -]]    ->  [@smith1992 -]  (narrative citation)
  *
- * Multi-work containers are merged into a single citation:
+ * Outer-bracket multi-work containers are merged into a single citation:
  *
- *   ⟦[[@a]]; [[@b|see also @@, 3]]⟧ -> [see also @a, 3; @b]
+ *   [ [[@a]]; [[@b|see also @@, 3]] ] -> [see also @a, 3; @b]
  *
  * When `linkCiteKey` is provided (reading mode, where Obsidian renders only
  * the alias text inside an <a> element and the raw `[[@key|…]]` markup is
@@ -741,7 +1005,9 @@ function transformLinkAliases(
   // by '@' + linkKey, mapping each emitted character back to the alias
   // position it came from.
   const emitExpanded = (alias: string, key: string, aliasStart: number) => {
-    const tokenRe = /@[^\s,;]*/g;
+    // Same token rule as `expandAlias`: `{` is excluded so a brace directly
+    // after the proxy survives as a forced-locator block.
+    const tokenRe = /@[^\s,;{]*/g;
     let cursor = 0;
     let tm: RegExpExecArray;
     while ((tm = tokenRe.exec(alias))) {
@@ -755,8 +1021,7 @@ function transformLinkAliases(
 
   const specialRe = new RegExp(
     '\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|' +
-      '\\[\\[@([^|\\]\\s]+)\\]\\]|' +
-      containerOpen,
+      '\\[\\[@([^|\\]\\s]+)\\]\\]',
     'g'
   );
 
@@ -860,25 +1125,6 @@ function transformLinkAliases(
 
     if (isInsideEmittedContainer(m.index)) {
       // This wikilink is part of an already-emitted outer-bracket container.
-      continue;
-    }
-
-    if (m[0] === containerOpen) {
-      // Multi-work container: ⟦ … ⟧ -> single merged citation (or reference
-      // list when a member uses the reference/ref alias).
-      const close = str.indexOf(containerClose, m.index + 1);
-      if (close === -1) continue;
-      const merged = mergeContainerExpression(str.slice(m.index, close + 1));
-      if (merged === null) continue;
-      copyRange(last, m.index);
-      for (let k = 0; k < merged.expr.length; k++) {
-        // First char maps to '⟦', last to '⟧' so the widget/span covers the
-        // whole container; interior chars map to the open delimiter.
-        push(merged.expr[k], k === merged.expr.length - 1 ? close : m.index);
-      }
-      if (merged.reference) referenceRanges.push([m.index, close + 1]);
-      specialRe.lastIndex = close + 1;
-      last = close + 1;
       continue;
     }
 
@@ -1006,24 +1252,27 @@ function mergeAdjacentGroups(
   groups: CitationSegments[]
 ): CitationSegments[] {
   if (groups.length < 2) return groups;
-  // A narrative (author-in-text) group — `[[@a|@ -]]` — is bracket-shaped but
-  // marked `composite`; like bare `@a`, it must NOT be combined.
-  const isNarrative = (g: CitationSegments): boolean => {
-    try {
-      return getCitations(g).citations.some((c) => c.composite === true);
-    } catch {
-      return false;
-    }
+  // Drop a trailing ` -` suffix (the author-in-text flag) from a group so it is
+  // no longer marked `composite` — used to IGNORE a non-leading narrative when
+  // it is merged into a citation run (see below). Operates on the segment
+  // copies, not the source text.
+  const dropNarrativeFlag = (g: CitationSegments): CitationSegments => {
+    const copy: CitationSegments = g
+      .filter((s) => !(s.type === SegmentType.suffix && s.val.trim() === '-'))
+      .map((s) => ({ ...s }));
+    return copy;
   };
   const out: CitationSegments[] = [];
   for (const group of groups) {
     const prev = out[out.length - 1];
+    // A contiguous run that contains ANY `reference`/`ref` member becomes a
+    // reference list — matching the explicit container rule ("a list is either
+    // all citations or all references"). For such a run we ignore the other
+    // members' aliases entirely (including the narrative `@ -` flag), so a
+    // `[[@a|reference]] [[@b|@ -]]` run still lists both as references.
+    const anyReference = !!prev?.reference || !!group.reference;
     if (
       prev &&
-      !prev.reference &&
-      !group.reference &&
-      !isNarrative(prev) &&
-      !isNarrative(group) &&
       prev.length > 0 &&
       group.length > 0 &&
       // Only BRACKET-style citations merge; a bare narrative `@a` does not.
@@ -1037,15 +1286,42 @@ function mergeAdjacentGroups(
         str[prevLast.to] === ']' ? prevLast.to + 1 : prevLast.to;
       const sep = str.slice(prevEnd, group[0].from);
       if (/^[ \t]*\n?[ \t]*$/.test(sep)) {
-        prev.push(
+        const merged: CitationSegments = prev.concat();
+        // The APPENDED member is never the first of the run, so its narrative
+        // (` -`) flag is always dropped: a LEADING narrative stays narrative
+        // (it is the `prev` group, never appended), while a narrative that is
+        // not first is ignored (pandoc's `@a [b]` has no mid-list narrative).
+        const appended = dropNarrativeFlag(group);
+        merged.push(
           {
             type: SegmentType.separator,
             from: prevEnd,
             to: group[0].from,
             val: ';',
           },
-          ...group
+          ...appended
         );
+        if (anyReference) {
+          merged.reference = true;
+          // Carry the reference range so the widget / export substitution covers
+          // the WHOLE run (not just the member that carried the `reference`
+          // alias). Only the aliased member has a `referenceRange`, so combine
+          // its start with the run's actual segment end.
+          const prevStart = prev.referenceRange?.[0] ?? prev[0].from;
+          const runEnd =
+            str[group[group.length - 1].to] === ']'
+              ? group[group.length - 1].to + 1
+              : group[group.length - 1].to;
+          const prevRange = prev.referenceRange;
+          const groupRange = group.referenceRange;
+          const combinedEnd = Math.max(
+            runEnd,
+            prevRange?.[1] ?? 0,
+            groupRange?.[1] ?? 0
+          );
+          merged.referenceRange = [Math.min(prevStart, groupRange?.[0] ?? prevStart), combinedEnd];
+        }
+        out[out.length - 1] = merged;
         continue;
       }
     }
@@ -1427,19 +1703,29 @@ function getCitationSegmentsRaw(
       if (c === '{') {
         endCurrent(i);
         state.currentSegment = newCurrent(i, c, SegmentType.curlyBracket);
-        if (seekState?.seekingLocator) {
+        // A `{` while we are still looking for a locator opens pandoc's
+        // explicit locator block (`{...}` forces its content to be a locator).
+        // Cover both the in-bracket `[@key, {pp. 3}]` form and the linked
+        // `@key {}` form (the space makes `state`, not `seekState`, the owner).
+        if (state.seekingLocator || seekState?.seekingLocator) {
           state.inExplicitLocator = true;
         }
         continue;
       }
 
       if (c === '}') {
-        if (
-          state.inExplicitLocator &&
-          state.currentSegment.type === SegmentType.suffix
-        ) {
-          state.currentSegment.type = SegmentType.locatorSuffix;
-          state.seekingLocator = false;
+        if (state.inExplicitLocator) {
+          if (state.currentSegment.type === SegmentType.suffix) {
+            state.currentSegment.type = SegmentType.locatorSuffix;
+            state.seekingLocator = false;
+          } else if (state.currentSegment.type === SegmentType.curlyBracket) {
+            // Empty `{}` immediately after the key is pandoc's "prevent the
+            // suffix from being parsed as a locator" marker
+            // (`[@smith{}, 99 years later]` → suffix ", 99 years later", no
+            // locator). Nothing sits between the braces, so stop locator
+            // detection and let the following text stay a suffix.
+            state.seekingLocator = false;
+          }
         }
         endCurrent(i);
         state.currentSegment = newCurrent(i, c, SegmentType.curlyBracket);

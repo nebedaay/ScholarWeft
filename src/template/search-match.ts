@@ -31,12 +31,218 @@ export const PARITY_LEN = 6;
 /** Split text into words. `u` is required for `\p{...}`. */
 const WORD_RE = /[\p{L}\p{N}]+/gu;
 
-/** Lowercased, diacritic-free. */
+/**
+ * The glyphs transliteration uses for hamza / ʿayn / ʻokina and the apostrophe
+ * family: the spacing modifier-letter ranges U+02B0–U+02FF (which contains ʾ
+ * U+02BE and ʿ U+02BF) and the phonetic-extension modifiers ᵓ U+1D53 (inside
+ * U+1D2C–U+1D6A) and ᶜ U+1D9C (U+1D9B–U+1DBF), plus `'` `'` `’` `‘` `` ` `` `´`.
+ */
+const APOSTROPHE_GLYPHS =
+  /[\u02B0-\u02FF\u1D2C-\u1D6A\u1D9B-\u1DBF\u2018-\u201B\u0027\u0060\u00B4]/g;
+
+/** Decompose and drop every nonspacing mark (é→e, ā→a, ḥ→h, ẓ→z …). */
+export function stripMarks(s: string): string {
+  return s.normalize('NFD').replace(/\p{Mn}/gu, '');
+}
+
+/**
+ * Map every hamza/ʿayn/apostrophe glyph to a bare `'`, WITHOUT removing it.
+ *
+ * The `'` is a BARRIER: the vowel-collapse step must not merge across it. In
+ * `tasāʾala` the hamza separates two short `a`s, so removing it first would
+ * leave `tasaala` (and then `aa`→`a` would wrongly give `tasala`). Keeping a
+ * marker during the collapse and deleting it afterwards preserves the seam.
+ */
+export function normalizeApostrophes(s: string): string {
+  return s.replace(APOSTROPHE_GLYPHS, "'");
+}
+
+/**
+ * Fold text for search comparison: decompose, drop every nonspacing mark, and
+ * remove the hamza/ʿayn/apostrophe glyphs. NFD alone is not enough for
+ * scholarly Arabic transliteration: `ʾ` (U+02BE) and `ʿ` (U+02BF) are spacing
+ * modifier letters with NO decomposition, so `rasāʾil` folded `rasaʾil` and a
+ * typed `rasail` never matched it. Used for the Fuse `getFn` index; the search
+ * scorer uses {@link normTerm}, which also collapses repeated vowels.
+ *
+ * Not lowercased here — `normTerm` adds that, and the Fuse wrapper leaves case
+ * for Fuse's own case-insensitive matching.
+ */
+export function foldDiacritics(s: string): string {
+  return stripMarks(s).replace(APOSTROPHE_GLYPHS, '');
+}
+
+/**
+ * Collapse a run of the same vowel (`aa` → `a`, `ī` written `ii` → `i`). Long
+ * vowels are transliterated with a macron (`ā`) by some conventions and by
+ * doubling (`aa`) by others — and BBT citekey formulas may or may not expand
+ * the macron — so `rasāʾil`, `rasaail` and `rasail` must all reach the same
+ * search form. Only VOWELS are collapsed: doubled consonants are shadda
+ * (`Muḥammad`), a different phenomenon that must stay doubled.
+ *
+ * Callers must run this WHILE the hamza/ʿayn barrier is still present (see
+ * {@link normalizeApostrophes}), or a hamza-separated `a…a` would merge.
+ */
+export function collapseRepeatedVowels(s: string): string {
+  return s.replace(/([aeiou])\1+/g, '$1');
+}
+
+/**
+ * The fold steps, IN ORDER. This is the SINGLE definition of the fold's
+ * composition, shared by its two consumers:
+ *   - `normTerm` applies each step to the whole string (fast, for scoring).
+ *   - `foldWithMap` applies each step to a character array that carries an
+ *     offset map (for highlighting).
+ *
+ * Reorder or add a step here and BOTH change. The exhaustive switches in
+ * `applyFoldStep` / `applyFoldStepToChars` make a MISSING handler a compile
+ * error, and the drift test in `search-match.test.ts` is the runtime backstop.
+ */
+export type FoldStep =
+  | 'stripMarks'
+  | 'apostrophes'
+  | 'lowercase'
+  | 'collapseVowels'
+  | 'removeBarrier';
+
+export const FOLD_STEPS: readonly FoldStep[] = [
+  'stripMarks',
+  'apostrophes',
+  'lowercase',
+  'collapseVowels',
+  'removeBarrier',
+];
+
+/** Compile-time exhaustiveness guard for the mapped step switch. */
+function assertNever(step: never): never {
+  throw new Error(`unhandled fold step: ${String(step)}`);
+}
+
+/**
+ * Whole-string handler for each fold step (the fast path used by scoring).
+ * A `Record` keyed by `FoldStep`, so adding a step to {@link FOLD_STEPS}
+ * without a handler here is a COMPILE error.
+ */
+const STRING_STEP: Record<FoldStep, (s: string) => string> = {
+  stripMarks,
+  apostrophes: normalizeApostrophes,
+  lowercase: (s) => s.toLowerCase(),
+  collapseVowels: collapseRepeatedVowels,
+  removeBarrier: (s) => s.replace(/'/g, ''),
+};
+
+/**
+ * The whole-string fold, COMPOSED ONCE from {@link FOLD_STEPS} at module load:
+ * `removeBarrier(collapseVowels(lowercase(apostrophes(stripMarks(s)))))`. This
+ * keeps the single ordered definition without paying a per-call switch/loop —
+ * it benchmarks within ~4% of the former hand-written inline chain.
+ */
+const foldString: (s: string) => string = FOLD_STEPS.reduce<
+  (s: string) => string
+>(
+  (f, step) => {
+    const g = STRING_STEP[step];
+    return (s) => g(f(s));
+  },
+  (s) => s
+);
+
+/**
+ * Lowercased, diacritic-free, long-vowel-folded search form.
+ *
+ * ORDER IS THE POINT (see {@link FOLD_STEPS}): strip marks → map hamza/ʿayn to
+ * a barrier `'` → lowercase → collapse repeated vowels → THEN remove the
+ * barrier. Removing the barrier first (or collapsing after removal) makes
+ * `tasāʾala` collapse to `tasala`; keeping it through the collapse gives
+ * `tasaala`, while a genuinely doubled long vowel (`rasaail`, `jawaahir`) still
+ * collapses to `rasail` / `jawahir`.
+ *
+ * KNOWN LIMIT: a hamza-less, macron-less spelling of a hamza word is ambiguous
+ * and is read as a doubled long vowel — `maani` → `mani`, so it does NOT match
+ * `maʿānī` (`maani`); type `ma'ani` (or `maʿānī`) for that one.
+ */
 export function normTerm(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+  return foldString(s);
+}
+
+/** A folded character plus the ORIGINAL-text range it came from. */
+export interface FoldedChar {
+  ch: string;
+  /** Original index of the first source char folded into this one. */
+  start: number;
+  /** Original index of the LAST source char folded into this one (widened
+   *  over a collapsed repeated vowel, so a highlight covers the whole
+   *  spelling). */
+  end: number;
+}
+
+/** Apply one fold step to the mapped character array (the mapped path). */
+function applyFoldStepToChars(
+  chars: FoldedChar[],
+  step: FoldStep
+): FoldedChar[] {
+  switch (step) {
+    case 'stripMarks': {
+      const out: FoldedChar[] = [];
+      for (const fc of chars) {
+        for (const c of stripMarks(fc.ch)) out.push({ ...fc, ch: c });
+      }
+      return out;
+    }
+    case 'apostrophes':
+      return chars.map((fc) => ({ ...fc, ch: normalizeApostrophes(fc.ch) }));
+    case 'lowercase':
+      return chars.map((fc) => ({ ...fc, ch: fc.ch.toLowerCase() }));
+    case 'collapseVowels': {
+      const out: FoldedChar[] = [];
+      for (const fc of chars) {
+        const prev = out[out.length - 1];
+        // Mirrors `collapseRepeatedVowels`; the `'` barrier is not a vowel, so
+        // a run never crosses it. The widened `end` keeps the whole doubled
+        // spelling inside the highlighted span.
+        if (/[aeiou]/.test(fc.ch) && prev && prev.ch === fc.ch) {
+          prev.end = fc.end;
+          continue;
+        }
+        out.push(fc);
+      }
+      return out;
+    }
+    case 'removeBarrier':
+      return chars.filter((fc) => fc.ch !== "'");
+    default:
+      return assertNever(step);
+  }
+}
+
+/**
+ * The SAME fold as {@link normTerm}, but with an OFFSET MAP back to the
+ * original text. Used by the highlighter (`search-excerpt.ts`), which has to
+ * bold the original characters a folded match came from.
+ *
+ * It dispatches on the SAME {@link FOLD_STEPS} order, so the two forms cannot
+ * drift in composition. `dropHyphens` is the only difference the highlighter
+ * needs (its substring search wants `anticolonial` to find `anti-colonial`);
+ * the scorer keeps hyphens because `matchTerm` handles the hyphen/joined
+ * equivalence itself.
+ */
+export function foldWithMap(
+  text: string,
+  opts: { dropHyphens?: boolean } = {}
+): { text: string; chars: FoldedChar[] } {
+  let chars: FoldedChar[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (
+      opts.dropHyphens &&
+      (ch === '-' || ch === '\u2010' || ch === '\u2011')
+    ) {
+      continue;
+    }
+    chars.push({ ch, start: i, end: i });
+  }
+  for (const step of FOLD_STEPS) chars = applyFoldStepToChars(chars, step);
+  return { text: chars.map((fc) => fc.ch).join(''), chars };
 }
 
 function splitWords(text: string): string[] {
@@ -113,10 +319,17 @@ export interface QueryAtom {
  * spaces and is kept whole (one literal atom); unquoted text is split on
  * whitespace/punctuation as before. Mixing is fine: `"anticolon" Africa` yields
  * a literal atom plus a normal one.
+ *
+ * An UNCLOSED double quote runs to the END of the query: while typing
+ * `@"postcolonial Afri` the intent is plainly a literal phrase, so everything
+ * after the opening `"` is one literal atom. SINGLE quotes are NOT treated this
+ * way — they double as transliteration apostrophes (`ma'ani`), so an unclosed
+ * `'` stays an ordinary term.
  */
 export function queryAtoms(query: string): QueryAtom[] {
   const atoms: QueryAtom[] = [];
-  const re = /"([^"]*)"|'([^']*)'|([^\s,;]+)/g;
+  // `"([^"]*)(?:"|$)`: a double quote closes at the next `"` OR at the end.
+  const re = /"([^"]*)(?:"|$)|'([^']*)'|([^\s,;]+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(query))) {
     if (m[1] !== undefined || m[2] !== undefined) {
@@ -126,22 +339,25 @@ export function queryAtoms(query: string): QueryAtom[] {
     } else {
       const raw = m[3].replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
       if (!raw) continue;
+      // Keep hamza/ʿayn/apostrophes INSIDE the token: `ma'ani` and `rasa'il`
+      // must stay one term (a straight apostrophe would otherwise split them
+      // into `ma` + `ani` / `rasa` + `il`), and the `'` barrier must survive
+      // until `normTerm` has finished collapsing repeated vowels.
+      const marked = normalizeApostrophes(raw);
       // A HYPHEN is a within-word marker, not a separator: `anti-colonial` is
       // the compound, not `anti` + `colonial`. It is matched like a word (its
       // hyphen-less variant `anticolonial` counts too), NOT as two terms — so
       // it does not become "anti-aging … colonial". Any OTHER punctuation
       // separates terms, as before.
-      if (raw.includes('-')) {
-        atoms.push({ text: normTerm(raw), literal: false, hyphenated: true });
+      if (marked.includes('-')) {
+        atoms.push({ text: normTerm(marked), literal: false, hyphenated: true });
         continue;
       }
-      for (const piece of raw.split(/[^\p{L}\p{N}]+/u)) {
+      for (const piece of marked.split(/[^\p{L}\p{N}']+/u)) {
         // Normalise case AND diacritics, like the field text does. Without this
         // a typed `café` stayed `café` while the haystack was folded to `cafe`,
         // so the pre-filter rejected the entry before the scorer ever saw it.
-        const text = normTerm(
-          piece.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-        );
+        const text = normTerm(piece);
         if (text) atoms.push({ text, literal: false });
       }
     }
@@ -362,9 +578,11 @@ export function matchSpans(
       let len = q.length;
       if (sameWord(w, q)) {
         at = 0;
-        // Bold the spelling the FIELD actually uses, so `color` emphasises all
-        // of `colour` rather than its first five characters.
-        len = needles.find((n) => n === w)?.length ?? q.length;
+        // Emphasise the WHOLE original word. The normalised form can be
+        // SHORTER than the source (folded diacritics, collapsed `aa` → `a`,
+        // `colour` → `color`), so a length taken from the normalised form would
+        // underline only part of the word.
+        len = m[0].length;
       } else {
         for (const n of needles) {
           const off = startAlignedAt(w, n);

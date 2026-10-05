@@ -36,11 +36,10 @@ import { readFileSync, writeFileSync } from 'fs';
 
 // ── exact plugin regexes ─────────────────────────────────────────────────────
 
-// Matches [[@key|alias]] / [[@key]] / ⟦ (from transformLinkAliases specialRe).
+// Matches [[@key|alias]] / [[@key]] (from transformLinkAliases specialRe).
 const SPECIAL_RE = new RegExp(
   '\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|' +
-    '\\[\\[@([^|\\]\\s]+)\\]\\]|' +
-    '\u27e6',
+    '\\[\\[@([^|\\]\\s]+)\\]\\]',
   'g'
 );
 
@@ -59,9 +58,23 @@ const LINK_RE =
  */
 function splitAuthorInText(expanded) {
   const m = /\s+-\s*$/.exec(expanded);
-  return m
-    ? { text: expanded.slice(0, m.index).trimEnd(), narrative: true }
-    : { text: expanded, narrative: false };
+  if (!m) return { text: expanded, narrative: false };
+  const before = expanded.slice(0, m.index).trimEnd();
+  // `[[@a|@, p. 15 -]]` -> pandoc `@a [p. 15]` (author-in-text + locator).
+  // The key token stops at `{`; everything after the key goes into the bracket
+  // VERBATIM (minus the comma after the key), mirroring a normal citation's
+  // after-comma content. A forced-locator block keeps its braces:
+  // `@{ii, A, D-Z} -` -> `@a [{ii, A, D-Z}]` (citeproc renders the locator).
+  const keyMatch = /@[^\s,;{[\]]*/.exec(before);
+  if (!keyMatch) return { text: before, narrative: true };
+  const prefix = before.slice(0, keyMatch.index);
+  const key = keyMatch[0];
+  const rest = before.slice(keyMatch.index + key.length);
+  const body = rest.replace(/^[ \t]*,[ \t]*/, '').trim();
+  return {
+    text: body ? `${prefix}${key} [${body}]` : `${prefix}${key}`,
+    narrative: true,
+  };
 }
 
 // ── container merge (mirrors parser.ts bracketContainers scan) ───────────────

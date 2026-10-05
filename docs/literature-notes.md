@@ -31,14 +31,14 @@ There are several ways to create literature notes using ScholarWeft, both throug
 
 ### Creating notes from the command palette
 
-- The **Add Literature Notes from Zotero (search and filter)** command is ScholarWeft’s own way to search your Zotero items and filter by what you’re most likely to need. Unlike the Zotero command (see below), this command is aware of which libraries you’ve enabled, what you’ve already imported, and which items have annotations, notes, and other attachments you may want to access from inside Obsidian.
+- The **Add Literature Notes/Citations (search and filter)** command is ScholarWeft’s own way to search your Zotero items and filter by what you’re most likely to need. Unlike the Zotero command (see below), this command is aware of which libraries you’ve enabled, what you’ve already imported, and which items have annotations, notes, and other attachments you may want to access from inside Obsidian. It can add literature notes, insert citations, or both.
 - The **Import Literature Notes from Zotero...** command uses the native Zotero interface (requires the Better BibTeX plugin installed in Zotero) to search your Zotero libraries and insert literature notes for one or more items.
 - The **Create literature notes for citations lacking notes (current note)** and **…(vault)** commands in the command palette create a note for every cited work that doesn't already have one. This command facilitates linking your Obsidian notes to your literature by making sure there's an Obsidian note for everything you cite.
 - Individual notes can also be created from the “**Create literature note**” button (a page icon with a + sign) on each reference in the reference sidebar and in the tooltip that pops up when you mouse over a citation. Linked citations that have no literature note are easy to spot by their purple dotted underline. After importing the literature note, the underline turns blue.
 
-<img src="../images/add-literature-note-modal.png" width="100%" alt="Add Literature Notes from Zotero"/>
+<img src="../images/add-literature-note-modal.png" width="100%" alt="Add Literature Notes/Citations"/>
 
-#### The Add Literature Notes from Zotero (search and filter) command
+#### The Add Literature Notes/Citations (search and filter) command
 
 This command is the most direct way to import when you know what you are looking for but not its citekey. It requires no extra plugins or dependencies.
 
@@ -46,11 +46,12 @@ This plugin uses the same two search modes you use to search and insert citation
 
 This search offers several filters to help you locate the items you want:
 
-  - **Show items with** narrows to items that have a **Zotero note**, a **PDF or snapshot**, or **annotations**, or that ***lack* a literature note** (on by default, because we’re searching notes to import).
+  - **Add** chooses what the selection produces: **literature notes**, **citations**, or **literature notes and citations**. Citations are inserted as one contiguous run at the cursor in the active note (`[[@a]] [[@b]]`, or `[@a] [@b]` when Process linked citations is off); the option defaults to the last-used value, or literature notes.
+  - **Show items with** narrows to items that have a **Zotero note**, a **PDF or snapshot**, or **annotations**, or that ***lack* a literature note** (on by default, because we’re searching notes to import). **All** is the other end of that same filter — it shows every reference, including ones you have already imported. Choosing citations (or both) releases the filter to **All**, since you cannot cite what the "no literature note" filter hides; choosing literature notes again restores what you had selected.
   - **Show item types** narrows to **books**, **articles**, **book sections**, **newspaper/magazine articles**, **web pages**, or **other** (everything else). The default is **all**.
   - **Collections** is a tree of your collections, one heading per library you’ve enabled in ScholarWeft settings, with subcollections nested under their parents. Everything is on at first; turning a collection off turns its whole branch off, and **All**, **None** and the library headings let you isolate one branch quickly.
-  - **Order** the results by the search ranking, author/title/year, or date added. Your last search and ordering are remembered for next time.
-  - You can select results individually by clicking each row, or take them all with **Select all results**; re-importing an existing item merges into its note rather than duplicating it. A single imported note opens (turn that off with **Open a single imported note**).
+  - **Order** the results by the search ranking, author/title/year, or date added. Your last search, add target, and ordering are remembered for next time.
+  - You can select results individually by clicking each row, or take them all with **Select all results**; re-importing an existing item merges into its note rather than duplicating it. A single imported note opens (turn that off with **Open a single imported note**); citations never open anything.
 
 ## Literature notes produced by the default template
 
@@ -82,6 +83,18 @@ The template structures each literature note as follows:
 - **Re-importing** refreshes the managed frontmatter fields and that region, and refills `## Notes` **only when it is empty** (whitespace doesn't count) — so notes you clear are restored, but anything you have written there is never overwritten or appended over. Your other properties, and all other writing, are left alone.
 
 If a note was created by ZotLit, ScholarWeft **asks before converting it**, so trying the plugin never silently reworks your existing notes. **Convert** is remembered for the notes you update; **Leave** applies to that note only, and the next ZotLit note asks again. The **ZotLit notes** setting can also be set to *Ask each time* (default), *Always convert*, or *Never touch ZotLit notes*.
+
+ScholarWeft also **asks before touching a note found under a different name**. When a note carrying the item's `zotero-key` has a filename that is neither the item's current citekey nor a citekey the note itself records (`citekey:` frontmatter) — for example a note created by another plugin with its own naming scheme, or one left under an obsolete citekey it doesn't record — importing or updating that item offers four choices: **Convert and rename** (update the managed metadata and annotations, append any Zotero notes to the existing `## Notes` section — keeping your own notes there — then rename it to `@citekey.md`), **Convert, add notes only if empty** (the same, but add Zotero notes only when `## Notes` is empty, the normal import behaviour), **Create a new literature note** (leave the found note and write a fresh `@citekey.md`), or **Cancel**. The choice is asked each time and anything you have written outside the managed region is kept. A note whose filename *is* a citekey it records is a known past citekey: it is treated as an ordinary citekey update (renamed by the citekey-sync machinery) with no merge question. The same prompt appears when the note is encountered by **Update all literature notes** or by the Zotero-driven auto-update.
+
+**Once, after the library loads**, ScholarWeft also reviews every note with a `zotero-key` in one cheap pass over Obsidian's in-memory metadata (no file reads, no Zotero requests). It offers the convert/new/cancel prompt for any foreign-named note it finds, and — if any keyed literature notes live outside your literature-note folder — asks once whether to **move them into that folder when they are next updated**. Accepting keeps them where ScholarWeft expects and stops an import from creating a duplicate beside them; the move preserves each note's filename and links. Your literature-note folder and **every subfolder inside it** count as "in place", so a note that is merely in the wrong subfolder is found and updated rather than duplicated. A **group-library note** is different: because its `zotero-key` ends in `g` + the library's id, ScholarWeft knows which library it belongs to and **automatically places it in the subfolder named after that library** (the group name, not the id) whenever it isn't already there — including after you rename the group in Zotero, in which case the note follows to the new folder name. This runs once (it does not ask again), and **Update all literature notes** still catches anything that appears later.
+
+If you prefer, **Insert literature notes for linked citations** (a three-way choice on the **Literature note import** settings page, just below **Update all literature notes**) controls whether ScholarWeft quietly creates a note from Zotero when a linked citation — `[[@key]]` — has none yet:
+
+- **Ensure literature notes exist for all linked citations** — whenever ScholarWeft resolves the linked citations of the note you are working in, it fills in any missing notes (bounded to that note, once per session, never a vault-wide scan).
+- **Insert a literature note whenever a linked citation is inserted** — only when you insert a citation in the editor.
+- **Don't insert missing literature notes for linked citations** (default) — only the explicit commands create notes.
+
+Notes are created without stealing focus or opening a tab.
 
 ## Keeping literature notes and citekeys in sync with Zotero
 
@@ -267,7 +280,7 @@ The **Child-note heading level** setting supplies the default `level`, so a temp
 
 | Helper | What it does |
 |---|---|
-| `wikilink(target, alias?)` | `[[target]]` or `[[target|alias]]`; empty string for an empty target. |
+| `wikilink(target, alias?)` | A wikilink to `target`, carrying `alias` as its display text when given; empty string for an empty target. |
 | `link_note(alias?, subpath?)` | A link to **this** literature note (uses the note's path once known). |
 | `md_html(html)` | Convert a Zotero HTML field to Markdown (entities resolved to Unicode). |
 | `heading(level, text)` | A heading with the level clamped to 1–6. |

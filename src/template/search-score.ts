@@ -30,7 +30,7 @@ import {
   interiorWeight,
   adjacentChain,
   containsLiteral,
-  hyphenWords,
+  normalizeApostrophes,
   normTerm,
   queryAtoms,
 } from './search-match';
@@ -99,19 +99,21 @@ const WORD_CACHE = new Map<string, string[]>();
 export function queryTerms(query: string): string[] {
   return query
     .split(/[\s,;]+/)
-    .flatMap((t) =>
-      t.includes('-') ? [t] : t.split(/[^\p{L}\p{N}]+/u)
-    )
-    .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+    .flatMap((t) => {
+      // Keep hamza/ʿayn/apostrophes inside the token so `ma'ani` / `rasa'il`
+      // stay ONE term and the `'` barrier survives until `normTerm` collapses
+      // repeated vowels (see `normalizeApostrophes`).
+      const marked = normalizeApostrophes(t);
+      return marked.includes('-') ? [marked] : marked.split(/[^\p{L}\p{N}']+/u);
+    })
+    .map((t) => t.replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, ''))
     .filter((t) => t.length > 0);
 }
 
-/** Case/diacritic-insensitive normalisation for comparison. */
+/** Case/diacritic-insensitive normalisation for comparison. Shares the fold
+ *  with the pre-filter (`normTerm`), so scoring and membership cannot drift. */
 function norm(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+  return normTerm(s);
 }
 
 /**
@@ -194,105 +196,6 @@ export function spacingConfidence(query: string): number {
 }
 
 /**
- * Score one entry against the query terms.
- *
- * `value` is a sort key, lower = better. Bands are separated widely, so a
- * higher-priority signal always beats any amount of a lower one. The order
- * follows the governing principle that searches are meaningful and usually made
- * of meaningful terms:
- *
- *   1. author + a title word      → 0.0–0.3   (the most meaningful search)
- *   2. exact phrase in the title  → 0.3–0.9
- *   3. concatenated prefixes      → 0.9–0.99  (soccri → social critique)
- *   4. full coverage              → 1.0–2.9
- *   5. partial coverage           → 3.0+
- */
-/**
- * Does the query, as ONE compound word, match a word of `title`?
- *
- * `anticolonial` matches "anticolonial" and "anti-colonial"; `anti-colonial`
- * matches both too. Either way the compound is the SAME term, so the two
- * spellings rank together (exact spelling only breaks the tie) and any split
- * reading is suppressed. Returns the occurrence's strength or null.
- */
-function compoundWordMatch(
-  title: string,
-  terms: string[]
-): 'exact' | 'variant' | null {
-  if (!title || terms.length !== 1) return null;
-  const q = normTerm(terms[0]);
-  if (!q) return null;
-  const joined = q.replace(/-/g, '');
-  // Only meaningful for a compound-looking query (has a hyphen, or is long
-  // enough to be one joined word).
-  let best: 'exact' | 'variant' | null = null;
-  for (const w of hyphenWords(title)) {
-    const wJoined = w.replace(/-/g, '');
-    if (w === q) return 'exact';
-    if (w.startsWith(q) && w.includes('-')) best = best ?? 'exact';
-    if (wJoined === joined || wJoined.startsWith(joined)) best = best ?? 'variant';
-  }
-  return best;
-}
-
-export function isCompoundQuery(query: string): boolean {
-  const terms = queryTerms(query);
-  if (terms.length !== 1) return false;
-  const q = normTerm(terms[0]);
-  return q.includes('-') || q.length >= 8;
-}
-
-/**
- * Score a query that is ONE compound word against the entry, or null when it is
- * not a compound-word query or does not match as a compound.
- *
- * Used by the search TIER (before interpretations) so a compound strong match
- * cannot be outranked by a split reading: `anticolonial` must place "anti-
- * colonial" and "anticolonial" above "anti … colonial" in unrelated words. Both
- * spellings match both spellings; the exact spelling wins by a hair.
- */
-export function compoundWordScore(
-  target: ScoreTarget,
-  query: string,
-  opts: ScoreOptions = {}
-): { value: number; terms: string[] } | null {
-  const terms = queryTerms(query);
-  if (terms.length !== 1) return null;
-  const q = normTerm(terms[0]);
-  // Only a compound-looking term: hyphenated, or a long single word that could
-  // be a joined compound. A short plain word is handled by the normal path.
-  if (!q.includes('-') && q.length < 8) return null;
-
-  const fields: Array<[string, number]> = [[target.title ?? '', 0]];
-  if (target.authorText) fields.push([target.authorText, 0.15]);
-  if (opts.includeVenue && target.venueText) fields.push([target.venueText, 0.2]);
-  if (opts.includeAbstract && target.abstract) fields.push([target.abstract, 0.35]);
-
-  const joined = q.replace(/-/g, '');
-  let best: { value: number; terms: string[] } | null = null;
-  for (const [text, fieldPenalty] of fields) {
-    if (!text) continue;
-    for (const w of hyphenWords(text)) {
-      const wJoined = w.replace(/-/g, '');
-      // "Exact" = the field word has the SAME spelling as the query (either
-      // both hyphenated or both joined). "Variant" = the other spelling of the
-      // same compound. Both are the same term; the exact spelling breaks ties.
-      const sameSpelling =
-        (w.includes('-') === q.includes('-')) &&
-        (w === q || w.startsWith(q) || wJoined === joined || wJoined.startsWith(joined));
-      const otherSpelling =
-        (wJoined === joined || wJoined.startsWith(joined)) && !sameSpelling;
-      if (!sameSpelling && !otherSpelling) continue;
-      // Hyphenated spelling preferred at equal fit (tie-breaker only).
-      const hyphenBonus = w.includes('-') && q.includes('-') ? 0 : 0.01;
-      const value = (sameSpelling ? 0.05 : 0.08) + hyphenBonus + fieldPenalty;
-      if (!best || value < best.value) best = { value, terms: terms };
-    }
-  }
-  return best;
-}
-
-/**
  * Do the query terms appear IN ORDER in the citekey, each as a substring of the
  * key (no separators in a BBT key: `authorShortTitleYear`)?
  *
@@ -316,6 +219,68 @@ function citekeyOrderedMatch(
   return { span: pos };
 }
 
+/**
+ * A CITEKEY match — exact, where the query is a leading PREFIX of the key, or
+ * where the query's terms appear IN ORDER in the key. Returns the ranking band
+ * (value < 0, ahead of every content band) or null.
+ *
+ * Shared by `scoreEntry` and by the tier's candidate gate (`scoreForTier`),
+ * which must consult it BEFORE its compound-word short-circuit: a long single
+ * term that is just the start of a citekey (`@smithMemory202`) is a
+ * compound-looking query, and without this the gate rejected it before the
+ * citekey was ever considered — so a literal `@citekey…` prefix found nothing
+ * unless a space split it into terms that happened to appear in the title.
+ */
+export function citekeyMatch(
+  citekey: string,
+  query: string
+): { value: number; exact: boolean } | null {
+  if (!citekey || !query.trim()) return null;
+  const key = citekey.toLowerCase();
+  const q = query.trim().toLowerCase().replace(/^@+/, '');
+  const qJoined = q.replace(/\s+/g, '');
+  if (!qJoined) return null;
+  if (key === q || key === qJoined) return { value: -2, exact: true };
+  // A contiguous join (`bourdieudist`) is the strongest prefix reading.
+  if (key.startsWith(qJoined)) {
+    // A SHORTER query (a looser prefix, matching more keys) ranks below a
+    // longer, more specific one, so `bourdieu dist` beats `bourdieu d`.
+    return {
+      value: -1 + Math.min(citekey.length - qJoined.length, 99) / 1000,
+      exact: false,
+    };
+  }
+  // The terms appear IN ORDER in the key, each as a substring of a key
+  // segment: `bourdieu dist 1984` → bourdieu···dist···1984 of
+  // `bourdieuDistinctionSocial1984`.
+  const inOrder = citekeyOrderedMatch(key, q.split(/\s+/).filter(Boolean));
+  if (inOrder) {
+    return {
+      value: -0.9 + Math.min(citekey.length - inOrder.span, 99) / 1000,
+      exact: false,
+    };
+  }
+  return null;
+}
+
+/**
+ * Score one entry against the query terms.
+ *
+ * `value` is a sort key, lower = better. Bands are separated widely, so a
+ * higher-priority signal always beats any amount of a lower one. The order
+ * follows the governing principle that searches are meaningful and usually made
+ * of meaningful terms:
+ *
+ *   0. citekey exact / prefix / in-order → below 0 (see `citekeyMatch`)
+ *   1. author + a title word      → 0.0–0.3   (the most meaningful search)
+ *   2. exact phrase in the title  → 0.3–0.9
+ *   3. full coverage              → 1.0–2.9
+ *   4. partial coverage           → 3.0+
+ *
+ * There is NO chunk / run / compound interpretation: a query is exactly its
+ * space-separated terms (plus the citekey check). Hyphenated vs joined
+ * spellings of the SAME term are folded by `matchTerm`, not by a special path.
+ */
 export function scoreEntry(
   target: ScoreTarget,
   query: string,
@@ -385,65 +350,21 @@ export function scoreEntry(
   // `soccrit` is no longer read as `soc` + `crit`; write `soc crit`.)
   const effective = terms;
 
-  // 0. CITEKEY: an exact match, or the query being a LEADING PREFIX of it,
-  //    ranks above everything. Someone typing a citekey wants that work — this
-  //    is why the `@` level stays useful once it also searches titles.
-  //
-  //    Spaces and a leading `@` are IGNORED for this test, so all of these hit
-  //    the same band: `@bourdieudist1984`, `bourdieudist`, `bourdieu dist`,
-  //    `bourdieu dist 1984`. Typing `bourdieu dist` is not a coincidence — it
-  //    is the citekey, and it belongs at the top, not merely in the results.
-  const citekey = target.citekey ?? '';
-  if (citekey && query.trim()) {
-    const key = citekey.toLowerCase();
-    const q = query.trim().toLowerCase().replace(/^@+/, '');
-    const qJoined = q.replace(/\s+/g, '');
-    if (qJoined && (key === q || key === qJoined)) {
-      return {
-        exactPhrase: true,
-        covered: 1,
-        total: 1,
-        authorAndTitle: false,
-        interpretedWords: 1,
-        matchedTerms: effective,
-        value: -2,
-      };
-    }
-    // A contiguous join (`bourdieudist`) is the strongest prefix reading.
-    if (qJoined && key.startsWith(qJoined)) {
-      return {
-        exactPhrase: false,
-        covered: 1,
-        total: 1,
-        authorAndTitle: false,
-        interpretedWords: 1,
-        matchedTerms: effective,
-        // Still ahead of every other band (0.0+), behind an exact match. A
-        // SHORTER query (a looser prefix, matching more keys) ranks below a
-        // longer, more specific one, so `bourdieu dist` beats `bourdieu d`.
-        value: -1 + Math.min(citekey.length - qJoined.length, 99) / 1000,
-      };
-    }
-    // The terms appear IN ORDER in the key, each as a substring of a key
-    // segment: `bourdieu dist 1984` → bourdieu···dist···1984 of
-    // `bourdieuDistinctionSocial1984`. A citekey is `author+shorttitle+year`
-    // with no separators, so a spaced phrase that reads onto the key in order
-    // IS that work — it belongs at the top, just below a contiguous match, and
-    // above any entry that merely contains the terms somewhere.
-    const inOrder = citekeyOrderedMatch(key, q.split(/\s+/).filter(Boolean));
-    if (inOrder) {
-      return {
-        exactPhrase: false,
-        covered: 1,
-        total: 1,
-        authorAndTitle: false,
-        interpretedWords: 1,
-        matchedTerms: effective,
-        // Ahead of every content band, behind a contiguous citekey prefix, and
-        // ordered among themselves by how much of the key they cover.
-        value: -0.9 + Math.min(citekey.length - inOrder.span, 99) / 1000,
-      };
-    }
+  // 0. CITEKEY (see `citekeyMatch`). An exact match, or the query being a
+  //    LEADING PREFIX of the key, ranks above everything. `@bourdieudist1984`,
+  //    `bourdieudist`, `bourdieu dist`, `bourdieu dist 1984` all hit the same
+  //    band.
+  const ck = citekeyMatch(target.citekey ?? '', query);
+  if (ck) {
+    return {
+      exactPhrase: ck.exact,
+      covered: 1,
+      total: 1,
+      authorAndTitle: false,
+      interpretedWords: 1,
+      matchedTerms: effective,
+      value: ck.value,
+    };
   }
 
   // 1. Exact phrase (title only — the title is the claim being matched).
@@ -509,10 +430,6 @@ export function scoreEntry(
   let wordHits = 0;
   let fragmentOnly = 0;
   let startBonus = 0;
-  // Does the WHOLE query match as a single compound WORD of the title
-  // (`anticolonial` or `anti-colonial`, either spelling)? If so, that IS the
-  // match, and any split reading must not compete with it.
-  const compoundExact = compoundWordMatch(title, effective);
   for (const term of meaningful) {
     const m = matchTerm(title, term);
     if (m) {
@@ -572,24 +489,6 @@ export function scoreEntry(
   // scattered across the title.
   const adjacencyBonus = adjacent >= forCoverage.length ? 0.3 : adjacent > 1 ? 0.12 : 0;
   const quality = 1.0 - Math.min(wordHits / Math.max(forCoverage.length, 1), 1) * 0.6;
-
-  // A COMPOUND WORD match is the strongest form: the query IS a word of the
-  // title. Rank it above everything else, and place the two spellings together
-  // (exact spelling wins the tie by a hair, not by a band).
-  if (compoundExact) {
-    return {
-      exactPhrase: compoundExact === 'exact',
-      covered,
-      total: forCoverage.length,
-      authorAndTitle: false,
-      interpretedWords: forCoverage.length,
-      matchedTerms: forCoverage,
-      value:
-        (compoundExact === 'exact' ? 0.05 : 0.08) +
-        (interiorPen > 0 ? 0.02 : 0) +
-        spacing,
-    };
-  }
 
   return {
     exactPhrase,

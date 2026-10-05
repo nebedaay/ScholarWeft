@@ -29,6 +29,19 @@ describe('convertCitationsInText', () => {
     ['[ [[@a|@ -]]; [[@b]] ]', '@a [@b]'],
     ['[ [[@a]]; [[@b|@ -]] ]', '[@a; @b]'],
     ['[[@a|@, vol. I, p. 113]]', '[@a, 1:113]'],
+    // Every volume synonym combines to the single Chicago locator (export
+    // parity with the live parser — see parser.test.ts).
+    ['[[@a|@, v. 2, p. 200–201]]', '[@a, 2:200–201]'],
+    ['[[@a|@, volume 2, p. 200–201]]', '[@a, 2:200–201]'],
+    ['[[@a|@, vols. 2, p. 200–201]]', '[@a, 2:200–201]'],
+    // Forced-locator block in a NARRATIVE alias: the bracket content mirrors a
+    // normal citation's after-comma content, so the braces are KEPT inside the
+    // author-in-text bracket (`@a [{…}]`) and citeproc still honours them.
+    ['[[@a|@{, vol. 2, p. 41–43} -]]', '@a [{, 2:41–43}]'],
+    ['[[@a|@{vol. 2, p. 41–43} -]]', '@a [{2:41–43}]'],
+    ['[[@a|@{ii, A, D-Z} -]]', '@a [{ii, A, D-Z}]'],
+    ['[[@a|@{ii, A, D-Z}, with a suffix]]', '[@a{ii, A, D-Z}, with a suffix]'],
+    ['[[@a|@{}, 99 years later]]', '[@a{}, 99 years later]'],
     ['plain [[note name]] link', 'plain [[note name]] link'],
   ];
 
@@ -52,7 +65,8 @@ describe('full-reference insertions (export pre-render)', () => {
     expect(
       collectReferenceKeys('[ [[@a|reference]] [[@b]] [[@c]] ]')
     ).toEqual(['a', 'b', 'c']);
-    expect(collectReferenceKeys('[[@a]] [[@b|ref]]')).toEqual(['b']);
+    // A contiguous run with any `ref` member is one reference list -> both keys.
+    expect(collectReferenceKeys('[[@a]] [[@b|ref]]')).toEqual(['a', 'b']);
   });
 
   it('substitutes each insertion with a styled reference block', () => {
@@ -73,6 +87,20 @@ describe('full-reference insertions (export pre-render)', () => {
       `\n\n${refBlock('[ENTRY a]')}\n\n${refBlock('[ENTRY b]')}\n\n${refBlock(
         '[ENTRY c]'
       )}\n\n`
+    );
+  });
+
+  it('substitutes a CONTIGUOUS reference run (no container) as one list', () => {
+    // Any `reference` member turns the whole adjacent run into a list; the
+    // whole run must be replaced (regression: only the first member's range
+    // was replaced, leaving `[[@b]] [[@c]]` behind).
+    const lookup = (k: string) => `[ENTRY ${k}]`;
+    expect(
+      substituteReferenceInsertions('See [[@a|reference]] [[@b]] [[@c]].', lookup)
+    ).toBe(
+      `See \n\n${refBlock('[ENTRY a]')}\n\n${refBlock(
+        '[ENTRY b]'
+      )}\n\n${refBlock('[ENTRY c]')}\n\n.`
     );
   });
 

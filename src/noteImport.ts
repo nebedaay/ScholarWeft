@@ -22,6 +22,7 @@ import type { NoteContextRelatedItem } from './template/context';
 import type { RawZoteroChildren } from './template/children';
 import {
   DEFAULT_LITERATURE_NOTE_FOLDER,
+  isInFolder,
   literatureNoteFolderFor,
   rememberFolderName,
   resolveLiteratureNoteFolder,
@@ -39,12 +40,18 @@ import {
 import { indexedKeyFor, type CachedEntry } from './template/context';
 import {
   findAvailableNotePath,
+  foreignNoteAction,
   isZotLitManaged,
   matchNoteByZoteroKey,
+  noteNameMatchesCitekey,
   zotLitChoice,
+  type ForeignNoteChoice,
   type ZotLitHandling,
 } from './template/note-lookup';
-import { substantiveContentDiffers } from './template/merge';
+import {
+  substantiveContentDiffers,
+  type NotesReimport,
+} from './template/merge';
 import {
   childrenCacheHit,
   readChildren,
@@ -223,6 +230,45 @@ function vaultPaths(app: App): Set<string> {
   return new Set(app.vault.getFiles().map((f) => f.path));
 }
 
+/** The note's own `citekey:` frontmatter (the record of a past citekey), or null. */
+function recordedCitekeyFor(app: App, notePath: string): string | null {
+  const file = app.vault.getAbstractFileByPath(notePath);
+  if (!(file instanceof TFile)) return null;
+  const ck = app.metadataCache.getFileCache(file)?.frontmatter?.citekey;
+  return typeof ck === 'string' && ck ? ck : null;
+}
+
+/**
+ * Move a note into `folder`, keeping its filename. Returns the (possibly
+ * unchanged) path. If the destination already exists, the note is left where it
+ * is — never overwrite.
+ */
+export async function moveNoteIntoFolder(
+  app: App,
+  notePath: string,
+  folder: string
+): Promise<string> {
+  const name = notePath.split('/').pop() ?? notePath;
+  const target = normalizePath(folder);
+  const desired = normalizePath(`${target}/${name}`);
+  if (desired === notePath) return notePath;
+  if (await app.vault.adapter.exists(desired)) return notePath;
+  const file = app.vault.getAbstractFileByPath(notePath);
+  try {
+    // The target folder may not exist yet (e.g. a group library's folder before
+    // its first import) — create it, then move.
+    if (target && !(await app.vault.adapter.exists(target))) {
+      await app.vault.adapter.mkdir(target);
+    }
+    if (file instanceof TFile) await app.fileManager.renameFile(file, desired);
+    else await app.vault.adapter.rename(notePath, desired);
+    return desired;
+  } catch (e) {
+    console.warn('[sw:import] could not move note into folder', notePath, '→', desired, e);
+    return notePath;
+  }
+}
+
 /** 1-based page of an annotation, from its `annotationPosition`. */
 function annotationPage(position: unknown): number | null {
   if (typeof position !== 'string' || !position) return null;
@@ -265,6 +311,33 @@ async function resolveZotLitHandling(
     await plugin.saveSettings();
   }
   return action;
+}
+
+/**
+ * Ask what to do about a note that carries the item's stable `zotero-key` but
+ * a filename that is not the item's current citekey. The note's own `citekey:`
+ * frontmatter (when present) is shown so an obsolete name is recognisable.
+ *
+ * Loaded on demand so modules that mock `obsidian` minimally never pull the
+ * modal in.
+ */
+async function resolveForeignNoteHandling(
+  plugin: ReferenceList,
+  notePath: string,
+  citekey: string,
+  noteCitekey: string | null
+): Promise<ForeignNoteChoice> {
+  const noteName = notePath.split('/').pop() ?? notePath;
+
+  const { ForeignNoteModal } = await import('./modals/foreignNoteModal');
+  return new Promise<ForeignNoteChoice>((resolve) =>
+    new ForeignNoteModal(plugin.app, {
+      noteName,
+      citekey,
+      noteCitekey,
+      onChoose: resolve,
+    }).open()
+  );
 }
 
 /**
@@ -423,10 +496,65 @@ export async function createOrUpdateOwnNote(
   );
 
   // Locate by the stable Zotero key FIRST, as ZotLit does: the note that owns
-  // this item is the one to update, whatever its filename.
+  // this item is the one to update, whatever its filename. Search the WHOLE
+  // import tree (the base folder and every subfolder) so a note that is merely
+  // in the wrong subfolder is found and updated in place, never duplicated.
+  const baseFolder = literatureNoteFolder(plugin);
   let notePath: string | null = stableKey
-    ? findNoteByZoteroKey(app, folder, stableKey)
+    ? findNoteByZoteroKey(app, baseFolder, stableKey)
     : null;
+
+  // A GROUP note (`zotero-key` `KEYg<groupID>`) belongs in the subfolder named
+  // after its library — the group NAME, not the id, so a renamed library means
+  // a renamed folder and the note follows it. Find it anywhere and move it
+  // there if it isn't already. This is structural, so it does not depend on the
+  // opt-in migration setting. It only applies when the group's name is KNOWN
+  // (otherwise the target would be a meaningless `Group N`); My Library notes
+  // are only moved when the user accepted the migration offer.
+  const groupName =
+    groupID && groupID !== 1
+      ? plugin.bibManager?.libraryNameFor(groupID) ?? null
+      : null;
+  const placeGroupNote = !!groupName;
+  if (notePath === null && stableKey) {
+    if (placeGroupNote || plugin.settings.moveKeyedNotesToImportFolder === true) {
+      const elsewhere = findNoteByZoteroKey(app, '', stableKey);
+      if (elsewhere && (placeGroupNote || !isInFolder(elsewhere, baseFolder))) {
+        notePath = await moveNoteIntoFolder(app, elsewhere, folder);
+      }
+    }
+  }
+  // Found under the tree but in the wrong subfolder: a group note goes to its
+  // (name-based) group folder.
+  if (notePath && placeGroupNote && folder) {
+    notePath = await moveNoteIntoFolder(app, notePath, folder);
+  }
+
+  // The item's note was found, but under a name that is not its current
+  // citekey. If the filename is the note's OWN recorded citekey it is a KNOWN
+  // past citekey — a regular citekey update (the reconcile path renames it), so
+  // no merge question is asked. Only an unknown name (another plugin's scheme,
+  // or an unrecorded obsolete citekey) asks how to merge.
+  let foreignNotesReimport: NotesReimport = 'ifEmpty';
+  let convertedForeign = false;
+  if (notePath && !noteNameMatchesCitekey(notePath, citekey)) {
+    const recorded = recordedCitekeyFor(app, notePath);
+    const knownPast = !!recorded && noteNameMatchesCitekey(notePath, recorded);
+    if (!knownPast) {
+      const action = foreignNoteAction(
+        await resolveForeignNoteHandling(plugin, notePath, citekey, recorded)
+      );
+      foreignNotesReimport = action.notesReimport;
+      if (action.createNew) {
+        notePath = null;
+      } else if (action.convert) {
+        convertedForeign = true;
+      } else {
+        debugLog('[sw:import] foreign note left alone:', notePath);
+        return { ok: true, changed: false };
+      }
+    }
+  }
 
   // Otherwise use the conventional filename — but NEVER overwrite a foreign
   // note sitting at that name (another library's copy, another work with a
@@ -446,6 +574,39 @@ export async function createOrUpdateOwnNote(
     }
   }
 
+  // Convert-and-rename: move the found note to the conventional `@citekey.md`
+  // (citations and future imports then find it there) before re-reading it. If
+  // that name is taken by another file, update in place and say so.
+  if (convertedForeign && notePath) {
+    const desired = folder ? normalizePath(`${folder}/${base}.md`) : `${base}.md`;
+    if (notePath !== desired) {
+      if (await app.vault.adapter.exists(desired)) {
+        new Notice(
+          `“${desired.split('/').pop()}” already exists; “${notePath.split('/').pop()}” was updated under its current name.`,
+          8000
+        );
+      } else {
+        const file = app.vault.getAbstractFileByPath(notePath);
+        try {
+          if (file instanceof TFile) {
+            await app.fileManager.renameFile(file, desired);
+          } else {
+            await app.vault.adapter.rename(notePath, desired);
+          }
+          notePath = desired;
+        } catch (e) {
+          console.warn(
+            '[sw:import] could not rename foreign note',
+            notePath,
+            '→',
+            desired,
+            e
+          );
+        }
+      }
+    }
+  }
+
   let existing: string | null = null;
   if (await app.vault.adapter.exists(notePath)) {
     try {
@@ -456,8 +617,10 @@ export async function createOrUpdateOwnNote(
   }
 
   // A ZotLit-managed note is either CONVERTED or left alone, per the user's
-  // remembered choice or an explicit prompt — never silently reworked.
-  if (existing != null && isZotLitManaged(existing)) {
+  // remembered choice or an explicit prompt — never silently reworked. When the
+  // user just chose to convert a foreign-named ZotLit note, that choice already
+  // answered this, so skip the second prompt.
+  if (existing != null && !convertedForeign && isZotLitManaged(existing)) {
     const name = notePath.split('/').pop() ?? notePath;
     if ((await resolveZotLitHandling(plugin, name)) === 'leave') {
       debugLog('[sw:import] leaving the ZotLit-managed note alone:', notePath);
@@ -484,6 +647,10 @@ export async function createOrUpdateOwnNote(
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
     existingContent: existing,
     migrateRelated,
+    // How the conversion meets the found note's existing `## Notes`: append
+    // (keep the user's writing and add Zotero notes below) or ifEmpty (add only
+    // when the section is empty).
+    options: { notesReimport: foreignNotesReimport },
   });
 
   if (folder && !(await app.vault.adapter.exists(normalizePath(folder)))) {

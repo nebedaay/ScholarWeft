@@ -1,6 +1,6 @@
 # Searching for references
 
-ScholarWeft's search and autocomplete popup is how you find a work to cite. The **Add Literature Notes from Zotero (search and filter)** uses the same search modes to select Zotero items to import as literature notes. Knowing what the two levels of search cover is the quickest way to get good results.
+ScholarWeft's search and autocomplete popup is how you find a work to cite. The **Add Literature Notes/Citations (search and filter)** command uses the same search modes to select Zotero items to import as literature notes or insert as citations. Knowing what the two levels of search cover is the quickest way to get good results.
 
 ## The two levels
 
@@ -44,7 +44,7 @@ Recents and the last search are kept **per note**: notes are about different thi
 - **Space your words.** Each term is matched on its own, so `@@bergson memory` finds works with both words. Write abbreviations the same way: `soc crit` for *Soc*ial *Cri*tique.
 - **A term matches where a word begins.** `@@soc cri` finds "**Soc**ial **Cri**tique". A fragment from the middle of a word is ignored.
 - **A citekey is matched whole, spaces or not.** `@@bourdieudist`, `@@bourdieu dist`, and `@@bourdieu dist 1984` all find `bourdieuDistinctionSocial1984` and put it first.
-- **Quote to search a literal string.** `"anti-colonial"` matches that exact string anywhere (case-insensitive), so it will not be split into separate words.
+- **Quote for a literal substring.** `"anti-colonial"` matches that exact string anywhere (case-insensitive), ignoring word boundaries. You do **not** need quotes to keep a hyphenated term whole: only spaces split terms, so `anti-colonial` matches both `anti-colonial` and `anticolonial`, and never "anti-witchcraft … colonial". While typing a quoted phrase you do not have to close the quote — everything after an opening `"` is treated as the literal phrase already, so `@"postcolonial Afri` searches "postcolonial Afri…" as you go.
 - **Add an author to narrow fast.** A surname plus one title word is the most precise search there is: `@@bourdieu critique` beats `@@critique` by a wide margin.
 - **Try `@@` when `@` finds nothing.** If you are sure the work should be there, the word may be in its abstract, or its journal or publisher.
 - **`@@` results show an excerpt** of the abstract where your terms were found, so you can see *why* an item matched when the title gives no clue. If your terms appear in different parts of the abstract you get a line for each.

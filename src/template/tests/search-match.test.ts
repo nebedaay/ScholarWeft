@@ -1,5 +1,5 @@
-import { matchTerm, adjacentChain, interiorWeight, queryAtoms, containsLiteral } from '../search-match';
-import { scoreEntry, passesCoverage, queryTerms, compoundWordScore, isCompoundQuery } from '../search-score';
+import { matchTerm, adjacentChain, interiorWeight, queryAtoms, containsLiteral, foldDiacritics, normTerm, foldWithMap } from '../search-match';
+import { scoreEntry, passesCoverage, queryTerms } from '../search-score';
 import { sameVariantWord } from '../search-variants';
 import { matchesWord } from '../search-score';
 
@@ -91,10 +91,54 @@ describe('quoted literal terms', () => {
     ]);
   });
 
+  it('treats an UNCLOSED double quote as a literal run to the end', () => {
+    // The intent of `@"postcolonial Afri` while typing is clear.
+    expect(queryAtoms('"postcolonial Afri')).toEqual([
+      { text: 'postcolonial afri', literal: true },
+    ]);
+    // A closed quote after it still parses normally.
+    expect(queryAtoms('"postcolonial" Afri')).toEqual([
+      { text: 'postcolonial', literal: true },
+      { text: 'afri', literal: false },
+    ]);
+  });
+
+  it('does NOT treat an unclosed SINGLE quote specially (apostrophes)', () => {
+    // `ma'ani` uses `'` as a transliteration barrier, not a quote delimiter.
+    expect(queryAtoms("ma'ani")).toEqual([{ text: 'maani', literal: false }]);
+    expect(queryAtoms("'anti colonial")).toEqual([
+      { text: 'anti', literal: false },
+      { text: 'colonial', literal: false },
+    ]);
+  });
+
   it('matches a quoted term literally, not as separated words', () => {
     expect(containsLiteral(title, 'anticolonial')).toBe(true);
     // "anti-witchcraft … colonialism" — the literal string is absent.
     expect(containsLiteral(title, 'anti-witchcraft colonialism')).toBe(false);
+  });
+
+  it('scores an unclosed quote as a literal phrase', () => {
+    const e = {
+      citekey: 'x',
+      title: 'Postcolonial African Literature',
+      authorText: '',
+      abstract: null,
+      venueText: null,
+    };
+    const s = scoreEntry(e, '"postcolonial Afri', {});
+    expect(passesCoverage(s)).toBe(true);
+    expect(s.matchedTerms).toEqual(['postcolonial afri']);
+    // The words apart in a different order are not the literal phrase.
+    expect(
+      passesCoverage(
+        scoreEntry(
+          { ...e, title: 'Postcolonialism and African' },
+          '"postcolonial African',
+          {}
+        )
+      )
+    ).toBe(false);
   });
 
   it('normalises case and diacritics in unquoted terms', () => {
@@ -104,6 +148,98 @@ describe('quoted literal terms', () => {
       { text: 'maria', literal: false },
     ]);
     expect(queryAtoms('"Café"')).toEqual([{ text: 'cafe', literal: true }]);
+  });
+
+  it('folds scholarly Arabic transliteration diacritics', () => {
+    // NFD alone leaves the spacing modifier letters for hamza/ʿayn, so a
+    // hamza-less query never matched the transliterated field.
+    expect(foldDiacritics('rasāʾil')).toBe('rasail');
+    expect(foldDiacritics('maʿānī')).toBe('maani');
+    expect(foldDiacritics('Jawāhir')).toBe('Jawahir');
+    // Underdots and macrons, the more common case, still fold.
+    expect(foldDiacritics('Ẓāhir')).toBe('Zahir');
+    expect(foldDiacritics('ḥadīth')).toBe('hadith');
+  });
+
+  it('folds every spelling of hamza / ʿayn to the same search form', () => {
+    // The point of the fold: the transliterated spelling and the apostrophe
+    // spelling must meet in the middle, whichever glyph the source used.
+    expect(normTerm('rasāʾil')).toBe('rasail');
+    expect(normTerm("rasa'il")).toBe('rasail');
+    // The phonetic modifier letters some conventions use instead of ʾ / ʿ.
+    expect(normTerm('rasāᶜil')).toBe('rasail');
+    expect(normTerm('maᵓānī')).toBe('maani');
+    expect(normTerm('maʿānī')).toBe('maani');
+    expect(normTerm("ma'ani")).toBe('maani');
+    // Curly vs straight apostrophe, and the grave/accent lookalikes.
+    expect(normTerm('wa’l')).toBe(normTerm("wa'l"));
+    expect(normTerm('wa`l')).toBe(normTerm('wa´l'));
+    expect(queryAtoms('Rasāʾil')).toEqual([{ text: 'rasail', literal: false }]);
+    expect(queryAtoms('Maʿānī')).toEqual([{ text: 'maani', literal: false }]);
+    // A hamza/apostrophe word stays ONE term (the straight apostrophe is not a
+    // separator once it is a barrier).
+    expect(queryAtoms("ma'ani")).toEqual([{ text: 'maani', literal: false }]);
+    expect(queryAtoms("rasa'il")).toEqual([{ text: 'rasail', literal: false }]);
+  });
+
+  it('collapses a doubled long vowel for every vowel', () => {
+    // Macron (ā) and doubling (aa) are the same long vowel in different
+    // conventions, so they must reach the same form.
+    expect(normTerm('jawaahir')).toBe(normTerm('jawāhir'));
+    expect(normTerm('Kitaab')).toBe('kitab');
+    expect(normTerm('Khaleel')).toBe('khalel');
+    expect(normTerm('Kareem')).toBe('karem');
+    expect(normTerm('soofi')).toBe('sofi');
+    expect(normTerm('Sufii')).toBe('sufi');
+    expect(normTerm('Sufuul')).toBe('suful');
+    // Shadda (a doubled CONSONANT) is a different phenomenon — it must stay.
+    expect(normTerm('Muḥammad')).toBe('muhammad');
+    expect(normTerm('Allah')).toBe('allah');
+  });
+
+  it('does not collapse across a removed hamza / ʿayn', () => {
+    // `tasāʾala` has a hamza BETWEEN two short a's. Removing it first and then
+    // collapsing `aa` would wrongly give `tasala`; keeping the barrier through
+    // the collapse preserves the seam.
+    expect(normTerm('tasāʾala')).toBe('tasaala');
+    expect(normTerm("tasa'ala")).toBe('tasaala');
+    expect(normTerm('tasala')).toBe('tasala');
+    expect(normTerm('tasāʾala')).not.toBe(normTerm('tasala'));
+    // A double that is NOT across a hamza still collapses.
+    expect(normTerm('rasaail')).toBe('rasail');
+    expect(normTerm('rasāʾil')).toBe('rasail');
+    // KNOWN LIMIT: a hamza-less + macron-less spelling is ambiguous and reads
+    // as a doubled long vowel, so `maani` alone does not reach `maʿānī`.
+    expect(normTerm('maani')).toBe('mani');
+  });
+
+  it('foldWithMap agrees with normTerm (the drift guard)', () => {
+    // Scoring uses `normTerm`; highlighting uses `foldWithMap`. If the fold is
+    // changed in one place and not the other, this fails, so the two cannot
+    // silently disagree about what a term matches.
+    const samples = [
+      'Jawāhir al-rasāʾil',
+      'maʿānī',
+      'tasāʾala',
+      "tasa'ala",
+      'jawaahir',
+      'rasaail',
+      'wa’l-khamsūn',
+      "ma'ani",
+      'Muḥammad',
+      'Ẓāhir',
+      'Café',
+      'Al-Khūʾī Abū',
+      'jidaa',
+      'anti-colonial',
+      '',
+    ];
+    for (const s of samples) {
+      expect(foldWithMap(s).text).toBe(normTerm(s));
+      expect(foldWithMap(s, { dropHyphens: true }).text).toBe(
+        normTerm(s).replace(/[-\u2010\u2011]/g, '')
+      );
+    }
   });
 });
 
@@ -186,25 +322,25 @@ describe('compound spelling equivalence (anti-colonial ≡ anticolonial)', () =>
 
   it('both spellings find both spellings', () => {
     for (const q of ['anticolonial', 'anti-colonial']) {
-      expect(compoundWordScore(hy, q, {})).not.toBeNull();
-      expect(compoundWordScore(jo, q, {})).not.toBeNull();
+      expect(passesCoverage(scoreEntry(hy, q, {}))).toBe(true);
+      expect(passesCoverage(scoreEntry(jo, q, {}))).toBe(true);
     }
   });
 
-  it('ranks the two spellings together, exact spelling winning the tie', () => {
-    const hyphenQuery = compoundWordScore(hy, 'anti-colonial', {})!;
-    const hyphenVariant = compoundWordScore(jo, 'anti-colonial', {})!;
-    const joinedQuery = compoundWordScore(jo, 'anticolonial', {})!;
-    const joinedVariant = compoundWordScore(hy, 'anticolonial', {})!;
-    // Exact spelling beats the variant by a small, fixed margin in each case.
-    expect(hyphenQuery.value).toBeLessThan(hyphenVariant.value);
-    expect(joinedQuery.value).toBeLessThan(joinedVariant.value);
+  it('ranks the exact spelling above the variant', () => {
+    // The hyphen/joined equivalence is handled by `matchTerm`, so no special
+    // compound path is needed; the exact spelling just matches the exact phrase.
+    expect(scoreEntry(hy, 'anti-colonial', {}).value).toBeLessThan(
+      scoreEntry(jo, 'anti-colonial', {}).value
+    );
+    expect(scoreEntry(jo, 'anticolonial', {}).value).toBeLessThan(
+      scoreEntry(hy, 'anticolonial', {}).value
+    );
   });
 
   it('rejects the split reading (anti … colonial in unrelated words)', () => {
     for (const q of ['anticolonial', 'anti-colonial']) {
-      expect(isCompoundQuery(q)).toBe(true);
-      expect(compoundWordScore(scatter, q, {})).toBeNull();
+      expect(passesCoverage(scoreEntry(scatter, q, {}))).toBe(false);
     }
   });
 });

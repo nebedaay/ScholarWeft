@@ -46,7 +46,7 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 
 ### Literature notes from Zotero items
 
-- **Import and update from Zotero** — The command **Add Literature Notes from Zotero (search and filter)** opens a search-and-filter window that searches all your enabled libraries inside Obsidian using the same search methods used to locate citations (see above). You can filter for items of a certain type; in a collection; containing notes, attachments, or annotations; and only notes not previously imported to Obsidian. You can order by search ranking or ascending or descending alphabetical order. See [Literature Notes](./docs/literature-notes.md#importing-and-updating).
+- **Import and update from Zotero** — The command **Add Literature Notes/Citations (search and filter)** opens a search-and-filter window that searches all your enabled libraries inside Obsidian using the same search methods used to locate citations (see above). It can create literature notes, insert citations, or both. You can filter for items of a certain type; in a collection; containing notes, attachments, or annotations; and for notes not previously imported to Obsidian (or all references). You can order by search ranking or ascending or descending alphabetical order. See [Literature Notes](./docs/literature-notes.md#importing-and-updating).
 - **Literature note creation** — While editing, create notes for cited works from the sidebar, tooltip, or command palette. ScholarWeft's default template provides comprehensive bibliographic data in the note’s frontmatter (every item type's own fields, its Zotero collections) and rich annotation callouts. See [Literature Notes](./docs/literature-notes.md).
 
 ### Zotero and file-based bibliographies

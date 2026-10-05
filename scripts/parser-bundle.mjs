@@ -4818,7 +4818,7 @@ var punct = /[:.#$%&\-+?<>~_/]/;
 var nonKeyPunct = /\p{P}/u;
 var space = /[ \t\v]/;
 var preKey = /[ \t\v[\-\r\n;]/;
-var locatorRe = /^((?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+)(?:[ \t]*,[ \t]*(?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+))*)/iu;
+var locatorRe = /^((?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?(?:[–—][[(]?[a-z\p{N}]+[\])]?)?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+(?![a-z\p{L}]|\.\s*\p{N}))(?:[ \t]*,[ \t]*(?:[[(]?[a-z\p{N}]+[\])]?[–—:-][[(]?[a-z\p{N}]+[\])]?(?:[–—][[(]?[a-z\p{N}]+[\])]?)?|[a-z\p{N}()[\]]*\p{N}+[a-z\p{N}()[\]]*|[mdclxvi]+(?![a-z\p{L}]|\.\s*\p{N})))*)/iu;
 function isTerminus(s) {
   return !s || s === "\r" || s === "\n";
 }
@@ -5007,11 +5007,45 @@ var parseExplicitLocator = (state) => {
       return [];
     }
   } else {
+    const m = state.currentSegment.val.match(/^([ \t]*[,;]?[ \t]*)([\s\S]*)$/);
+    if (m && m[2]) {
+      state.currentSegment.from += m[1].length;
+      state.currentSegment.val = m[2];
+    }
     state.currentSegment.type = SegmentType.locator;
   }
   return segments;
 };
+function splitLeadingLocatorLabel(value) {
+  const m = value.match(locators);
+  if (!m)
+    return null;
+  const after = value.slice(m.index + m[0].length);
+  const lm = after.match(locatorRe);
+  if (!lm)
+    return null;
+  return {
+    label: m[2],
+    value: lm[1],
+    rest: after.slice(lm.index + lm[0].length)
+  };
+}
+function splitLocatorValueContinuation(value, label) {
+  if (!isVolumeLabel(label))
+    return null;
+  let i = value.indexOf(",");
+  while (i !== -1) {
+    const rest = value.slice(i);
+    const parts = parseFollowingLocatorParts(rest).parts;
+    if (parts.length && isPageLabel(parts[0].label)) {
+      return { value: value.slice(0, i).trim(), rest };
+    }
+    i = value.indexOf(",", i + 1);
+  }
+  return null;
+}
 function getCitations(segments, locale = "en-US") {
+  var _a;
   const cites = [];
   const reference = (segments == null ? void 0 : segments.reference) === true;
   let key;
@@ -5023,17 +5057,35 @@ function getCitations(segments, locale = "en-US") {
   let suppressAuthor = false;
   let onlyAuthor = false;
   let composite = false;
+  let sawSeparator = false;
   const push = () => {
-    if ((suffix == null ? void 0 : suffix.trim()) === "-") {
+    if (suffix && /(^|\s)-\s*$/.test(suffix)) {
       if (cites.length === 0)
         composite = true;
-      suffix = void 0;
+      suffix = suffix.replace(/\s*-\s*$/, "");
+      if (!suffix.trim())
+        suffix = void 0;
     }
-    if ((label === "volume" || label === "vol." || label === "vols.") && locator && suffix && /^,\s*p{1,2}\.?\s*(\S+)/i.test(suffix)) {
-      const page = suffix.replace(/^,\s*p{1,2}\.?\s*/i, "");
-      locator = `${romanToArabic(locator)}:${page}`;
-      label = "page";
-      suffix = void 0;
+    if (!label && locator) {
+      const split = splitLeadingLocatorLabel(locator);
+      if (split) {
+        label = split.label;
+        locator = split.value;
+        suffix = (split.rest || "") + (suffix != null ? suffix : "");
+      }
+    }
+    if (locator) {
+      const cont = splitLocatorValueContinuation(locator, label);
+      if (cont) {
+        locator = cont.value;
+        suffix = cont.rest + (suffix != null ? suffix : "");
+      }
+    }
+    const combined = combineLocators(label, locator, suffix);
+    if (combined) {
+      locator = combined.locator;
+      label = combined.label;
+      suffix = combined.suffix;
     }
     const cite = {
       id: key
@@ -5066,6 +5118,19 @@ function getCitations(segments, locale = "en-US") {
       case SegmentType.at:
         if (i === 0) {
           composite = true;
+          continue;
+        }
+        if (!sawSeparator && segments[0].type === SegmentType.at && key !== void 0 && ((_a = segments[i - 1]) == null ? void 0 : _a.type) !== SegmentType.suppressor) {
+          const carried = suffix != null ? suffix : prefix;
+          suffix = void 0;
+          push();
+          prefix = carried;
+          locator = void 0;
+          label = void 0;
+          infix = void 0;
+          onlyAuthor = false;
+          suppressAuthor = false;
+          composite = false;
         }
         continue;
       case SegmentType.suppressor:
@@ -5089,6 +5154,7 @@ function getCitations(segments, locale = "en-US") {
         onlyAuthor = false;
         suppressAuthor = false;
         composite = false;
+        sawSeparator = true;
         continue;
       case SegmentType.key:
         key = seg.val;
@@ -5114,6 +5180,91 @@ function getCitations(segments, locale = "en-US") {
     from: segments[0].from,
     to: segments[segments.length - 1].to,
     reference: reference || void 0
+  };
+}
+function isVolumeLabel(label, locale = "en-US") {
+  var _a, _b, _c;
+  if (!label)
+    return false;
+  const trimmed = label.trim().toLowerCase();
+  if (/^(v|vv|vo|vlm|vlms|vol|vols|volume|volumes|tom|tome|tomes|band|bd|bde|bind)$/.test(trimmed.replace(/\.$/, ""))) {
+    return true;
+  }
+  const term = (_c = (_a = locatorToTerm[locale]) == null ? void 0 : _a[trimmed]) != null ? _c : (_b = locatorToTerm[locale]) == null ? void 0 : _b[trimmed.replace(/\.$/, "")];
+  return term === "volume";
+}
+function isPageLabel(label, locale = "en-US") {
+  var _a;
+  if (!label)
+    return true;
+  return label === "page" || ((_a = locatorToTerm[locale]) == null ? void 0 : _a[label]) === "page";
+}
+function combineVolumePage(label, locator, suffix, locale = "en-US") {
+  if (!locator || !suffix || !isVolumeLabel(label, locale))
+    return null;
+  const m = suffix.match(/^,\s*p{1,2}\.?\s*(\S.*)$/i);
+  if (!m)
+    return null;
+  return { locator: `${romanToArabic(locator)}:${m[1].trim()}`, label: "page" };
+}
+function parseFollowingLocatorParts(suffix) {
+  const parts = [];
+  let cursor = 0;
+  while (cursor < suffix.length) {
+    const rest = suffix.slice(cursor);
+    const sep = rest.match(/^[ \t]*[;,]?[ \t]*/);
+    if (!sep || !/[;,]/.test(sep[0]))
+      break;
+    const sepLen = sep[0].length;
+    const afterSep = rest.slice(sepLen);
+    const labelMatch = afterSep.match(locators);
+    if (!labelMatch)
+      break;
+    const valStart = sepLen + labelMatch[0].length;
+    const valueMatch = suffix.slice(cursor + valStart).match(locatorRe);
+    if (!valueMatch)
+      break;
+    parts.push({
+      label: labelMatch[2],
+      value: valueMatch[1],
+      start: cursor,
+      end: cursor + valStart + valueMatch[0].length
+    });
+    cursor = cursor + valStart + valueMatch[0].length;
+  }
+  return { parts, tail: suffix.slice(cursor) };
+}
+function combineLocators(label, locator, suffix, locale = "en-US") {
+  if (!locator)
+    return null;
+  const first = {
+    label: label != null ? label : "",
+    value: locator,
+    start: 0,
+    end: 0
+  };
+  const parsed = suffix ? parseFollowingLocatorParts(suffix) : { parts: [], tail: "" };
+  const all = [first, ...parsed.parts];
+  const isPage = (l) => {
+    var _a;
+    return !l || l === "page" || ((_a = locatorToTerm[locale]) == null ? void 0 : _a[l]) === "page";
+  };
+  const isVol = (l) => isVolumeLabel(l, locale);
+  const volIdx = all.findIndex((p) => isVol(p.label));
+  const pageIdx = all.findIndex((p) => isPage(p.label));
+  if (volIdx === -1 || pageIdx === -1 || volIdx === pageIdx)
+    return null;
+  if (pageIdx - volIdx !== 1)
+    return null;
+  const combined = `${romanToArabic(all[volIdx].value)}:${all[pageIdx].value}`;
+  const enDash = (v) => v.replace(/(?<=[\p{L}\p{N}])-(?=[\p{L}\p{N}])/gu, "\u2013");
+  const others = all.filter((_, i) => i !== volIdx && i !== pageIdx);
+  const text = others.map((p) => p.label ? `${p.label} ${enDash(p.value)}` : enDash(p.value)).join(", ");
+  const newSuffix = (text ? ", " + text : "") + parsed.tail;
+  return {
+    locator: combined,
+    label: "page",
+    suffix: newSuffix.trim() ? newSuffix : void 0
   };
 }
 function romanToArabic(s) {
@@ -5143,22 +5294,16 @@ function romanToArabic(s) {
   return String(total);
 }
 function expandAlias(alias, linkKey) {
-  const expanded = alias.replace(/@[^\s,;]*/g, "@" + linkKey);
-  return expanded.replace(/(^|[\s,(])vol\.\s*([IVXLCDM]+|\d+),\s*p{1,2}\.?\s*(\S+)/gi, (_m, pre, vol, page) => `${pre}${romanToArabic(vol)}:${page}`);
+  const expanded = alias.replace(/@[^\s,;{]*/g, "@" + linkKey);
+  return expanded.replace(/(^|[\s,({])(?:vols?|volumes?|vv?|bd|bde|band|bind|tomes?|tom)\.?\s*([IVXLCDM]+|\d+),\s*p{1,2}\.?\s*([^\s}]+)/gi, (_m, pre, vol, page) => `${pre}${romanToArabic(vol)}:${page}`);
 }
-var containerOpen = "\u27E6";
-var containerClose = "\u27E7";
 var containerMemberRe = /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
 function mergeContainerExpression(containerText) {
   var _a, _b;
-  const isUnicode = containerText.startsWith(containerOpen) && containerText.endsWith(containerClose);
-  const isBracket = !isUnicode && containerText.startsWith("[") && containerText.endsWith("]") && containerText[1] !== "[";
-  if (!isUnicode && !isBracket)
+  const isBracket = containerText.startsWith("[") && containerText.endsWith("]") && containerText[1] !== "[";
+  if (!isBracket)
     return null;
-  const strict = isUnicode;
-  const openLen = isUnicode ? containerOpen.length : 1;
-  const closeLen = isUnicode ? containerClose.length : 1;
-  const content = containerText.slice(openLen, containerText.length - closeLen);
+  const content = containerText.slice(1, containerText.length - 1);
   const members = [];
   containerMemberRe.lastIndex = 0;
   let m;
@@ -5183,8 +5328,7 @@ function mergeContainerExpression(containerText) {
       });
     }
   }
-  const minMembers = strict ? 2 : 1;
-  if (members.length < minMembers)
+  if (members.length < 1)
     return null;
   const publicMembers = members.map((x) => ({
     key: x.key,
@@ -5195,28 +5339,13 @@ function mergeContainerExpression(containerText) {
     return { expr: "[" + expr2 + "]", members: publicMembers, reference: true };
   }
   let expr = "";
-  let lastEnd = 0;
   for (let i = 0; i < members.length; i++) {
     const mem = members[i];
-    if (strict) {
-      const between = content.slice(lastEnd, mem.start);
-      if (!/^[\s;]*$/.test(between))
-        return null;
-      if (i > 0 && !/;/.test(between))
-        return null;
-      if (i === 0 && /;/.test(between))
-        return null;
-      if (mem.alias !== void 0 && !mem.alias.includes("@"))
-        return null;
-    }
     const aliasText = (_b = mem.alias) != null ? _b : "@" + mem.key;
     if (i > 0)
       expr += "; ";
     expr += expandAlias(aliasText, mem.key);
-    lastEnd = mem.end;
   }
-  if (strict && !/^[\s;]*$/.test(content.slice(lastEnd)))
-    return null;
   return { expr: "[" + expr + "]", members: publicMembers, reference: false };
 }
 function transformLinkAliases(str, linkCiteKey) {
@@ -5234,7 +5363,7 @@ function transformLinkAliases(str, linkCiteKey) {
       push(str[i], i);
   };
   const emitExpanded = (alias, key, aliasStart) => {
-    const tokenRe = /@[^\s,;]*/g;
+    const tokenRe = /@[^\s,;{]*/g;
     let cursor = 0;
     let tm;
     while (tm = tokenRe.exec(alias)) {
@@ -5248,7 +5377,7 @@ function transformLinkAliases(str, linkCiteKey) {
     for (let k = cursor; k < alias.length; k++)
       push(alias[k], aliasStart + k);
   };
-  const specialRe = new RegExp("\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|\\[\\[@([^|\\]\\s]+)\\]\\]|" + containerOpen, "g");
+  const specialRe = new RegExp("\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|\\[\\[@([^|\\]\\s]+)\\]\\]", "g");
   const bracketContainers = [];
   {
     let scan = 0;
@@ -5322,23 +5451,6 @@ function transformLinkAliases(str, linkCiteKey) {
     if (isInsideEmittedContainer(m.index)) {
       continue;
     }
-    if (m[0] === containerOpen) {
-      const close = str.indexOf(containerClose, m.index + 1);
-      if (close === -1)
-        continue;
-      const merged = mergeContainerExpression(str.slice(m.index, close + 1));
-      if (merged === null)
-        continue;
-      copyRange(last, m.index);
-      for (let k = 0; k < merged.expr.length; k++) {
-        push(merged.expr[k], k === merged.expr.length - 1 ? close : m.index);
-      }
-      if (merged.reference)
-        referenceRanges.push([m.index, close + 1]);
-      specialRe.lastIndex = close + 1;
-      last = close + 1;
-      continue;
-    }
     const full = m[0];
     const key = (_a = m[1]) != null ? _a : m[3];
     const alias = m[2];
@@ -5405,29 +5517,40 @@ function getCitationSegments(str, ignoreLinks = false, expandLinkAliases = false
   return mergeAdjacentGroups(str, getCitationSegmentsRaw(str, ignoreLinks, expandLinkAliases, linkCiteKey));
 }
 function mergeAdjacentGroups(str, groups) {
+  var _a, _b, _c, _d, _e;
   if (groups.length < 2)
     return groups;
-  const isNarrative = (g) => {
-    try {
-      return getCitations(g).citations.some((c) => c.composite === true);
-    } catch (e) {
-      return false;
-    }
+  const dropNarrativeFlag = (g) => {
+    const copy = g.filter((s) => !(s.type === SegmentType.suffix && s.val.trim() === "-")).map((s) => ({ ...s }));
+    return copy;
   };
   const out = [];
   for (const group of groups) {
     const prev = out[out.length - 1];
-    if (prev && !prev.reference && !group.reference && !isNarrative(prev) && !isNarrative(group) && prev.length > 0 && group.length > 0 && prev[0].type === SegmentType.bracket && group[0].type === SegmentType.bracket) {
+    const anyReference = !!(prev == null ? void 0 : prev.reference) || !!group.reference;
+    if (prev && prev.length > 0 && group.length > 0 && prev[0].type === SegmentType.bracket && group[0].type === SegmentType.bracket) {
       const prevLast = prev[prev.length - 1];
       const prevEnd = str[prevLast.to] === "]" ? prevLast.to + 1 : prevLast.to;
       const sep = str.slice(prevEnd, group[0].from);
       if (/^[ \t]*\n?[ \t]*$/.test(sep)) {
-        prev.push({
+        const merged = prev.concat();
+        const appended = dropNarrativeFlag(group);
+        merged.push({
           type: SegmentType.separator,
           from: prevEnd,
           to: group[0].from,
           val: ";"
-        }, ...group);
+        }, ...appended);
+        if (anyReference) {
+          merged.reference = true;
+          const prevStart = (_b = (_a = prev.referenceRange) == null ? void 0 : _a[0]) != null ? _b : prev[0].from;
+          const runEnd = str[group[group.length - 1].to] === "]" ? group[group.length - 1].to + 1 : group[group.length - 1].to;
+          const prevRange = prev.referenceRange;
+          const groupRange = group.referenceRange;
+          const combinedEnd = Math.max(runEnd, (_c = prevRange == null ? void 0 : prevRange[1]) != null ? _c : 0, (_d = groupRange == null ? void 0 : groupRange[1]) != null ? _d : 0);
+          merged.referenceRange = [Math.min(prevStart, (_e = groupRange == null ? void 0 : groupRange[0]) != null ? _e : prevStart), combinedEnd];
+        }
+        out[out.length - 1] = merged;
         continue;
       }
     }
@@ -5738,15 +5861,19 @@ function getCitationSegmentsRaw(str, ignoreLinks = false, expandLinkAliases = fa
       if (c === "{") {
         endCurrent(i);
         state.currentSegment = newCurrent(i, c, SegmentType.curlyBracket);
-        if (seekState == null ? void 0 : seekState.seekingLocator) {
+        if (state.seekingLocator || (seekState == null ? void 0 : seekState.seekingLocator)) {
           state.inExplicitLocator = true;
         }
         continue;
       }
       if (c === "}") {
-        if (state.inExplicitLocator && state.currentSegment.type === SegmentType.suffix) {
-          state.currentSegment.type = SegmentType.locatorSuffix;
-          state.seekingLocator = false;
+        if (state.inExplicitLocator) {
+          if (state.currentSegment.type === SegmentType.suffix) {
+            state.currentSegment.type = SegmentType.locatorSuffix;
+            state.seekingLocator = false;
+          } else if (state.currentSegment.type === SegmentType.curlyBracket) {
+            state.seekingLocator = false;
+          }
         }
         endCurrent(i);
         state.currentSegment = newCurrent(i, c, SegmentType.curlyBracket);
@@ -5809,10 +5936,13 @@ function getCitationSegmentsRaw(str, ignoreLinks = false, expandLinkAliases = fa
 }
 export {
   SegmentType,
+  combineLocators,
+  combineVolumePage,
   expandAlias,
   getCitationSegments,
   getCitations,
   getSegmentData,
+  isVolumeLabel,
   mergeCompoundCitations,
   mergeContainerExpression,
   referenceAliasRe

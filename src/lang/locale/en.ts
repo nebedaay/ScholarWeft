@@ -282,6 +282,22 @@ export default {
   'Select all results': 'Select all results',
   Clear: 'Clear',
   'Add notes': 'Add notes',
+  'Add Literature Notes/Citations': 'Add Literature Notes/Citations',
+  'Add Literature Notes/Citations (search and filter)':
+    'Add Literature Notes/Citations (search and filter)',
+  Add: 'Add',
+  'literature notes': 'literature notes',
+  citations: 'citations',
+  'literature notes and citations': 'literature notes and citations',
+  'Add citations': 'Add citations',
+  'Add notes and citations': 'Add notes and citations',
+  'Open a note to insert citations.': 'Open a note to insert citations.',
+  'A Note Already Exists for This Reference':
+    'A Note Already Exists for This Reference',
+  'Add a literature note for linked citations that lack them':
+    'Add a literature note for linked citations that lack them',
+  'When you insert a linked citation ([[@key]]) for an item that has no literature note yet, create the note from Zotero automatically. The note is created quietly — it is not opened.':
+    'When you insert a linked citation ([[@key]]) for an item that has no literature note yet, create the note from Zotero automatically. The note is created quietly — it is not opened.',
   reference: 'reference',
   references: 'references',
   selected: 'selected',
@@ -293,6 +309,16 @@ export default {
   'Update citekeys automatically': 'Update citekeys automatically',
   'Update notes when the template changes':
     'Update notes when the template changes',
+  'Insert literature notes for linked citations':
+    'Insert literature notes for linked citations',
+  'What to do when a linked citation ([[@key]]) has no literature note yet. Notes are created quietly from Zotero — never opened.':
+    'What to do when a linked citation ([[@key]]) has no literature note yet. Notes are created quietly from Zotero — never opened.',
+  'Ensure literature notes exist for all linked citations':
+    'Ensure literature notes exist for all linked citations',
+  'Insert a literature note whenever a linked citation is inserted':
+    'Insert a literature note whenever a linked citation is inserted',
+  "Don't insert missing literature notes for linked citations":
+    "Don't insert missing literature notes for linked citations",
   'Update all literature notes': 'Update all literature notes',
   'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.':
     'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.',

@@ -9,11 +9,16 @@ import {
   citeOnlyPairs,
   derivedRenameFor,
   findAvailableNotePath,
+  foreignNoteAction,
+  formatCitekey,
   matchNoteByZoteroKey,
+  noteNameMatchesCitekey,
   isZotLitManaged,
+  needsKeyBraces,
   planCitekeyReconcile,
   replaceCitekeys,
   scanCitekeys,
+  stableKeyGroupID,
   transformBareCitekeys,
   zotLitChoice,
   suffixCandidate,
@@ -241,6 +246,23 @@ describe('scanCitekeys (Pandoc key grammar)', () => {
     expect(keys('mailto:john@smith2005.com')).toEqual([]);
     expect(keys('2020@smith2005')).toEqual([]);
   });
+
+  it('reads a wikilink target verbatim (it is a filename)', () => {
+    expect(keys('[[@smith2005]]')).toEqual(['smith2005']);
+    expect(keys('[[@smith2005.]]')).toEqual(['smith2005.']);
+    expect(keys('[[@smith2005.|@, p. 2]]')).toEqual(['smith2005.']);
+  });
+
+  it('reads Pandoc\'s explicit @{…} form verbatim (trailing punct kept)', () => {
+    expect(keys('see @{smith2005.}')).toEqual(['smith2005.']);
+    expect(keys('[[@{smith.important.}]]')).toEqual(['smith.important.']);
+    expect(keys('@{https://example.com/bib?x=1&y=2}')).toEqual([
+      'https://example.com/bib?x=1&y=2',
+    ]);
+    // The empty forced-suffix marker is not a citekey.
+    expect(keys('@smith{}, 99 years later')).toEqual(['smith']);
+    expect(scanCitekeys('@{}')).toEqual([]);
+  });
 });
 
 describe('replaceCitekeys', () => {
@@ -270,6 +292,47 @@ describe('replaceCitekeys', () => {
         smith2005: 'smithNew2020',
       })
     ).toBe('mail john@smith2005.com about @smithNew2020.');
+  });
+
+  it('rewrites explicit @{…} keys and keeps the braces', () => {
+    expect(replaceCitekeys('see @{smith2005.}', { 'smith2005.': 'jones.2020.' })).toBe(
+      'see @{jones.2020.}'
+    );
+    // Renaming away the trailing punctuation drops the braces (bare is fine).
+    expect(replaceCitekeys('see @{smith2005.}', { 'smith2005.': 'jones2020' })).toBe(
+      'see @jones2020'
+    );
+  });
+
+  it('rewrites a wikilink target verbatim, never adding braces', () => {
+    expect(
+      replaceCitekeys('[[@smith2005.]]', { 'smith2005.': 'jones.2020.' })
+    ).toBe('[[@jones.2020.]]');
+    expect(
+      replaceCitekeys('[[@smith2005.|@, p. 2]]', { 'smith2005.': 'jones2020' })
+    ).toBe('[[@jones2020|@, p. 2]]');
+  });
+
+  it('adds braces when the NEW key needs them (sentence period kept)', () => {
+    expect(replaceCitekeys('see @smith2005.', { smith2005: 'jones.2020.' })).toBe(
+      'see @{jones.2020.}.'
+    );
+  });
+});
+
+describe('needsKeyBraces / formatCitekey', () => {
+  it('needs braces only when a bare @key would be misread', () => {
+    expect(needsKeyBraces('smith2005')).toBe(false);
+    expect(needsKeyBraces('smith-2005')).toBe(false);
+    expect(needsKeyBraces('smith.important.2005')).toBe(false);
+    expect(needsKeyBraces('smith2005.')).toBe(true);
+    expect(needsKeyBraces('smith2005-')).toBe(true);
+  });
+
+  it('formats with braces exactly when needed', () => {
+    expect(formatCitekey('smith2005')).toBe('@smith2005');
+    expect(formatCitekey('smith2005.')).toBe('@{smith2005.}');
+    expect(formatCitekey('smith2005', true)).toBe('@{smith2005}');
   });
 });
 
@@ -309,5 +372,61 @@ describe('transformBareCitekeys (shared converter detection)', () => {
     expect(transformBareCitekeys('see @smith2005.', () => null)).toBe(
       'see @smith2005.'
     );
+  });
+});
+
+describe('noteNameMatchesCitekey', () => {
+  it('accepts the conventional @citekey filename, with or without a folder', () => {
+    expect(noteNameMatchesCitekey('@smith2020.md', 'smith2020')).toBe(true);
+    expect(
+      noteNameMatchesCitekey('_2 Bibliographic notes/@smith2020.md', 'smith2020')
+    ).toBe(true);
+  });
+
+  it('rejects a foreign naming scheme or an obsolete citekey', () => {
+    expect(noteNameMatchesCitekey('Smith 2020 title.md', 'smith2020')).toBe(false);
+    expect(noteNameMatchesCitekey('@old2019.md', 'smith2020')).toBe(false);
+    expect(noteNameMatchesCitekey('@smith2020 - transcription.md', 'smith2020')).toBe(
+      false
+    );
+    expect(noteNameMatchesCitekey('@smith2020.md', '')).toBe(false);
+  });
+});
+
+describe('foreignNoteAction', () => {
+  it('maps convert/ifEmpty/new/cancel to what the importer does', () => {
+    expect(foreignNoteAction('convert')).toEqual({
+      convert: true,
+      notesReimport: 'append',
+      createNew: false,
+    });
+    expect(foreignNoteAction('convertIfEmpty')).toEqual({
+      convert: true,
+      notesReimport: 'ifEmpty',
+      createNew: false,
+    });
+    expect(foreignNoteAction('new')).toEqual({
+      convert: false,
+      notesReimport: 'ifEmpty',
+      createNew: true,
+    });
+    expect(foreignNoteAction('cancel')).toEqual({
+      convert: false,
+      notesReimport: 'ifEmpty',
+      createNew: false,
+    });
+  });
+});
+
+describe('stableKeyGroupID', () => {
+  it('extracts the group id from a `KEYg<groupID>` stable key', () => {
+    expect(stableKeyGroupID('EKUBHHNWg42')).toBe(42);
+    expect(stableKeyGroupID('ABC123g7')).toBe(7);
+  });
+
+  it('returns null for a My Library key', () => {
+    expect(stableKeyGroupID('EKUBHHNW')).toBeNull();
+    // An uppercase G is part of an ordinary key, not the group suffix.
+    expect(stableKeyGroupID('ABCg12X')).toBeNull();
   });
 });

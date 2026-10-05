@@ -79,21 +79,49 @@ describe('reference insertion syntax', () => {
     expect(segs[0].reference).toBeUndefined();
   });
 
-  it('flags a ⟦…⟧ multi-work container with a reference member', () => {
-    const segs = getCitationSegments('⟦[[@a|reference]]; [[@b]]⟧', false, true);
+  it('flags a CONTIGUOUS run when any member is a reference (no container needed)', () => {
+    const segs = getCitationSegments(
+      '[[@a|reference]] [[@b]] [[@c]]',
+      false,
+      true
+    );
     expect(segs).toHaveLength(1);
     expect(segs[0].reference).toBe(true);
     expect(getCitations(segs[0]).citations.map((c) => c.id)).toEqual([
       'a',
       'b',
+      'c',
     ]);
   });
 
-  it('a reference ⟦…⟧ container is permissive about between-member text', () => {
+  it('a contiguous reference run ignores the other members’ aliases', () => {
+    // A narrative `@ -` (or any alias) on a neighbour neither blocks the merge
+    // nor is honoured: the run is a reference list.
     for (const src of [
-      '⟦[[@a|reference]] [[@b]]⟧',
-      '⟦[[@a|reference]]; see also [[@b]]⟧',
-      '⟦[[@a|ref]] and [[@b]] and [[@c]]⟧',
+      '[[@a|reference]] [[@b|@ -]]',
+      '[[@a|see @, p. 5]] [[@b|ref]]',
+      '[[@a|reference]] [[@b|Smith’s work]]',
+    ]) {
+      const segs = getCitationSegments(src, false, true);
+      expect(segs).toHaveLength(1);
+      expect(segs[0].reference).toBe(true);
+    }
+  });
+
+  it('a reference run does not merge across a blank line or text', () => {
+    expect(
+      getCitationSegments('[[@a|reference]]\n\n[[@b]]', false, true)
+    ).toHaveLength(2);
+    expect(
+      getCitationSegments('[[@a|reference]] and [[@b]]', false, true)
+    ).toHaveLength(2);
+  });
+
+  it('a bracket reference container is permissive about between-member text', () => {
+    for (const src of [
+      '[ [[@a|reference]] [[@b]] ]',
+      '[ [[@a|reference]]; see also [[@b]] ]',
+      '[ [[@a|ref]] and [[@b]] and [[@c]] ]',
     ]) {
       const segs = getCitationSegments(src, false, true);
       expect(segs).toHaveLength(1);
@@ -115,30 +143,31 @@ describe('reference insertion syntax', () => {
   });
 
   it('mergeContainerExpression reports reference containers', () => {
-    expect(mergeContainerExpression('⟦[[@a|reference]]; [[@b]]⟧')).toMatchObject({
+    expect(
+      mergeContainerExpression('[ [[@a|reference]]; [[@b]] ]')
+    ).toMatchObject({
       expr: '[@a; @b]',
       members: [{ key: 'a' }, { key: 'b' }],
       reference: true,
     });
-    expect(mergeContainerExpression('⟦[[@a]]; [[@b|ref]]⟧')).toMatchObject({
+    expect(mergeContainerExpression('[ [[@a]]; [[@b|ref]] ]')).toMatchObject({
       expr: '[@a; @b]',
       reference: true,
     });
-    expect(mergeContainerExpression('⟦[[@a]]; [[@b]]⟧')).toMatchObject({
+    expect(mergeContainerExpression('[ [[@a]]; [[@b]] ]')).toMatchObject({
       expr: '[@a; @b]',
       reference: false,
     });
     // Reference containers ignore between-member text entirely.
-    expect(mergeContainerExpression('⟦[[@a|reference]] [[@b]]⟧')).toMatchObject({
-      expr: '[@a; @b]',
-      reference: true,
-    });
     expect(
-      mergeContainerExpression('⟦[[@a|reference]]; see [[@b]]⟧')
+      mergeContainerExpression('[ [[@a|reference]] [[@b]] ]')
+    ).toMatchObject({ expr: '[@a; @b]', reference: true });
+    expect(
+      mergeContainerExpression('[ [[@a|reference]]; see [[@b]] ]')
     ).toMatchObject({ expr: '[@a; @b]', reference: true });
   });
 
-  it('mergeContainerExpression handles both delimiter forms', () => {
+  it('mergeContainerExpression handles the bracket delimiter', () => {
     expect(
       mergeContainerExpression('[ [[@a|reference]] [[@b]] ]')
     ).toMatchObject({ expr: '[@a; @b]', reference: true });

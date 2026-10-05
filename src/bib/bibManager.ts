@@ -30,7 +30,11 @@ import {
   queryTerms,
   tierWeights,
 } from 'src/template/search-tier';
-import { passesCoverage, compoundWordScore, isCompoundQuery, scoreEntry } from 'src/template/search-score';
+import {
+  citekeyMatch,
+  passesCoverage,
+  scoreEntry,
+} from 'src/template/search-score';
 import {
   interpretationsFor,
   isSearchableQuery,
@@ -59,6 +63,10 @@ import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZote
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import {
+  linkedCitekeysIn,
+  sweepsNoteOnResolve,
+} from 'src/template/missing-notes';
+import {
   folderNameSnapshot,
   literatureNoteFolderFor,
   libraryDisplayName,
@@ -84,6 +92,7 @@ import {
 import { buildChildPresence } from 'src/template/child-presence';
 import {
   containsLiteral,
+  foldDiacritics,
   queryAtoms,
   normTerm,
   setWordCacheLimit,
@@ -114,11 +123,12 @@ import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
 
-// Strip diacritics so "Muller" matches "Müller", "Cezanne" matches "Cézanne".
+// Strip diacritics so "Muller" matches "Müller", "Cezanne" matches "Cézanne",
+// and (scholarly Arabic) "rasail" matches "rasāʾil". The SAME fold the search
+// scorer uses (`foldDiacritics`), so the Fuse index and the scorer agree.
 // Applied both when building the index and when normalising search queries.
 // Credit: approach from obsidian-citation-extended (MIT).
-export const normalizeDiacritics = (s: string): string =>
-  s.normalize('NFD').replace(/\p{Mn}/gu, '');
+export const normalizeDiacritics = (s: string): string => foldDiacritics(s);
 
 /**
  * A copy of a CSL entry with its external-link fields removed. citeproc renders
@@ -150,7 +160,7 @@ import { cslEntryHtmlToMarkdown } from './csl-markdown';
  * and every note re-renders with the new code. Without this, live preview
  * and reading mode keep serving stale citations from before a code fix.
  */
-const RENDER_CACHE_VERSION = 3;
+const RENDER_CACHE_VERSION = 7;
 
 /**
  * Persisted citation-index format version. v2 adds `builtAt` (a scan
@@ -914,10 +924,24 @@ export class BibManager {
     this.markBackendReady();
     this.initPromise.resolve();
 
+    // Re-render any open note NOW. A note opened while the library was still
+    // loading rendered from the partial/empty cache — often leaving citations
+    // as raw alias text because the citable item wasn't fetched yet — and
+    // `markBackendReady` only clears the cache; without this call nothing
+    // re-asks the open views to render, so they stayed unformatted until the
+    // plugin was toggled (which rebuilds and re-renders). retryNow /
+    // scheduleZoteroRecovery / reinit all already do this; the initial load is
+    // the one path that did not.
+    void Promise.resolve(this.plugin?.processReferences()).catch(console.error);
+
     // A citekey renamed in Zotero while Obsidian was closed is not visible as a
     // cache delta (the in-memory item-key map starts empty), so reconcile the
     // vault notes against the freshly-loaded library by stable key instead.
     this.plugin.scheduleCitekeyReconcile();
+    // Also review keyed notes once: foreign filenames get the merge prompt, and
+    // notes outside the import folder get a one-time move offer. Cheap (metadata
+    // cache only) and silent when there is nothing to fix.
+    this.plugin.scheduleKeyedNotesReview();
   }
 
   /**
@@ -1053,7 +1077,14 @@ export class BibManager {
     let parts = this.hayCache.get(entry);
     if (!parts) {
       parts = {
-        core: normTerm(`${entry.title ?? ''} \u0001 ${authorTextOf(entry)}`),
+        // The CITEKEY is part of the searchable text: the `@` tier must find a
+        // literal citekey prefix (`smithMemory202`), and the cheap pre-filter
+        // is what admits a candidate before the scorer runs. Without the key
+        // here, a query that matches only the citekey was dropped before the
+        // scorer's citekey logic could see it.
+        core: normTerm(
+          `${entry.id ?? ''} \u0001 ${entry.title ?? ''} \u0001 ${authorTextOf(entry)}`
+        ),
         abstract: normTerm((entry as { abstract?: string }).abstract ?? ''),
         venue: normTerm(venueTextOf(entry)),
       };
@@ -1212,6 +1243,12 @@ export class BibManager {
       venueText: venueTextOf(entry),
     };
 
+    // A literal CITEKEY match wins outright (exact / leading prefix / terms in
+    // order). The pre-filter above already admits entries whose citekey holds
+    // the query, so this is what makes `@authorTitle20` find the key directly.
+    const ck = citekeyMatch(entry.id ?? '', query);
+    if (ck) return { value: ck.value, terms: queryTerms(query) };
+
     // A quoted query is matched LITERALLY. The interpretation machinery strips
     // the quotes, so its re-joined terms lose the literal signal — score the
     // RAW query once and use that result.
@@ -1219,18 +1256,6 @@ export class BibManager {
       const s = scoreEntry(target, query, { includeAbstract, includeVenue });
       return passesCoverage(s) ? { value: s.value, terms: s.matchedTerms } : null;
     }
-
-    // A COMPOUND whole-word match wins outright and must not be undercut by a
-    // split reading (`anticolonial` vs "anti" + "colonial" in unrelated words).
-    const compound = compoundWordScore(target, query, {
-      includeAbstract,
-      includeVenue,
-    });
-    if (compound !== null) return { value: compound.value, terms: compound.terms };
-
-    // A compound-word query that this entry does NOT contain as a compound, but
-    // DOES contain as separate words, is the false positive to reject.
-    if (isCompoundQuery(query)) return null;
 
     // NO FUSE GATE HERE. Fuse supplies RECALL only; using its hits as a filter
     // silently dropped entries that plainly contain the terms. The scorer alone
@@ -1516,9 +1541,13 @@ export class BibManager {
   }
 
   getZoteroAdapter(): ZoteroAdapter {
-    const { settings } = this.plugin;
-    const port = settings.zoteroPort ?? DEFAULT_ZOTERO_PORT;
-    return settings.useNativeZoteroAPI
+    // `plugin` is null before init and briefly during a re-init/teardown (e.g.
+    // a settings save triggers refreshGlobalZBib → refreshOnAppRefocus →
+    // processReferences while the plugin is being re-created). Fall back to the
+    // defaults so a fire-and-forget caller can never throw on a null plugin.
+    const settings = this.plugin?.settings;
+    const port = settings?.zoteroPort ?? DEFAULT_ZOTERO_PORT;
+    return settings?.useNativeZoteroAPI
       ? new NativeAdapter(port)
       : new BBTAdapter(port);
   }
@@ -1540,6 +1569,11 @@ export class BibManager {
   markBackendReady() {
     this.backendLoading = false;
     this.fileCache.clear();
+    // The render inputs (the full library) changed, so an unchanged note's
+    // output differs from the partial-load render. Clear the per-path dispatch
+    // hashes or `dispatchResult` sees a match and skips re-dispatching, leaving
+    // the open view showing the partial/raw render.
+    this.dispatchedHashes.clear();
   }
 
   get isBackendLoading(): boolean {
@@ -2534,42 +2568,6 @@ export class BibManager {
       this.plugin.settings.formatLinkAliases
     );
 
-    // When formatLinkAliases is on, getCitationSegments' transformLinkAliases
-    // pass converts [[@key]] → [@key] before the container pre-pass runs.
-    // mergeContainerExpression then finds no [[@…]] anchors and returns null,
-    // so ⟦…⟧ container groups are silently dropped from segs — they never
-    // reach cache.citations, and the reading-mode post-processor's findRendered
-    // always returns undefined for them.
-    //
-    // Recover missed containers: re-parse without alias expansion (so
-    // mergeContainerExpression still sees [[@…]]) and splice in any container
-    // groups that the first pass omitted.
-    if (
-      this.plugin.settings.renderLinkCitations &&
-      this.plugin.settings.formatLinkAliases
-    ) {
-      const containerOpen = '⟦'; // ⟦
-      const rawSegs = getCitationSegments(
-        content,
-        false, // ignoreLinks=false — containers use [[@key]] wikilinks
-        false  // expandLinkAliases=false — keep [[@key]] intact for merging
-      );
-      for (const group of rawSegs) {
-        if (!group.length) continue;
-        // Only add groups that start with the container-open character.
-        if (content[group[0].from] !== containerOpen) continue;
-        // Skip if the first pass already captured this range (avoids
-        // duplicates if the parser is ever fixed upstream).
-        const dup = segs.some(
-          (s) =>
-            s.length > 0 &&
-            s[0].from === group[0].from &&
-            s[s.length - 1].to === group[group.length - 1].to
-        );
-        if (!dup) segs.push(group);
-      }
-    }
-
     const processed = segs.map((s) => getCitations(s));
 
     // Cold start: while the full library is still loading, fetch only THIS
@@ -2620,6 +2618,21 @@ export class BibManager {
         }
       })
     );
+
+    // "Ensure literature notes exist for all linked citations": when the ACTIVE
+    // note's citations are resolved, fill in any missing notes for its linked
+    // citations. Bounded to the active note and de-duplicated per session, so
+    // this never becomes a vault-wide scan. Skipped during warm-up (which walks
+    // many notes and must not create anything).
+    if (
+      !this.warmingSkipLRU &&
+      sweepsNoteOnResolve(this.plugin.settings.missingLinkedNoteAction) &&
+      app.workspace.getActiveFile()?.path === file.path
+    ) {
+      void this.ensureLinkedNotesForFile(file, content).catch((e) =>
+        console.warn('[sw:notes] linked-note sweep failed', e)
+      );
+    }
 
     const areSettingsEqual = equal(settings, cachedDoc?.settings);
 
@@ -3971,6 +3984,90 @@ export class BibManager {
     // the user has to know about.
     void this.fillZoteroNotesForCitekey(citekey, sourceFile);
     return { ok: true, changed: true };
+  }
+
+  /**
+   * Quietly create the literature note for `citekey` when none exists yet.
+   *
+   * Used by the "Insert literature notes for linked citations" setting (both
+   * the insertion path and the resolve sweep): the note must appear WITHOUT
+   * stealing focus (ZotLit's protocol path opens a tab, so the ZotLit route
+   * goes through the non-opening bulk API). Returns true when a note was
+   * created.
+   */
+  async ensureLitNoteForCitekey(
+    citekey: string,
+    sourceFile: TFile
+  ): Promise<boolean> {
+    const entry = this.bibCache.get(citekey) as any;
+    if (!entry) return false;
+    // Re-check here too: the caller checks, but a concurrent path may have
+    // created the note in between.
+    if (getLitNoteForCitekey(citekey, sourceFile.path, app)) return false;
+
+    if (this.plugin.settings.useOwnNoteTemplate === true) {
+      const res = await createOrUpdateOwnNote(
+        this.plugin,
+        citekey,
+        entry,
+        sourceFile,
+        { open: false }
+      );
+      return res.ok;
+    }
+
+    // ZotLit path: create via the non-opening bulk API (createNote), never the
+    // protocol route, which would open the new note.
+    const zoteroItemKey: string | undefined = entry._zoteroKey;
+    if (zoteroItemKey && this.plugin.settings.createNotesWithZotLit !== false) {
+      const groupId: number | undefined = entry.groupID;
+      const indexedKey =
+        groupId && groupId !== 1
+          ? `${zoteroItemKey}g${groupId}`
+          : zoteroItemKey;
+      const attempted = await createLitNotesViaZotLitBulk(app, [
+        { indexedKey, entry },
+      ]);
+      if (attempted) {
+        void this.fillZoteroNotesForCitekey(citekey, sourceFile);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Linked citekeys already swept this session, so a render never loops. */
+  private linkedNoteSweepAttempted = new Set<string>();
+
+  /**
+   * Create missing literature notes for the LINKED citations in `content`
+   * ("Ensure literature notes exist for all linked citations").
+   *
+   * Bounded to ONE note and de-duplicated per session, so it never turns into a
+   * vault-wide scan. Non-blocking: the caller fires it without awaiting.
+   * Returns the number of notes created.
+   */
+  async ensureLinkedNotesForFile(file: TFile, content: string): Promise<number> {
+    const keys = linkedCitekeysIn(content);
+    if (!keys.length) return 0;
+    let created = 0;
+    for (const key of keys) {
+      if (this.linkedNoteSweepAttempted.has(key)) continue;
+      this.linkedNoteSweepAttempted.add(key);
+      if (getLitNoteForCitekey(key, file.path, app)) continue;
+      if (!this.bibCache.has(key)) continue;
+      try {
+        if (await this.ensureLitNoteForCitekey(key, file)) created++;
+      } catch (e) {
+        console.warn(
+          '[sw:notes] could not create note for linked citation',
+          key,
+          e
+        );
+      }
+    }
+    if (created) void this.plugin?.processReferences();
+    return created;
   }
 
   /**

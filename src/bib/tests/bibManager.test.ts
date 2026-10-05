@@ -72,6 +72,7 @@ function makePlugin(overrides: Record<string, any> = {}) {
     saveSettings: jest.fn(),
     processReferences: jest.fn(),
     scheduleCitekeyReconcile: jest.fn(),
+    scheduleKeyedNotesReview: jest.fn(),
     view: { setMessage: jest.fn() },
   } as any;
 }
@@ -1254,7 +1255,7 @@ describe('BibManager CSL rendering pipeline', () => {
 
     expect(writes.length).toBeGreaterThanOrEqual(1);
     const parsed = JSON.parse(writes[writes.length - 1]);
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(7);
     expect(parsed.notes['notes/io.md']).toBeTruthy();
 
     // Round-trip through loadRenderedCache into a fresh map.
@@ -1628,6 +1629,45 @@ describe('searchTier — variant symmetry and the cancellable async scan', () =>
     expect(ids('pérez')).toEqual(['e']);
   });
 
+  it('folds the transliteration hamza / ʿayn both ways', () => {
+    // Real scholarly transliteration: `ʾ` (U+02BE) and `ʿ` (U+02BF) do not
+    // decompose under NFD, so a typed `rasail` used to return nothing; and the
+    // macron vs doubled-vowel conventions (`jawāhir` / `jawaahir`) did not
+    // agree. The hamza is a barrier, so `tasāʾala`-style seams are preserved.
+    const translit: PartialCSLEntry[] = [
+      {
+        id: 'jaw',
+        title: 'Jawāhir al-rasāʾil: al-ḥāwī baʿd ʿulūm wasīlat al-wasāʾil',
+        author: [{ family: 'Niasse' }],
+        type: 'book',
+      },
+      {
+        id: 'bookB',
+        title: 'Jawāhir al-maʿānī wa-bulūgh al-amānī',
+        author: [{ family: 'Barada' }],
+        type: 'book',
+      },
+    ];
+    const { manager } = makeManager(translit);
+    manager.setFuse(translit);
+    const ids = (q: string) =>
+      manager.searchTier('title', q, 20).entries.map((x) => x.entry.id);
+    expect(ids('jawāhir')).toEqual(['jaw', 'bookB']);
+    expect(ids('jawaahir')).toEqual(['jaw', 'bookB']); // doubled long vowel
+    expect(ids('rasail')).toEqual(['jaw']);
+    expect(ids('rasāʾil')).toEqual(['jaw']);
+    expect(ids("rasa'il")).toEqual(['jaw']);
+    expect(ids('rasaail')).toEqual(['jaw']);
+    expect(ids('maʿānī')).toEqual(['bookB']);
+    expect(ids("ma'ani")).toEqual(['bookB']);
+    // KNOWN LIMIT: `maani` (no hamza, no macron) is ambiguous and folds to
+    // `mani`, so it does not reach `maʿānī`; type `ma'ani` or `maʿānī`.
+    expect(ids('maani')).toEqual([]);
+    // Two-term AND still works once the terms fold together.
+    expect(ids('jawāhir rasail')).toEqual(['jaw']);
+    expect(ids("jawāhir ma'ani")).toEqual(['bookB']);
+  });
+
   it('abandons the scan when the caller cancels', async () => {
     const { manager } = makeManager(entries);
     manager.setFuse(entries);
@@ -1638,5 +1678,62 @@ describe('searchTier — variant symmetry and the cancellable async scan', () =>
     });
     expect(res.cancelled).toBe(true);
     expect(res.entries).toEqual([]);
+  });
+
+  it('finds a literal citekey prefix typed as ONE long term', () => {
+    // Regression: the pre-filter haystack did not include the citekey, and the
+    // compound-word gate rejected a long single term before the citekey was
+    // consulted — so `@authorTitle20` found nothing unless a space split it
+    // into terms that happened to appear in the title.
+    const lib: PartialCSLEntry[] = [
+      {
+        id: 'smithMemory2020',
+        title: 'The Social Life of Memory',
+        author: [{ family: 'Smith' }],
+        type: 'book',
+      },
+      {
+        id: 'jonesRitual1999',
+        title: 'Ritual and Power',
+        author: [{ family: 'Jones' }],
+        type: 'book',
+      },
+    ];
+    const { manager } = makeManager(lib);
+    manager.setFuse(lib);
+    const ids = (q: string) =>
+      manager.searchTier('title', q, 20).entries.map((x) => x.entry.id);
+    expect(ids('smithMemory202')).toEqual(['smithMemory2020']);
+    expect(ids('@smithMemory202')).toEqual(['smithMemory2020']);
+    expect(ids('smithMemory')).toEqual(['smithMemory2020']);
+    // A long single term that is NEITHER a citekey prefix NOR a whole word of
+    // any field matches nothing (coverage rejects it; no chunk reading).
+    expect(ids('ritualpower')).toEqual([]);
+  });
+
+  it('searches literally from an UNCLOSED double quote', () => {
+    const lib: PartialCSLEntry[] = [
+      {
+        id: 'post',
+        title: 'Postcolonial African Literature',
+        author: [{ family: 'Ngugi' }],
+        type: 'book',
+      },
+      {
+        id: 'scatter',
+        title: 'Postcolonialism and African Studies',
+        author: [{ family: 'Other' }],
+        type: 'book',
+      },
+    ];
+    const { manager } = makeManager(lib);
+    manager.setFuse(lib);
+    const ids = (q: string) =>
+      manager.searchTier('title', q, 20).entries.map((x) => x.entry.id);
+    // Everything after the opening quote is one literal phrase.
+    expect(ids('"postcolonial Afri')).toEqual(['post']);
+    // The words apart/in another order do not satisfy the literal phrase.
+    expect(ids('"postcolonial African')).toEqual(['post']);
+    expect(ids('"african postcolonial')).toEqual([]);
   });
 });

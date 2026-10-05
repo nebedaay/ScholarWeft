@@ -1,4 +1,4 @@
-import { App, Modal, Notice, TFile } from 'obsidian';
+import { App, MarkdownView, Modal, Notice, TFile } from 'obsidian';
 
 import type ReferenceList from '../main';
 import { t } from '../lang/helpers';
@@ -7,12 +7,15 @@ import {
   defaultFilters,
   flagsFromChildren,
   flagsFromPresence,
+  litNoteFilterForTarget,
   passesImportFilters,
   IMPORT_TYPE_GROUPS,
+  type AddTarget,
   type ImportFilters,
   type ImportItemFlags,
   type ImportTypeGroup,
 } from '../template/import-filters';
+import { formatCitekey } from '../template/citekey-grammar';
 import {
   sortImportEntries,
   type ImportSortMode,
@@ -77,6 +80,10 @@ interface LastSearchState {
   searchAbstract: boolean;
   sortMode: ImportSortMode;
   sortDir: SortDirection;
+  /** Last-used add target: literature notes, citations, or both. */
+  addTarget?: AddTarget;
+  /** The literature-note filter to restore when the target returns to notes. */
+  noteWithoutLitNote?: boolean;
 }
 
 /** The remembered search/ordering, or `{}` when absent/unreadable. */
@@ -95,6 +102,12 @@ export class AddLiteratureNotesModal extends Modal {
   private filters: ImportFilters = defaultFilters();
   private sortMode: ImportSortMode = 'relevance';
   private sortDir: SortDirection = 'asc';
+  /** Add literature notes, citations, or both. */
+  private addTarget: AddTarget = 'notes';
+  /** Remembered literature-note filter, kept while the target is not `notes`. */
+  private noteWithoutLitNote = true;
+  private allFilterBtn: HTMLButtonElement | null = null;
+  private litFilterBtn: HTMLButtonElement | null = null;
   private selected = new Set<string>();
   private listEl!: HTMLElement;
   private statusEl!: HTMLElement;
@@ -130,8 +143,25 @@ export class AddLiteratureNotesModal extends Modal {
         ? saved.sortMode
         : 'relevance';
     this.sortDir = saved.sortDir === 'desc' ? 'desc' : 'asc';
+    this.addTarget =
+      saved.addTarget === 'citations' || saved.addTarget === 'both'
+        ? saved.addTarget
+        : 'notes';
+    this.noteWithoutLitNote =
+      typeof saved.noteWithoutLitNote === 'boolean'
+        ? saved.noteWithoutLitNote
+        : true;
+    // Apply the remembered target to the filter: citations/both always query
+    // all references.
+    this.filters = {
+      ...this.filters,
+      withoutLitNote: litNoteFilterForTarget(
+        this.addTarget,
+        this.noteWithoutLitNote
+      ),
+    };
 
-    setModalTitle(this, t('Add Literature Notes from Zotero'));
+    setModalTitle(this, t('Add Literature Notes/Citations'));
     // Search box + the abstract toggle (the `@@` tier).
     const searchRow = contentEl.createDiv({ cls: 'sw-add-notes__searchrow' });
     this.searchInput = searchRow.createEl('input', {
@@ -170,6 +200,23 @@ export class AddLiteratureNotesModal extends Modal {
     // control is disabled for it (and, with no query, it falls back to author
     // order — see `orderMatches`).
     const orderRow = contentEl.createDiv({ cls: 'sw-add-notes__order' });
+    // Add target: literature notes, citations, or both. Sits before "Order by"
+    // on the same row, and defaults to the last-used value (else notes).
+    orderRow.createSpan({ cls: 'sw-add-notes__order-label', text: t('Add') });
+    const addSelect = orderRow.createEl('select', { cls: 'dropdown' });
+    const addOptions: Array<[AddTarget, string]> = [
+      ['notes', t('literature notes')],
+      ['citations', t('citations')],
+      ['both', t('literature notes and citations')],
+    ];
+    for (const [value, label] of addOptions) {
+      addSelect.createEl('option', { text: label, value });
+    }
+    addSelect.value = this.addTarget;
+    addSelect.addEventListener('change', () => {
+      this.setAddTarget(addSelect.value as AddTarget);
+    });
+
     orderRow.createSpan({ cls: 'sw-add-notes__order-label', text: t('Order by') });
     const modeSelect = orderRow.createEl('select', { cls: 'dropdown' });
     const modeOptions: Array<[ImportSortMode, string]> = [
@@ -297,6 +344,8 @@ export class AddLiteratureNotesModal extends Modal {
           searchAbstract: this.searchAbstract,
           sortMode: this.sortMode,
           sortDir: this.sortDir,
+          addTarget: this.addTarget,
+          noteWithoutLitNote: this.noteWithoutLitNote,
         })
       );
     } catch {
@@ -311,8 +360,22 @@ export class AddLiteratureNotesModal extends Modal {
       text: t('Show items with'),
     });
     const withRow = side.createDiv({ cls: 'sw-add-notes__toggles' });
-    const withToggles: Array<[string, 'hasNotes' | 'hasAttachment' | 'hasAnnotations' | 'withoutLitNote']> = [
-      [t('No literature note'), 'withoutLitNote'],
+    // "All" and "No literature note" are two ends of ONE filter. All releases
+    // the note filter; No literature note applies it. They are mutually
+    // exclusive, and both are pinned to All while the add target is citations
+    // or both — you cannot cite what the "no literature note" filter hides.
+    this.allFilterBtn = withRow.createEl('button', {
+      cls: 'sw-add-notes__toggle',
+      text: t('All'),
+    });
+    this.allFilterBtn.addEventListener('click', () => this.setLitNoteFilter(false));
+    this.litFilterBtn = withRow.createEl('button', {
+      cls: 'sw-add-notes__toggle',
+      text: t('No literature note'),
+    });
+    this.litFilterBtn.addEventListener('click', () => this.setLitNoteFilter(true));
+    this.syncNoteFilterButtons();
+    const withToggles: Array<[string, 'hasNotes' | 'hasAttachment' | 'hasAnnotations']> = [
       [t('Zotero notes'), 'hasNotes'],
       [t('PDF/snapshot'), 'hasAttachment'],
       [t('Annotations'), 'hasAnnotations'],
@@ -393,6 +456,56 @@ export class AddLiteratureNotesModal extends Modal {
       onToggle(next);
     });
     return btn;
+  }
+
+  /** Set the literature-note filter (All / No literature note) in notes mode. */
+  private setLitNoteFilter(withoutLitNote: boolean): void {
+    // In citations/both mode the filter is pinned to All.
+    if (this.addTarget !== 'notes') return;
+    this.noteWithoutLitNote = withoutLitNote;
+    this.filters = { ...this.filters, withoutLitNote };
+    this.syncNoteFilterButtons();
+    this.persistSearch();
+    this.refresh();
+  }
+
+  /** Reflect the active literature-note filter (and its disabled state). */
+  private syncNoteFilterButtons(): void {
+    const inNotesMode = this.addTarget === 'notes';
+    const without = inNotesMode ? this.filters.withoutLitNote : false;
+    this.allFilterBtn?.toggleClass('is-on', !without);
+    this.allFilterBtn?.toggleClass('is-disabled', !inNotesMode);
+    this.litFilterBtn?.toggleClass('is-on', without);
+    this.litFilterBtn?.toggleClass('is-disabled', !inNotesMode);
+  }
+
+  /**
+   * Switch the add target. Citations/both query ALL references, so the
+   * literature-note filter is released to All; returning to notes restores the
+   * value the user last chose. Other filters are never disturbed.
+   */
+  private setAddTarget(target: AddTarget): void {
+    const previous = this.addTarget;
+    if (target === previous) return;
+    if (previous === 'notes' && target !== 'notes') {
+      this.noteWithoutLitNote = this.filters.withoutLitNote;
+    }
+    this.addTarget = target;
+    this.filters = {
+      ...this.filters,
+      withoutLitNote: litNoteFilterForTarget(target, this.noteWithoutLitNote),
+    };
+    this.syncNoteFilterButtons();
+    this.persistSearch();
+    this.updateStatus();
+    this.refresh();
+  }
+
+  /** Label for the confirm button, per the add target. */
+  private targetLabel(): string {
+    if (this.addTarget === 'citations') return t('Add citations');
+    if (this.addTarget === 'both') return t('Add notes and citations');
+    return t('Add notes');
   }
 
   /**
@@ -828,15 +941,56 @@ export class AddLiteratureNotesModal extends Modal {
         (n ? ` · ${n} ${t('selected')}` : '')
     );
     if (this.confirmBtn) {
-      this.confirmBtn.setText(`${t('Add notes')} (${n})`);
+      this.confirmBtn.setText(`${this.targetLabel()} (${n})`);
       this.confirmBtn.toggleClass('is-disabled', n === 0);
     }
+  }
+
+  /**
+   * Insert the selected references as a contiguous run of citations at the
+   * cursor in the active note — `[[@a]] [[@b]]`, or `[@a] [@b]` when linked
+   * citations are off. A contiguous run merges into one rendered citation.
+   */
+  private insertCitations(citekeys: string[]): void {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.editor || !view.file) {
+      new Notice(t('Open a note to insert citations.'));
+      return;
+    }
+    const linked = this.plugin.settings.renderLinkCitations !== false;
+    const text = citekeys
+      .map((key) => (linked ? `[[@${key}]]` : `[${formatCitekey(key)}]`))
+      .join(' ');
+    const file = view.file;
+    view.editor.replaceSelection(text);
+    // Render THIS file explicitly from the editor's just-updated text.
+    //
+    // The editor's own doc-change render (`citeKeyPlugin`) and the debounced
+    // `vault.modify` re-render can both be missed or superseded here: the
+    // note-creation loop that follows `both` changes the active view and calls
+    // `processReferences` itself, and the shared `modify` debounce can deliver a
+    // different file — which left the inserted citations sitting as literal
+    // `[[@key]]` links. `vault.cachedRead` can also lag an unsaved programmatic
+    // edit, so pass the editor's CURRENT value. `getReferenceList` dispatches to
+    // every live-preview/reading view showing the file.
+    void this.plugin.bibManager
+      .getReferenceList(file, view.editor.getValue())
+      .catch((e) => console.warn('[sw:add-notes] citation render failed', e));
   }
 
   private async createSelected(): Promise<void> {
     if (!this.selected.size) return;
     const citekeys = [...this.selected];
+    const mode = this.addTarget;
     this.close();
+    // Insert citations first, while the editor still holds the caret position
+    // the user left it at (note creation never moves it, but this is the
+    // synchronous, user-visible half of the action).
+    if (mode === 'citations' || mode === 'both') {
+      this.insertCitations(citekeys);
+    }
+    if (mode !== 'notes' && mode !== 'both') return;
+
     const source = this.sourceFile();
     const progress = new Notice(`Creating literature notes… 0/${citekeys.length}`, 0);
     // Open the note when the user asked for exactly one (and the setting allows).

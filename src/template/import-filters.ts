@@ -104,6 +104,27 @@ export function defaultFilters(): ImportFilters {
   };
 }
 
+/**
+ * What the "Add Literature Notes/Citations" dialogue should produce:
+ * literature notes, citations, or both.
+ */
+export type AddTarget = 'notes' | 'citations' | 'both';
+
+/**
+ * The `withoutLitNote` filter value for a given add target.
+ *
+ * In notes mode the user's chosen literature-note filter applies. Asking for
+ * citations (or both) implies querying ALL references — you cannot cite what the
+ * "no literature note" filter hides — so the note filter is released to All.
+ * The caller restores the saved value when the target returns to `notes`.
+ */
+export function litNoteFilterForTarget(
+  target: AddTarget,
+  savedWithoutLitNote: boolean
+): boolean {
+  return target === 'notes' ? savedWithoutLitNote : false;
+}
+
 /** The raw children payload the cache stores, in the shape we inspect. */
 interface RawChildrenShape {
   attachments?: Array<{ contentType?: string | null }>;

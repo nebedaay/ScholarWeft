@@ -6,12 +6,15 @@ import {
   SegmentType,
   RenderedCitation,
   getCitationSegments,
-  mergeContainerExpression,
-  referenceAliasRe,
 } from './parser/parser';
-import type { CitationSegments } from './parser/parser';
-import equal from 'fast-deep-equal';
 import { getLitNoteForCitekey } from './zotlit';
+import { domToCitationSource, replaceSourceRange } from './citationSource';
+import { matchRendered } from './citationMatch';
+import {
+  citationSpanClass,
+  citationSpanAttributes,
+  renderCitationContent,
+} from './citationRender';
 
 function getCiteClass(isResolved: boolean, isUnresolved: boolean) {
   const cls = ['sw-citation'];
@@ -19,36 +22,6 @@ function getCiteClass(isResolved: boolean, isUnresolved: boolean) {
   if (isUnresolved) cls.push('is-unresolved');
 
   return cls.join(' ');
-}
-
-function onlyValType(segs: Segment[]) {
-  return segs.map((s) => ({ type: s.type, val: s.val }));
-}
-
-/**
- * Extract the citekey from a reading-mode wikilink anchor. Obsidian renders
- * [[@key|alias]] as <a data-href="@key" …>alias</a>; the href may include a
- * folder path and/or a .md extension (e.g. "Literature/@smith1992.md").
- * Returns the bare citekey ("smith1992") or undefined when the target is not
- * an @citekey note.
- *
- * A link whose target is "@key (space and other text)" — e.g. the vault's
- * convention for derived files like [[@key - transcription]] or
- * [[@key - English translation]] — is NOT a citation link: the space after
- * the key means the filename is a derivative, not the literature note. Those
- * links must stay native wikilinks, so this returns undefined for them.
- */
-function getLinkCiteKey(a: HTMLElement): string | undefined {
-  const href =
-    a.getAttribute('data-href') || a.getAttribute('href') || '';
-  const base = href.replace(/\\/g, '/').split('/').pop() ?? '';
-  const stem = base.replace(/\.md$/i, '');
-  if (!stem.startsWith('@')) return undefined;
-  const citekey = stem.slice(1);
-  // A space (or other non-citekey char) after the key means the target is a
-  // derived filename (@key - transcription), not the literature note.
-  if (!/^[\w:.-]+$/.test(citekey)) return undefined;
-  return citekey;
 }
 
 // Obsidian renders footnotes in a <section data-footnotes> element.
@@ -80,143 +53,148 @@ function isCalloutSection(el: HTMLElement): boolean {
 }
 
 /**
- * Build the reading-mode DOM for a rendered citation. THE single builder used
- * by both the text walker (single citations) and the container pre-pass
- * (⟦…⟧ multi-work runs), so both produce identical markup:
- *
- *   <span class="sw-citation is-resolved [is-link]">
- *     rendered text
- *     [<a class="internal-link">…</a>]   when renderCitationsAsLinks
- *
- * Callers must NOT wrap the result in their own <a> — the span is the unit.
+ * Build the reading-mode DOM for a full-reference insertion: one
+ * `.sw-reference-entry` per cited work, each holding the formatted CSL entry.
+ * The content (and the span class/attributes) come from the SHARED
+ * `citationRender` module, so reading mode and live preview are identical.
  */
-function buildReferenceSpan(
-  plugin: ReferenceList,
-  rendered: RenderedCitation,
-  ctx: MarkdownPostProcessorContext
-): HTMLSpanElement {
-  const span = document.createElement('span');
-  span.className =
-    'sw-reference' + (rendered.citations.length > 1 ? ' is-list' : '');
-  span.setAttribute(
-    'data-citekey',
-    rendered.citations.map((c) => c.id).join('|')
-  );
-  span.setAttribute('data-source', ctx.sourcePath);
-
-  const abstract = plugin.app?.vault?.getAbstractFileByPath?.(ctx.sourcePath);
-  const file =
-    typeof TFile === 'function' && abstract instanceof TFile ? abstract : null;
-
-  for (const cite of rendered.citations) {
-    const item = document.createElement('span');
-    item.className = 'sw-reference-entry';
-    item.setAttribute('data-citekey', cite.id);
-
-    const entryEl = file
-      ? plugin.bibManager.getBibForCiteKey(file, cite.id)
-      : null;
-    if (entryEl) {
-      // Drop the sidebar button row; keep only the formatted CSL entry.
-      const entry = entryEl.querySelector('.csl-entry') ?? entryEl;
-      item.appendChild(entry.cloneNode(true));
-    } else {
-      item.classList.add('is-unresolved');
-      item.textContent = cite.id;
-    }
-    span.appendChild(item);
-  }
-
-  return span;
-}
-
 function buildCitationSpan(
   plugin: ReferenceList,
   rendered: RenderedCitation,
   ctx: MarkdownPostProcessorContext,
   sourceText?: Node
 ): HTMLSpanElement {
-  // Full-reference insertion: render the bibliography entry (or the whole
-  // list) instead of the in-text citation text.
-  if (rendered.reference) {
-    return buildReferenceSpan(plugin, rendered, ctx);
-  }
-
-  const attr: Record<string, string> = {
-    'data-citekey': rendered.citations.map((c) => c.id).join('|'),
-    'data-source': ctx.sourcePath,
-  };
-  if (rendered.note) {
-    attr['data-note-index'] = rendered.noteIndex.toString();
-  }
-
   const span = document.createElement('span');
-  span.className = getCiteClass(true, false);
-  for (const [k, v] of Object.entries(attr)) span.setAttribute(k, v);
+  span.className = citationSpanClass(rendered);
+  for (const [k, v] of Object.entries(
+    citationSpanAttributes(rendered, ctx.sourcePath)
+  )) {
+    span.setAttribute(k, v);
+  }
 
-  // When "render citations in reading mode" is off, fall back to the raw
-  // source text the citation came from (walker passes the text node).
-  if (plugin.settings.renderCitationsReadingMode || !sourceText) {
-    if (/</.test(rendered.val)) {
-      const parsed = new DOMParser().parseFromString(
-        rendered.val,
-        'text/html'
-      );
-      span.append(...Array.from(parsed.body.childNodes));
-    } else {
-      span.textContent = rendered.val;
+  // Reference groups resolve each entry's `.csl-entry` from the bibliography.
+  let referenceHtml: (Element | null)[] | undefined;
+  if (rendered.reference) {
+    const abstract = plugin.app?.vault?.getAbstractFileByPath?.(ctx.sourcePath);
+    const file =
+      typeof TFile === 'function' && abstract instanceof TFile ? abstract : null;
+    referenceHtml = rendered.citations.map((c) =>
+      file ? plugin.bibManager.getBibForCiteKey(file, c.id) : null
+    );
+  }
+
+  span.appendChild(
+    renderCitationContent({
+      cite: rendered,
+      referenceHtml,
+      sourceText,
+      useSourceText: !plugin.settings.renderCitationsReadingMode,
+    })
+  );
+
+  // Reference insertions are not links and carry no tooltip.
+  if (!rendered.reference) {
+    // If "link citations to literature notes" is on, wrap the content in an
+    // <a class="internal-link"> so Obsidian's own reading-mode click handler
+    // navigates to the note. `appendChild` preserves child order —
+    // `insertBefore(c, a.firstChild)` in a loop REVERSES the children.
+    if (plugin.settings.renderCitationsAsLinks && rendered.citations.length) {
+      const citekey = rendered.citations[0].id;
+      const resolved = getLitNoteForCitekey(citekey, ctx.sourcePath, plugin.app);
+      const linkTarget = resolved?.linkText ?? '@' + citekey;
+      span.classList.add('is-link');
+      const a = document.createElement('a');
+      a.className = 'internal-link';
+      a.setAttribute('data-href', linkTarget);
+      a.setAttribute('href', linkTarget);
+      while (span.firstChild) a.appendChild(span.firstChild);
+      span.appendChild(a);
     }
-  } else {
-    span.appendChild(sourceText.cloneNode());
+    plugin.tooltipManager.bindPreviewTooltipHandler(span);
   }
 
-  // If "link citations to literature notes" is on, wrap the content in an
-  // <a class="internal-link"> so Obsidian's own reading-mode click handler
-  // navigates to the note (same mechanism as [[wikilinks]]).
-  if (plugin.settings.renderCitationsAsLinks && rendered.citations.length) {
-    const citekey = rendered.citations[0].id;
-    const resolved = getLitNoteForCitekey(citekey, ctx.sourcePath, plugin.app);
-    const linkTarget = resolved?.linkText ?? '@' + citekey;
-    span.classList.add('is-link');
-    const a = document.createElement('a');
-    a.className = 'internal-link';
-    a.setAttribute('data-href', linkTarget);
-    a.setAttribute('href', linkTarget);
-    while (span.firstChild) a.insertBefore(span.firstChild, a.firstChild);
-    span.appendChild(a);
-  }
-
-  plugin.tooltipManager.bindPreviewTooltipHandler(span);
   return span;
 }
 
-/** Is this text node inside a code span or block? Code is never a citation. */
-function isCodeNode(node: Node): boolean {
-  const parent = node.parentElement;
-  return !!parent && (parent.tagName === 'CODE' || parent.tagName === 'PRE');
+/**
+ * Per-segment fallback used when a parsed citation has no rendered match
+ * (unresolved/unimported): render each segment with its status class, matching
+ * the live-preview decoration classes.
+ */
+function buildFallbackFragment(
+  plugin: ReferenceList,
+  ctx: MarkdownPostProcessorContext,
+  match: Segment[],
+  text: string,
+  from: number,
+  to: number
+): DocumentFragment {
+  const frag = createFragment();
+  let pos = from;
+  for (let i = 0; i < match.length; i++) {
+    const part = match[i];
+    const next = match[i + 1];
+    frag.appendText(text.substring(pos, part.from));
+    pos = part.to;
+
+    switch (part.type) {
+      case SegmentType.key: {
+        const { isResolved, isUnresolved } =
+          plugin.bibManager.getResolution(ctx.sourcePath, part.val) || {
+            isResolved: false,
+            isUnresolved: false,
+          };
+        frag.createSpan({
+          cls: getCiteClass(isResolved, isUnresolved),
+          text: part.val,
+          attr: { 'data-citekey': part.val, 'data-source': ctx.sourcePath },
+        });
+        continue;
+      }
+      case SegmentType.at: {
+        const { isResolved, isUnresolved } =
+          plugin.bibManager.getResolution(ctx.sourcePath, next?.val) || {
+            isResolved: false,
+            isUnresolved: false,
+          };
+        const classes: string[] = [part.type];
+        if (isUnresolved) classes.push('is-unresolved');
+        if (isResolved) classes.push('is-resolved');
+        frag.createSpan({
+          cls: `sw-citation-formatting ${classes.join(' ')}`,
+          text: part.val,
+        });
+        continue;
+      }
+      default:
+        frag.createSpan({
+          cls: `sw-citation-formatting ${part.type}`,
+          text: part.val,
+        });
+    }
+  }
+  frag.appendText(text.substring(pos, to));
+  return frag;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function processCiteKeys(plugin: ReferenceList) {
   return (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
-    const toRemove: Node[] = [];
-    const doc = (el as any).doc || el.ownerDocument || document;
     const sectionInfo = ctx.getSectionInfo(el);
     const isFootnote = isFootnoteSection(el);
     const isCallout = isCalloutSection(el);
 
     // Callouts (live preview) and footnotes have no usable sectionInfo; the
-    // whole-file cache is used for them instead. Bailing here would leave
-    // every citation inside a callout unrendered.
+    // whole-file cache is used for them instead.
     if (
       !sectionInfo &&
       !isCallout &&
       !el.hasClass('markdown-preview-view') &&
       !isFootnote
-    )
+    ) {
       return;
+    }
 
-    // We wont get a sectionInfo in print mode or for footnote sections
     const cache = plugin.bibManager.getCacheForPath(ctx.sourcePath);
     const sectionCites0 =
       sectionInfo && !isFootnote
@@ -226,623 +204,65 @@ export function processCiteKeys(plugin: ReferenceList) {
             sectionInfo.lineEnd
           )
         : cache?.citations;
-
-    // If the section lookup came up empty (Obsidian's getSectionInfo and
-    // metadataCache.sections can disagree on ranges), fall back to the
-    // whole-file cache so citations still render — matching the footnote /
-    // callout path. Prevents the base walker from degrading to raw
-    // per-part formatting for every citation in the section.
+    // Obsidian's getSectionInfo and metadataCache.sections can disagree on
+    // ranges, so fall back to the whole-file cache.
     const sectionCites =
       !sectionCites0?.length && cache?.citations?.length
         ? cache.citations
         : sectionCites0;
 
     if (!sectionCites?.length) {
+      // Reading mode can render a note before bibManager has built that note's
+      // citation cache. Ask the plugin to build the cache for THIS file; it
+      // re-renders the note and the next pass finds the cached citations.
+      // Loop-guarded per path inside the plugin.
+      if (typeof plugin.requestPostProcessRender === 'function') {
+        plugin.requestPostProcessRender(ctx.sourcePath);
+      }
       return;
     }
 
-    // Find a rendered citation by val/type equality. Prefer the section-scoped
-    // list, but fall back to the whole-file cache: Obsidian's
-    // getSectionInfo(el) and metadataCache.sections can disagree on a section's
-    // line range, so getCitationsForSection may return a subset that is missing
-    // the citation we need (e.g. the MERGED container group while standalone
-    // single-link entries from neighbouring lines ARE present). Without the
-    // fallback the container pre-pass silently does nothing and the walker
-    // degrades to raw per-part formatting.
-    const findRendered = (segs: Segment[]): RenderedCitation | undefined => {
-      const want = onlyValType(segs);
-      return (
-        sectionCites.find((c) => equal(onlyValType(c.data), want)) ??
-        cache?.citations?.find((c) => equal(onlyValType(c.data), want))
-      );
-    };
+    const candidates = [...sectionCites, ...(cache?.citations ?? [])];
 
-    // Reading mode gives us only the anchor text for a `[[@key|reference]]`
-    // link (no `[[…]]` markup), and "reference" contains no '@' for the parser
-    // to expand — so locate the rendered group by citekey + reference flag.
-    const findReference = (key: string): RenderedCitation | undefined => {
-      const matches = (c: RenderedCitation) =>
-        !!c.reference && c.citations.some((x) => x.id === key);
-      return sectionCites.find(matches) ?? cache?.citations?.find(matches);
-    };
-
-    // Multi-work containers (⟦…⟧): Obsidian renders each [[…]] inside the run
-    // as a separate <a>, so group the whole run into ONE rendered citation
-    // before the text walker sees it.
-    if (
-      plugin.settings.renderLinkCitations &&
-      plugin.settings.formatLinkAliases
-    ) {
-      const containerOpen = '\u27E6';
-      const containerClose = '\u27E7';
-
-      const buildSpan = (rendered: RenderedCitation): HTMLSpanElement =>
-        buildCitationSpan(plugin, rendered, ctx);
-
-      const finder = doc.createNodeIterator(el, NodeFilter.SHOW_TEXT);
-      const containerStarts: Text[] = [];
-      let fn: Node | null;
-      while ((fn = finder.nextNode())) {
-        if (isCodeNode(fn)) continue;
-        if (fn.nodeValue && fn.nodeValue.includes(containerOpen)) {
-          containerStarts.push(fn as Text);
-        }
-      }
-
-      for (const start of containerStarts) {
-        if (!start.isConnected || start.parentElement === null) continue;
-        const parent = start.parentElement;
-        const value = start.nodeValue ?? '';
-
-        // A text node can hold several '⟦' (e.g. "(⟦…⟧): ⟦[[@a]]…"): try each
-        // occurrence — an early one may just be the parenthetical ⟦…⟧ with no
-        // anchors, while a later one starts the real container.
-        let openIdx = value.indexOf(containerOpen);
-        while (openIdx !== -1) {
-          const preText = value.slice(0, openIdx);
-          let nodeText = value.slice(openIdx);
-          let cursor: Node = start;
-          let textNode: Text = start;
-          let first = true;
-          const runNodes: Node[] = [];
-          const pieces: string[] = [];
-          let anchors = 0;
-          let valid = true;
-          let closed = false;
-          let tailText = '';
-
-          while (true) {
-            const closeIdx = nodeText.indexOf(containerClose);
-            if (closeIdx !== -1) {
-              pieces.push(nodeText.slice(0, closeIdx + 1));
-              tailText = nodeText.slice(closeIdx + 1);
-              closed = true;
-              break;
-            }
-            pieces.push(nodeText);
-            if (!first) runNodes.push(cursor);
-            first = false;
-
-            const next = cursor.nextSibling;
-            if (!next) {
-              valid = false;
-              break;
-            }
-            if (next.nodeType === Node.TEXT_NODE) {
-              cursor = next;
-              textNode = next as Text;
-              nodeText = (next as Text).nodeValue ?? '';
-              continue;
-            }
-            if (next.nodeType === Node.ELEMENT_NODE && next.nodeName === 'A') {
-              const a = next as HTMLAnchorElement;
-              const key = getLinkCiteKey(a);
-              if (!key) {
-                valid = false;
-                break;
-              }
-              anchors++;
-              const aText = (a.textContent ?? '').trim();
-              pieces.push(
-                aText === '@' + key
-                  ? `[[@${key}]]`
-                  : `[[@${key}|${aText}]]`
-              );
-              runNodes.push(next);
-              // Advance past any run of adjacent anchors rendered without a
-              // text node between them (e.g. ⟦[[@a]][[@b]]⟧ with no spaces).
-              let after: ChildNode | null = next.nextSibling;
-              while (
-                after &&
-                after.nodeType === Node.ELEMENT_NODE &&
-                (after as Element).nodeName === 'A'
-              ) {
-                const nextA = after as HTMLAnchorElement;
-                const nextKey = getLinkCiteKey(nextA);
-                if (!nextKey) { valid = false; break; }
-                pieces.push(''); // implicit empty separator between adjacent anchors
-                anchors++;
-                const nextAText = (nextA.textContent ?? '').trim();
-                pieces.push(
-                  nextAText === '@' + nextKey
-                    ? `[[@${nextKey}]]`
-                    : `[[@${nextKey}|${nextAText}]]`
-                );
-                runNodes.push(after);
-                after = after.nextSibling;
-              }
-              if (!valid) break;
-              if (!after || after.nodeType !== Node.TEXT_NODE) {
-                valid = false;
-                break;
-              }
-              cursor = after;
-              textNode = after as Text;
-              nodeText = (after as Text).nodeValue ?? '';
-              continue;
-            }
-            valid = false;
-            break;
-          }
-
-          if (closed && valid && anchors >= 2) {
-            const merged = mergeContainerExpression(pieces.join(''));
-            if (merged !== null) {
-              const segs = getCitationSegments(merged.expr, false, false);
-              // Mirror the parser's reference marker so findRendered can match
-              // the cache group (whose data carries it).
-              if (merged.reference && segs.length) {
-                (segs[0] as CitationSegments).reference = true;
-                segs[0].push({
-                  type: SegmentType.reference,
-                  from: 0,
-                  to: 0,
-                  val: '',
-                });
-              }
-              if (segs.length) {
-                const rendered = findRendered(segs[0]);
-                if (rendered) {
-                  const span = buildSpan(rendered);
-                  if (preText) {
-                    start.nodeValue = preText;
-                    parent.insertBefore(span, start.nextSibling);
-                  } else {
-                    parent.insertBefore(span, start);
-                    parent.removeChild(start);
-                  }
-                  for (const n of runNodes) parent.removeChild(n);
-                  if (tailText) {
-                    textNode.nodeValue = tailText;
-                  } else {
-                    parent.removeChild(textNode);
-                  }
-                  break; // consumed this container — stop scanning this node
-                }
-              }
-            }
-          }
-
-          openIdx = value.indexOf(containerOpen, openIdx + 1);
-        }
-      }
-
-      // Outer-bracket multi-citation containers: `[ [[@a]]; [[@b]] ]` (2+
-      // wikilinks inside a plain bracket pair). Obsidian renders this as
-      // text "[ ", <a>@a</a>, text "; ", <a>@b</a>, text " ]". The base walker
-      // would render each anchor separately and leave the outer brackets as
-      // literal text, so merge the run into ONE rendered citation first.
-      // A bare `[` not part of `[[` starts a candidate; a bare `]` (not part of
-      // `]]`) closes it. Requires 2+ citation anchors inside to be treated as a
-      // container — single-wikilink or anchor-free brackets are left alone.
-      {
-        const innerLinkRe = /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]/g;
-
-
-        const finder2 = doc.createNodeIterator(el, NodeFilter.SHOW_TEXT);
-        const bracketStarts: Text[] = [];
-        let fn2: Node | null;
-        while ((fn2 = finder2.nextNode())) {
-          if (isCodeNode(fn2)) continue;
-          if (fn2.nodeValue && /(^|[^[])\[/.test(fn2.nodeValue)) {
-            bracketStarts.push(fn2 as Text);
-          }
-        }
-
-        for (const start of bracketStarts) {
-          if (!start.isConnected || start.parentElement === null) continue;
-          const parent = start.parentElement;
-          const value = start.nodeValue ?? '';
-
-          // Try each bare '[' in this text node (skip '[' that starts '[[').
-          let openIdx = value.search(/(^|[^[])\[/);
-          while (openIdx !== -1) {
-            // openIdx from search is the index of the char BEFORE '[', so
-            // adjust. (search returns index of the group start; the '[' is at
-            // openIdx + 1 when preceded by a char, or 0 when at start.)
-            const bracketAt = openIdx === 0 ? 0 : openIdx + 1;
-            const preText = value.slice(0, bracketAt);
-            let nodeText = value.slice(bracketAt);
-            let cursor: Node = start;
-            let textNode: Text = start;
-            let first = true;
-            const runNodes: Node[] = [];
-            let anchors = 0;
-            let valid = true;
-            let closed = false;
-            let tailText = '';
-            let innerText = '';
-
-            while (true) {
-              // Closing bare ']' (not part of ']]'): scan for a ']' at
-              // bracket depth 0. Nested plain citations ([@b]) have their own
-              // ']' which must NOT close the outer container — so count '['
-              // and ']' (skipping '[[…]]' wikilink pairs) over the text
-              // accumulated so far plus the current node's text.
-              const accumulated = innerText + nodeText;
-              let closeAt = -1;
-              let depth = 0;
-              for (let ci = 0; ci < accumulated.length; ci++) {
-                const ch = accumulated[ci];
-                if (ch === '[' && accumulated[ci + 1] === '[') {
-                  depth++;
-                  ci++;
-                } else if (ch === '[' && accumulated[ci + 1] !== '[') {
-                  depth++;
-                } else if (ch === ']' && accumulated[ci + 1] === ']') {
-                  if (depth > 1) {
-                    depth--;
-                    ci++;
-                  } else {
-                    // depth 1: this ']]' closes the outer container.
-                    closeAt = ci;
-                    break;
-                  }
-                } else if (ch === ']' && accumulated[ci + 1] !== ']') {
-                  if (depth > 1) {
-                    depth--;
-                  } else {
-                    // depth 0 or 1: the outer container's closing ']'.
-                    closeAt = ci;
-                    break;
-                  }
-                }
-              }
-              if (closeAt !== -1) {
-                const rel = closeAt - innerText.length;
-                innerText += nodeText.slice(0, rel);
-                tailText = nodeText.slice(rel + 1);
-                closed = true;
-                break;
-              }
-              innerText += nodeText;
-              // Don't re-push the node we just handled (the anchor branch below
-              // advances the cursor to the anchor itself, not past it).
-              if (!first && runNodes[runNodes.length - 1] !== cursor) {
-                runNodes.push(cursor);
-              }
-              first = false;
-
-              // Walk forward through siblings, tolerating ANY structure:
-              // text nodes, citation anchors, and unrelated elements (Obsidian
-              // may insert spans/breaks around list items). We only give up
-              // when we run off the end of the DOM without finding the closing
-              // ']'. Anchors without a citekey href are skipped, not fatal.
-              const next = cursor.nextSibling;
-              if (!next) {
-                valid = false;
-                break;
-              }
-              if (next.nodeType === Node.TEXT_NODE) {
-                cursor = next;
-                textNode = next as Text;
-                nodeText = (next as Text).nodeValue ?? '';
-                continue;
-              }
-              if (next.nodeType === Node.ELEMENT_NODE && next.nodeName === 'A') {
-                const a = next as HTMLAnchorElement;
-                const key = getLinkCiteKey(a);
-                if (key) {
-                  anchors++;
-                  // Obsidian's reading-mode anchor text can carry
-                  // leading/trailing whitespace or newlines (esp. inside list
-                  // items); trim before comparing so plain [[@key]] links are
-                  // detected as such and aliased links don't smuggle stray
-                  // whitespace into the merged citation expression.
-                  const aText = (a.textContent ?? '').trim();
-                  innerText +=
-                    aText === '@' + key
-                      ? `[[@${key}]]`
-                      : `[[@${key}|${aText}]]`;
-                }
-                runNodes.push(next);
-                // Advance to the anchor ITSELF (not past it) so the next
-                // iteration inspects its following sibling. Advancing past it
-                // skipped every other member when two anchors are adjacent with
-                // no text node between them ([[@a|reference]][[@b]][[@c]]),
-                // leaving the container unmerged and its members rendered as
-                // separate citations. The duplicate-push guard above keeps the
-                // anchor out of runNodes twice.
-                cursor = next;
-                textNode = next as Text;
-                nodeText = '';
-                continue;
-              }
-              // Unrelated element: skip it and keep scanning.
-              cursor = next;
-              textNode = next as Text;
-              nodeText = '';
-              continue;
-            }
-
-            if (closed && valid) {
-              // Parse the container with the shared parser (the same function
-              // the document parser uses, so citations and references stay in
-              // lock-step); everything between the brackets is discarded.
-              // `innerText` already includes the opening '[' but not the
-              // closing one.
-              const container = mergeContainerExpression(innerText + ']');
-              if (container && container.members.length >= 2) {
-                const segs = getCitationSegments(container.expr, false, false);
-                // Mirror the parser's reference marker so findRendered can
-                // match the cache group (whose data carries it).
-                if (container.reference && segs.length) {
-                  (segs[0] as CitationSegments).reference = true;
-                  segs[0].push({
-                    type: SegmentType.reference,
-                    from: 0,
-                    to: 0,
-                    val: '',
-                  });
-                }
-                if (segs.length) {
-                  const rendered = findRendered(segs[0]);
-                  if (rendered) {
-                    const span = buildSpan(rendered);
-                    if (preText) {
-                      start.nodeValue = preText;
-                      parent.insertBefore(span, start.nextSibling);
-                    } else {
-                      parent.insertBefore(span, start);
-                      parent.removeChild(start);
-                    }
-                    for (const n of runNodes) parent.removeChild(n);
-                    if (tailText) {
-                      textNode.nodeValue = tailText;
-                    } else {
-                      parent.removeChild(textNode);
-                    }
-                    break; // consumed this container
-                  }
-                }
-              }
-            }
-
-            // Move to the next bare '[' in this text node.
-            const rest = value.slice(bracketAt + 1);
-            const nextM = rest.match(/(^|[^[])\[/);
-            if (!nextM) {
-              openIdx = -1;
-            } else {
-              // nextM.index = index (in rest) of the char BEFORE the '['
-              // (0 when the '[' sits at rest[0] via the '^' alternative).
-              // The '[' itself is at nextM.index + nextM[0].length - 1.
-              const bracketInRest = nextM.index + nextM[0].length - 1;
-              const bracketAbs = bracketAt + 1 + bracketInRest;
-              // openIdx must point at the char BEFORE the '[' (0 when at start).
-              openIdx = bracketAbs === 0 ? 0 : bracketAbs - 1;
-            }
-          }
-        }
-      }
-    }
-
-    // Adjacent LINKED citations: in reading mode `[[@a]] [[@b]]` is two <a>
-    // elements separated by whitespace, so the base walker (one anchor at a
-    // time) would render them separately. Merge such a run into ONE compound
-    // citation, exactly as the container pre-pass does. Pandoc `[@a] [@b]`
-    // needs no pre-pass — it is a single text node, which the parser now merges.
-    if (plugin.settings.renderLinkCitations) {
-    for (const anchor of Array.from(el.querySelectorAll('a'))) {
-      const a = anchor as HTMLAnchorElement;
-      if (!a.isConnected) continue;
-      if (!getLinkCiteKey(a)) continue;
-
-      const runAnchors: HTMLAnchorElement[] = [a];
-      const gaps: Node[] = [];
-      let cursor: Node = a;
-      for (;;) {
-        const n = cursor.nextSibling;
-        if (!n || n.nodeType !== Node.TEXT_NODE) break;
-        if (!/^\s*$/.test((n as Text).nodeValue ?? '')) break;
-        const after = n.nextSibling;
-        if (
-          after &&
-          after.nodeType === Node.ELEMENT_NODE &&
-          (after as Element).nodeName === 'A' &&
-          getLinkCiteKey(after as HTMLElement)
-        ) {
-          gaps.push(n);
-          runAnchors.push(after as HTMLAnchorElement);
-          cursor = after;
-          continue;
-        }
-        break;
-      }
-      if (runAnchors.length < 2) continue;
-
-      // Rebuild the source expression and let the SHARED parser merge it.
-      const expr = runAnchors
-        .map((an) => {
-          const k = getLinkCiteKey(an)!;
-          const text = (an.textContent ?? '').trim();
-          return text === '@' + k ? `[[@${k}]]` : `[[@${k}|${text}]]`;
-        })
-        .join(' ');
-      const groups = getCitationSegments(expr, false, true);
-      // A run that does NOT collapse to one group (narrative `[[@a|@ -]]`, a
-      // `|reference` member) must be left for the base walker.
-      if (groups.length !== 1) continue;
-      const rendered = findRendered(groups[0]);
-      if (!rendered) continue;
-
-      const parent = a.parentNode;
-      if (!parent) continue;
-      parent.insertBefore(buildCitationSpan(plugin, rendered, ctx), a);
-      for (const an of runAnchors) parent.removeChild(an);
-      for (const gap of gaps) parent.removeChild(gap);
-    }
-    }
-
-    const walker = doc.createNodeIterator(el, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node.parentElement && node.parentElement.tagName === 'CODE') {
-        continue;
-      }
-
-      let content = node.nodeValue;
-      let linkCiteKey: string | undefined;
-      if (node.parentElement.tagName === 'A') {
-        if (!plugin.settings.renderLinkCitations) continue;
-        content = `[${content}]`;
-        if (plugin.settings.formatLinkAliases) {
-          linkCiteKey = getLinkCiteKey(node.parentElement);
-        }
-        // Single `[[@key|reference]]`: the anchor text is the literal alias.
-        if (
-          linkCiteKey &&
-          referenceAliasRe.test(content.replace(/^\[|\]$/g, '').trim())
-        ) {
-          const rendered = findReference(linkCiteKey);
-          if (rendered) {
-            const span = buildCitationSpan(plugin, rendered, ctx, node);
-            const anchor = node.parentElement;
-            anchor.parentNode.insertBefore(span, anchor);
-            toRemove.push(anchor); // detaches the text node too
-            continue;
-          }
-        }
-      }
-
-      let frag = createFragment();
-      let pos = 0;
-      let didMatch = false;
-
+    // ── The consolidated step ────────────────────────────────────────────────
+    // Reconstruct the Markdown source from the DOM and run the SAME parser live
+    // preview runs. All merging/composition (contiguous runs, `@author
+    // [bracket]`, reference runs, `{}` overrides) then happens identically in
+    // both modes — there is no reading-mode-specific citation logic left.
+    //
+    // Replacements are applied LAST-match-first, re-serializing between each so
+    // offsets are always fresh. A replaced span carries the plugin's classes,
+    // which `domToCitationSource` skips, so the loop converges.
+    let guard = 0;
+    for (;;) {
+      if (guard++ > 10000) break;
+      const { text, chunks } = domToCitationSource(el);
       const segments = getCitationSegments(
-        content,
+        text,
         !plugin.settings.renderLinkCitations,
-        plugin.settings.formatLinkAliases,
-        linkCiteKey
+        plugin.settings.formatLinkAliases
       );
-      for (const match of segments) {
-        if (!didMatch) didMatch = true;
+      if (!segments.length) break;
 
-        const rendered = findRendered(match);
+      const match = segments[segments.length - 1];
+      const from = match[0].from;
+      const to = match[match.length - 1].to;
+      const rendered = matchRendered(candidates, match);
+      const replacement = rendered
+        ? buildCitationSpan(
+            plugin,
+            rendered,
+            ctx,
+            document.createTextNode(text.slice(from, to))
+          )
+        : buildFallbackFragment(plugin, ctx, match, text, from, to);
 
-        if (rendered) {
-          const preCite = content.substring(pos, match[0].from);
-          pos = match[match.length - 1].to;
-
-          frag.appendText(preCite);
-          frag.appendChild(buildCitationSpan(plugin, rendered, ctx, node));
-          continue;
-        }
-
-        for (let i = 0, len = match.length; i < len; i++) {
-          const part = match[i];
-          const next = match[i + 1];
-          frag.appendText(content.substring(pos, part.from));
-          pos = part.to;
-
-          switch (part.type) {
-            case SegmentType.key: {
-              const { isResolved, isUnresolved } =
-                plugin.bibManager.getResolution(ctx.sourcePath, part.val) || {
-                  isResolved: false,
-                  isUnresolved: false,
-                };
-
-              frag.createSpan({
-                cls: getCiteClass(isResolved, isUnresolved),
-                text: part.val,
-                attr: {
-                  'data-citekey': part.val,
-                  'data-source': ctx.sourcePath,
-                },
-              });
-              continue;
-            }
-            case SegmentType.at: {
-              const { isResolved, isUnresolved } =
-                plugin.bibManager.getResolution(ctx.sourcePath, next?.val) || {
-                  isResolved: false,
-                  isUnresolved: false,
-                };
-
-              const classes: string[] = [part.type];
-
-              if (isUnresolved) classes.push('is-unresolved');
-              if (isResolved) classes.push('is-resolved');
-
-              frag.createSpan({
-                cls: `sw-citation-formatting ${classes.join(' ')}`,
-                text: part.val,
-              });
-              continue;
-            }
-            case SegmentType.curlyBracket:
-            case SegmentType.bracket:
-            case SegmentType.separator:
-            case SegmentType.suppressor:
-            case SegmentType.prefix:
-            case SegmentType.suffix:
-            case SegmentType.locator:
-            case SegmentType.locatorLabel:
-            case SegmentType.locatorSuffix:
-              frag.createSpan({
-                cls: `sw-citation-formatting ${part.type}`,
-                text: part.val,
-              });
-              continue;
-          }
-        }
-      }
-
-      if (didMatch) {
-        // Add trailing text
-        frag.appendText(content.substring(pos));
-        const parent = node.parentElement;
-        if (
-          parent &&
-          parent.tagName === 'A' &&
-          plugin.settings.renderCitationsAsLinks &&
-          parent.childNodes.length === 1 &&
-          parent.firstChild === node
-        ) {
-          // The citation came from a reading-mode wikilink
-          // (<a class="internal-link">…</a>). The rendered citation span
-          // already carries its own <a class="internal-link"> for navigation,
-          // so replace the WHOLE original anchor. Leaving it in place would
-          // nest the span inside Obsidian's link and force its blue link
-          // styling onto the citation (via the inner anchor's color: inherit).
-          parent.parentNode.insertBefore(frag, parent);
-          toRemove.push(parent); // detaches the text node along with it
-        } else {
-          node.parentNode.insertBefore(frag, node);
-          toRemove.push(node);
-        }
-        frag = null;
-      }
+      if (!replaceSourceRange(el, chunks, from, to, replacement)) break;
     }
-
-    toRemove.forEach((n) => n.parentNode.removeChild(n));
 
     // A reference insertion on its own line is block-level content wrapped in
-    // Obsidian's <p>. Mark such paragraphs (only when they hold nothing but the
-    // reference) so CSS can collapse the paragraph's empty line box, which
-    // otherwise shows as a blank line above and below. Inline references mixed
-    // with text are left untouched.
+    // Obsidian's <p>. Mark such paragraphs so CSS can collapse the paragraph's
+    // empty line box; inline references mixed with text are left untouched.
     el.querySelectorAll('.sw-reference').forEach((node) => {
       const span = node as HTMLElement;
       const p = span.closest('p');
@@ -853,8 +273,9 @@ export function processCiteKeys(plugin: ReferenceList) {
         Array.from(p.children).some(
           (c) => c !== span && (c.textContent ?? '').trim()
         )
-      )
+      ) {
         return;
+      }
       p.classList.add('sw-reference-paragraph');
     });
   };

@@ -2,6 +2,7 @@ import {
   fillEmptyNotesSection,
   findManagedRegion,
   joinNote,
+  reconcileNotesSection,
   MANAGED_CLOSE,
   MANAGED_OPEN,
   mergeFrontmatter,
@@ -319,6 +320,38 @@ describe('fillEmptyNotesSection', () => {
       '## Notes\n\n'
     );
     expect(fillEmptyNotesSection('# T\n\nx\n', rendered)).toBe('# T\n\nx\n');
+  });
+});
+
+describe('reconcileNotesSection — append', () => {
+  const rendered = '## Notes\n\nZotero note one\n\n---\n\nZotero note two\n';
+
+  it('keeps the existing content and adds the rendered notes below it', () => {
+    const existing = '## Notes\n\nMy own writing\n';
+    expect(reconcileNotesSection(existing, rendered, 'append')).toBe(
+      '## Notes\n\nMy own writing\n\nZotero note one\n\n---\n\nZotero note two\n'
+    );
+  });
+
+  it('behaves like ifEmpty when the section is empty', () => {
+    expect(reconcileNotesSection('## Notes\n\n', rendered, 'append')).toBe(
+      '## Notes\n\nZotero note one\n\n---\n\nZotero note two\n'
+    );
+  });
+
+  it('adds nothing when the render has no notes', () => {
+    const existing = '## Notes\n\nMy own writing\n';
+    expect(reconcileNotesSection(existing, '## Notes\n\n', 'append')).toBe(existing);
+  });
+
+  it('keeps the managed region intact', () => {
+    const existing =
+      `## Notes\n\nMy own writing\n\n${MANAGED_OPEN}\n## Annotations\nx\n${MANAGED_CLOSE}\n`;
+    const out = reconcileNotesSection(existing, rendered, 'append');
+    expect(out).toContain('My own writing');
+    expect(out).toContain('Zotero note one');
+    expect(out).toContain(MANAGED_OPEN);
+    expect(out).toContain(MANAGED_CLOSE);
   });
 });
 
