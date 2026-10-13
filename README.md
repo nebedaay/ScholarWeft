@@ -25,7 +25,6 @@ Beyond linking your scholarly notes and references, ScholarWeft allows you to ke
 - [Creating Literature Notes from Zotero](./docs/literature-notes.md) — where notes live and how to create them from Zotero items
 - [Document Import and Export](./docs/import-export.md) — compile a longer document from a series of notes, export to markdown, DOCX, ODT, PDF
 - [Commands](./docs/commands.md) — the full command list
-- [ZotLit Import Templates](./docs/zotlit-import-templates.md) — rich annotation templates that replicate ScholarWeft’s internal template
 - [Mobile](./docs/mobile.md) — iOS/Android behaviour
 
 ## Features
@@ -88,9 +87,9 @@ ScholarWeft works offline for its core features (bibliography files you supply, 
 
 ## Companion plugins
 
-ScholarWeft creates and refreshes literature notes itself — no companion plugin is required, and **ScholarWeft never downloads or installs another plugin**. If a feature benefits from a companion plugin, the settings page links you to **Settings → Community plugins** so you can install it yourself the normal way. If you already use [ZotLit](https://github.com/PKM-er/obsidian-zotlit), you can switch the import path to ZotLit under **Settings → ScholarWeft → Literature note import**. Autocomplete (`@` for citekey, author and title; `@@` to add abstracts and publication details) uses ScholarWeft's own index either way. Neither plugin requires the other.
+ScholarWeft creates and refreshes literature notes itself — no companion plugin is required, and **ScholarWeft never downloads or installs another plugin**. If a feature benefits from a companion plugin, the settings page links you to **Settings → Community plugins** so you can install it yourself the normal way. Autocomplete (`@` for citekey, author and title; `@@` to add abstracts and publication details) uses ScholarWeft's own index.
 
-**ZotLit import templates (optional):** If you select ZotLit, *Settings → ScholarWeft → "Install and use ScholarWeft's ZotLit import templates"* copies ScholarWeft’s Zotero import templates into `sw-zotlit-templates/` to yield literature notes similar to those generated when using ScholarWeft’s own import path. This leaves your own templates untouched. It also applies ScholarWeft's **frontmatter field mappings** to your ZotLit settings, since ZotLit builds note frontmatter from its settings, not from the templates. See [ZotLit Import Templates](./docs/zotlit-import-templates.md).
+**Coming from ZotLit?** ScholarWeft does not integrate with ZotLit, but it recognises notes ZotLit created (they carry a `zotero-key` property and ZotLit's managed region) and can convert them to ScholarWeft's format — on conversion, ScholarWeft takes over the note and ZotLit stops managing it. Notes you leave alone stay ZotLit's; ScholarWeft still links to them for citations, it just does not update them. See [Literature Notes](./docs/literature-notes.md#coming-from-zotlit).
 
 ## Plugin API
 
@@ -110,6 +109,8 @@ ScholarWeft is a **fork** of **Bripey Citation Suite** by [112345brian](https://
 - Original [Pandoc Reference List](https://github.com/community-archive/obsidian-pandoc-reference-list) plugin by [mgmeyers](https://github.com/mgmeyers/obsidian-pandoc-reference-list), maintained by [obsidian-community](https://github.com/obsidian-community/obsidian-pandoc-reference-list)
 
 Both are licensed under the GNU GPL; ScholarWeft is distributed under the same license, as required.
+
+**Published with the upstream author's permission.** ScholarWeft is listed in the Obsidian community directory with the written approval of Bripey Citation Suite's author: <https://github.com/112345brian/knowledge/issues/11>
 
 This fork incorporates changes from:
 

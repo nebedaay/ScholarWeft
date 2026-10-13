@@ -11,6 +11,8 @@
 import { App, Notice, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { debugLog } from './helpers';
+import type { ForeignNoteAnswer } from './modals/foreignNoteModal';
+import type { AdoptNoteAnswer, AdoptNoteChoice } from './modals/adoptNoteModal';
 import {
   DEFAULT_ZOTERO_PORT,
   citekeysForItemKeys,
@@ -29,6 +31,7 @@ import {
 } from './template/lit-folder';
 export { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
 import { readTemplate } from './template/note-template-io';
+import { readStableKey } from './template/note-format';
 export {
   readTemplate,
   copyDefaultTemplateToVault,
@@ -44,6 +47,7 @@ import {
   isZotLitManaged,
   matchNoteByZoteroKey,
   noteNameMatchesCitekey,
+  isBareCitekeyName,
   zotLitChoice,
   type ForeignNoteChoice,
   type ZotLitHandling,
@@ -58,7 +62,6 @@ import {
   writeChildren,
 } from './template/children-cache';
 import { renderNote } from './template/render';
-import { getZotlitLiteratureFolder } from './zotlit';
 
 declare const require: (id: string) => any;
 
@@ -107,9 +110,7 @@ export function resolveZoteroDataDir(configured?: string): string | null {
 /** The literature-note folder for ScholarWeft's own notes. */
 export function literatureNoteFolder(plugin: ReferenceList): string {
   return resolveLiteratureNoteFolder({
-    useOwnNoteTemplate: plugin.settings.useOwnNoteTemplate,
     literatureNoteFolder: plugin.settings.literatureNoteFolder,
-    zotlitFolder: getZotlitLiteratureFolder(plugin.app),
   });
 }
 
@@ -220,7 +221,7 @@ function findNoteByZoteroKey(
   if (!zoteroKey) return null;
   const candidates = app.vault.getMarkdownFiles().map((f) => ({
     path: f.path,
-    zoteroKey: app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'],
+    zoteroKey: readStableKey(app.metadataCache.getFileCache(f)?.frontmatter),
   }));
   return matchNoteByZoteroKey(candidates, folder, zoteroKey);
 }
@@ -314,6 +315,33 @@ async function resolveZotLitHandling(
 }
 
 /**
+ * Ask whether to adopt an existing `@citekey.md` that carries no
+ * `sw-zotero-id`, or leave it and create a separate note. A remembered choice
+ * is applied silently.
+ */
+async function resolveAdoptHandling(
+  plugin: ReferenceList,
+  base: string
+): Promise<AdoptNoteChoice> {
+  const remembered = plugin.settings.adoptExistingNote;
+  if (remembered && remembered !== 'ask') return remembered;
+
+  const { AdoptNoteModal } = await import('./modals/adoptNoteModal');
+  const answer = await new Promise<AdoptNoteAnswer>((resolve) =>
+    new AdoptNoteModal(plugin.app, {
+      noteName: `${base}.md`,
+      citekey: base.replace(/^@/, ''),
+      onChoose: resolve,
+    }).open()
+  );
+  if (answer.remember && answer.choice !== 'cancel') {
+    plugin.settings.adoptExistingNote = answer.choice;
+    await plugin.saveSettings();
+  }
+  return answer.choice;
+}
+
+/**
  * Ask what to do about a note that carries the item's stable `zotero-key` but
  * a filename that is not the item's current citekey. The note's own `citekey:`
  * frontmatter (when present) is shown so an obsolete name is recognisable.
@@ -327,10 +355,16 @@ async function resolveForeignNoteHandling(
   citekey: string,
   noteCitekey: string | null
 ): Promise<ForeignNoteChoice> {
+  // A remembered choice is applied silently — once the user has opted into
+  // ScholarWeft, a note name other than `@citekey` rarely makes sense, so this
+  // is normally answered once and never asked again.
+  const remembered = plugin.settings.foreignNoteHandling;
+  if (remembered && remembered !== 'ask') return remembered;
+
   const noteName = notePath.split('/').pop() ?? notePath;
 
   const { ForeignNoteModal } = await import('./modals/foreignNoteModal');
-  return new Promise<ForeignNoteChoice>((resolve) =>
+  const answer = await new Promise<ForeignNoteAnswer>((resolve) =>
     new ForeignNoteModal(plugin.app, {
       noteName,
       citekey,
@@ -338,6 +372,11 @@ async function resolveForeignNoteHandling(
       onChoose: resolve,
     }).open()
   );
+  if (answer.remember && answer.choice !== 'cancel') {
+    plugin.settings.foreignNoteHandling = answer.choice;
+    await plugin.saveSettings();
+  }
+  return answer.choice;
 }
 
 /**
@@ -539,7 +578,15 @@ export async function createOrUpdateOwnNote(
   let convertedForeign = false;
   if (notePath && !noteNameMatchesCitekey(notePath, citekey)) {
     const recorded = recordedCitekeyFor(app, notePath);
-    const knownPast = !!recorded && noteNameMatchesCitekey(notePath, recorded);
+    // A KNOWN name needs no merge question: the note's own recorded citekey (a
+    // past citekey), or the current/recorded citekey written WITHOUT its `@`
+    // (ZotLit's naming). The file already says which item it is — the reconcile
+    // just adds the `@`. Only a genuinely unknown name (another plugin's scheme,
+    // or an unrecorded obsolete citekey) asks how to merge.
+    const knownPast =
+      (!!recorded && noteNameMatchesCitekey(notePath, recorded)) ||
+      isBareCitekeyName(notePath, citekey) ||
+      (!!recorded && isBareCitekeyName(notePath, recorded));
     if (!knownPast) {
       const action = foreignNoteAction(
         await resolveForeignNoteHandling(plugin, notePath, citekey, recorded)
@@ -563,12 +610,23 @@ export async function createOrUpdateOwnNote(
   if (!notePath) {
     const desired = folder ? normalizePath(`${folder}/${base}.md`) : `${base}.md`;
     if (await app.vault.adapter.exists(desired)) {
-      notePath = findAvailableNotePath(base, folder, vaultPaths(app));
-      console.warn('[sw:import] note name taken; importing as', notePath);
-      new Notice(
-        `“${base}.md” already exists; the imported note was saved as “${notePath.split('/').pop()}”.`,
-        8000
-      );
+      // A file already sits at the conventional `@citekey.md` but carries no
+      // `sw-zotero-id` — else the key search above would have found it. Ask
+      // whether to ADOPT it, rather than silently making a duplicate beside it.
+      const adopt =
+        base === `@${citekey}` ? await resolveAdoptHandling(plugin, base) : 'new';
+      if (adopt === 'adopt') {
+        notePath = desired;
+      } else if (adopt === 'cancel') {
+        return { ok: true, changed: false };
+      } else {
+        notePath = findAvailableNotePath(base, folder, vaultPaths(app));
+        console.warn('[sw:import] note name taken; importing as', notePath);
+        new Notice(
+          `“${base}.md” already exists; the imported note was saved as “${notePath.split('/').pop()}”.`,
+          8000
+        );
+      }
     } else {
       notePath = desired;
     }

@@ -7,7 +7,7 @@ import {
   RenderedCitation,
   getCitationSegments,
 } from './parser/parser';
-import { getLitNoteForCitekey } from './zotlit';
+import { getLitNoteForCitekey } from './lit-note';
 import { domToCitationSource, replaceSourceRange } from './citationSource';
 import { matchRendered } from './citationMatch';
 import {

@@ -374,3 +374,46 @@ describe('substantiveContentDiffers()', () => {
     ).toBe(true);
   });
 });
+
+describe('mergeNote() drops the legacy zotero-key', () => {
+  it('removes zotero-key when ScholarWeft manages the note', () => {
+    const specs = buildSpecs([['sw-zotero-id', 'EKUBHHNW']]);
+    const existing = [
+      '---',
+      'citekey: smith2020',
+      'zotero-key: EKUBHHNW',
+      'title: Old',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    const rendered = [
+      '---',
+      'citekey: smith2020',
+      'sw-zotero-id: EKUBHHNW',
+      'title: Old',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    const out = mergeNote(existing, rendered, specs);
+    expect(out).toContain('sw-zotero-id: EKUBHHNW');
+    expect(out).not.toContain('zotero-key');
+  });
+
+  it('leaves an out-of-scope property alone', () => {
+    const specs = buildSpecs([['sw-zotero-id', 'EKUBHHNW']]);
+    const existing = [
+      '---',
+      'my-own-property: keep me',
+      'zotero-key: EKUBHHNW',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    const rendered = ['---', 'sw-zotero-id: EKUBHHNW', '---', '', 'body'].join('\n');
+    const out = mergeNote(existing, rendered, specs);
+    expect(out).toContain('my-own-property: keep me');
+    expect(out).not.toContain('zotero-key');
+  });
+});

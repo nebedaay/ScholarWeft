@@ -1,38 +1,30 @@
 #!/bin/sh
-# ScholarWeft pre-commit: refuse a commit whose markdown has hard line wraps.
+# ScholarWeft pre-commit: keep the repo's markdown well-formed.
 #
-# Obsidian renders markdown with proportional fonts and hides the markup, so a
-# source-level wrap breaks at a random place on screen. The vault convention is
-# one logical line per paragraph (see "AI OS/Me.md" → Text Formatting).
+# Two rules, both mechanical:
+#   1. no hard line wraps — one logical line per paragraph
+#   2. a blank line between block elements (pandoc strict)
 #
-# This check exists because asking an agent (or a person) not to wrap does not
-# reliably work — wrapping is a generation-time habit, not a decision. The gate
-# is mechanical on purpose.
+# Why mechanical: asking a person (or an agent) not to wrap does not reliably
+# work — wrapping is a generation-time habit, not a decision.
 #
-# Bypass with:  git commit --no-verify
+# The checkers are vendored in this repo at tools/md/, so the hook works for
+# anyone who clones it, with no external paths.
 #
-# The checker lives at <vault>/scripts/unwrap-md.py. It is resolved from the
-# repo root so the hook works no matter where the file is run from.
+# Enable once per clone:   git config core.hooksPath hooks
+# Bypass for one commit:   git commit --no-verify
+#
+# Template files are code, not prose (their lines are the template's output
+# structure), so they are exempted below.
 
 set -eu
 
 repo_root=$(git rev-parse --show-toplevel)
+unwrap="$repo_root/tools/md/unwrap-md.py"
+blanks="$repo_root/tools/md/blankline-md.py"
 
-# Locate the shared checker: relative to the repo, then up the tree.
-checker=""
-for candidate in \
-    "$repo_root/scripts/unwrap-md.py" \
-    "$repo_root/../../scripts/unwrap-md.py" \
-    "$repo_root/../scripts/unwrap-md.py"
-do
-    if [ -f "$candidate" ]; then
-        checker=$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")
-        break
-    fi
-done
-
-if [ -z "$checker" ]; then
-    echo "pre-commit: unwrap-md.py not found; skipping the wrap check." >&2
+if [ ! -f "$unwrap" ] || [ ! -f "$blanks" ]; then
+    echo "pre-commit: tools/md/ checkers not found; skipping the markdown check." >&2
     exit 0
 fi
 
@@ -40,8 +32,7 @@ fi
 files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.md' || true)
 [ -z "$files" ] && exit 0
 
-# Template files are code, not prose: their "lines" are the template's output
-# structure (Eta/Liquid source, indented JS), so they are never unwrapped.
+# Template sources and generated bundles are not prose.
 prose=""
 for f in $files; do
     case "$f" in
@@ -51,40 +42,27 @@ for f in $files; do
 done
 [ -z "$prose" ] && exit 0
 
-if ! python3 "$checker" --check $prose; then
+if ! python3 "$unwrap" --check $prose; then
     cat >&2 <<'EOF'
 
-pre-commit: the markdown above has hard line wraps (see the vault convention:
-one logical line per paragraph). Fix with:
+pre-commit: the markdown above has hard line wraps (one logical line per
+paragraph). Fix with:
 
-    npm run fix-wraps
+    npm run fix-md
 
 or commit with --no-verify to skip this check.
 EOF
     exit 1
 fi
 
-# Blank-line rule (pandoc strict): a blank line between block elements.
-blanks="$repo_root/scripts/../../scripts/blankline-md.py"
-for candidate in \
-    "$repo_root/scripts/blankline-md.py" \
-    "$repo_root/../../scripts/blankline-md.py" \
-    "$repo_root/../scripts/blankline-md.py"
-do
-    if [ -f "$candidate" ]; then
-        blanks=$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")
-        break
-    fi
-done
-
-if [ -f "$blanks" ] && ! python3 "$blanks" --check $prose; then
+if ! python3 "$blanks" --check $prose; then
     cat >&2 <<'EOF'
 
 pre-commit: the markdown above is missing blank lines between block elements
 (pandoc strict: heading↔text, paragraph↔list, …; items within a list stay
 tight). Fix with:
 
-    npm run fix-blanks
+    npm run fix-md
 
 or commit with --no-verify to skip this check.
 EOF

@@ -22,7 +22,6 @@ curl -fsSL https://raw.githubusercontent.com/nebedaay/ScholarWeft/main/install/i
 | **Better BibTeX** (Zotero add-on)      | The **Import literature notes from Zotero…** picker; the BBT endpoint needed for exporting live Zotero citations on Zotero 6. Not required for export using Zotero 7/8, but still the easiest way to auto-generate citekeys inside Zotero        |
 | **LibreOffice**                        | PDF export through an ODT/DOCX template                                                                                                                                                          |
 | **A LaTeX distribution with LuaLaTeX** | PDF export through a `.tex` template                                                                                                                                                             |
-| **ZotLit** (optional)                  | Alternative literature-note creation. Not required — ScholarWeft creates and refreshes notes itself, and its `@`/`@@` search uses its own index |
 
 ## Python 3
 
@@ -82,14 +81,6 @@ Required only for **PDF export through a `.tex` template**. The engine used is *
 - macOS: [MacTeX](https://tug.org/mactex/) (or the smaller BasicTeX)
 - Windows: [MiKTeX](https://miktex.org/download)
 - Linux: [TeX Live](https://tug.org/texlive/)
-
-## ZotLit (optional)
-
-An Obsidian plugin that can create literature notes from Zotero with its own templates. ScholarWeft creates and refreshes literature notes itself, and its `@`/`@@` autocomplete searches its own index, so ZotLit is only needed if you prefer its templates — select ZotLit under **Literature note import** to use it.
-
-The one overlap is `@`: if you have chosen to let ZotLit handle `@` completions, ScholarWeft steps aside for `@`. See [ZotLit Import Templates](./zotlit-import-templates.md).
-
-Download: <https://github.com/PKM-er/obsidian-zotlit>
 
 ## What the plugin does when something is missing
 

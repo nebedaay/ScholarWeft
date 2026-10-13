@@ -127,7 +127,7 @@ describe('sw-related: Zotero references and tags', () => {
   it('rebuilds sw-related on import, so a removed tag disappears', () => {
     const existing = [
       '---',
-      'zotero-key: EKUBHHNW',
+      'sw-zotero-id: EKUBHHNW',
       'related:',
       '  - "[[my-own-note]]"',
       'sw-related:',
@@ -160,7 +160,7 @@ describe('sw-related: Zotero references and tags', () => {
     // removed one of those tags in Zotero.
     const existing = [
       '---',
-      'zotero-key: EKUBHHNW',
+      'sw-zotero-id: EKUBHHNW',
       'related:',
       '  - "[[my-own-note]]"',
       '  - "[[@other2020]]"',
@@ -211,7 +211,7 @@ describe('sw-related: Zotero references and tags', () => {
     // `related:` alongside the user's own link.
     const existing = [
       '---',
-      'zotero-key: EKUBHHNW',
+      'sw-zotero-id: EKUBHHNW',
       'related:',
       '  - "[[my-own-note]]"',
       '  - "[[@other2020]]"',
@@ -258,7 +258,7 @@ describe('sw-related: Zotero references and tags', () => {
   it('never touches the user’s related: list', () => {
     const existing = [
       '---',
-      'zotero-key: EKUBHHNW',
+      'sw-zotero-id: EKUBHHNW',
       'related:',
       '  - "[[only-mine]]"',
       '---',
@@ -452,12 +452,12 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(out).not.toContain('zotero-collections:');
   });
 
-  it('writes the stable zotero-key from the item key', () => {
-    expect(out).toContain('zotero-key: EKUBHHNW');
+  it('writes the stable sw-zotero-id from the item key', () => {
+    expect(out).toContain('sw-zotero-id: EKUBHHNW');
     // It sits with the other Zotero identifiers (after zotero-link).
     const at = (key: string) => out.indexOf(`\n${key}:`);
-    expect(at('zotero-link')).toBeLessThan(at('zotero-key'));
-    expect(at('zotero-key')).toBeLessThan(at('attachments'));
+    expect(at('zotero-link')).toBeLessThan(at('sw-zotero-id'));
+    expect(at('sw-zotero-id')).toBeLessThan(at('attachments'));
   });
 
   it('leaves no trailing whitespace on any line', () => {

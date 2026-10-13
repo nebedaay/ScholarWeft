@@ -40,7 +40,7 @@ const entry: CachedEntry = {
 
 const PDF = '2VFRLV96';
 const ENCLOSURE =
-  'file:///Users/josephhill/Zotero/storage/2VFRLV96/Bughyat%20al-mustaf%C4%ABd.pdf';
+  'file:///Users/test/Zotero/storage/2VFRLV96/Bughyat%20al-mustaf%C4%ABd.pdf';
 
 function attachmentItem(over: Record<string, unknown> = {}): any {
   return {
@@ -89,7 +89,7 @@ describe('mapAttachment()', () => {
     expect(a.linkMode).toBe('imported_file');
     expect(a.filename).toBe('Bughyat al-mustafīd.pdf');
     expect(a.filePath).toBe(
-      '/Users/josephhill/Zotero/storage/2VFRLV96/Bughyat al-mustafīd.pdf'
+      '/Users/test/Zotero/storage/2VFRLV96/Bughyat al-mustafīd.pdf'
     );
     expect(a.backlink).toBe('zotero://open/library/items/2VFRLV96');
   });

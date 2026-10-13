@@ -40,7 +40,7 @@ The native API works on mobile when Zotero is running and reachable by IP on the
 
 ## Searching
 
-`@` searches citekey, author and title; `@@` adds the abstract, publisher and containing work. Both run on ScholarWeft's own index (no ZotLit needed). See [Citations](./citations.md).
+`@` searches citekey, author and title; `@@` adds the abstract, publisher and containing work. Both run on ScholarWeft's own index. See [Citations](./citations.md).
 
 ## Styles and refreshing
 

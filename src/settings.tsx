@@ -3,12 +3,6 @@ import { FuzzySuggestModal, Notice, Platform, PluginSettingTab, Setting, TFile, 
 import { t } from './lang/helpers';
 import { findPandoc } from './bib/pandoc';
 import { getBibPath } from './bib/helpers';
-import { getZotlitLiteratureFolder } from './zotlit';
-import {
-  SW_ZOTLIT_FOLDER,
-  installZotlitTemplatesWithNotice,
-  uninstallZotlitTemplates,
-} from './zotlitTemplates';
 import {
   SW_MARKDOWN_FOLDER,
   installTemplaterTemplatesWithNotice,
@@ -43,7 +37,6 @@ import {
   DEFAULT_YAML_TITLE_SIZE,
 } from './yamlFormatting';
 import { debugLog } from './helpers';
-import { zotlitIsNoteImportPath } from './template/import-path';
 import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
 import type { MissingLinkedNoteAction } from './template/missing-notes';
 
@@ -71,14 +64,6 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   citeSearchMinChars: 0,
   prioritizeCiteKeyCompletion: true,
   showCitekeyTooltips: true,
-  createNotesWithZotLit: false,
-  /**
-   * When true, literature notes are rendered with ScholarWeft's own bundled
-   * single-file template (`sw-literature-note-templates/sw-note.eta.md`). Re-importing
-   * refreshes only the managed frontmatter fields and the `%%sw-managed%%`
-   * region. On by default; turning it off switches to ZotLit.
-   */
-  useOwnNoteTemplate: true,
   /** When true (default), notes render with the bundled template in the plugin
    *  folder. When off, `noteTemplatePath` selects a vault file instead. */
   useDefaultNoteTemplate: true,
@@ -100,8 +85,12 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   /** Set after the one-time automatic review of keyed notes, so it does not
    *  nag on every startup. */
   keyedNotesReviewed: false,
-  /** How to treat an existing ZotLit note when our template renders it. */
+  /** How to treat a literature note another plugin created. */
   ownNoteZotLitHandling: 'ask',
+  /** How to treat a note found under a filename other than `@citekey`. */
+  foreignNoteHandling: 'ask',
+  /** How to treat an existing `@citekey.md` that has no `sw-zotero-id`. */
+  adoptExistingNote: 'ask',
   // autoUpdateNotes is intentionally NOT set: undefined means "not yet chosen",
   // so the user is asked before any note is modified.
   /** Where ScholarWeft creates its own literature notes (vault-relative). Used
@@ -221,11 +210,8 @@ export interface ReferenceListSettings {
 
   /** Where ScholarWeft creates its own literature notes (vault-relative; blank
    *  means the vault root). Shown under "Import literature notes with
-   *  ScholarWeft". When ZotLit is the chosen path, ZotLit's folder applies. */
+   *  ScholarWeft". */
   literatureNoteFolder?: string;
-  /** @deprecated Kept only to read settings written by earlier versions; the
-   *  folder now follows the selected import path. No longer surfaced. */
-  useZotlitLiteratureFolder?: boolean;
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default (opening in Zotero shows all attachments; the
    *  PDF lookup costs per-citekey network time). */
@@ -245,19 +231,6 @@ export interface ReferenceListSettings {
   defaultAuthor?: string;
   /** When true, fall back to the Obsidian account display name if defaultAuthor is also empty. */
   useAccountNameAsAuthor?: boolean;
-  /**
-   * When true (default), the tooltip's "Create literature note" button hands
-   * note creation off to ZotLit when it is available, so the note is rendered
-   * with ZotLit's templates. When ZotLit is absent (or this is off), the
-   * plugin's own basic template is used instead.
-   */
-  createNotesWithZotLit?: boolean;
-  /**
-   * When true, literature notes are rendered with ScholarWeft's own bundled
-   * single-file template instead of ZotLit's, and re-importing refreshes the
-   * managed frontmatter fields + `%%sw-managed%%` region. Off by default.
-   */
-  useOwnNoteTemplate?: boolean;
   /**
    * When true (default), literature notes render with the bundled template in
    * the plugin folder. Turn it off to render with `noteTemplatePath`, a file in
@@ -297,11 +270,24 @@ export interface ReferenceListSettings {
   /** Set after the one-time automatic review of keyed notes. */
   keyedNotesReviewed?: boolean;
   /**
-   * How to treat a note that ZotLit created when our own template renders it:
-   * `ask` (prompt, default), `convert` (replace ZotLit's region with ours), or
-   * `leave` (never touch ZotLit notes).
+   * How to treat a literature note that another plugin created when our own
+   * template renders it: `ask` (prompt, default), `convert` (replace the other
+   * plugin's managed region with ours), or `leave` (never touch it).
    */
   ownNoteZotLitHandling?: 'ask' | 'convert' | 'leave';
+  /**
+   * How to treat a note found under a filename other than `@citekey` when the
+   * item's note is otherwise identified by its `sw-zotero-id`: `ask` (prompt),
+   * or the remembered answer (`convert` / `convertIfEmpty` / `new`), applied
+   * silently.
+   */
+  foreignNoteHandling?: 'ask' | 'convert' | 'convertIfEmpty' | 'new';
+  /**
+   * How to treat a note already sitting at the conventional `@citekey.md` but
+   * carrying no `sw-zotero-id`: `ask`, or the remembered answer (`adopt` /
+   * `new`), applied silently.
+   */
+  adoptExistingNote?: 'ask' | 'adopt' | 'new';
   /** Automatically re-render a literature note when its Zotero item changes
    *  (metadata, or annotations/attachments). `undefined` = not yet chosen (the
    *  user is asked before anything is modified); `true`/`false` = chosen. */
@@ -992,7 +978,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Prioritize citation completion'))
       .setDesc(
         t(
-          'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.'
+          'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester; "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.'
         )
       )
       .addToggle((toggle) =>
@@ -1206,7 +1192,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     renderDependencyNote(
       containerEl,
       ['zotero'],
-      t('Creating literature notes needs Zotero for citekey and metadata lookup. ZotLit is an optional alternative, not a requirement.'),
+      t('Creating literature notes needs Zotero for citekey and metadata lookup.'),
       (_note, list) => {
         const li = list.createEl('li');
         li.appendText('For consistent citekeys, install ');
@@ -1221,7 +1207,6 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       }
     );
 
-    const useOwn = this.plugin.settings.useOwnNoteTemplate === true;
 
     // Vault-wide maintenance: re-render every literature note. A BUTTON here
     // rather than a command, so the command list stays focused on per-note
@@ -1281,25 +1266,10 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         );
       });
 
-    new Setting(containerEl)
-      .setName(t('Import literature notes with ScholarWeft'))
-      .setDesc(
-        t(
-          'The default. ScholarWeft creates and refreshes literature notes from your Zotero items — frontmatter, child notes, and a managed annotations region that re-imports update without touching your own writing. Turn this off to use ZotLit instead.'
-        )
-      )
-      .addToggle((toggle) =>
-        toggle.setValue(useOwn).onChange((value) => {
-          this.plugin.settings.useOwnNoteTemplate = value;
-          this.plugin.saveSettings();
-          this.display();
-        })
-      );
 
     // Folder where ScholarWeft's own notes go: shown with the own import (the
     // default), because that is the path whose output it controls. It sits
     // directly under the toggle so the pairing is obvious.
-    if (useOwn) {
       new Setting(containerEl)
         .setName(t('Literature notes folder'))
         .setDesc(
@@ -1414,17 +1384,17 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName(t('ZotLit notes'))
+        .setName(t('Literature notes from other plugins'))
         .setDesc(
           t(
-            'What to do when a note was created by ZotLit. Ask (default) prompts the first time and again for every “leave” answer; the prompt itself offers to convert every note you update.'
+            'What to do with literature notes created by another plugin. Ask (default) prompts when you update one; Always convert takes them over; Never touch leaves them alone.'
           )
         )
         .addDropdown((drop) =>
           drop
             .addOption('ask', t('Ask each time'))
             .addOption('convert', t('Always convert'))
-            .addOption('leave', t('Never touch ZotLit notes'))
+            .addOption('leave', t('Never touch them'))
             .setValue(this.plugin.settings.ownNoteZotLitHandling ?? 'ask')
             .onChange((value) => {
               this.plugin.settings.ownNoteZotLitHandling = value as
@@ -1507,113 +1477,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               this.plugin.saveSettings();
             })
         );
-      return;
-    }
 
-    const zotlitFolder = getZotlitLiteratureFolder(this.app) || '(not set)';
-    const useZotlitForNotes = this.plugin.settings.createNotesWithZotLit !== false;
-
-    new Setting(containerEl)
-      .setName(t('Use ZotLit for literature notes'))
-      .setHeading();
-
-    new Setting(containerEl)
-      .setName(t('Create literature notes with ZotLit'))
-      .setDesc(
-        t(
-          `Create and refresh notes with ZotLit's templates instead of ScholarWeft's own. Notes are created in ZotLit's own literature-note folder, currently "${zotlitFolder}", so all literature notes stay in one place. To change that folder, use ZotLit's settings. Falls back to ScholarWeft when ZotLit is absent or this is off.`
-        )
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(useZotlitForNotes)
-          .onChange((value) => {
-            this.plugin.settings.createNotesWithZotLit = value;
-            this.plugin.saveSettings();
-          })
-      );
-
-    // ZotLit-only actions: needed only by the ZotLit import path, so they live
-    // in this section and nowhere else.
-    if (zotlitIsNoteImportPath(this.plugin.settings)) {
-      new Setting(containerEl)
-        .setName(t('Insert Zotero notes into literature notes'))
-        .setDesc(
-          t(
-            'ZotLit imports a Zotero item\'s child notes as separate files and never hands their text to a template, so its notes can start with an empty "## Notes" section. This inserts each item\'s Zotero notes into every literature note whose "## Notes" section is still empty. Notes that already contain them are left alone.'
-          )
-        )
-        .addButton((button) =>
-          button
-            .setButtonText(t('Insert now (whole vault)'))
-            .setTooltip(
-              t('Runs on every literature note in the vault; Zotero must be running.')
-            )
-            .onClick(async () => {
-              const progress = new Notice('Inserting Zotero notes…', 0);
-              (progress as any).setProgress?.(0, 0);
-              const r = await insertZoteroNotesVaultWide(this.app, {
-                zoteroPort: this.plugin.settings.zoteroPort,
-                notesHeadingLevel:
-                  this.plugin.settings.ownNoteNotesHeadingLevel ?? 3,
-                onProgress: (done, total) =>
-                  (progress as any).setProgress?.(done, total),
-              });
-              progress.hide();
-              const lines = [
-                `Inserted Zotero notes into ${r.inserted} literature note(s).`,
-                `${r.noNotes.length} had no Zotero notes.`,
-              ];
-              if (r.skipped.length) {
-                lines.push(
-                  `${r.skipped.length} skipped (the "## Notes" section already had content).`
-                );
-              }
-              if (r.failed.length) {
-                lines.push(
-                  `${r.failed.length} could not be read from Zotero — is Zotero running? (see the developer console)`
-                );
-              }
-              new Notice(`ScholarWeft: ${lines.join('\n')}`, 10000);
-              if (r.skipped.length) {
-                debugLog(
-                  'ScholarWeft: notes skipped because "## Notes" already had content:\n' +
-                    r.skipped.join('\n')
-                );
-              }
-            })
-        );
-
-      if (Platform.isDesktop) {
-        this.renderCompanionSetting(containerEl, {
-          pluginId: 'zotlit',
-          name: "Install and use ScholarWeft's ZotLit import templates",
-          readyDesc:
-            'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
-          actionLabel: 'Install templates',
-          reinstallLabel: 'Reinstall templates',
-          isInstalled: () => this.templatesInstalled(SW_ZOTLIT_FOLDER),
-          hint:
-            "ZotLit won't enable, or errors when you turn it on? Your Obsidian installer is probably older than the app — the app updates itself, but the installer only updates when you reinstall from a fresh download. Check Settings → About → Installer version, then download the latest installer from obsidian.md/download and reinstall Obsidian; your vault and settings are untouched.",
-          run: async () => {
-            await installZotlitTemplatesWithNotice(this.plugin);
-          },
-          uninstall: async () => {
-            const r = await uninstallZotlitTemplates(this.plugin);
-            if (r.error) new Notice(`ScholarWeft: ${r.error}`, 8000);
-            else {
-              new Notice(
-                r.reverted
-                  ? "ScholarWeft: removed the ZotLit templates and restored ZotLit's own settings."
-                  : 'ScholarWeft: removed the ZotLit templates.' +
-                      (r.reverted ? '' : " (ZotLit's settings were left as they are.)"),
-                8000
-              );
-            }
-          },
-        });
-      }
-    }
   }
 
   // ── Addons for displaying and linking notes ──────────────────────────────

@@ -9,8 +9,8 @@ export default {
   'Add file': 'Add file',
   'Remove': 'Remove',
   'Prioritize citation completion': 'Prioritize citation completion',
-  'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.':
-    'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester (e.g. ZotLit); "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.',
+  'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester; "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.':
+    'Use this plugin\'s citation search for "@" completions. When ON, typing "[@key" (or "[[" followed by "@") searches the Zotero/bibliography index with citekey-first fuzzy matching. When OFF, plain "[@key" yields to another plugin\'s suggester; "[[@key" is still always handled by this plugin since Obsidian\'s link search can\'t see unimported references.',
   'Move the citation autocomplete suggester to the front of Obsidian\'s internal queue so it wins when multiple plugins respond to "@". Disable this if another plugin\'s "@" completions stop working.':
     'Move the citation autocomplete suggester to the front of Obsidian\'s internal queue so it wins when multiple plugins respond to "@". Disable this if another plugin\'s "@" completions stop working.',
   'Save bibliography snapshot': 'Save bibliography snapshot',
@@ -183,17 +183,6 @@ export default {
   'Open literature note': 'Open literature note',
   'Create literature note': 'Create literature note',
   'Literature notes folder': 'Literature notes folder',
-  'Folder where the plugin\'s own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.':
-    'Folder where the plugin\'s own literature notes are created (vault-relative). Leave blank to create at the vault root. Used for the "Create literature note" button when ZotLit is not handling creation. ZotLit uses its own configured folder.',
-  'Create literature notes with ZotLit':
-    'Create literature notes with ZotLit',
-  "Install and use ScholarWeft's ZotLit import templates":
-    "Install and use ScholarWeft's ZotLit import templates",
-  'Install templates': 'Install templates',
-  'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.':
-    'Copies ScholarWeft\'s ZotLit templates into "sw-zotlit-templates/" and points ZotLit\'s "Template folder" setting there. Your own ZotLit templates (in "Templates/") are left untouched.',
-  'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.':
-    'When ZotLit is available, the tooltip\'s "Create literature note" button creates the note with ZotLit\'s templates instead of the plugin\'s basic template. Falls back to the plugin template when ZotLit is absent or this is off.',
   'Use ScholarWeft\'s own note template':
     'Use ScholarWeft\'s own note template',
   'Use the default template': 'Use the default template',
@@ -209,8 +198,6 @@ export default {
     'Write a copy of ScholarWeft\'s bundled template into a folder in your vault, so you can edit it and pick it as your template file. The copy is not overwritten by plugin updates.',
   'Copy template': 'Copy template',
   'Choose a folder…': 'Choose a folder…',
-  "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.":
-    "Renders literature notes with ScholarWeft's bundled single-file template instead of ZotLit's. Re-importing refreshes the template's frontmatter fields and the annotations region (between %%sw-managed%% markers) while keeping everything you write yourself. Off by default while it is being proven.",
   'Child-note heading level':
     'Child-note heading level',
   'Update literature notes automatically':

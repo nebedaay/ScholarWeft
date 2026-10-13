@@ -52,13 +52,8 @@ import {
   getCitations,
 } from 'src/parser/parser';
 import { App, FileSystemAdapter, Keymap, MarkdownView, Menu, Modal, Notice, TFile, TFolder, debounce, normalizePath, setIcon } from 'obsidian';
-import {
-  createLitNoteViaZotLit,
-  createLitNotesViaZotLitBulk,
-  getLitNoteForCitekey,
-  getZotlitLiteratureFolder,
-} from 'src/zotlit';
 import { cite } from 'src/parser/citeproc';
+import { getLitNoteForCitekey } from 'src/lit-note';
 import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
@@ -119,6 +114,7 @@ import {
   type NoteReconcile,
   type ReconcileNote,
 } from 'src/template/note-lookup';
+import { readStableKey } from 'src/template/note-format';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
@@ -2068,7 +2064,7 @@ export class BibManager {
     const notes: ReconcileNote[] = [];
     for (const file of vault.getMarkdownFiles()) {
       const fm = metadataCache.getFileCache(file)?.frontmatter;
-      const zk = fm?.['zotero-key'] ?? fm?.zoteroKey;
+      const zk = readStableKey(fm);
       if (typeof zk !== 'string' || !zk.trim()) continue;
       const ck = typeof fm?.citekey === 'string' ? fm.citekey : null;
       notes.push({
@@ -2083,15 +2079,45 @@ export class BibManager {
       this.findCitekeyByStableKey(stable)
     );
 
-    // A note whose target name is already taken cannot be renamed — surface it
-    // instead of silently failing at apply time.
+    // Two notes resolving to the SAME citekey means the library really holds two
+    // items with one citekey — possible after manual citekey editing (Better
+    // BibTeX normally disambiguates with a trailing `a`). No rename can fix it,
+    // so report it and leave those notes alone rather than half-applying.
+    const byTarget = new Map<string, NoteReconcile[]>();
+    for (const r of planned) {
+      if (r.newPath === r.path) continue;
+      const list = byTarget.get(r.newPath) ?? [];
+      list.push(r);
+      byTarget.set(r.newPath, list);
+    }
+    const duplicateCitekeys: Array<{ citekey: string; paths: string[] }> = [];
+    const duplicatePaths = new Set<string>();
+    for (const [target, list] of byTarget) {
+      if (list.length > 1) {
+        duplicateCitekeys.push({
+          citekey: list[0].toKey,
+          paths: list.map((r) => r.path),
+        });
+        for (const r of list) duplicatePaths.add(r.path);
+      }
+    }
+
+    // A note whose target name is already taken cannot be renamed — UNLESS the
+    // occupying file is itself being renamed, which is a cycle (`A → B`, `B → A`:
+    // the two notes' names are crossed). A cycle CAN be applied, by exchanging
+    // the files through a temporary name, so it is actionable rather than
+    // blocked. Anything else whose target is occupied is genuinely blocked.
+    const movingFrom = new Set(planned.map((r) => r.path));
     const renames: NoteReconcile[] = [];
     const blocked: NoteReconcile[] = [];
     for (const r of planned) {
-      if (r.newPath !== r.path && vault.getAbstractFileByPath(r.newPath)) {
-        blocked.push(r);
-      } else {
+      if (duplicatePaths.has(r.path)) continue;
+      if (r.newPath === r.path) {
         renames.push(r);
+      } else if (!vault.getAbstractFileByPath(r.newPath) || movingFrom.has(r.newPath)) {
+        renames.push(r);
+      } else {
+        blocked.push(r);
       }
     }
 
@@ -2132,7 +2158,7 @@ export class BibManager {
     );
     const citeOnly = citeOnlyPairs(this.pendingCitekeyRenames(), noteFromKeys);
 
-    return { renames, citeOnly, blocked, unresolved, derived, conflicts };
+    return { renames, citeOnly, blocked, unresolved, derived, conflicts, duplicateCitekeys };
   }
 
   /**
@@ -2158,10 +2184,26 @@ export class BibManager {
     let derivedRenamed = 0;
     const skipped: string[] = [];
 
+    // A rename whose target is itself being renamed forms a cycle (`@a` ↔ `@b`:
+    // the two notes' names are crossed). Cycles are special in TWO ways:
+    //   * they cannot be applied in one pass — the two exchange places through
+    //     temporary names below; and
+    //   * they must NOT feed the citation rewrite. In a cycle the CITekeys are
+    //     unchanged (both still exist in the library); only which FILE holds
+    //     which item is wrong. Rewriting citations would point them at the wrong
+    //     work.
+    const movingFrom = new Set(
+      plan.renames.filter((r) => r.newPath !== r.path).map((r) => r.path)
+    );
+    const isCyclic = (r: NoteReconcile) =>
+      r.newPath !== r.path && movingFrom.has(r.newPath);
+
     // ONE rewrite map for note-covered and cite-only renames alike.
     const renameMap: Record<string, string> = {};
     for (const r of plan.renames) {
-      if (r.fromKey && r.fromKey !== r.toKey) renameMap[r.fromKey] = r.toKey;
+      if (r.fromKey && r.fromKey !== r.toKey && !isCyclic(r)) {
+        renameMap[r.fromKey] = r.toKey;
+      }
     }
     for (const c of plan.citeOnly) {
       if (c.fromKey && c.fromKey !== c.toKey) renameMap[c.fromKey] = c.toKey;
@@ -2176,7 +2218,19 @@ export class BibManager {
       await this.clearPendingCitekeyRenames(Object.keys(renameMap));
     }
 
+    // Renames whose target is free are applied directly (see `isCyclic` above).
+    const rekey = async (r: NoteReconcile): Promise<void> => {
+      if (!r.rekeyFrontmatter) return;
+      const target = vault.getAbstractFileByPath(r.newPath);
+      if (target instanceof TFile) {
+        await fileManager.processFrontMatter(target, (fm) => {
+          fm.citekey = r.toKey;
+        });
+      }
+    };
+
     for (const r of plan.renames) {
+      if (isCyclic(r)) continue;
       const file = vault.getAbstractFileByPath(r.path);
       if (!(file instanceof TFile)) continue;
       if (r.newPath !== r.path) {
@@ -2187,12 +2241,56 @@ export class BibManager {
         await vault.rename(file, r.newPath);
         notesRenamed++;
       }
-      if (r.rekeyFrontmatter) {
-        const target = vault.getAbstractFileByPath(r.newPath);
-        if (target instanceof TFile) {
-          await fileManager.processFrontMatter(target, (fm) => {
-            fm.citekey = r.toKey;
-          });
+      await rekey(r);
+    }
+
+    // A cycle: move every member aside to a temporary name first (which frees
+    // all their targets), then move each into place. Without this, a crossed
+    // pair is left crossed forever — each rename's target is occupied by the
+    // other, so both look "blocked".
+    const cyclic = plan.renames.filter(isCyclic);
+    if (cyclic.length) {
+      const stashed: Array<{ tmp: string; r: NoteReconcile }> = [];
+      let n = 0;
+      for (const r of cyclic) {
+        const file = vault.getAbstractFileByPath(r.path);
+        if (!(file instanceof TFile)) continue;
+        const tmp = normalizePath(`${r.path}.sw-swap-${n++}`);
+        try {
+          await vault.rename(file, tmp);
+          stashed.push({ tmp, r });
+        } catch (e) {
+          console.warn('[sw:reconcile] swap: could not move aside', r.path, e);
+          skipped.push(r.path);
+        }
+      }
+      for (const { tmp, r } of stashed) {
+        const file = vault.getAbstractFileByPath(tmp);
+        if (!(file instanceof TFile)) continue;
+        // The target should be free now that every cycle member has moved aside.
+        // If something else still holds it (e.g. a rename in this plan that was
+        // itself blocked), put this file back rather than leave a temp behind.
+        if (vault.getAbstractFileByPath(r.newPath)) {
+          try {
+            await vault.rename(file, r.path);
+          } catch {
+            /* leave it under the temp name rather than lose it */
+          }
+          skipped.push(r.newPath);
+          continue;
+        }
+        try {
+          await vault.rename(file, r.newPath);
+          notesRenamed++;
+          await rekey(r);
+        } catch (e) {
+          console.warn('[sw:reconcile] swap: could not move into place', tmp, e);
+          try {
+            await vault.rename(file, r.path);
+          } catch {
+            /* leave it */
+          }
+          skipped.push(r.newPath);
         }
       }
     }
@@ -3827,9 +3925,7 @@ export class BibManager {
       rememberLibraryName(g.id, g.name);
     }
     return resolveLiteratureNoteFolder({
-      useOwnNoteTemplate: settings.useOwnNoteTemplate,
       literatureNoteFolder: settings.literatureNoteFolder,
-      zotlitFolder: getZotlitLiteratureFolder(app),
     });
   }
 
@@ -3879,49 +3975,15 @@ export class BibManager {
       ? this.entryForStableKey(opts.stableKey)
       : null) ?? (this.bibCache.get(citekey) as any);
 
-    // Our own single-file template path, when the user selected it. Falls
-    // through to the ZotLit/basic paths only if the template asset is missing.
-    if (this.plugin.settings.useOwnNoteTemplate === true) {
-      const res = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
-        open: opts.open !== false,
-        skipChildCache: opts.skipChildCache === true,
-        force: opts.force === true,
-      });
-      if (res.ok) return res;
-      console.warn('[sw:import] own note template unavailable; using the fallback path');
-    }
-
-    // Route to ZotLit when the user enabled it and ZotLit is available, so the
-    // note is rendered with ZotLit's templates. ZotLit's note feature takes an
-    // item identified by its indexedKey (the zotero-key field value).
-    if (this.plugin.settings.createNotesWithZotLit !== false) {
-      const zoteroItemKey: string | undefined = entry?._zoteroKey;
-      const groupId: number | undefined = entry?.groupID;
-      const indexedKey = zoteroItemKey
-        ? groupId && groupId !== 1
-          ? `${zoteroItemKey}g${groupId}`
-          : zoteroItemKey
-        : undefined;
-
-      if (indexedKey) {
-        const res = await createLitNoteViaZotLit(app, { indexedKey });
-        if (res.ok) {
-          // The protocol handler (obsidian://zotlit/open) creates AND opens the
-          // note itself. ZotLit creates asynchronously, so wait briefly, then
-          // fold in its child notes — SW drove the import, so SW finishes it.
-          void this.fillZoteroNotesForCitekey(citekey, sourceFile);
-          return { ok: true, changed: true };
-        }
-
-        // ZotLit failed. Do NOT silently substitute our own template: a user
-        // who enabled ZotLit wants ZotLit's note shape (their templates,
-        // frontmatter, and attachments), and a quiet fallback produces a note
-        // they never asked for — which is what made this look like the setting
-        // was being ignored. Ask instead, and say WHY it failed.
-        const useFallback = await promptZotLitFallback(res.reason);
-        if (!useFallback) return { ok: false, changed: false };
-      }
-    }
+    // Our own single-file template path. Falls through to the basic fallback
+    // below only if the template asset is missing.
+    const res = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
+      open: opts.open !== false,
+      skipChildCache: opts.skipChildCache === true,
+      force: opts.force === true,
+    });
+    if (res.ok) return res;
+    console.warn('[sw:import] own note template unavailable; using the fallback path');
 
     const title = entry?.title ?? citekey;
     const year = entry?.issued?.['date-parts']?.[0]?.[0] ?? '';
@@ -3929,9 +3991,10 @@ export class BibManager {
       .map((a: any) => [a.family, a.given].filter(Boolean).join(', ') || a.literal || '')
       .filter(Boolean);
 
-    // Build the "zotero-key" value ZotLit needs to index this note.
+    // Build the stable-identity value for this note.
     // Format: ITEMKEY for My Library (groupID 1), ITEMKEYgGROUPID for group libraries.
-    // See ZotLit's getItemKeyGroupID and ZOTERO_KEY_FIELDNAME.
+    // Written as `sw-zotero-id` — NOT `zotero-key`, which ZotLit reserves and
+    // uses to claim any note carrying it (see template/note-format.ts).
     const zoteroItemKey: string | undefined = entry?._zoteroKey;
     const groupId: number | undefined = entry?.groupID;
     let zoteroKeyField: string | null = null;
@@ -3942,13 +4005,9 @@ export class BibManager {
           : zoteroItemKey;
     }
 
-    // Where the note goes: shares one rule with the own import path and the
-    // settings page (see resolveLiteratureNoteFolder) so all three agree —
-    // ZotLit's folder when it is the chosen path, ours otherwise.
+    // Where the note goes (see resolveLiteratureNoteFolder).
     const folder = resolveLiteratureNoteFolder({
-      useOwnNoteTemplate: this.plugin.settings.useOwnNoteTemplate,
       literatureNoteFolder: this.plugin.settings.literatureNoteFolder,
-      zotlitFolder: getZotlitLiteratureFolder(app),
     });
     const filename = `@${citekey}.md`;
     const notePath = folder ? normalizePath(`${folder}/${filename}`) : filename;
@@ -3961,7 +4020,7 @@ export class BibManager {
     const lines = [
       '---',
       `citekey: ${citekey}`,
-      ...(zoteroKeyField ? [`zotero-key: ${zoteroKeyField}`] : []),
+      ...(zoteroKeyField ? [`sw-zotero-id: ${zoteroKeyField}`] : []),
       `title: "${title.replace(/"/g, '\\"')}"`,
       `year: ${year}`,
       ...(authors.length
@@ -3978,11 +4037,6 @@ export class BibManager {
 
     await app.vault.create(notePath, content);
     await app.workspace.openLinkText(notePath, sourceFile.path, true);
-
-    // SW created this note, so SW should finish the job: pull in the item's
-    // Zotero child notes rather than leaving "Insert Zotero notes" as a step
-    // the user has to know about.
-    void this.fillZoteroNotesForCitekey(citekey, sourceFile);
     return { ok: true, changed: true };
   }
 
@@ -4005,35 +4059,14 @@ export class BibManager {
     // created the note in between.
     if (getLitNoteForCitekey(citekey, sourceFile.path, app)) return false;
 
-    if (this.plugin.settings.useOwnNoteTemplate === true) {
-      const res = await createOrUpdateOwnNote(
-        this.plugin,
-        citekey,
-        entry,
-        sourceFile,
-        { open: false }
-      );
-      return res.ok;
-    }
-
-    // ZotLit path: create via the non-opening bulk API (createNote), never the
-    // protocol route, which would open the new note.
-    const zoteroItemKey: string | undefined = entry._zoteroKey;
-    if (zoteroItemKey && this.plugin.settings.createNotesWithZotLit !== false) {
-      const groupId: number | undefined = entry.groupID;
-      const indexedKey =
-        groupId && groupId !== 1
-          ? `${zoteroItemKey}g${groupId}`
-          : zoteroItemKey;
-      const attempted = await createLitNotesViaZotLitBulk(app, [
-        { indexedKey, entry },
-      ]);
-      if (attempted) {
-        void this.fillZoteroNotesForCitekey(citekey, sourceFile);
-        return true;
-      }
-    }
-    return false;
+    const res = await createOrUpdateOwnNote(
+      this.plugin,
+      citekey,
+      entry,
+      sourceFile,
+      { open: false }
+    );
+    return res.ok;
   }
 
   /** Linked citekeys already swept this session, so a render never loops. */
@@ -4068,89 +4101,6 @@ export class BibManager {
     }
     if (created) void this.plugin?.processReferences();
     return created;
-  }
-
-  /**
-   * Insert a single literature note's Zotero child notes, once the note exists.
-   *
-   * Every SW-driven note-creation path funnels through here, so "insert Zotero
-   * notes" is never a separate step the user has to know about. Best-effort:
-   * the vault-wide command remains available to re-run later.
-   *
-   * @param expectCreation ZotLit creates notes asynchronously (via its protocol
-   *   handler), so allow a few retries for the file to appear.
-   */
-  /**
-   * Insert a single literature note's Zotero child notes, once the note exists.
-   *
-   * Only the ZotLit import path needs this (ZotLit never hands a template its
-   * child notes), so it is gated on ZotLit being the selected path; the vault
-   * settings button and command remain available at any time. Best-effort.
-   *
-   * @param expectCreation ZotLit creates notes asynchronously (via its protocol
-   *   handler), so allow a few retries for the file to appear.
-   */
-  async fillZoteroNotesForCitekey(
-    citekey: string,
-    sourceFile: TFile | null,
-    expectCreation = true
-  ): Promise<void> {
-    if (
-      this.plugin.settings.useOwnNoteTemplate === true ||
-      this.plugin.settings.createNotesWithZotLit === false
-    ) {
-      return;
-    }
-    debugLog('[sw:notes] fill start', citekey, 'expectCreation=', expectCreation);
-
-    // Prefer the file we were handed. Resolution by citekey goes through
-    // ZotLit's note index, which can be mid-rebuild right after an export — and
-    // when the caller already knows the file (e.g. a vault event), there is no
-    // reason to depend on that index at all.
-    let file: TFile | null =
-      sourceFile && this.plugin?.app.vault.getAbstractFileByPath(sourceFile.path) instanceof TFile
-        ? sourceFile
-        : null;
-
-    if (!file) {
-      const sourcePath =
-        sourceFile?.path ?? app.workspace.getActiveFile()?.path ?? '';
-      const attempts = Math.max(expectCreation ? 6 : 4, 4);
-      for (let i = 0; i < attempts; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        const hit = getLitNoteForCitekey(citekey, sourcePath, app);
-        debugLog('[sw:notes] resolve attempt', i + 1, '/', attempts, 'for', citekey, '→', hit?.file?.path ?? 'not found');
-        if (hit?.file) {
-          file = hit.file;
-          break;
-        }
-      }
-    }
-
-    if (!file) {
-      console.warn('[sw:notes] could not resolve a literature note for', citekey);
-      return;
-    }
-    try {
-      const res = await insertZoteroNotesForFiles(app, [file], {
-        zoteroPort: this.plugin.settings.zoteroPort,
-        notesHeadingLevel: this.plugin.settings.ownNoteNotesHeadingLevel ?? 3,
-      });
-      debugLog('[sw:notes] fill result for', citekey, {
-        inserted: res.inserted,
-        noNotes: res.noNotes,
-        skipped: res.skipped,
-        failed: res.failed,
-      });
-      if (res.inserted) {
-        new Notice(
-          `ScholarWeft: inserted Zotero notes into ${res.inserted} new literature note(s).`,
-          8000
-        );
-      }
-    } catch (e) {
-      console.warn('[sw:notes] fill threw for', citekey, e);
-    }
   }
 
   /**
@@ -4638,28 +4588,10 @@ export class BibManager {
       return { created, missing: [], missingKeys: missing };
     }
 
-    // Prefer ZotLit's batch import (no tabs); if it can't handle everything,
-    // fall through to per-note creation (which itself falls back to the
-    // plugin's own template when ZotLit can't create a given item).
     let created = 0;
-    if (
-      this.plugin.settings.createNotesWithZotLit !== false &&
-      this.plugin.settings.useOwnNoteTemplate !== true
-    ) {
-      created = await createLitNotesViaZotLitBulk(app, refs, onProgress);
-      if (created >= refs.length) {
-        // ZotLit created them all. Fold in each note's Zotero child notes here
-        // rather than leaving it to the caller, so EVERY creation path ends the
-        // same way (SW drove the import, so SW finishes it).
-        for (const key of missing) {
-          await this.fillZoteroNotesForCitekey(key, opts.file ?? null);
-        }
-        return { created, missing: refs.map((r) => r.indexedKey), missingKeys: missing };
-      }
-    }
 
-    // Create any that ZotLit couldn't (re-checking existence so notes ZotLit
-    // did create aren't re-opened).
+    // Create any missing notes (re-checking existence so a note a concurrent
+    // path created isn't re-opened).
     const sourceFile =
       opts.file ??
       app.workspace.getActiveFile() ??

@@ -18,7 +18,6 @@ jest.mock(
       'sw-export-templates/x.docx': { content: 'AA==', binary: true, hash: 'h3' },
       // Never extracted (used from the bundle / written by settings buttons):
       'docs/readme.md': { content: 'doc', binary: false, hash: 'h4' },
-      'sw-zotlit-templates/t.md': { content: 't', binary: false, hash: 'h5' },
       'sw-markdown-templates/m.md': { content: 'm', binary: false, hash: 'h6' },
       'README.md': { content: 'r', binary: false, hash: 'h7' },
       'images/i.png': { content: 'AA==', binary: true, hash: 'h8' },
@@ -75,7 +74,6 @@ describe('setupAssets content-aware extraction', () => {
     expect(written).toContain(`${PLUG}/sw-export-templates/x.docx`);
     // Never extracted:
     expect(written).not.toContain(`${PLUG}/docs/readme.md`);
-    expect(written).not.toContain(`${PLUG}/sw-zotlit-templates/t.md`);
     expect(written).not.toContain(`${PLUG}/sw-markdown-templates/m.md`);
     expect(written).not.toContain(`${PLUG}/README.md`);
     expect(written).not.toContain(`${PLUG}/images/i.png`);
@@ -132,9 +130,8 @@ describe('setupAssets content-aware extraction', () => {
   it('does not create opt-in template folders for a user who never opted in', async () => {
     const { plugin, files, written } = makePlugin();
     await setupAssets(plugin);
-    expect(written).not.toContain(`sw-zotlit-templates/t.md`);
     expect(written).not.toContain(`sw-markdown-templates/m.md`);
-    expect(files[`sw-zotlit-templates/t.md`]).toBeUndefined();
+    expect(files[`sw-markdown-templates/m.md`]).toBeUndefined();
   });
 
   it('updates an opted-in template when the bundled content changes', async () => {
@@ -142,19 +139,19 @@ describe('setupAssets content-aware extraction', () => {
     // Seed the opt-in record with an OLD hash, and the file present.
     files[`${PLUG}/.sw-assets.json`] = JSON.stringify({
       version: 1,
-      hashes: { 'template:sw-zotlit-templates/t.md': 'OLD' },
-      templateOptIns: ['sw-zotlit-templates'],
+      hashes: { 'template:sw-markdown-templates/m.md': 'OLD' },
+      templateOptIns: ['sw-markdown-templates'],
     });
     // The folder exists (with stale content) — the real opt-in state.
-    files['sw-zotlit-templates'] = '<dir>';
-    files['sw-zotlit-templates/t.md'] = 'stale';
+    files['sw-markdown-templates'] = '<dir>';
+    files['sw-markdown-templates/m.md'] = 'stale';
     adapter.write.mockClear();
 
     await setupAssets(plugin);
 
     // Recopied because the bundled hash no longer matches.
-    expect(files['sw-zotlit-templates/t.md']).toBe(
-      BUNDLED_ASSETS['sw-zotlit-templates/t.md'].content
+    expect(files['sw-markdown-templates/m.md']).toBe(
+      BUNDLED_ASSETS['sw-markdown-templates/m.md'].content
     );
   });
 
@@ -163,15 +160,15 @@ describe('setupAssets content-aware extraction', () => {
     files[`${PLUG}/.sw-assets.json`] = JSON.stringify({
       version: 1,
       hashes: {},
-      templateOptIns: ['sw-zotlit-templates'],
+      templateOptIns: ['sw-markdown-templates'],
     });
     // Folder is absent — the user's opt-out.
 
     await setupAssets(plugin);
 
-    expect(written).not.toContain('sw-zotlit-templates/t.md');
+    expect(written).not.toContain('sw-markdown-templates/m.md');
     // And the stale opt-in is pruned, so we stop checking for it.
     const stamp = JSON.parse(files[`${PLUG}/.sw-assets.json`]);
-    expect(stamp.templateOptIns).not.toContain('sw-zotlit-templates');
+    expect(stamp.templateOptIns).not.toContain('sw-markdown-templates');
   });
 });

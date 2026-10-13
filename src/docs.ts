@@ -28,7 +28,6 @@ const DOC_ORDER: [string, string][] = [
   ['linked-citations.md', 'Linked citations'],
   ['zotero.md', 'Zotero'],
   ['literature-notes.md', 'Literature notes'],
-  ['zotlit-import-templates.md', 'ZotLit import templates'],
   ['import-export.md', 'Document import and export'],
   ['commands.md', 'Commands'],
   ['mobile.md', 'Mobile'],

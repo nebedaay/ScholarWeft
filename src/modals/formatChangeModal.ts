@@ -4,18 +4,16 @@ import { noteFormatLabel, type NoteFormat } from '../template/note-format';
 import { setModalTitle } from './modalTitle';
 
 /**
- * Shown before an update that may change a note's formatting.
+ * Shown before an update that would change a note's formatting.
  *
- * Updating re-renders a note with whichever import path is selected, so a note
- * in the other tool's format — or one already in the selected format — can gain
- * or lose a managed region. Rather than silently reworking the file, say which
- * format the note is in and which one the update will apply, and offer both
- * "proceed" and "change the setting first".
+ * A note in another tool's format — ZotLit's — gains a managed region when
+ * ScholarWeft updates it. Rather than silently reworking the file, say which
+ * format the note is in and that the update will convert it, and offer both
+ * "proceed" and "leave it alone".
  */
 export class FormatChangeModal extends Modal {
   private noteName: string;
   private noteFormat: NoteFormat;
-  private importingWithZotLit: boolean;
   private onChoose: (proceed: boolean) => void;
   private chosen = false;
 
@@ -24,47 +22,40 @@ export class FormatChangeModal extends Modal {
     opts: {
       noteName: string;
       noteFormat: NoteFormat;
-      importingWithZotLit: boolean;
       onChoose: (proceed: boolean) => void;
     }
   ) {
     super(app);
     this.noteName = opts.noteName;
     this.noteFormat = opts.noteFormat;
-    this.importingWithZotLit = opts.importingWithZotLit;
     this.onChoose = opts.onChoose;
   }
 
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    const target = this.importingWithZotLit
-      ? "ZotLit's format"
-      : "ScholarWeft's format";
 
     setModalTitle(this, 'This Note Will Be Reformatted');
     contentEl.createEl('p', {
       text:
         `“${this.noteName}” is in ${noteFormatLabel(this.noteFormat)}, but ` +
-        `your import setting updates notes with ${target}. Updating it may ` +
-        `change how the note is structured — including its managed annotations ` +
-        `region. Your own writing outside that region is kept either way.`,
+        `updating it will apply ScholarWeft's format. That may change how the ` +
+        `note is structured — including its managed annotations region. Your ` +
+        `own writing outside that region is kept either way.`,
     });
     contentEl.createEl('p', {
-      text:
-        'Proceed with the update, or change the import setting under ' +
-        'Settings → ScholarWeft → Literature note import before trying again?',
+      text: 'Proceed with the update, or leave the note as it is?',
     });
 
     new Setting(contentEl)
       .addButton((b) =>
         b
-          .setButtonText(`Proceed and update as ${target}`)
+          .setButtonText("Proceed and convert to ScholarWeft's format")
           .setCta()
           .onClick(() => this.choose(true))
       )
       .addButton((b) =>
-        b.setButtonText('Change the setting first').onClick(() => this.choose(false))
+        b.setButtonText('Leave it alone').onClick(() => this.choose(false))
       );
   }
 

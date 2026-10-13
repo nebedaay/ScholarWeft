@@ -20,6 +20,7 @@
 // would reorder keys and drop comments).
 
 import type { YamlFieldSpec, FrontmatterMerge } from './yaml';
+import { LEGACY_ZOTERO_KEY } from './note-format';
 
 /** Region markers. OUR namespace. */
 export const MANAGED_OPEN = '%%sw-managed%%';
@@ -175,13 +176,20 @@ function reconcile(
  * Merge the template's managed fields into existing frontmatter. Properties out
  * of scope are preserved verbatim and in place; in-scope properties are
  * reconciled; brand-new managed properties are appended in template order.
+ *
+ * `dropKeys` are REMOVED from the result. Used for `zotero-key`: once
+ * ScholarWeft manages a note it writes `sw-zotero-id`, and leaving the legacy
+ * property behind would let ZotLit keep claiming the note — two plugins
+ * updating one file.
  */
 export function mergeFrontmatter(
   existingFrontmatter: string | null,
-  specs: readonly YamlFieldSpec[]
+  specs: readonly YamlFieldSpec[],
+  dropKeys: readonly string[] = []
 ): string {
   const existing = parseFrontmatter(existingFrontmatter ?? '');
   const byKey = new Map(specs.map((s) => [s.key, s]));
+  const drop = new Set(dropKeys);
 
   // A `subtract` property references the property that now OWNS the list (its
   // lines are the freshly-rendered items). Resolve that here so `reconcile`
@@ -198,6 +206,7 @@ export function mergeFrontmatter(
   const out: string[] = [];
 
   for (const prop of existing) {
+    if (drop.has(prop.key)) continue;
     const spec = byKey.get(prop.key);
     if (!spec) {
       out.push(...prop.lines);
@@ -421,7 +430,12 @@ export function mergeNote(
 ): string {
   const prior = splitNote(existing);
   const fresh = splitNote(rendered);
-  const frontmatter = mergeFrontmatter(prior.frontmatter, specs);
+  // Drop the legacy `zotero-key`: ScholarWeft writes `sw-zotero-id` below, and
+  // leaving the old property would let ZotLit keep claiming (and rewriting) a
+  // note ScholarWeft now manages.
+  const frontmatter = mergeFrontmatter(prior.frontmatter, specs, [
+    LEGACY_ZOTERO_KEY,
+  ]);
   let body =
     prior.frontmatter === null
       ? prior.body

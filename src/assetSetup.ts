@@ -6,7 +6,6 @@ import { BUNDLED_ASSETS } from 'bundled:assets';
 // Folder names are duplicated deliberately: importing them from the template
 // modules would create a cycle (those modules call back into this one to record
 // the opt-in), which drags their UI graph into `assetSetup` and its tests.
-const SW_ZOTLIT_FOLDER = 'sw-zotlit-templates';
 const SW_MARKDOWN_FOLDER = 'sw-markdown-templates';
 
 /**
@@ -84,7 +83,6 @@ export async function setupAssets(plugin: ReferenceList): Promise<void> {
   const extractable = Object.entries(BUNDLED_ASSETS).filter(
     ([relativePath]) =>
       !relativePath.startsWith('sw-markdown-templates/') &&
-      !relativePath.startsWith('sw-zotlit-templates/') &&
       !relativePath.startsWith('docs/') &&
       !relativePath.startsWith('images/') &&
       relativePath !== 'README.md' &&
@@ -169,7 +167,7 @@ export async function setupAssets(plugin: ReferenceList): Promise<void> {
   // user HAS opted in, the templates should travel with the plugin: when a
   // build changes a template, the installed copy updates too. And if the user
   // has deleted the folder, that is the opt-out — leave it deleted.
-  for (const folder of [SW_ZOTLIT_FOLDER, SW_MARKDOWN_FOLDER]) {
+  for (const folder of [SW_MARKDOWN_FOLDER]) {
     if (!optedIn.includes(folder)) continue;
     const dir = normalizePath(folder);
     if (!(await app.vault.adapter.exists(dir))) {

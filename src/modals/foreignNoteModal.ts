@@ -4,22 +4,31 @@ import type { ForeignNoteChoice } from '../template/note-lookup';
 import { setModalTitle } from './modalTitle';
 
 /**
- * Shown when a note carrying the item's stable `zotero-key` is found under a
+ * Shown when a note carrying the item's stable `sw-zotero-id` is found under a
  * filename that is not the item's current citekey — e.g. a note imported by
  * another plugin with its own naming scheme, or one left under an obsolete
  * citekey. The note IS this reference's note, so the user chooses whether to
  * convert and rename it, convert it but leave its `## Notes` section alone,
  * create a fresh note and leave the found one, or cancel.
  *
- * Asking each time (rather than remembering) keeps us from silently reworking
- * a file the user may have named and organised deliberately.
+ * Once the user has opted into ScholarWeft, note names other than `@citekey`
+ * make little sense, so the choice can be REMEMBERED ("Always do this") and
+ * applied silently from then on. The checkbox is pre-ticked for that reason;
+ * untick it to be asked again next time.
  */
+export interface ForeignNoteAnswer {
+  choice: ForeignNoteChoice;
+  /** Apply this choice to every such note from now on, without asking. */
+  remember: boolean;
+}
+
 export class ForeignNoteModal extends Modal {
   private noteName: string;
   private citekey: string;
   private noteCitekey: string | null;
-  private onChoose: (choice: ForeignNoteChoice) => void;
+  private onChoose: (answer: ForeignNoteAnswer) => void;
   private chosen = false;
+  private remember = true;
 
   constructor(
     app: App,
@@ -28,7 +37,7 @@ export class ForeignNoteModal extends Modal {
       citekey: string;
       /** The note's own `citekey:` frontmatter, when it records one. */
       noteCitekey?: string | null;
-      onChoose: (choice: ForeignNoteChoice) => void;
+      onChoose: (answer: ForeignNoteAnswer) => void;
     }
   ) {
     super(app);
@@ -46,7 +55,7 @@ export class ForeignNoteModal extends Modal {
     contentEl.createEl('p', {
       text:
         `“${this.noteName}” is already associated with this Zotero item ` +
-        `(its “zotero-key” matches), but its filename is not this item's ` +
+        `(its “sw-zotero-id” matches), but its filename is not this item's ` +
         `current citekey, “@${this.citekey}”.`,
     });
     if (this.noteCitekey && this.noteCitekey !== this.citekey) {
@@ -87,17 +96,28 @@ export class ForeignNoteModal extends Modal {
           if (choice === 'convert') b.setCta();
         });
     }
+
+    new Setting(contentEl)
+      .setName('Always do this')
+      .setDesc(
+        'Apply this choice to every note found under a non-citekey name from now on, without asking again. Untick to be asked next time.'
+      )
+      .addToggle((t) =>
+        t.setValue(this.remember).onChange((v) => {
+          this.remember = v;
+        })
+      );
   }
 
   private choose(choice: ForeignNoteChoice): void {
     this.chosen = true;
-    this.onChoose(choice);
+    this.onChoose({ choice, remember: this.remember });
     this.close();
   }
 
   onClose(): void {
     this.contentEl.empty();
-    // Dismissing means "not now": change nothing.
-    if (!this.chosen) this.onChoose('cancel');
+    // Dismissing means "not now": change nothing, and remember nothing.
+    if (!this.chosen) this.onChoose({ choice: 'cancel', remember: false });
   }
 }

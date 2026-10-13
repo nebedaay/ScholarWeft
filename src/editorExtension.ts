@@ -30,7 +30,7 @@ import {
   renderCitationContent,
 } from './citationRender';
 import { TooltipManager } from './tooltip';
-import { getLitNoteForCitekey } from './zotlit';
+import { getLitNoteForCitekey } from './lit-note';
 
 const ignoreListRegEx = /code|math|templater|hashtag/;
 

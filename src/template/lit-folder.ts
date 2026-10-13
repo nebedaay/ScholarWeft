@@ -10,24 +10,17 @@
 export const DEFAULT_LITERATURE_NOTE_FOLDER = 'Literature Notes';
 
 /**
- * Which folder literature notes belong in, given the chosen import path.
+ * Which folder literature notes belong in.
  *
- * - **ZotLit path** — ZotLit's own configured folder wins (read live), so its
- *   notes and ours land in one place; our setting is only a fallback for when
- *   ZotLit has none.
- * - **ScholarWeft path** — our **Literature notes folder** setting is
- *   authoritative, and blank means the vault root. ZotLit's folder is NOT
- *   consulted, so the two settings cannot fight over where notes land.
+ * ScholarWeft's **Literature notes folder** setting is authoritative, and blank
+ * means the vault root. (This used to consult ZotLit's own configured folder
+ * when ZotLit was the chosen import path; that path is gone, so there is one
+ * rule again.)
  */
 export function resolveLiteratureNoteFolder(opts: {
-  useOwnNoteTemplate?: boolean;
   literatureNoteFolder?: string;
-  zotlitFolder?: string;
 }): string {
-  const settingsFolder = (opts.literatureNoteFolder ?? '').trim();
-  if (opts.useOwnNoteTemplate === true) return settingsFolder;
-  const zotlitFolder = (opts.zotlitFolder ?? '').trim();
-  return zotlitFolder || settingsFolder || DEFAULT_LITERATURE_NOTE_FOLDER;
+  return (opts.literatureNoteFolder ?? '').trim();
 }
 
 /**

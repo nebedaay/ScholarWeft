@@ -46,6 +46,20 @@ export function noteNameMatchesCitekey(path: string, citekey: string): boolean {
 }
 
 /**
+ * The note's basename IS the citekey, with no `@` prefix — ZotLit's naming, and
+ * also what a hand-renamed note can end up as.
+ *
+ * Such a name is a naming-convention difference, NOT a foreign note: the file
+ * already records which item it is, so it needs no merge question — just the
+ * `@` added. `planCitekeyReconcile` does that.
+ */
+export function isBareCitekeyName(path: string, citekey: string): boolean {
+  if (!citekey) return false;
+  const base = (path.split('/').pop() ?? '').replace(/\.md$/i, '');
+  return base === citekey;
+}
+
+/**
  * The group id encoded in a stable `zotero-key` (`KEYg<groupID>`), or null for
  * a My Library key. The suffix is a lowercase `g` + digits; Zotero item keys
  * are uppercase, so this cannot be confused with an ordinary key.
@@ -256,6 +270,13 @@ export interface CitekeyReconcilePlan {
   derived: DerivedRename[];
   /** Derived-file target names already taken; those renames are skipped. */
   conflicts: string[];
+  /**
+   * Two or more notes whose item resolves to the SAME citekey — i.e. the Zotero
+   * library really holds two items with one citekey (or two libraries do). No
+   * rename can fix this; the user must change one citekey in Zotero. Reported
+   * clearly instead of failing silently.
+   */
+  duplicateCitekeys: Array<{ citekey: string; paths: string[] }>;
 }
 
 /**
@@ -299,11 +320,17 @@ export function planCitekeyReconcile(
 
     const fnameKey = citekeyFromBasename(note.basename);
     const fmKey = note.citekey;
-    const filenameDiffers = fnameKey != null && fnameKey !== toKey;
+    // A name that IS the citekey but lacks the `@` (ZotLit's convention) still
+    // needs renaming — to `@citekey.md`. Without this it is never renamed, so
+    // every update asks the "found under a different name" merge question.
+    const bareName = fnameKey == null && note.basename === toKey;
+    const filenameDiffers = (fnameKey != null && fnameKey !== toKey) || bareName;
     const fmDiffers = fmKey !== toKey;
     if (!filenameDiffers && !fmDiffers) continue; // already current
 
-    const fromKey = filenameDiffers ? fnameKey! : fmKey ?? fnameKey ?? '';
+    const fromKey = filenameDiffers
+      ? fnameKey ?? toKey
+      : fmKey ?? fnameKey ?? '';
     let newPath = note.path;
     if (filenameDiffers) {
       const dir = note.path.replace(/[^/]+$/, '');

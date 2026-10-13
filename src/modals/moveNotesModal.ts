@@ -34,7 +34,7 @@ export class MoveNotesModal extends Modal {
     contentEl.createEl('p', {
       text:
         `${this.count} literature note${this.count === 1 ? '' : 's'} with a ` +
-        `“zotero-key” live outside your literature-note folder, “${this.folder}”.`,
+        `“sw-zotero-id” live outside your literature-note folder, “${this.folder}”.`,
     });
     contentEl.createEl('p', {
       text:

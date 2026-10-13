@@ -32,7 +32,7 @@ beforeAll(() => {
   };
 });
 
-jest.mock('../zotlit', () => ({
+jest.mock('../lit-note', () => ({
   getLitNoteForCitekey: jest.fn((): undefined => undefined),
 }));
 

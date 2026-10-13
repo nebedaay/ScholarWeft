@@ -38,8 +38,6 @@ import {
 import { PartialCSLEntry } from 'src/bib/types';
 import { insertsNoteOnInsertion } from 'src/template/missing-notes';
 import ReferenceList from 'src/main';
-import { isZotLitSuggestActive } from 'src/zotlit';
-export { isZotLitSuggestActive }; // re-exported for settings.tsx
 
 // Set to true to enable verbose autocomplete logging.
 const SUGGEST_DEBUG = false;
@@ -367,13 +365,11 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
       if (!fuse) {
         // No local index yet (a fresh install). Prefer Zotero live search, then
-        // ZotLit's index if that is all we have, then say "still loading".
+        // say "still loading".
         const items = await this.liveSearch(searchQuery, 'text');
         if (items.length) {
           return items.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
         }
-        const zotlitResults = await this.zotlitFallback(searchQuery);
-        if (zotlitResults.length) return zotlitResults;
         return terminalSuggestion(searchQuery, indexReady);
       }
 
@@ -440,8 +436,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         this.renderCount(live.length);
         return live.map((item, refIndex) => ({ item, refIndex, score: 0.5 }));
       }
-      const zotlitResults = await this.zotlitFallback(searchQuery);
-      if (zotlitResults.length) return zotlitResults;
       return terminalSuggestion(searchQuery, indexReady);
     }
   }
@@ -531,49 +525,6 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       line: context.start.line,
       ch: context.start.ch + text.length,
     });
-  }
-
-  /**
-   * ZotLit's own index, used ONLY when ours is unavailable and Zotero's live
-   * search came up empty. It is an accelerator, not a dependency: `@@` works
-   * identically with ZotLit absent.
-   */
-  private async zotlitFallback(
-    searchQuery: string
-  ): Promise<Fuse.FuseResult<PartialCSLEntry>[]> {
-    const db = (this.plugin.app as any).plugins?.plugins?.['zotlit']?.database;
-    if (!db) return [];
-    try {
-      const raw: any[] = searchQuery
-        ? await db.search(searchQuery)
-        : await db.getItemsOf(this.limit);
-      if (!raw?.length) return [];
-      LOG('@@ ZotLit fallback returned', raw.length, 'items');
-      return raw
-        .map((r: any, refIndex: number) => {
-          const titleRaw = r.item?.title;
-          const title: string | undefined = Array.isArray(titleRaw)
-            ? titleRaw[0]
-            : typeof titleRaw === 'string'
-              ? titleRaw
-              : undefined;
-          const id: string = r.item?.citekey ?? r.item?.citationKey ?? '';
-          if (!id) return null;
-          const entry: PartialCSLEntry = { id, title };
-          const creators = r.item?.creators;
-          if (Array.isArray(creators) && creators.length > 0) {
-            entry.author = creators.map((c: any) => ({
-              family: c.lastName ?? c.name ?? '',
-              given: c.firstName ?? '',
-            }));
-          }
-          return { item: entry, refIndex, score: 0.5 };
-        })
-        .filter(Boolean) as Fuse.FuseResult<PartialCSLEntry>[];
-    } catch (e) {
-      LOG('@@ ZotLit fallback failed:', e);
-      return [];
-    }
   }
 
   renderSuggestion(
@@ -901,17 +852,14 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     });
     if (!trigger) return null;
 
-    // A bare `@`/`@@` outside any bracket yields to ZotLit's own suggester when
-    // the user has explicitly turned prioritization off. Bracketed forms are
-    // always claimed (Obsidian's native link search can't see unimported refs).
+    // A bare `@`/`@@` outside any bracket yields when the user has turned
+    // prioritization off (so another plugin's suggester can take it). Bracketed
+    // forms are always claimed — Obsidian's native link search can't see
+    // unimported references.
     if (!trigger.isDoubleAt) {
       const beforeAt = line.substring(0, trigger.atPos);
       const inBracketCite = beforeAt.lastIndexOf('[') > beforeAt.lastIndexOf(']');
-      if (
-        !inBracketCite &&
-        this.plugin.settings.prioritizeCiteKeyCompletion === false &&
-        isZotLitSuggestActive(this.plugin.app)
-      ) {
+      if (!inBracketCite && this.plugin.settings.prioritizeCiteKeyCompletion === false) {
         return null;
       }
     }

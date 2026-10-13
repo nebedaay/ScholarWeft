@@ -81,7 +81,3 @@ Write each abbreviation as its own word:
 - `berg mem` → *Berg*son on *mem*ory
 
 Two letters is usually enough per term; a term matches wherever a word *begins* with it. A hyphenated compound (`anti-colonial`) is matched whole, either spelling.
-
-## If you also use ZotLit
-
-ZotLit is not needed for any of this. The only overlap is `@`: if you have chosen to let ZotLit handle `@` completions, ScholarWeft steps aside for `@`. ScholarWeft's own `@` search covers more, so if you would rather use it, turn on **Settings → ScholarWeft → Prioritize citation completion**.

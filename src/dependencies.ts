@@ -46,11 +46,6 @@ export const DEPENDENCIES = {
     enables: 'PDF export through a .tex template',
     url: 'https://tug.org/texlive/',
   },
-  zotlit: {
-    label: 'ZotLit',
-    enables: 'richer literature notes and @@ full-text search',
-    url: 'https://github.com/PKM-er/obsidian-zotlit',
-  },
 } as const;
 
 export type DepKey = keyof typeof DEPENDENCIES;

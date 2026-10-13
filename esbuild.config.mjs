@@ -88,15 +88,6 @@ const bundleAssetsPlugin = {
 			await readFile('README.md');
 			await readFile('NOTICE.md');
 			await readDir('images');
-			// ZotLit import templates — bundled so the "Install ScholarWeft's
-			// ZotLit templates" button in settings can write them into the
-			// vault. NOT auto-extracted to the plugin dir (see assetSetup.ts).
-			await readDir('sw-zotlit-templates');
-			// ZotLit import SETTINGS (frontmatter field mappings). ZotLit's
-			// frontmatter is driven by its data.json, not by the templates, so
-			// the templates alone don't reproduce the import output; the install
-			// button writes these mappings into ZotLit's settings.
-			await readDir('sw-zotlit-settings');
 			// Basic note template — bundled so the "Install the Basic note
 			// template and set up Templater" button in settings can write it
 			// into the vault. NOT auto-extracted to the plugin dir.

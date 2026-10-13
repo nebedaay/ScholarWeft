@@ -42,7 +42,8 @@ export class CitekeyReconcileModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    const { renames, citeOnly, derived, blocked, unresolved } = this.plan;
+    const { renames, citeOnly, derived, blocked, unresolved, duplicateCitekeys } =
+      this.plan;
     const actionable =
       renames.length > 0 || derived.length > 0 || citeOnly.length > 0;
 
@@ -109,6 +110,28 @@ export class CitekeyReconcileModal extends Modal {
       }
     }
 
+    // ── Two items share one citekey ───────────────────────────────────────────
+    if (duplicateCitekeys.length) {
+      const heading = contentEl.createEl('p', {
+        text:
+          `Two or more items share the same citekey (${duplicateCitekeys.length}). ` +
+          `A citekey must be unique, so this has to be fixed in Zotero — Better ` +
+          `BibTeX adds a trailing letter automatically, but a hand-edited citekey ` +
+          `can collide. Change one of them, then run this again:`,
+      });
+      heading.style.color = 'var(--text-warning, var(--text-error))';
+      const ul = contentEl.createEl('ul', { cls: 'sw-unresolved-list' });
+      ul.style.maxWidth = '100%';
+      for (const d of duplicateCitekeys) {
+        const li = ul.createEl('li');
+        li.createSpan({ text: `@${d.citekey}: ` });
+        d.paths.forEach((p, i) => {
+          if (i > 0) li.createSpan({ text: ', ' });
+          this.link(li, p, p.split('/').pop());
+        });
+      }
+    }
+
     // ── Could not be renamed: the target name is taken ────────────────────────
     if (blocked.length) {
       const heading = contentEl.createEl('p', {
@@ -123,7 +146,7 @@ export class CitekeyReconcileModal extends Modal {
         const li = ul.createEl('li');
         this.link(li, r.path, r.path.split('/').pop());
         li.createSpan({
-          text: `  wants @${r.toKey}  (zotero-key ${r.zoteroKey})`,
+          text: `  wants @${r.toKey}  (sw-zotero-id ${r.zoteroKey})`,
         });
       }
     }
@@ -143,7 +166,7 @@ export class CitekeyReconcileModal extends Modal {
         const li = ul.createEl('li');
         this.link(li, n.path, n.path.split('/').pop());
         li.createSpan({
-          text: `  (zotero-key ${n.zoteroKey})`,
+          text: `  (sw-zotero-id ${n.zoteroKey})`,
         });
       }
     }

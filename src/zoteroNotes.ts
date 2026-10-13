@@ -1,6 +1,7 @@
 import { App, TFile, requestUrl } from 'obsidian';
 import { debugLog } from './helpers';
 import { promoteShortFirstLine } from './template/markdown';
+import { readStableKey } from './template/note-format';
 
 /** Zotero's local REST API port (same default as `bib/helpers.ts`; inlined so
  *  this module doesn't pull the whole bib graph in for one string). */
@@ -168,11 +169,12 @@ export function recordedKeys(content: string): Set<string> {
 async function zoteroKeyOf(app: App, file: TFile): Promise<string | null> {
   const cache = app.metadataCache.getFileCache(file);
   const fm = cache?.frontmatter;
-  // `zotero-key` is what ScholarWeft's own template writes. ZotLit — including
-  // an export from the Zotero–ZotLit companion — writes the same value under
-  // `citekey`. Accept both, or notes ZotLit created are silently treated as
-  // having no Zotero item (`noNotes`) and never get their child notes.
-  const k = fm?.['zotero-key'] ?? fm?.zoteroKey ?? fm?.citekey;
+  // `sw-zotero-id` is what ScholarWeft's own template writes; the legacy
+  // `zotero-key` is still read (a note not yet migrated, or one ZotLit manages).
+  // ZotLit — including an export from the Zotero–ZotLit companion — writes the
+  // value under `citekey`. Accept all three, or such notes are silently treated
+  // as having no Zotero item (`noNotes`) and never get their child notes.
+  const k = readStableKey(fm) ?? fm?.citekey;
   return typeof k === 'string' && k.trim() ? k.trim() : null;
 }
 

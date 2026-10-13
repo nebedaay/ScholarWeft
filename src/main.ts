@@ -60,15 +60,10 @@ import {
   stableKeyGroupID,
 } from './template/note-lookup';
 import { moveNoteIntoFolder } from './noteImport';
+import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
-import {
-  SW_ZOTLIT_FOLDER,
-  installZotlitTemplates,
-  installZotlitTemplatesWithNotice,
-} from './zotlitTemplates';
-import { getLitNoteForCitekey, getZotlitLiteratureFolder } from './zotlit';
-import { zotlitIsNoteImportPath } from './template/import-path';
-import { detectNoteFormat } from './template/note-format';
+import { getLitNoteForCitekey } from './lit-note';
+import { detectNoteFormat, readStableKey, hasLegacyKey, shouldMigrateKey, SW_ZOTERO_ID, LEGACY_ZOTERO_KEY } from './template/note-format';
 import {
   markRelatedMigrated,
   needsRelatedMigration,
@@ -488,8 +483,10 @@ export default class ReferenceList extends Plugin {
       }
       this.checkConflictingPlugins();
       void this.applyPendingSetup();
-      void this.autoConfigureZotlitTemplates();
-      void this.ensureZotlitJsTemplates();
+      // Startup work that must run on EVERY launch. It cannot live in
+      // `initLeaf`: the reference-list leaf is usually restored from the last
+      // session, so `initLeaf` returns early and never reaches it.
+      void this.runStartupTasks();
     });
 
     this.addCommand({
@@ -542,9 +539,7 @@ export default class ReferenceList extends Plugin {
         const file = this.app.workspace.getActiveFile();
         const stable =
           file &&
-          this.app.metadataCache.getFileCache(file)?.frontmatter?.[
-            'zotero-key'
-          ];
+          readStableKey(this.app.metadataCache.getFileCache(file)?.frontmatter);
         if (typeof stable !== 'string' || !stable) return false;
         if (!checking) void this.updateActiveLiteratureNote();
         return true;
@@ -603,8 +598,6 @@ export default class ReferenceList extends Plugin {
           (done, total) => (progress as any).setProgress?.(done, total)
         );
         progress.hide();
-        // Fill any freshly created notes with their Zotero child notes.
-        await this.fillZoteroNotesForCitekeys(missingKeys, view.file);
         // Re-render the sidebar reference list so per-entry buttons flip from
         // "Create literature note" to "Open literature note".
         this.processReferences();
@@ -630,8 +623,6 @@ export default class ReferenceList extends Plugin {
           (done, total) => (progress as any).setProgress?.(done, total)
         );
         progress.hide();
-        // Fill any freshly created notes with their Zotero child notes.
-        await this.fillZoteroNotesForCitekeys(missingKeys, null);
         // Re-render the sidebar so entry buttons reflect the new notes.
         this.processReferences();
         new Notice(
@@ -643,49 +634,6 @@ export default class ReferenceList extends Plugin {
       },
     });
 
-    // Insert the Zotero child notes of every literature note whose "## Notes"
-    // section is still empty (ZotLit imports them as separate files and never
-    // hands their text to a template, so we do it ourselves). ZotLit-only: the
-    // command is hidden unless ZotLit is the import path; the settings page
-    // exposes it as a button in the ZotLit section.
-    const run = async () => {
-      const progress = new Notice('Inserting Zotero notes…', 0);
-      (progress as any).setProgress?.(0, 0);
-      const r = await insertZoteroNotesVaultWide(this.app, {
-        zoteroPort: this.settings.zoteroPort,
-        notesHeadingLevel: this.settings.ownNoteNotesHeadingLevel ?? 3,
-        onProgress: (done, total) =>
-          (progress as any).setProgress?.(done, total),
-      });
-      progress.hide();
-      const lines = [
-        `Inserted Zotero notes into ${r.inserted} literature note(s).`,
-        `${r.noNotes.length} had no Zotero notes.`,
-      ];
-      if (r.skipped.length) {
-        lines.push(
-          `${r.skipped.length} skipped (the "## Notes" section already had content).`
-        );
-      }
-      if (r.failed.length) {
-        lines.push(
-          `${r.failed.length} could not be read from Zotero — is Zotero running? (see the developer console)`
-        );
-      }
-      new Notice(`ScholarWeft: ${lines.join('\n')}`, 10000);
-      if (r.skipped.length) {
-        debugLog(
-          'ScholarWeft: notes skipped because "## Notes" already had content:\n' +
-            r.skipped.join('\n')
-        );
-      }
-    };
-    // ZotLit-only: the on-demand insert lives in the ZotLit section of the
-    // literature-note settings, and the command is registered only while ZotLit
-    // is the import path — a `checkCallback` returning false still lists the
-    // command in the palette, so the command is added/removed instead.
-    this._runInsertZoteroNotes = run;
-    this.registerZoteroNotesCommand();
     // Document Compiler — outline → markdown, and outline/markdown → docx.
     // Desktop only: runs the bundled scripts/DocumentCompiler.py with Python 3.
     // A single command opens a modal with the TOC / footnotes / output-folder
@@ -995,25 +943,9 @@ export default class ReferenceList extends Plugin {
     const content = await this.app.vault.cachedRead(file);
     if (!/^##[ \t]+Notes[ \t]*$/m.test(content)) return null;
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    const raw = fm?.['zotero-key'] ?? fm?.zoteroKey ?? fm?.citekey;
+    const raw = readStableKey(fm) ?? fm?.citekey;
     if (typeof raw !== 'string' || !raw.trim()) return null;
     return /^([A-Za-z0-9]+)(?:g(\d+))?$/.test(raw.trim()) ? raw.trim() : null;
-  }
-
-  /**
-   * After notes are created for `citekeys`, insert their Zotero child notes.
-   *
-   * Delegates to BibManager so every creation path shares ONE implementation
-   * (the single-note sidebar/tooltip path calls it directly). Kept as a thin
-   * wrapper because the bulk commands already know the citekeys.
-   */
-  private async fillZoteroNotesForCitekeys(
-    citekeys: string[],
-    sourceFile: TFile | null
-  ): Promise<void> {
-    for (const key of citekeys) {
-      await this.bibManager.fillZoteroNotesForCitekey(key, sourceFile);
-    }
   }
 
   /**
@@ -1082,80 +1014,17 @@ export default class ReferenceList extends Plugin {
     }
   }
 
-  /**
-   * If ZotLit is installed and its "Template folder" is still the default
-   * ("templates"), and our `sw-zotlit-templates/` folder exists, point ZotLit
-   * at ours automatically. Uses the same safe routine as the settings button
-   * (disable ZotLit → back up → write → re-enable), so we never race ZotLit's
-   * own settings save. Never overrides a non-default choice the user made.
-   * ZotLit may not be loaded yet when the layout is ready, so retry briefly.
-   */
-  private async autoConfigureZotlitTemplates(attempt = 0): Promise<void> {
-    const zotlit = (this.app as any).plugins?.plugins?.['zotlit'];
-    const folder = zotlit?.settings?.current?.['template.folder'];
-    if (!zotlit || folder === undefined) {
-      if (attempt < 5) setTimeout(() => void this.autoConfigureZotlitTemplates(attempt + 1), 2000);
-      return;
-    }
-    if (folder === SW_ZOTLIT_FOLDER) return;
-    if (folder && folder !== 'templates') return; // respect a custom choice
-    if (!(await this.app.vault.adapter.exists(SW_ZOTLIT_FOLDER))) return;
-    const res = await installZotlitTemplates(this);
-    if (res.folderConfigured) {
-      new Notice(`ScholarWeft: pointed ZotLit's “Template folder” at ${SW_ZOTLIT_FOLDER}/`);
-    }
-  }
-
   onunload() {
     activeDocument.body.removeClass('sw-tooltips');
     // Obsidian detaches this plugin's own leaves automatically on unload; do
     // NOT call detach()/detachLeavesOfType() here (a review-flagged mistake).
     // Guard: onload may have failed before bibManager existed, and unload must
     // not throw on top of that.
-    this.unregisterZoteroNotesCommand();
     if (this.bibManager) {
       void this.bibManager.saveRenderedCache();
       void this.bibManager.saveZLinks();
       this.bibManager.destroy();
     }
-  }
-
-  /** The vault-wide Zotero-notes insert, wired to the palette command. */
-  private _runInsertZoteroNotes: (() => Promise<void>) | null = null;
-  /** Whether the ZotLit-only insert command is currently registered. */
-  private _zoteroNotesCommandAdded = false;
-
-  /**
-   * ZotLit-only command: shown in the command palette only while ZotLit is the
-   * selected import path.
-   *
-   * A `checkCallback` that returns false still LISTS the command (greyed at
-   * best), so the command is registered and removed instead. The settings page
-   * calls this after a save so the palette follows the choice immediately.
-   */
-  registerZoteroNotesCommand(): void {
-    if (!this._runInsertZoteroNotes) return;
-    const wanted = zotlitIsNoteImportPath(this.settings);
-    if (wanted === this._zoteroNotesCommandAdded) return;
-    if (wanted) {
-      this.addCommand({
-        id: 'insert-zotero-notes',
-        name: t('Insert Zotero notes into literature notes (vault)'),
-        callback: () => void this._runInsertZoteroNotes?.(),
-      });
-    } else {
-      this.unregisterZoteroNotesCommand();
-    }
-    this._zoteroNotesCommandAdded = wanted;
-  }
-
-  private unregisterZoteroNotesCommand(): void {
-    if (!this._zoteroNotesCommandAdded) return;
-    // `commands` is internal (not in the public typings), like viewRegistry.
-    (this.app as any).commands?.removeCommand?.(
-      'scholar-weft:insert-zotero-notes'
-    );
-    this._zoteroNotesCommandAdded = false;
   }
 
   async updateBibliographyFrontmatter(oldPath: string, newPath: string) {
@@ -1340,6 +1209,37 @@ export default class ReferenceList extends Plugin {
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;
 
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView) {
+      this.processReferences();
+    }
+  }
+
+  /**
+   * One-time startup work that must run on EVERY launch.
+   *
+   * Deliberately NOT in `initLeaf`: the reference-list leaf is usually restored
+   * from the last session, so `initLeaf` takes its early-return branch and
+   * anything living after that branch would never run. (That bug hid the
+   * `zotero-key` → `sw-zotero-id` migration and the citation-index rebuild.)
+   */
+  private async runStartupTasks(): Promise<void> {
+    await this.initPromise.promise;
+    await this.bibManager.initPromise.promise;
+
+    // Rename the legacy `zotero-key` property to `sw-zotero-id` before anything
+    // else reads note identity, so ZotLit stops claiming ScholarWeft's notes.
+    // Then offer ONCE to take over any notes another plugin created: the
+    // automatic update skips those silently (it never opens a modal mid-batch),
+    // so this review is the only place the user is asked.
+    void (async () => {
+      try {
+        await this.migrateLegacyStableKeys();
+        await this.reviewNonSwNotes();
+      } catch (e) {
+        console.warn('[sw:migrate] legacy key migration failed', e);
+      }
+    })();
     // Rebuild the citation index on startup if the persisted one is missing,
     // empty, or stale — otherwise a failed load would silently shrink it.
     void this.ensureCitedKeysIndex();
@@ -1361,11 +1261,6 @@ export default class ReferenceList extends Plugin {
     window.setTimeout(() => {
       void this.offerGroupNoteMove();
     }, 4000);
-
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (activeView) {
-      this.processReferences();
-    }
 
     // Background warm-up: pre-render citations for files not currently open
     // so the first open of any cited note is instant. Safe to run while the
@@ -1512,9 +1407,9 @@ export default class ReferenceList extends Plugin {
     opts?: { confirm?: boolean; skipChildCache?: boolean; force?: boolean }
   ): Promise<UpdateResult> {
     const stable =
-      this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
+      readStableKey(this.app.metadataCache.getFileCache(file)?.frontmatter);
     if (typeof stable !== 'string' || !stable) {
-      return { ok: false, reason: 'no zotero-key' };
+      return { ok: false, reason: 'no stable key' };
     }
     const citekey = this.findCitekeyByStableKey(stable);
     if (!citekey) {
@@ -1563,17 +1458,14 @@ export default class ReferenceList extends Plugin {
       return true; // unreadable: let the normal path report the failure
     }
     const format = detectNoteFormat(source, true);
-    const importingWithZotLit = this.settings.useOwnNoteTemplate !== true;
-
-    // Same format on both sides means a plain refresh; no prompt needed.
-    if (importingWithZotLit ? format === 'zotlit' : format === 'sw') return true;
+    // A note already in our format is a plain refresh; no prompt needed.
+    if (format === 'sw') return true;
 
     const { FormatChangeModal } = await import('./modals/formatChangeModal');
     return new Promise<boolean>((resolve) => {
       new FormatChangeModal(this.app, {
         noteName: file.basename,
         noteFormat: format,
-        importingWithZotLit,
         onChoose: resolve,
       }).open();
     });
@@ -1587,7 +1479,7 @@ export default class ReferenceList extends Plugin {
     new Notice(
       ok
         ? `Updated ${file.basename}.`
-        : `“${file.basename}” was not updated (no zotero-key, or its item is not in the loaded library).`,
+        : `“${file.basename}” was not updated (no sw-zotero-id, or its item is not in the loaded library).`,
       8000
     );
   }
@@ -1597,7 +1489,7 @@ export default class ReferenceList extends Plugin {
     const file = this.app.workspace.getActiveFile();
     const stable =
       file &&
-      this.app.metadataCache.getFileCache(file)?.frontmatter?.['zotero-key'];
+      readStableKey(this.app.metadataCache.getFileCache(file)?.frontmatter);
     return typeof stable === 'string' && !!stable;
   }
 
@@ -1611,11 +1503,11 @@ export default class ReferenceList extends Plugin {
   async updateAllLiteratureNotes(): Promise<void> {
     const files = this.app.vault.getMarkdownFiles().filter((f) => {
       const stable =
-        this.app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'];
+        readStableKey(this.app.metadataCache.getFileCache(f)?.frontmatter);
       return typeof stable === 'string' && !!stable;
     });
     if (!files.length) {
-      new Notice('No literature notes with a “zotero-key” were found.');
+      new Notice('No literature notes with a “sw-zotero-id” were found.');
       return;
     }
 
@@ -1793,8 +1685,10 @@ export default class ReferenceList extends Plugin {
       let ck: string | null = null;
       if (fm) {
         if (typeof fm.citekey === 'string' && fm.citekey) ck = fm.citekey;
-        else if (typeof fm['zotero-key'] === 'string')
-          ck = this.findCitekeyByStableKey(fm['zotero-key']);
+        else {
+          const stable = readStableKey(fm);
+          if (stable) ck = this.findCitekeyByStableKey(stable);
+        }
       }
       if (!ck && f.basename.startsWith('@')) ck = f.basename.slice(1);
       if (!ck || !citekeys.has(ck) || seen.has(f.path)) continue;
@@ -1903,7 +1797,7 @@ export default class ReferenceList extends Plugin {
     const byGroup = new Map<number, TFile[]>();
     for (const f of this.app.vault.getMarkdownFiles()) {
       const zk =
-        this.app.metadataCache.getFileCache(f)?.frontmatter?.['zotero-key'];
+        readStableKey(this.app.metadataCache.getFileCache(f)?.frontmatter);
       if (typeof zk !== 'string') continue;
       const m = /^.*?g(\d+)$/.exec(zk.trim());
       if (!m) continue;
@@ -2440,9 +2334,6 @@ export default class ReferenceList extends Plugin {
 
     this.positionSuggest();
 
-    // Show/hide the ZotLit-only insert command to match the import path.
-    this.registerZoteroNotesCommand();
-
     // Refresh the reference list when settings change
     this.emitSettingsUpdate(cb);
     await this.saveData(this.settings);
@@ -2602,6 +2493,139 @@ export default class ReferenceList extends Plugin {
   }
 
   /**
+   * One-time migration: rename the legacy `zotero-key` property to
+   * `sw-zotero-id` on every literature note ScholarWeft owns.
+   *
+   * Why this matters: ZotLit claims ANY note carrying `zotero-key` as one of its
+   * own literature notes ("ZotLit identifies a literature note by a single
+   * frontmatter field: `zotero-key`") and reserves that key. Sharing the name
+   * meant ZotLit would adopt — and could rewrite — ScholarWeft's notes.
+   * `sw-zotero-id` cannot be claimed by anyone else.
+   *
+   * Runs without asking, which is safe because the discriminator is exact:
+   * ZotLit ALWAYS writes its `%%zt-managed%%` region, while ScholarWeft omits
+   * its own region when an item has no annotations. So a `zotero-key` note with
+   * no `%%zt-managed%%` region is ScholarWeft's (with or without annotations).
+   * Notes that DO carry the ZotLit region are skipped — they belong to ZotLit,
+   * and the import path asks before converting them.
+   */
+  async migrateLegacyStableKeys(): Promise<number> {
+    // Once per session, not once forever. A permanent flag was a trap: if the
+    // first pass ran before Obsidian's metadata cache was populated it would
+    // find nothing and then never retry. The scan itself is in-memory (no file
+    // reads), so re-running it each launch is cheap and self-healing.
+    if (this._legacyKeyMigrationRan) return 0;
+    this._legacyKeyMigrationRan = true;
+    const { vault, metadataCache, fileManager } = this.app;
+    let migrated = 0;
+    for (const file of vault.getMarkdownFiles()) {
+      const fm = metadataCache.getFileCache(file)?.frontmatter;
+      if (!hasLegacyKey(fm)) continue;
+      let content: string;
+      try {
+        content = await vault.cachedRead(file);
+      } catch {
+        continue;
+      }
+      if (!shouldMigrateKey(fm, content)) continue;
+      try {
+        await fileManager.processFrontMatter(file, (front) => {
+          const value = front[LEGACY_ZOTERO_KEY];
+          delete front[LEGACY_ZOTERO_KEY];
+          if (value !== undefined && value !== null && value !== '') {
+            front[SW_ZOTERO_ID] = value;
+          }
+        });
+        migrated++;
+      } catch (e) {
+        debugLog('[sw:migrate] could not migrate', file.path, e);
+      }
+    }
+    if (migrated > 0) {
+      debugLog(`[sw:migrate] renamed zotero-key → sw-zotero-id on ${migrated} note(s)`);
+      new Notice(
+        `ScholarWeft: updated ${migrated} literature note${migrated === 1 ? '' : 's'} to the new ` +
+          '`sw-zotero-id` property (so ZotLit no longer claims them).',
+        8000
+      );
+    }
+    return migrated;
+  }
+
+  /** Guard so the migration runs once per session (see the method above). */
+  private _legacyKeyMigrationRan = false;
+
+  /**
+   * One-time offer, after the library loads, to take over literature notes that
+   * another plugin created (ZotLit writes a `%%zt-managed%%` region and a
+   * `zotero-key` property).
+   *
+   * The automatic update deliberately never opens a modal mid-batch, so it
+   * SKIPS such notes. Without this prompt they would be skipped silently and
+   * could sit un-migrated forever — which is what happened once the identity
+   * property moved to `sw-zotero-id`. Asked once; the answer is recorded in
+   * `ownNoteZotLitHandling` (the "Literature notes from other plugins" setting),
+   * so it can be changed later.
+   */
+  async reviewNonSwNotes(): Promise<void> {
+    // Once per SESSION, but not once forever: this is state-driven, so it runs
+    // again on the next launch while upgradable notes remain and the user has
+    // not said "leave". (A permanent flag was wrong: a user who imported notes
+    // later would never be asked.)
+    if (this._nonSwNotesReviewed) return;
+    this._nonSwNotesReviewed = true;
+
+    // Only a note still carrying the legacy key can be another plugin's (or one
+    // not yet migrated), which keeps the content reads below to a small set.
+    const foreign: TFile[] = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const legacy = fm?.[LEGACY_ZOTERO_KEY];
+      if (typeof legacy !== 'string' || !legacy) continue;
+      try {
+        if (isZotLitManaged(await this.app.vault.cachedRead(file))) foreign.push(file);
+      } catch {
+        /* unreadable — skip */
+      }
+    }
+    if (!foreign.length) return;
+
+    // A standing choice is honoured without asking again.
+    const setting = this.settings.ownNoteZotLitHandling;
+    if (setting === 'convert' || setting === 'leave') {
+      if (setting === 'convert') await this.convertForeignNotes(foreign);
+      return;
+    }
+
+    // 'ask' (the default): ask. Dismissing keeps 'ask', so the question returns
+    // next session — deliberately, because the notes are still un-converted and
+    // the user has not said no. Choosing "leave" stops it for good.
+    const { NonSwNotesModal } = await import('./modals/nonSwNotesModal');
+    const choice = await new Promise<NonSwNotesChoice>((resolve) =>
+      new NonSwNotesModal(this.app, foreign.length, resolve).open()
+    );
+    this.settings.ownNoteZotLitHandling = choice;
+    await this.saveSettings();
+    if (choice === 'convert') await this.convertForeignNotes(foreign);
+  }
+
+  /** Take over each note (convert its region + identity to ScholarWeft's). */
+  private async convertForeignNotes(files: TFile[]): Promise<void> {
+    let converted = 0;
+    for (const file of files) {
+      const res = await this.updateLiteratureNoteResult(file, { confirm: false });
+      if (res.ok) converted++;
+    }
+    new Notice(
+      `ScholarWeft: converted ${converted} literature note${converted === 1 ? '' : 's'} to its format.`,
+      8000
+    );
+  }
+
+  /** Guard so the one-time review runs once per session. */
+  private _nonSwNotesReviewed = false;
+
+  /**
    * Debounced, once-per-session review of every `zotero-key` note. Runs after
    * the library loads (same trigger as citekey reconcile), so it costs nothing
    * until there is a library to match against.
@@ -2633,7 +2657,6 @@ export default class ReferenceList extends Plugin {
   async reviewKeyedNotes(): Promise<void> {
     if (this._keyedNotesReviewed) return;
     if (this.bibManager.isBackendLoading) return;
-    if (this.settings.useOwnNoteTemplate !== true) return;
     this._keyedNotesReviewed = true;
 
     const folder = this.bibManager.resolveBaseNoteFolder();
@@ -2641,7 +2664,7 @@ export default class ReferenceList extends Plugin {
     const misplaced: TFile[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      const stable = fm?.['zotero-key'];
+      const stable = readStableKey(fm);
       if (typeof stable !== 'string' || !stable) continue;
       const citekey = this.findCitekeyByStableKey(stable);
       if (!citekey) continue;
@@ -2737,7 +2760,11 @@ export default class ReferenceList extends Plugin {
     if (!actionable) {
       if (interactive) {
         // Nothing to apply, but there may be notes to resolve by hand.
-        if (plan.blocked.length || plan.unresolved.length) {
+        if (
+          plan.blocked.length ||
+          plan.unresolved.length ||
+          plan.duplicateCitekeys.length
+        ) {
           new CitekeyReconcileModal(this.app, plan, async () => {}).open();
         } else {
           new Notice('All literature note citekeys are up to date.');
@@ -2807,15 +2834,13 @@ export default class ReferenceList extends Plugin {
     // Re-render our own notes so annotations and excerpt images
     // (`@<key>_p…_<annotationKey>.png`) follow the new citekey.
     let refreshed = 0;
-    if (this.settings.useOwnNoteTemplate === true) {
-      for (const r of plan.renames) {
-        const file = this.app.vault.getAbstractFileByPath(r.newPath);
-        if (
-          file instanceof TFile &&
-          (await this.updateLiteratureNote(file, { confirm: false }))
-        ) {
-          refreshed++;
-        }
+    for (const r of plan.renames) {
+      const file = this.app.vault.getAbstractFileByPath(r.newPath);
+      if (
+        file instanceof TFile &&
+        (await this.updateLiteratureNote(file, { confirm: false }))
+      ) {
+        refreshed++;
       }
     }
 
