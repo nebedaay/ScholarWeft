@@ -214,6 +214,23 @@ describe('re-import merge', () => {
     expect(specs.filter((s) => s.key === 'updated')).toHaveLength(1);
   });
 
+  it('rewrites an older template’s `zotero-key` as `sw-zotero-id`', () => {
+    // A template copied before the identity property was renamed still emits
+    // `zotero-key`. The merge DROPS that name, so without the rewrite the note
+    // would silently lose its identity on every render.
+    const ctx = buildNoteContext(entry);
+    prepareTemplateData(ctx);
+    helpers.startYAML(ctx);
+    helpers.addProperty(ctx, 'zotero-key', 'EKUBHHNW');
+    helpers.endYAML(ctx);
+
+    const specs = helpers.fieldSpecs(ctx);
+    const spec = specs.find((s) => s.key === 'sw-zotero-id');
+    expect(spec).toBeDefined();
+    expect(spec!.lines[0]).toBe('sw-zotero-id: EKUBHHNW');
+    expect(specs.some((s) => s.key === 'zotero-key')).toBe(false);
+  });
+
   it('merges a fresh render into an existing note, keeping user data', () => {
     const ctx = buildNoteContext(entry);
     prepareTemplateData(ctx);

@@ -3967,6 +3967,12 @@ export class BibManager {
       stableKey?: string;
       skipChildCache?: boolean;
       force?: boolean;
+      /** Adopt an existing `@citekey.md` without asking (the review's batch). */
+      forceAdopt?: boolean;
+      /** The note to adopt when it is not named `@citekey.md` (another
+       *  plugin's naming): the import path takes this file over and renames it,
+       *  rather than writing a duplicate beside it. */
+      adoptPath?: string;
     } = {}
   ): Promise<{ ok: boolean; changed: boolean }> {
     // Prefer the note's OWN item (by `zotero-key`) over the citekey slot, so a
@@ -3981,6 +3987,8 @@ export class BibManager {
       open: opts.open !== false,
       skipChildCache: opts.skipChildCache === true,
       force: opts.force === true,
+      forceAdopt: opts.forceAdopt === true,
+      adoptPath: opts.adoptPath,
     });
     if (res.ok) return res;
     console.warn('[sw:import] own note template unavailable; using the fallback path');

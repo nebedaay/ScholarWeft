@@ -48,6 +48,7 @@ import {
   promoteShortFirstLine,
 } from './markdown';
 import { mergeNote, type NotesReimport } from './merge';
+import { LEGACY_ZOTERO_KEY, SW_ZOTERO_ID } from './note-format';
 import {
   YamlBuilder,
   serializeProperty,
@@ -64,6 +65,25 @@ import type {
 
 /** How child notes reach the literature note. */
 export type ZoteroNotesMode = 'inline' | 'link';
+
+/**
+ * A template copied from an older version still emits `zotero-key` (or
+ * `zoteroKey`) — the property ZotLit reserves and claims any note carrying. A
+ * note ScholarWeft manages must write `sw-zotero-id` instead, and the re-import
+ * merge DROPS the legacy name, so left alone the render would lose the note's
+ * identity entirely. Rename the field spec (key and serialized line) so the
+ * template keeps working while writing the right property.
+ */
+function renameLegacyIdentityField(spec: YamlFieldSpec): YamlFieldSpec {
+  if (spec.key !== LEGACY_ZOTERO_KEY && spec.key !== 'zoteroKey') return spec;
+  return {
+    ...spec,
+    key: SW_ZOTERO_ID,
+    lines: spec.lines.map((line, i) =>
+      i === 0 ? line.replace(/^zotero-?[Kk]ey:/, `${SW_ZOTERO_ID}:`) : line
+    ),
+  };
+}
 
 export interface NoteImportOptions {
   /** `inline` writes the note text; `link` links an imported note file. */
@@ -218,7 +238,7 @@ export class NoteHelpers {
     opts: { migrateRelated?: boolean } = {}
   ): YamlFieldSpec[] {
     const state = this.stateOf(ctx);
-    let specs = state.yaml.fieldSpecs();
+    let specs = state.yaml.fieldSpecs().map(renameLegacyIdentityField);
     // GUARANTEE the `updated` stamp: a custom template that omits it still gets
     // one, so template staleness can always be judged. `replace` refreshes it on
     // every render (which is the point).

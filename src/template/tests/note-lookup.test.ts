@@ -17,9 +17,11 @@ import {
   needsKeyBraces,
   planCitekeyReconcile,
   replaceCitekeys,
+  resolveOwnNotePath,
   scanCitekeys,
   stableKeyGroupID,
   transformBareCitekeys,
+  unmanagedNoteCitekey,
   zotLitChoice,
   suffixCandidate,
   type ReconcileNote,
@@ -428,5 +430,57 @@ describe('stableKeyGroupID', () => {
     expect(stableKeyGroupID('EKUBHHNW')).toBeNull();
     // An uppercase G is part of an ordinary key, not the group suffix.
     expect(stableKeyGroupID('ABCg12X')).toBeNull();
+  });
+});
+
+describe('unmanagedNoteCitekey', () => {
+  it('takes the `@name` of a note with no frontmatter', () => {
+    expect(unmanagedNoteCitekey('@turner1987', undefined)).toBe('turner1987');
+  });
+
+  it('takes a `citekey:` property, whatever the filename', () => {
+    // Zotero Integration's shape: a citekey property, no `@citekey` filename.
+    expect(
+      unmanagedNoteCitekey('Turner 1987', { citekey: 'turner1987' })
+    ).toBe('turner1987');
+  });
+
+  it('prefers the property over the filename when both are present', () => {
+    expect(
+      unmanagedNoteCitekey('@stale1999', { citekey: 'turner1987' })
+    ).toBe('turner1987');
+  });
+
+  it('returns null when the note shows neither signal', () => {
+    expect(unmanagedNoteCitekey('Meeting notes', { tags: ['x'] })).toBeNull();
+    expect(unmanagedNoteCitekey('@', {})).toBeNull();
+  });
+});
+
+describe('resolveOwnNotePath', () => {
+  it('prefers the note found by identity key', () => {
+    expect(
+      resolveOwnNotePath({
+        foundByKey: '_2 Bibliographic notes/@turner1987.md',
+        adoptPath: '_2 Bibliographic notes/Turner 1987.md',
+      })
+    ).toBe('_2 Bibliographic notes/@turner1987.md');
+  });
+
+  it('falls back to the adopt path when no note has the identity key', () => {
+    // The regression: a renamed note whose `sw-zotero-id` was removed. The item
+    // still HAS a key, so `foundByKey` is null while the item is known — the
+    // adopt path must win, or a second `@citekey.md` is written beside it.
+    expect(
+      resolveOwnNotePath({
+        foundByKey: null,
+        adoptPath: '_2 Bibliographic notes/Turner 1987.md',
+      })
+    ).toBe('_2 Bibliographic notes/Turner 1987.md');
+  });
+
+  it('is null when there is neither, so the conventional path is used', () => {
+    expect(resolveOwnNotePath({ foundByKey: null })).toBeNull();
+    expect(resolveOwnNotePath({ foundByKey: null, adoptPath: null })).toBeNull();
   });
 });

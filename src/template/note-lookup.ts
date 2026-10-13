@@ -60,6 +60,46 @@ export function isBareCitekeyName(path: string, citekey: string): boolean {
 }
 
 /**
+ * The citekey a note that ScholarWeft does NOT manage appears to belong to: its
+ * `citekey:` frontmatter, else its `@name`. `null` when it shows neither signal.
+ *
+ * That pair is what another plugin leaves behind — Zotero Integration writes
+ * `citekey` (but neither an identity property nor our `@citekey` filename), and
+ * an older ScholarWeft note has the filename. Either way the note names an item,
+ * so it can be offered for adoption; the caller checks the citekey is in the
+ * loaded library before offering.
+ */
+export function unmanagedNoteCitekey(
+  basename: string,
+  fm: Record<string, unknown> | undefined | null
+): string | null {
+  const prop = typeof fm?.citekey === 'string' && fm.citekey ? fm.citekey : null;
+  const fromName = basename.startsWith('@') ? basename.slice(1) : null;
+  const candidate = prop ?? fromName;
+  return candidate || null;
+}
+
+/**
+ * Which note a re-import should write, when the caller may have found one under
+ * a non-conventional name.
+ *
+ * Precedence: a note located by its IDENTITY KEY wins (it is unambiguously this
+ * item's note, whatever it is called). Failing that, `adoptPath` — a note the
+ * caller found by its own citekey, whose identity property was removed or
+ * renamed — so it is adopted IN PLACE rather than a second `@citekey.md` being
+ * written beside it. `null` means neither: use the conventional path.
+ *
+ * Split out (and tested) because getting the precedence wrong is silent: the
+ * note is duplicated instead of adopted.
+ */
+export function resolveOwnNotePath(args: {
+  foundByKey: string | null;
+  adoptPath?: string | null;
+}): string | null {
+  return args.foundByKey ?? args.adoptPath ?? null;
+}
+
+/**
  * The group id encoded in a stable `zotero-key` (`KEYg<groupID>`), or null for
  * a My Library key. The suffix is a lowercase `g` + digits; Zotero item keys
  * are uppercase, so this cannot be confused with an ordinary key.

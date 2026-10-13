@@ -2,17 +2,18 @@ import { App, Modal, Setting } from 'obsidian';
 
 import { setModalTitle } from './modalTitle';
 
-/** The one-time answer for literature notes another plugin created. */
+/** The one-time answer for literature notes ScholarWeft does not manage. */
 export type NonSwNotesChoice = 'convert' | 'leave' | 'ask';
 
 /**
- * One-time offer, after the library loads, to take over literature notes that
- * another plugin created (ZotLit writes a `%%zt-managed%%` region and a
- * `zotero-key` property).
+ * One-time offer, after the library loads, to take over literature notes
+ * ScholarWeft does not manage — whether another plugin created them (ZotLit
+ * writes a `%%zt-managed%%` region and a `zotero-key` property; Zotero
+ * Integration writes a `citekey`), or they predate its own identity property.
  *
  * Why this exists: the automatic update deliberately never opens a modal
  * mid-batch, so it SKIPS such notes. Without this prompt they would be skipped
- * silently and could sit un-migrated forever. Asking once — and recording the
+ * silently and could sit un-adopted forever. Asking once — and recording the
  * answer in the "Literature notes from other plugins" setting — turns that into
  * an explicit choice the user can change later.
  */
@@ -36,13 +37,15 @@ export class NonSwNotesModal extends Modal {
     contentEl.empty();
     const n = this.count;
     const one = n === 1;
-    setModalTitle(this, 'Literature Notes From Another Plugin');
+    setModalTitle(this, 'Literature Notes ScholarWeft Doesn’t Manage');
     contentEl.createEl('p', {
       text:
-        `ScholarWeft found ${n} literature note${one ? '' : 's'} created by ` +
-        `another plugin (such as ZotLit). Converting ${one ? 'it' : 'them'} lets ` +
-        `ScholarWeft take over and keep ${one ? 'it' : 'them'} up to date; ` +
-        `leaving ${one ? 'it' : 'them'} alone means ScholarWeft still links to ` +
+        `ScholarWeft found ${n} literature note${one ? '' : 's'} it does not ` +
+        `manage — ${one ? 'it' : 'they'} may not have been created by ` +
+        `ScholarWeft (perhaps by another plugin, or before ScholarWeft ` +
+        `started recording its own identity). Adopting lets ScholarWeft take ` +
+        `over and keep ${one ? 'it' : 'them'} up to date; leaving ` +
+        `${one ? 'it' : 'them'} alone means ScholarWeft still links to ` +
         `${one ? 'it' : 'them'} for citations but never updates ` +
         `${one ? 'it' : 'them'}.`,
     });
@@ -54,7 +57,7 @@ export class NonSwNotesModal extends Modal {
     new Setting(contentEl)
       .addButton((b) =>
         b
-          .setButtonText(one ? 'Convert it' : 'Convert them all')
+          .setButtonText(one ? 'Adopt it' : 'Adopt them all')
           .setCta()
           .onClick(() => this.choose('convert'))
       )

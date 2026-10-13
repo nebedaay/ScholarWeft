@@ -23331,14 +23331,14 @@ var init_nonSwNotesModal = __esm({
         contentEl.empty();
         const n2 = this.count;
         const one = n2 === 1;
-        setModalTitle(this, "Literature Notes From Another Plugin");
+        setModalTitle(this, "Literature Notes ScholarWeft Doesn\u2019t Manage");
         contentEl.createEl("p", {
-          text: `ScholarWeft found ${n2} literature note${one ? "" : "s"} created by another plugin (such as ZotLit). Converting ${one ? "it" : "them"} lets ScholarWeft take over and keep ${one ? "it" : "them"} up to date; leaving ${one ? "it" : "them"} alone means ScholarWeft still links to ${one ? "it" : "them"} for citations but never updates ${one ? "it" : "them"}.`
+          text: `ScholarWeft found ${n2} literature note${one ? "" : "s"} it does not manage \u2014 ${one ? "it" : "they"} may not have been created by ScholarWeft (perhaps by another plugin, or before ScholarWeft started recording its own identity). Adopting lets ScholarWeft take over and keep ${one ? "it" : "them"} up to date; leaving ${one ? "it" : "them"} alone means ScholarWeft still links to ${one ? "it" : "them"} for citations but never updates ${one ? "it" : "them"}.`
         });
         contentEl.createEl("p", {
           text: "You can change this any time under Settings \u2192 ScholarWeft \u2192 Literature note import."
         });
-        new import_obsidian40.Setting(contentEl).addButton((b3) => b3.setButtonText(one ? "Convert it" : "Convert them all").setCta().onClick(() => this.choose("convert"))).addButton((b3) => b3.setButtonText(one ? "Leave it alone" : "Leave them alone").onClick(() => this.choose("leave"))).addButton((b3) => b3.setButtonText("Ask me each time").onClick(() => this.choose("ask")));
+        new import_obsidian40.Setting(contentEl).addButton((b3) => b3.setButtonText(one ? "Adopt it" : "Adopt them all").setCta().onClick(() => this.choose("convert"))).addButton((b3) => b3.setButtonText(one ? "Leave it alone" : "Leave them alone").onClick(() => this.choose("leave"))).addButton((b3) => b3.setButtonText("Ask me each time").onClick(() => this.choose("ask")));
       }
       choose(choice) {
         this.chosen = true;
@@ -90730,6 +90730,16 @@ function isBareCitekeyName(path2, citekey) {
   const base = ((_a = path2.split("/").pop()) != null ? _a : "").replace(/\.md$/i, "");
   return base === citekey;
 }
+function unmanagedNoteCitekey(basename2, fm) {
+  const prop = typeof (fm == null ? void 0 : fm.citekey) === "string" && fm.citekey ? fm.citekey : null;
+  const fromName = basename2.startsWith("@") ? basename2.slice(1) : null;
+  const candidate = prop != null ? prop : fromName;
+  return candidate || null;
+}
+function resolveOwnNotePath(args) {
+  var _a, _b;
+  return (_b = (_a = args.foundByKey) != null ? _a : args.adoptPath) != null ? _b : null;
+}
 function stableKeyGroupID(stable) {
   const m3 = /g(\d+)$/.exec(stable != null ? stable : "");
   return m3 ? Number(m3[1]) : null;
@@ -92121,6 +92131,9 @@ function renderCallout(opts) {
   return formatBlockquote([head, ...body].join("\n"));
 }
 
+// src/template/note-helpers.ts
+init_note_format();
+
 // src/template/yaml.ts
 var INDENT = "  ";
 var INDICATOR_RE = /^[\s\-?:,[\]{}#&*!|>'"%@`]/;
@@ -92252,6 +92265,15 @@ var YamlBuilder = class {
 };
 
 // src/template/note-helpers.ts
+function renameLegacyIdentityField(spec) {
+  if (spec.key !== LEGACY_ZOTERO_KEY && spec.key !== "zoteroKey")
+    return spec;
+  return {
+    ...spec,
+    key: SW_ZOTERO_ID,
+    lines: spec.lines.map((line, i3) => i3 === 0 ? line.replace(/^zotero-?[Kk]ey:/, `${SW_ZOTERO_ID}:`) : line)
+  };
+}
 var STATE_KEY = "__sw";
 function todayIso(now = new Date()) {
   const y3 = now.getFullYear();
@@ -92314,7 +92336,7 @@ var NoteHelpers = class {
   }
   fieldSpecs(ctx, opts = {}) {
     const state = this.stateOf(ctx);
-    let specs = state.yaml.fieldSpecs();
+    let specs = state.yaml.fieldSpecs().map(renameLegacyIdentityField);
     if (!specs.some((s3) => s3.key === "updated")) {
       specs = [
         ...specs,
@@ -92900,7 +92922,7 @@ async function copyExcerptImages(plugin, citekey, children, groupID, dataDir) {
   return copied;
 }
 async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = {}) {
-  var _a, _b, _c, _d, _e, _f, _g, _h;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
   const app2 = plugin.app;
   const templateSource = await readTemplate(plugin);
   if (!templateSource)
@@ -92930,7 +92952,11 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
   const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, "");
   const stableKey = indexedKeyFor(typeof (entry == null ? void 0 : entry._zoteroKey) === "string" ? entry._zoteroKey : "", groupID);
   const baseFolder = literatureNoteFolder(plugin);
-  let notePath = stableKey ? findNoteByZoteroKey(app2, baseFolder, stableKey) : null;
+  const notePathByKey = stableKey ? findNoteByZoteroKey(app2, baseFolder, stableKey) : null;
+  let notePath = resolveOwnNotePath({
+    foundByKey: notePathByKey,
+    adoptPath: opts.adoptPath
+  });
   const groupName = groupID && groupID !== 1 ? (_f = (_e = plugin.bibManager) == null ? void 0 : _e.libraryNameFor(groupID)) != null ? _f : null : null;
   const placeGroupNote = !!groupName;
   if (notePath === null && stableKey) {
@@ -92950,7 +92976,7 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
     const recorded = recordedCitekeyFor(app2, notePath);
     const knownPast = !!recorded && noteNameMatchesCitekey(notePath, recorded) || isBareCitekeyName(notePath, citekey) || !!recorded && isBareCitekeyName(notePath, recorded);
     if (!knownPast) {
-      const action = foreignNoteAction(await resolveForeignNoteHandling(plugin, notePath, citekey, recorded));
+      const action = foreignNoteAction(opts.forceAdopt ? "convert" : await resolveForeignNoteHandling(plugin, notePath, citekey, recorded));
       foreignNotesReimport = action.notesReimport;
       if (action.createNew) {
         notePath = null;
@@ -92965,7 +92991,7 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
   if (!notePath) {
     const desired = folder ? (0, import_obsidian21.normalizePath)(`${folder}/${base}.md`) : `${base}.md`;
     if (await app2.vault.adapter.exists(desired)) {
-      const adopt = base === `@${citekey}` ? await resolveAdoptHandling(plugin, base) : "new";
+      const adopt = base === `@${citekey}` ? opts.forceAdopt ? "adopt" : await resolveAdoptHandling(plugin, base) : "new";
       if (adopt === "adopt") {
         notePath = desired;
       } else if (adopt === "cancel") {
@@ -92983,6 +93009,15 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
     const desired = folder ? (0, import_obsidian21.normalizePath)(`${folder}/${base}.md`) : `${base}.md`;
     if (notePath !== desired) {
       if (await app2.vault.adapter.exists(desired)) {
+        const takenFile = app2.vault.getAbstractFileByPath(desired);
+        const takenKey = takenFile instanceof import_obsidian21.TFile ? readStableKey((_g = app2.metadataCache.getFileCache(takenFile)) == null ? void 0 : _g.frontmatter) : void 0;
+        if (stableKey && takenKey === stableKey) {
+          const kept = (_h = desired.split("/").pop()) != null ? _h : desired;
+          const other = (_i = notePath.split("/").pop()) != null ? _i : notePath;
+          console.warn("[sw:import] two notes claim the same item; keeping", desired, "and leaving", notePath, "alone");
+          new import_obsidian21.Notice(`ScholarWeft: \u201C${kept}\u201D and \u201C${other}\u201D are both notes for this reference. ScholarWeft updates \u201C${kept}\u201D \u2014 please delete or rename \u201C${other}\u201D.`, 12e3);
+          return { ok: false, changed: false };
+        }
         new import_obsidian21.Notice(`\u201C${desired.split("/").pop()}\u201D already exists; \u201C${notePath.split("/").pop()}\u201D was updated under its current name.`, 8e3);
       } else {
         const file = app2.vault.getAbstractFileByPath(notePath);
@@ -93008,7 +93043,7 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
     }
   }
   if (existing != null && !convertedForeign && isZotLitManaged(existing)) {
-    const name = (_g = notePath.split("/").pop()) != null ? _g : notePath;
+    const name = (_j = notePath.split("/").pop()) != null ? _j : notePath;
     if (await resolveZotLitHandling(plugin, name) === "leave") {
       debugLog("[sw:import] leaving the ZotLit-managed note alone:", notePath);
       return { ok: true, changed: false };
@@ -93023,7 +93058,7 @@ async function createOrUpdateOwnNote(plugin, citekey, entry, sourceFile, opts = 
     imageVaultPath,
     notePath,
     collections,
-    noteHeadingLevel: (_h = plugin.settings.ownNoteNotesHeadingLevel) != null ? _h : 3,
+    noteHeadingLevel: (_k = plugin.settings.ownNoteNotesHeadingLevel) != null ? _k : 3,
     existingContent: existing,
     migrateRelated,
     options: { notesReimport: foreignNotesReimport }
@@ -93807,38 +93842,25 @@ var ReferenceListSettingsTab = class extends import_obsidian22.PluginSettingTab 
       this.plugin.settings.openImportedNote = value;
       this.plugin.saveSettings();
     }));
-    new import_obsidian22.Setting(containerEl).setName(t("Literature notes from other plugins")).setDesc(t("What to do with literature notes created by another plugin. Ask (default) prompts when you update one; Always convert takes them over; Never touch leaves them alone.")).addDropdown((drop) => {
+    new import_obsidian22.Setting(containerEl).setName(t("Literature notes from other plugins")).setDesc(t("What to do with literature notes ScholarWeft does not manage \u2014 created by another plugin, or imported without an identity property. Ask (default) prompts when you update one; Always adopt takes them over; Never touch leaves them alone.")).addDropdown((drop) => {
       var _a;
-      return drop.addOption("ask", t("Ask each time")).addOption("convert", t("Always convert")).addOption("leave", t("Never touch them")).setValue((_a = this.plugin.settings.ownNoteZotLitHandling) != null ? _a : "ask").onChange((value) => {
+      return drop.addOption("ask", t("Ask each time")).addOption("convert", t("Always adopt")).addOption("leave", t("Never touch them")).setValue((_a = this.plugin.settings.ownNoteZotLitHandling) != null ? _a : "ask").onChange((value) => {
         this.plugin.settings.ownNoteZotLitHandling = value;
         this.plugin.saveSettings();
       });
     });
-    const autoUpdateRadio = (name, desc, get2, set) => {
-      new import_obsidian22.Setting(containerEl).setName(t(name)).setDesc(t(desc)).then((setting) => {
-        const makeRadio = (label, value) => {
-          const wrap = setting.controlEl.createEl("label", {
-            cls: "sw-auto-update-radio"
-          });
-          const input = wrap.createEl("input", { type: "radio" });
-          input.name = `sw-radio-${name}`;
-          input.checked = get2() === value;
-          input.addEventListener("change", () => set(value));
-          wrap.appendText(" " + label);
-        };
-        makeRadio(t("Yes"), true);
-        makeRadio(t("No"), false);
-      });
+    const autoUpdateToggle = (name, desc, get2, set) => {
+      new import_obsidian22.Setting(containerEl).setName(t(name)).setDesc(t(desc)).addToggle((toggle) => toggle.setValue(get2() === true).onChange((value) => set(value)));
     };
-    autoUpdateRadio("Update literature notes automatically", "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.", () => this.plugin.settings.autoUpdateNotes, (v3) => {
+    autoUpdateToggle("Update literature notes automatically", "When a Zotero item changes \u2014 its metadata, or one of its annotations or attachments \u2014 re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Until you choose, ScholarWeft asks before the first change.", () => this.plugin.settings.autoUpdateNotes, (v3) => {
       this.plugin.settings.autoUpdateNotes = v3;
       this.plugin.saveSettings();
     });
-    autoUpdateRadio("Update citekeys automatically", "When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Leave both unselected and you will be asked the first time it happens.", () => this.plugin.settings.autoUpdateCitekeys, (v3) => {
+    autoUpdateToggle("Update citekeys automatically", "When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Until you choose, ScholarWeft asks the first time it happens.", () => this.plugin.settings.autoUpdateCitekeys, (v3) => {
       this.plugin.settings.autoUpdateCitekeys = v3;
       this.plugin.saveSettings();
     });
-    autoUpdateRadio("Update notes when the template changes", "When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.", () => this.plugin.settings.autoUpdateTemplate, (v3) => {
+    autoUpdateToggle("Update notes when the template changes", "When the literature-note template changes, update every note that was rendered with the old template. Until you choose, ScholarWeft asks the first time it happens.", () => this.plugin.settings.autoUpdateTemplate, (v3) => {
       this.plugin.settings.autoUpdateTemplate = v3;
       this.plugin.saveSettings();
     });
@@ -99451,7 +99473,9 @@ var BibManager = class {
     const res = await createOrUpdateOwnNote(this.plugin, citekey, entry, sourceFile, {
       open: opts.open !== false,
       skipChildCache: opts.skipChildCache === true,
-      force: opts.force === true
+      force: opts.force === true,
+      forceAdopt: opts.forceAdopt === true,
+      adoptPath: opts.adoptPath
     });
     if (res.ok)
       return res;
@@ -103228,6 +103252,7 @@ function looksLikeReferenceListPlugin(id, name) {
   return /reference[\s_-]*list/.test(s3) || /(bripey|briley)/.test(s3) || /(alias|linked)[\s_-]*citations/.test(s3) || /scholar[\s_-]*weave/.test(s3);
 }
 var bibliographyExtensions = new Set(["bib", "json", "yaml", "yml"]);
+var NON_SW_NOTES_REVIEW_MS = 2 * 60 * 1e3;
 function isBibliographyFile(file) {
   return file instanceof import_obsidian43.TFile && bibliographyExtensions.has(file.extension);
 }
@@ -103349,6 +103374,8 @@ var ReferenceList = class extends import_obsidian43.Plugin {
     this._keyedNotesReviewed = false;
     this._legacyKeyMigrationRan = false;
     this._nonSwNotesReviewed = false;
+    this._nonSwNotesTimer = null;
+    this._lastUnmanagedCount = -1;
     this.requestPostProcessRender = (filePath) => {
       if (this.postProcessRenderRequested.has(filePath))
         return;
@@ -103554,6 +103581,15 @@ var ReferenceList = class extends import_obsidian43.Plugin {
       name: t("Show reference list"),
       callback: async () => {
         this.initLeaf();
+      }
+    });
+    this.addCommand({
+      id: "review-notes-from-other-plugins",
+      name: t("Review literature notes from other plugins"),
+      callback: async () => {
+        await this.reviewNonSwNotes({ manual: true });
+        const remaining = await this.scanUnmanagedNotes();
+        new import_obsidian43.Notice(remaining.length ? `ScholarWeft: ${remaining.length} literature note${remaining.length === 1 ? "" : "s"} still not managed by ScholarWeft.` : "ScholarWeft: every literature note it can see is up to date.", 8e3);
       }
     });
     this.addCommand({
@@ -104062,6 +104098,7 @@ var ReferenceList = class extends import_obsidian43.Plugin {
         console.warn("[sw:migrate] legacy key migration failed", e3);
       }
     })();
+    this.scheduleNonSwNotesReview();
     void this.ensureCitedKeysIndex();
     void (async () => {
       try {
@@ -104165,14 +104202,32 @@ var ReferenceList = class extends import_obsidian43.Plugin {
     return this.bibManager.findCitekeyByStableKey(stable);
   }
   async updateLiteratureNoteResult(file, opts) {
-    var _a, _b;
-    const stable = readStableKey((_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter);
-    if (typeof stable !== "string" || !stable) {
-      return { ok: false, reason: "no stable key" };
-    }
-    const citekey = this.findCitekeyByStableKey(stable);
-    if (!citekey) {
-      return { ok: false, reason: `item ${stable} is not in the loaded library` };
+    var _a, _b, _c, _d;
+    const fm = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
+    let stable = readStableKey(fm);
+    let citekey = null;
+    let adoptPath;
+    let forceAdopt = (opts == null ? void 0 : opts.forceAdopt) === true;
+    if (typeof stable === "string" && stable) {
+      citekey = this.findCitekeyByStableKey(stable);
+      if (!citekey) {
+        return { ok: false, reason: `item ${stable} is not in the loaded library` };
+      }
+    } else {
+      const candidate = unmanagedNoteCitekey(file.basename, fm);
+      if (!candidate || !((_b = this.bibManager.bibCache) == null ? void 0 : _b.has(candidate))) {
+        return { ok: false, reason: "no stable key" };
+      }
+      citekey = candidate;
+      stable = void 0;
+      const setting = (_c = this.settings.ownNoteZotLitHandling) != null ? _c : "ask";
+      if (setting === "leave") {
+        return { ok: false, reason: "left alone (not managed by ScholarWeft)" };
+      }
+      forceAdopt = forceAdopt || setting === "convert";
+      const conventional = file.basename.startsWith("@") && file.basename.slice(1) === citekey;
+      if (!conventional)
+        adoptPath = file.path;
     }
     if ((opts == null ? void 0 : opts.confirm) !== false) {
       const proceed = await this.confirmFormatChange(file);
@@ -104184,12 +104239,14 @@ var ReferenceList = class extends import_obsidian43.Plugin {
         open: false,
         stableKey: stable,
         skipChildCache: (opts == null ? void 0 : opts.skipChildCache) === true,
-        force: (opts == null ? void 0 : opts.force) === true
+        force: (opts == null ? void 0 : opts.force) === true,
+        forceAdopt,
+        adoptPath
       });
       return { ok: true, changed: res.changed };
     } catch (e3) {
       console.warn("[sw:update] failed for", file.path, e3);
-      return { ok: false, reason: (_b = e3 == null ? void 0 : e3.message) != null ? _b : "update failed" };
+      return { ok: false, reason: (_d = e3 == null ? void 0 : e3.message) != null ? _d : "update failed" };
     }
   }
   async updateLiteratureNote(file, opts) {
@@ -104890,31 +104947,28 @@ var ReferenceList = class extends import_obsidian43.Plugin {
     }
     return migrated;
   }
-  async reviewNonSwNotes() {
+  async reviewNonSwNotes(opts) {
     var _a;
-    if (this._nonSwNotesReviewed)
+    const setting = (_a = this.settings.ownNoteZotLitHandling) != null ? _a : "ask";
+    const promptShown = this._nonSwNotesReviewed;
+    if (setting === "ask" && promptShown && (opts == null ? void 0 : opts.manual) !== true)
       return;
-    this._nonSwNotesReviewed = true;
-    const foreign = [];
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      const fm = (_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter;
-      const legacy = fm == null ? void 0 : fm[LEGACY_ZOTERO_KEY];
-      if (typeof legacy !== "string" || !legacy)
-        continue;
-      try {
-        if (isZotLitManaged(await this.app.vault.cachedRead(file)))
-          foreign.push(file);
-      } catch (e3) {
-      }
+    if (setting === "leave")
+      return;
+    const foreign = await this.scanUnmanagedNotes();
+    if ((opts == null ? void 0 : opts.manual) || foreign.length !== this._lastUnmanagedCount) {
+      console.log(`[sw:review] ${foreign.length} literature note(s) not managed by ScholarWeft (setting: ${setting})`, foreign.map((f3) => f3.path));
     }
+    this._lastUnmanagedCount = foreign.length;
     if (!foreign.length)
       return;
-    const setting = this.settings.ownNoteZotLitHandling;
-    if (setting === "convert" || setting === "leave") {
-      if (setting === "convert")
-        await this.convertForeignNotes(foreign);
+    if (setting === "convert") {
+      await this.convertForeignNotes(foreign);
       return;
     }
+    if (promptShown && (opts == null ? void 0 : opts.manual) !== true)
+      return;
+    this._nonSwNotesReviewed = true;
     const { NonSwNotesModal: NonSwNotesModal2 } = await Promise.resolve().then(() => (init_nonSwNotesModal(), nonSwNotesModal_exports));
     const choice = await new Promise((resolve) => new NonSwNotesModal2(this.app, foreign.length, resolve).open());
     this.settings.ownNoteZotLitHandling = choice;
@@ -104922,14 +104976,68 @@ var ReferenceList = class extends import_obsidian43.Plugin {
     if (choice === "convert")
       await this.convertForeignNotes(foreign);
   }
+  async scanUnmanagedNotes() {
+    var _a, _b, _c;
+    const claimed = new Set();
+    for (const f3 of this.app.vault.getMarkdownFiles()) {
+      const k4 = readStableKey((_a = this.app.metadataCache.getFileCache(f3)) == null ? void 0 : _a.frontmatter);
+      if (k4)
+        claimed.add(k4);
+    }
+    const foreign = [];
+    const duplicates = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = (_b = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _b.frontmatter;
+      const own = fm == null ? void 0 : fm[SW_ZOTERO_ID];
+      if (typeof own === "string" && own)
+        continue;
+      const legacy = fm == null ? void 0 : fm[LEGACY_ZOTERO_KEY];
+      if (typeof legacy === "string" && legacy) {
+        try {
+          if (isZotLitManaged(await this.app.vault.cachedRead(file)))
+            foreign.push(file);
+        } catch (e3) {
+        }
+        continue;
+      }
+      const candidate = unmanagedNoteCitekey(file.basename, fm);
+      if (!candidate)
+        continue;
+      const entry = (_c = this.bibManager.bibCache) == null ? void 0 : _c.get(candidate);
+      if (!entry)
+        continue;
+      const itemKey = indexedKeyFor(typeof entry._zoteroKey === "string" ? entry._zoteroKey : "", entry.groupID && entry.groupID !== 1 ? entry.groupID : null);
+      if (itemKey && claimed.has(itemKey)) {
+        duplicates.push(file.path);
+        continue;
+      }
+      foreign.push(file);
+    }
+    if (duplicates.length) {
+      console.warn("[sw:review] note(s) duplicate an item that already has a managed note; left alone:", duplicates);
+    }
+    return foreign;
+  }
+  scheduleNonSwNotesReview() {
+    if (this._nonSwNotesTimer != null)
+      return;
+    this._nonSwNotesTimer = this.registerInterval(window.setInterval(() => {
+      void this.reviewNonSwNotes().catch(console.error);
+    }, NON_SW_NOTES_REVIEW_MS));
+  }
   async convertForeignNotes(files) {
     let converted = 0;
     for (const file of files) {
-      const res = await this.updateLiteratureNoteResult(file, { confirm: false });
+      const res = await this.updateLiteratureNoteResult(file, {
+        confirm: false,
+        forceAdopt: true
+      });
       if (res.ok)
         converted++;
     }
-    new import_obsidian43.Notice(`ScholarWeft: converted ${converted} literature note${converted === 1 ? "" : "s"} to its format.`, 8e3);
+    if (converted === 0)
+      return;
+    new import_obsidian43.Notice(`ScholarWeft: adopted ${converted} literature note${converted === 1 ? "" : "s"}.`, 8e3);
   }
   scheduleKeyedNotesReview() {
     if (this._keyedNotesReviewQueued || this._keyedNotesReviewed)

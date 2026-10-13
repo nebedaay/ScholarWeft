@@ -58,8 +58,10 @@ import {
   isZotLitManaged,
   noteNameMatchesCitekey,
   stableKeyGroupID,
+  unmanagedNoteCitekey,
 } from './template/note-lookup';
 import { moveNoteIntoFolder } from './noteImport';
+import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
 import { getLitNoteForCitekey } from './lit-note';
@@ -113,6 +115,13 @@ import { setupAssets } from './assetSetup';
 import { applyYamlFormatting } from './yamlFormatting';
 
 const bibliographyExtensions = new Set(['bib', 'json', 'yaml', 'yml']);
+
+/**
+ * How often the unmanaged-notes review re-scans during a session. Long enough to
+ * be invisible (the scan is in-memory), short enough that a note that loses its
+ * identity mid-session is picked up without a restart.
+ */
+const NON_SW_NOTES_REVIEW_MS = 2 * 60 * 1000;
 
 function isBibliographyFile(file: TAbstractFile): file is TFile {
   return file instanceof TFile && bibliographyExtensions.has(file.extension);
@@ -494,6 +503,27 @@ export default class ReferenceList extends Plugin {
       name: t('Show reference list'),
       callback: async () => {
         this.initLeaf();
+      },
+    });
+
+    // On demand, for a note that is not being picked up automatically (or to
+    // see what the automatic review sees). `manual` ignores the once-per-session
+    // prompt guard.
+    this.addCommand({
+      id: 'review-notes-from-other-plugins',
+      name: t('Review literature notes from other plugins'),
+      callback: async () => {
+        await this.reviewNonSwNotes({ manual: true });
+        // Say what is left, so the command always answers: with "Always adopt"
+        // the review is silent, and "every note is up to date" is the useful
+        // reply.
+        const remaining = await this.scanUnmanagedNotes();
+        new Notice(
+          remaining.length
+            ? `ScholarWeft: ${remaining.length} literature note${remaining.length === 1 ? '' : 's'} still not managed by ScholarWeft.`
+            : 'ScholarWeft: every literature note it can see is up to date.',
+          8000
+        );
       },
     });
 
@@ -1240,6 +1270,10 @@ export default class ReferenceList extends Plugin {
         console.warn('[sw:migrate] legacy key migration failed', e);
       }
     })();
+    // …and keep checking: a note can lose its id (or arrive from another plugin)
+    // at any point in a session, and nothing else revisits it until the next
+    // launch. Silent for a standing choice; at most one prompt per session.
+    this.scheduleNonSwNotesReview();
     // Rebuild the citation index on startup if the persisted one is missing,
     // empty, or stale — otherwise a failed load would silently shrink it.
     void this.ensureCitedKeysIndex();
@@ -1404,16 +1438,50 @@ export default class ReferenceList extends Plugin {
    */
   async updateLiteratureNoteResult(
     file: TFile,
-    opts?: { confirm?: boolean; skipChildCache?: boolean; force?: boolean }
-  ): Promise<UpdateResult> {
-    const stable =
-      readStableKey(this.app.metadataCache.getFileCache(file)?.frontmatter);
-    if (typeof stable !== 'string' || !stable) {
-      return { ok: false, reason: 'no stable key' };
+    opts?: {
+      confirm?: boolean;
+      skipChildCache?: boolean;
+      force?: boolean;
+      forceAdopt?: boolean;
     }
-    const citekey = this.findCitekeyByStableKey(stable);
-    if (!citekey) {
-      return { ok: false, reason: `item ${stable} is not in the loaded library` };
+  ): Promise<UpdateResult> {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    let stable = readStableKey(fm);
+    let citekey: string | null = null;
+    let adoptPath: string | undefined;
+    let forceAdopt = opts?.forceAdopt === true;
+
+    if (typeof stable === 'string' && stable) {
+      citekey = this.findCitekeyByStableKey(stable);
+      if (!citekey) {
+        return { ok: false, reason: `item ${stable} is not in the loaded library` };
+      }
+    } else {
+      // No identity property: another plugin's note (Zotero Integration writes
+      // `citekey` but no id), or one that predates `sw-zotero-id`. Resolve it by
+      // its OWN citekey and offer to ADOPT it.
+      const candidate = unmanagedNoteCitekey(file.basename, fm);
+      if (!candidate || !this.bibManager.bibCache?.has(candidate)) {
+        return { ok: false, reason: 'no stable key' };
+      }
+      citekey = candidate;
+      stable = undefined;
+
+      // "Never touch them" means exactly that — no update, and no prompt.
+      const setting = this.settings.ownNoteZotLitHandling ?? 'ask';
+      if (setting === 'leave') {
+        return { ok: false, reason: 'left alone (not managed by ScholarWeft)' };
+      }
+      forceAdopt = forceAdopt || setting === 'convert';
+
+      // At the conventional `@citekey.md`, leave the path unset so the import
+      // path's own adoption prompt (or the forced answer) applies. Under any
+      // OTHER name — another plugin's scheme — point the import path at THIS
+      // file, so it adopts it in place and renames it to `@citekey.md` rather
+      // than writing a duplicate beside it.
+      const conventional =
+        file.basename.startsWith('@') && file.basename.slice(1) === citekey;
+      if (!conventional) adoptPath = file.path;
     }
 
     if (opts?.confirm !== false) {
@@ -1427,6 +1495,8 @@ export default class ReferenceList extends Plugin {
         stableKey: stable,
         skipChildCache: opts?.skipChildCache === true,
         force: opts?.force === true,
+        forceAdopt,
+        adoptPath,
       });
       return { ok: true, changed: res.changed };
     } catch (e) {
@@ -2557,49 +2627,58 @@ export default class ReferenceList extends Plugin {
 
   /**
    * One-time offer, after the library loads, to take over literature notes that
-   * another plugin created (ZotLit writes a `%%zt-managed%%` region and a
-   * `zotero-key` property).
+   * ScholarWeft does not manage. Two shapes count, and the prompt is the same
+   * for both:
    *
-   * The automatic update deliberately never opens a modal mid-batch, so it
-   * SKIPS such notes. Without this prompt they would be skipped silently and
-   * could sit un-migrated forever — which is what happened once the identity
-   * property moved to `sw-zotero-id`. Asked once; the answer is recorded in
+   *  - a note still carrying the legacy `zotero-key` AND ZotLit's
+   *    `%%zt-managed%%` region — another plugin's note, which the automatic
+   *    update deliberately SKIPS (it never opens a modal mid-batch), so without
+   *    this prompt it would sit un-migrated forever;
+   *  - a note with NO identity property at all that nonetheless looks like a
+   *    literature note: a `@citekey.md` filename, or a `citekey:` property (how
+   *    other plugins write notes — Zotero Integration writes `citekey` but
+   *    neither an id nor our filename).
+   *
+   * Asked once per session while such notes remain; the answer is recorded in
    * `ownNoteZotLitHandling` (the "Literature notes from other plugins" setting),
    * so it can be changed later.
    */
-  async reviewNonSwNotes(): Promise<void> {
-    // Once per SESSION, but not once forever: this is state-driven, so it runs
-    // again on the next launch while upgradable notes remain and the user has
-    // not said "leave". (A permanent flag was wrong: a user who imported notes
-    // later would never be asked.)
-    if (this._nonSwNotesReviewed) return;
-    this._nonSwNotesReviewed = true;
+  async reviewNonSwNotes(opts?: { manual?: boolean }): Promise<void> {
+    const setting = this.settings.ownNoteZotLitHandling ?? 'ask';
 
-    // Only a note still carrying the legacy key can be another plugin's (or one
-    // not yet migrated), which keeps the content reads below to a small set.
-    const foreign: TFile[] = [];
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      const legacy = fm?.[LEGACY_ZOTERO_KEY];
-      if (typeof legacy !== 'string' || !legacy) continue;
-      try {
-        if (isZotLitManaged(await this.app.vault.cachedRead(file))) foreign.push(file);
-      } catch {
-        /* unreadable — skip */
-      }
+    // A STANDING choice is applied silently, and may run on every periodic pass
+    // — that is what makes "Always adopt" keep up with notes that lose their id
+    // mid-session. The 'ask' PROMPT is shown at most once per session
+    // (state-driven: it returns next session while unmanaged notes remain and
+    // the user has not said "leave").
+    const promptShown = this._nonSwNotesReviewed;
+    if (setting === 'ask' && promptShown && opts?.manual !== true) return;
+    // "Never touch them" is a standing no: do not even scan.
+    if (setting === 'leave') return;
+
+    const foreign = await this.scanUnmanagedNotes();
+    // Visible when it matters (or when run by hand): the console line answers
+    // "did the review see my note?" without opening a dialog. Only when the
+    // count CHANGES, so the periodic pass does not spam the console.
+    if (opts?.manual || foreign.length !== this._lastUnmanagedCount) {
+      console.log(
+        `[sw:review] ${foreign.length} literature note(s) not managed by ScholarWeft (setting: ${setting})`,
+        foreign.map((f) => f.path)
+      );
     }
+    this._lastUnmanagedCount = foreign.length;
     if (!foreign.length) return;
 
-    // A standing choice is honoured without asking again.
-    const setting = this.settings.ownNoteZotLitHandling;
-    if (setting === 'convert' || setting === 'leave') {
-      if (setting === 'convert') await this.convertForeignNotes(foreign);
+    if (setting === 'convert') {
+      await this.convertForeignNotes(foreign);
       return;
     }
 
     // 'ask' (the default): ask. Dismissing keeps 'ask', so the question returns
-    // next session — deliberately, because the notes are still un-converted and
+    // next session — deliberately, because the notes are still un-adopted and
     // the user has not said no. Choosing "leave" stops it for good.
+    if (promptShown && opts?.manual !== true) return;
+    this._nonSwNotesReviewed = true;
     const { NonSwNotesModal } = await import('./modals/nonSwNotesModal');
     const choice = await new Promise<NonSwNotesChoice>((resolve) =>
       new NonSwNotesModal(this.app, foreign.length, resolve).open()
@@ -2609,21 +2688,119 @@ export default class ReferenceList extends Plugin {
     if (choice === 'convert') await this.convertForeignNotes(foreign);
   }
 
+  /**
+   * Every literature note ScholarWeft does not manage that looks like one it
+   * could: a note still carrying the legacy `zotero-key` and ZotLit's region, or
+   * a note with no identity property whose `@citekey` filename / `citekey:`
+   * property names a loaded item.
+   *
+   * Cheap: the metadata cache only, except for the small `zotero-key` set, whose
+   * content must be read to see the region marker.
+   */
+  private async scanUnmanagedNotes(): Promise<TFile[]> {
+    // Every identity key a note already claims. A candidate whose ITEM is
+    // already claimed elsewhere is a DUPLICATE of that note, not a note to
+    // adopt: adopting it would put one `sw-zotero-id` on two files, and every
+    // later lookup would reach only the first. (The import path reports the
+    // collision too, if one is ever adopted directly.)
+    const claimed = new Set<string>();
+    for (const f of this.app.vault.getMarkdownFiles()) {
+      const k = readStableKey(this.app.metadataCache.getFileCache(f)?.frontmatter);
+      if (k) claimed.add(k);
+    }
+
+    const foreign: TFile[] = [];
+    const duplicates: string[] = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const own = fm?.[SW_ZOTERO_ID];
+      if (typeof own === 'string' && own) continue;
+
+      const legacy = fm?.[LEGACY_ZOTERO_KEY];
+      if (typeof legacy === 'string' && legacy) {
+        // A `zotero-key` note: ZotLit's if it carries the region (one without a
+        // region was already migrated to `sw-zotero-id` above).
+        try {
+          if (isZotLitManaged(await this.app.vault.cachedRead(file))) foreign.push(file);
+        } catch {
+          /* unreadable — skip */
+        }
+        continue;
+      }
+
+      // No identity property at all. A `@citekey.md` filename or a `citekey:`
+      // property marks a literature note another plugin made. Offer it only when
+      // the citekey names a real, loaded item, so a stray `@note` or a `citekey`
+      // for something not in the library is left alone.
+      const candidate = unmanagedNoteCitekey(file.basename, fm);
+      if (!candidate) continue;
+      const entry = this.bibManager.bibCache?.get(candidate);
+      if (!entry) continue;
+      const itemKey = indexedKeyFor(
+        typeof entry._zoteroKey === 'string' ? entry._zoteroKey : '',
+        entry.groupID && entry.groupID !== 1 ? entry.groupID : null
+      );
+      if (itemKey && claimed.has(itemKey)) {
+        duplicates.push(file.path);
+        continue;
+      }
+      foreign.push(file);
+    }
+    if (duplicates.length) {
+      console.warn(
+        '[sw:review] note(s) duplicate an item that already has a managed note; left alone:',
+        duplicates
+      );
+    }
+    return foreign;
+  }
+
+  /**
+   * Re-scan on a slow timer. A note can lose its `sw-zotero-id` (or be created
+   * by another plugin) at any point in a session, and the automatic update only
+   * visits items Zotero reports as changed — so a note nothing touches would sit
+   * unmanaged until the next launch. `registerInterval` clears the timer on
+   * unload.
+   */
+  scheduleNonSwNotesReview(): void {
+    if (this._nonSwNotesTimer != null) return;
+    this._nonSwNotesTimer = this.registerInterval(
+      window.setInterval(() => {
+        void this.reviewNonSwNotes().catch(console.error);
+      }, NON_SW_NOTES_REVIEW_MS)
+    );
+  }
+
   /** Take over each note (convert its region + identity to ScholarWeft's). */
   private async convertForeignNotes(files: TFile[]): Promise<void> {
     let converted = 0;
     for (const file of files) {
-      const res = await this.updateLiteratureNoteResult(file, { confirm: false });
+      // `forceAdopt` because the user just chose "adopt them all" for this
+      // batch: a note sitting at `@citekey.md` with no id is adopted without a
+      // second, per-note prompt.
+      const res = await this.updateLiteratureNoteResult(file, {
+        confirm: false,
+        forceAdopt: true,
+      });
       if (res.ok) converted++;
     }
+    // Only speak when something actually happened: the periodic pass re-scans,
+    // and a note it cannot take over must not produce a Notice every time.
+    if (converted === 0) return;
     new Notice(
-      `ScholarWeft: converted ${converted} literature note${converted === 1 ? '' : 's'} to its format.`,
+      `ScholarWeft: adopted ${converted} literature note${converted === 1 ? '' : 's'}.`,
       8000
     );
   }
 
   /** Guard so the one-time review runs once per session. */
   private _nonSwNotesReviewed = false;
+
+  /** The periodic re-scan's interval id (`registerInterval` clears it). */
+  private _nonSwNotesTimer: number | null = null;
+
+  /** Last scan's candidate count, so the console line only reports changes. */
+  private _lastUnmanagedCount = -1;
 
   /**
    * Debounced, once-per-session review of every `zotero-key` note. Runs after

@@ -48,6 +48,7 @@ import {
   matchNoteByZoteroKey,
   noteNameMatchesCitekey,
   isBareCitekeyName,
+  resolveOwnNotePath,
   zotLitChoice,
   type ForeignNoteChoice,
   type ZotLitHandling,
@@ -490,7 +491,15 @@ export async function createOrUpdateOwnNote(
   citekey: string,
   entry: CachedEntry | undefined,
   sourceFile: TFile,
-  opts: { open?: boolean; skipChildCache?: boolean; force?: boolean } = {}
+  opts: {
+    open?: boolean;
+    skipChildCache?: boolean;
+    force?: boolean;
+    /** Adopt an existing `@citekey.md` without asking (the review's batch). */
+    forceAdopt?: boolean;
+    /** The note to adopt when it is not named `@citekey.md`. */
+    adoptPath?: string;
+  } = {}
 ): Promise<{ ok: boolean; changed: boolean }> {
   const app = plugin.app;
   const templateSource = await readTemplate(plugin);
@@ -538,10 +547,20 @@ export async function createOrUpdateOwnNote(
   // this item is the one to update, whatever its filename. Search the WHOLE
   // import tree (the base folder and every subfolder) so a note that is merely
   // in the wrong subfolder is found and updated in place, never duplicated.
+  //
+  // `stableKey` here comes from the ITEM, so it is always set — it says which
+  // note to LOOK for, not which was found. When the search finds nothing, a
+  // caller-supplied `adoptPath` (a note found by its own citekey under a
+  // different name) wins over the conventional `@citekey.md` path, so that note
+  // is adopted in place instead of a second one being written beside it.
   const baseFolder = literatureNoteFolder(plugin);
-  let notePath: string | null = stableKey
+  const notePathByKey = stableKey
     ? findNoteByZoteroKey(app, baseFolder, stableKey)
     : null;
+  let notePath: string | null = resolveOwnNotePath({
+    foundByKey: notePathByKey,
+    adoptPath: opts.adoptPath,
+  });
 
   // A GROUP note (`zotero-key` `KEYg<groupID>`) belongs in the subfolder named
   // after its library — the group NAME, not the id, so a renamed library means
@@ -588,8 +607,13 @@ export async function createOrUpdateOwnNote(
       isBareCitekeyName(notePath, citekey) ||
       (!!recorded && isBareCitekeyName(notePath, recorded));
     if (!knownPast) {
+      // `forceAdopt` means the user already said "adopt this note" (the startup
+      // review's batch), so the how-to-merge question is already answered:
+      // convert it in place.
       const action = foreignNoteAction(
-        await resolveForeignNoteHandling(plugin, notePath, citekey, recorded)
+        opts.forceAdopt
+          ? 'convert'
+          : await resolveForeignNoteHandling(plugin, notePath, citekey, recorded)
       );
       foreignNotesReimport = action.notesReimport;
       if (action.createNew) {
@@ -613,8 +637,14 @@ export async function createOrUpdateOwnNote(
       // A file already sits at the conventional `@citekey.md` but carries no
       // `sw-zotero-id` — else the key search above would have found it. Ask
       // whether to ADOPT it, rather than silently making a duplicate beside it.
+      // `forceAdopt` is set by the startup review's "adopt them all", which is
+      // the answer to exactly this question, so it is not asked again.
       const adopt =
-        base === `@${citekey}` ? await resolveAdoptHandling(plugin, base) : 'new';
+        base === `@${citekey}`
+          ? opts.forceAdopt
+            ? 'adopt'
+            : await resolveAdoptHandling(plugin, base)
+          : 'new';
       if (adopt === 'adopt') {
         notePath = desired;
       } else if (adopt === 'cancel') {
@@ -639,6 +669,35 @@ export async function createOrUpdateOwnNote(
     const desired = folder ? normalizePath(`${folder}/${base}.md`) : `${base}.md`;
     if (notePath !== desired) {
       if (await app.vault.adapter.exists(desired)) {
+        // Taken. If it is taken by THIS item's own note — the same stable key —
+        // the two files are duplicates, and adopting here would put one
+        // `sw-zotero-id` on two notes; every later lookup (updates, citation
+        // links) would then reach only the first one. Report it and leave both
+        // alone: which to keep is the user's call.
+        const takenFile = app.vault.getAbstractFileByPath(desired);
+        const takenKey =
+          takenFile instanceof TFile
+            ? readStableKey(
+                app.metadataCache.getFileCache(takenFile)?.frontmatter
+              )
+            : undefined;
+        if (stableKey && takenKey === stableKey) {
+          const kept = desired.split('/').pop() ?? desired;
+          const other = notePath.split('/').pop() ?? notePath;
+          console.warn(
+            '[sw:import] two notes claim the same item; keeping',
+            desired,
+            'and leaving',
+            notePath,
+            'alone'
+          );
+          new Notice(
+            `ScholarWeft: “${kept}” and “${other}” are both notes for this reference. ` +
+              `ScholarWeft updates “${kept}” — please delete or rename “${other}”.`,
+            12000
+          );
+          return { ok: false, changed: false };
+        }
         new Notice(
           `“${desired.split('/').pop()}” already exists; “${notePath.split('/').pop()}” was updated under its current name.`,
           8000

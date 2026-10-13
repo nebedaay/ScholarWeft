@@ -85,7 +85,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   /** Set after the one-time automatic review of keyed notes, so it does not
    *  nag on every startup. */
   keyedNotesReviewed: false,
-  /** How to treat a literature note another plugin created. */
+  /** How to treat a literature note ScholarWeft does not manage (another
+   *  plugin's, or imported without an identity property). */
   ownNoteZotLitHandling: 'ask',
   /** How to treat a note found under a filename other than `@citekey`. */
   foreignNoteHandling: 'ask',
@@ -270,9 +271,10 @@ export interface ReferenceListSettings {
   /** Set after the one-time automatic review of keyed notes. */
   keyedNotesReviewed?: boolean;
   /**
-   * How to treat a literature note that another plugin created when our own
-   * template renders it: `ask` (prompt, default), `convert` (replace the other
-   * plugin's managed region with ours), or `leave` (never touch it).
+   * How to treat a literature note that ScholarWeft does not manage when our
+   * own template renders it: `ask` (prompt, default), `convert` (adopt — replace
+   * the other plugin's managed region with ours, or take over a note that has no
+   * identity property), or `leave` (never touch it).
    */
   ownNoteZotLitHandling?: 'ask' | 'convert' | 'leave';
   /**
@@ -1387,13 +1389,13 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         .setName(t('Literature notes from other plugins'))
         .setDesc(
           t(
-            'What to do with literature notes created by another plugin. Ask (default) prompts when you update one; Always convert takes them over; Never touch leaves them alone.'
+            'What to do with literature notes ScholarWeft does not manage — created by another plugin, or imported without an identity property. Ask (default) prompts when you update one; Always adopt takes them over; Never touch leaves them alone.'
           )
         )
         .addDropdown((drop) =>
           drop
             .addOption('ask', t('Ask each time'))
-            .addOption('convert', t('Always convert'))
+            .addOption('convert', t('Always adopt'))
             .addOption('leave', t('Never touch them'))
             .setValue(this.plugin.settings.ownNoteZotLitHandling ?? 'ask')
             .onChange((value) => {
@@ -1405,7 +1407,11 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             })
         );
 
-      const autoUpdateRadio = (
+      // One control shape for every on/off setting: Obsidian's slider-style
+      // toggle. These three are tri-state in storage (`undefined` = not yet
+      // chosen, so the first occurrence asks), which a toggle shows as OFF; the
+      // description says so, and choosing either way records a real answer.
+      const autoUpdateToggle = (
         name: string,
         desc: string,
         get: () => boolean | undefined,
@@ -1414,25 +1420,14 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
           .setName(t(name))
           .setDesc(t(desc))
-          .then((setting) => {
-            const makeRadio = (label: string, value: boolean) => {
-              const wrap = setting.controlEl.createEl('label', {
-                cls: 'sw-auto-update-radio',
-              });
-              const input = wrap.createEl('input', { type: 'radio' });
-              input.name = `sw-radio-${name}`;
-              input.checked = get() === value;
-              input.addEventListener('change', () => set(value));
-              wrap.appendText(' ' + label);
-            };
-            makeRadio(t('Yes'), true);
-            makeRadio(t('No'), false);
-          });
+          .addToggle((toggle) =>
+            toggle.setValue(get() === true).onChange((value) => set(value))
+          );
       };
 
-      autoUpdateRadio(
+      autoUpdateToggle(
         'Update literature notes automatically',
-        'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Leave both unselected and you will be asked before anything changes.',
+        'When a Zotero item changes — its metadata, or one of its annotations or attachments — re-render its literature note automatically (managed frontmatter fields and the annotations region only; your own writing is untouched). Until you choose, ScholarWeft asks before the first change.',
         () => this.plugin.settings.autoUpdateNotes,
         (v) => {
           this.plugin.settings.autoUpdateNotes = v;
@@ -1440,9 +1435,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         }
       );
 
-      autoUpdateRadio(
+      autoUpdateToggle(
         'Update citekeys automatically',
-        'When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Leave both unselected and you will be asked the first time it happens.',
+        'When Zotero gives a reference a new citekey, rename its literature note (and its associated files) and update citations across the vault. Until you choose, ScholarWeft asks the first time it happens.',
         () => this.plugin.settings.autoUpdateCitekeys,
         (v) => {
           this.plugin.settings.autoUpdateCitekeys = v;
@@ -1450,9 +1445,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         }
       );
 
-      autoUpdateRadio(
+      autoUpdateToggle(
         'Update notes when the template changes',
-        'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.',
+        'When the literature-note template changes, update every note that was rendered with the old template. Until you choose, ScholarWeft asks the first time it happens.',
         () => this.plugin.settings.autoUpdateTemplate,
         (v) => {
           this.plugin.settings.autoUpdateTemplate = v;
