@@ -9,7 +9,6 @@ import {
   Platform,
 } from 'obsidian';
 import { searchZoteroNative, searchZoteroBBT, DEFAULT_ZOTERO_PORT } from 'src/bib/helpers';
-import { normalizeDiacritics } from 'src/bib/bibManager';
 import { excerptsForResult } from 'src/template/search-excerpt';
 import { appendHighlighted } from 'src/template/highlight';
 import {
@@ -286,7 +285,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // Yield so the keystroke PAINTS, then coalesce: if another key arrived
     // while we waited, this scan is already stale — return the previous list
     // rather than score text the user has moved past.
-    await new Promise<void>((r) => setTimeout(r, SUGGEST_DEBOUNCE_MS));
+    await new Promise<void>((r) => window.setTimeout(r, SUGGEST_DEBOUNCE_MS));
     if (gen !== this._searchGen) return this._lastSuggestions;
 
     const result = await this.computeSuggestions(
@@ -543,7 +542,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     }
     const frag = createFragment();
     const item = suggestion.item;
-    const excerpts = this.excerptsFor(item as { id?: string; abstract?: string });
+    const excerpts = this.excerptsFor(item);
 
     // Highlight the matched terms in EVERY field, on every render path. Doing
     // it from TERMS rather than Fuse's `matches` matters because searchTier

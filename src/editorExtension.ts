@@ -18,7 +18,6 @@ import {
 
 import {
   RenderedCitation,
-  Segment,
   SegmentType,
   getCitationSegments,
 } from './parser/parser';
@@ -130,7 +129,7 @@ class CiteWidget extends WidgetType {
           span.addEventListener('mousedown', (evt) => {
             if (evt.button !== 0) return;
             const newPane = Keymap.isModEvent(evt);
-            activeWindow.setTimeout(() => {
+            window.setTimeout(() => {
               app.workspace.openLinkText(
                 this.linkText,
                 this.sourcePath,

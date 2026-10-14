@@ -31,7 +31,7 @@ export function SearchSelect({
   const [selected, setSelected] = React.useState<SelectOption | null>(
     defaultValue ?? null
   );
-  const dbRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dbRef = React.useRef<number | null>(null);
   const menuId = React.useId();
 
   const openOptions = (results: SelectOption[]) => {
@@ -43,9 +43,9 @@ export function SearchSelect({
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setInputVal(val);
-    if (dbRef.current) clearTimeout(dbRef.current);
+    if (dbRef.current) window.clearTimeout(dbRef.current);
     if (val.length >= 1) {
-      dbRef.current = setTimeout(() => {
+      dbRef.current = window.setTimeout(() => {
         const results = search(val).slice(0, 20);
         openOptions(results);
       }, 150);
@@ -114,7 +114,7 @@ export function SearchSelect({
           }}
           onBlur={() => {
             // Delay close so onMouseDown on an option fires first
-            setTimeout(() => {
+            window.setTimeout(() => {
               setIsOpen(false);
               setActiveIndex(-1);
             }, 200);

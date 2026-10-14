@@ -66,29 +66,7 @@ export interface ScoreOptions {
 /** Terms shorter than this contribute nothing to word-boundary scoring. */
 export const MIN_MEANINGFUL_TERM = 3;
 
-/** Split text into words. The `u` flag is REQUIRED for `\p{...}` to work. */
-function words(text: string): string[] {
-  const cached = WORD_CACHE.get(text);
-  if (cached) return cached;
-  const out = norm(text)
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean);
-  // Bounded so a long-lived vault cannot grow this without limit.
-  if (WORD_CACHE.size > 4000) WORD_CACHE.clear();
-  WORD_CACHE.set(text, out);
-  return out;
-}
-
 /**
- * Split text into words. The `u` flag is REQUIRED for `\p{...}` to work.
- *
- * Cached because search calls this repeatedly for the same strings — every
- * entry has its words split once per interpretation otherwise, which was the
- * dominant cost of a multi-interpretation query (measured 131ms of 166ms for
- * 1000 entries before caching).
- */
-const WORD_CACHE = new Map<string, string[]>();
-
 /** Split a query into searchable terms.
  *
  * A HYPHEN is a within-word marker (`anti-colonial` is one compound), so a

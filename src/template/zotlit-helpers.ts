@@ -126,13 +126,13 @@ export function replaceSuffixMarkers(
 export function coerceOutput(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString();
-  const T = (globalThis as { Temporal?: any }).Temporal;
+  const T = (window as { Temporal?: any }).Temporal;
   if (T && value instanceof T.Instant) {
     return (value as any)
       .toZonedDateTimeISO(T.Now.timeZoneId())
       .toPlainDate()
       .toString();
   }
-  // eslint-disable-next-line @typescript-eslint/no-base-to-string
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- `value` is a Temporal object (PlainDate/Instant) whose `toString()` is the ISO form the template wants; the rule cannot see that through the generic helper.
   return String(value);
 }

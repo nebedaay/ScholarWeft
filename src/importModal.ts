@@ -11,9 +11,6 @@ import { setModalTitle } from './modals/modalTitle';
 
 declare const require: (id: string) => any;
 
-const LAST_DIR_KEY = 'scholar-weft:import-last-dir';
-const LAST_OUTDIR_KEY = 'scholar-weft:import-outdir';
-const IMPORT_HISTORY_KEY = 'scholar-weft:import-history';
 
 interface ImportHistoryEntry {
   folder: string;
@@ -21,21 +18,25 @@ interface ImportHistoryEntry {
 }
 
 /** Per-source-file import destination, so re-importing an updated file updates
- *  the same note (mirrors the export modal's per-file history). */
-function loadImportHistory(): Record<string, ImportHistoryEntry> {
-  try {
-    return JSON.parse(localStorage.getItem(IMPORT_HISTORY_KEY) || '{}');
-  } catch {
-    return {};
-  }
+ *  the same note (mirrors the export modal's per-file history). Stored in the
+ *  plugin's data file — `localStorage` is discouraged by the directory. */
+function loadImportHistory(
+  plugin: ReferenceList
+): Record<string, ImportHistoryEntry> {
+  const hist = plugin.settings.importHistory;
+  return hist && typeof hist === 'object' ? hist : {};
 }
 
-function saveImportHistory(sourcePath: string, entry: ImportHistoryEntry): void {
-  try {
-    const hist = loadImportHistory();
-    hist[sourcePath] = entry;
-    localStorage.setItem(IMPORT_HISTORY_KEY, JSON.stringify(hist));
-  } catch { /* ignore */ }
+function saveImportHistory(
+  plugin: ReferenceList,
+  sourcePath: string,
+  entry: ImportHistoryEntry
+): void {
+  plugin.settings.importHistory = {
+    ...loadImportHistory(plugin),
+    [sourcePath]: entry,
+  };
+  void plugin.saveSettings();
 }
 
 /**
@@ -87,10 +88,8 @@ export class ImportModal extends Modal {
 
   /** The directory the file picker should open to. */
   private getDefaultDir(): string {
-    try {
-      const stored = localStorage.getItem(LAST_DIR_KEY);
-      if (stored) return stored;
-    } catch { /* localStorage unavailable */ }
+    const stored = this.plugin.settings.importLastDir;
+    if (stored) return stored;
     // Fall back to the vault root.
     const adapter = this.plugin.app.vault.adapter as any;
     return typeof adapter?.getBasePath === 'function' ? adapter.getBasePath() : '';
@@ -100,7 +99,8 @@ export class ImportModal extends Modal {
   private saveLastDir(filePath: string): void {
     try {
       const nodePath = require('path') as typeof import('path');
-      localStorage.setItem(LAST_DIR_KEY, nodePath.dirname(filePath));
+      this.plugin.settings.importLastDir = nodePath.dirname(filePath);
+      void this.plugin.saveSettings();
     } catch { /* ignore */ }
   }
 
@@ -112,7 +112,7 @@ export class ImportModal extends Modal {
     this.importBtn.disabled = !this.importReady;
     // Restore this source file's previous destination if we have one; else
     // default the filename to the source basename + .md.
-    const hist = loadImportHistory()[filePath];
+    const hist = loadImportHistory(this.plugin)[filePath];
     if (hist && this.filenameInput && this.outputDirInput) {
       this.outputDirInput.value = hist.folder ?? '';
       this.filenameInput.value = hist.filename
@@ -125,17 +125,12 @@ export class ImportModal extends Modal {
   }
 
   private getLastOutputDir(): string {
-    try {
-      return localStorage.getItem(LAST_OUTDIR_KEY) ?? '';
-    } catch {
-      return '';
-    }
+    return this.plugin.settings.importLastOutputDir ?? '';
   }
 
   private saveLastOutputDir(): void {
-    try {
-      localStorage.setItem(LAST_OUTDIR_KEY, this.outputDirInput.value.trim());
-    } catch { /* ignore */ }
+    this.plugin.settings.importLastOutputDir = this.outputDirInput.value.trim();
+    void this.plugin.saveSettings();
   }
 
   /** Dependencies the importer needs that were NOT found on this computer. */
@@ -195,26 +190,26 @@ export class ImportModal extends Modal {
 
     this.fileLabel = dropZone.createSpan({ cls: 'sw-import-file-label sw-import-drop-hint' });
     this.fileLabel.textContent = 'No file selected — or drop a .docx/.odt here';
-    this.fileLabel.style.cssText = 'flex:1;color:var(--text-muted);font-size:0.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    this.fileLabel.setCssStyles({ flex: '1', color: 'var(--text-muted)', fontSize: '0.9em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
 
     // Drag-and-drop handlers on the whole drop zone.
     dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropZone.style.background = 'var(--background-secondary)';
+      dropZone.setCssStyles({ background: 'var(--background-secondary)' });
     });
     dropZone.addEventListener('dragleave', () => {
-      dropZone.style.background = '';
+      dropZone.setCssStyles({ background: '' });
     });
     dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropZone.style.background = '';
+      dropZone.setCssStyles({ background: '' });
       const file = e.dataTransfer?.files?.[0] as any;
       if (!file) return;
       const filePath: string | undefined = pathForDroppedFile(file);
       if (!filePath) {
-        new Notice('[ScholarWeft] Could not read the file path from the dropped file.');
+        new Notice('[ScholarWeft] could not read the file path from the dropped file.');
         return;
       }
       const lower = filePath.toLowerCase();
@@ -245,7 +240,7 @@ export class ImportModal extends Modal {
       } catch {
         // @electron/remote unavailable – fall back to <input type="file">
         await new Promise<void>(resolve => {
-          const input = document.createElement('input');
+          const input = createEl('input');
           input.type = 'file';
           input.accept = '.docx,.odt';
           input.addEventListener('change', () => {
@@ -284,33 +279,33 @@ export class ImportModal extends Modal {
 
     // ── Output filename + folder (mirrors the export dialogue) ───────────────
     const fnWrap = contentEl.createDiv({ cls: 'sw-export-row' });
-    fnWrap.style.marginTop = '12px';
+    fnWrap.setCssStyles({ marginTop: '12px' });
     fnWrap.createEl('label', { text: 'Output filename' });
     this.filenameInput = fnWrap.createEl('input', {
       type: 'text',
       cls: 'sw-export-filename-input',
     });
-    this.filenameInput.style.cssText = 'width:100%;margin-top:4px';
+    this.filenameInput.setCssStyles({ width: '100%', marginTop: '4px' });
     this.filenameInput.addEventListener('input', () => {
       this.filenameTouched = true;
     });
 
     const dirWrap = contentEl.createDiv({ cls: 'sw-export-row' });
-    dirWrap.style.marginTop = '10px';
+    dirWrap.setCssStyles({ marginTop: '10px' });
     dirWrap.createEl('label', { text: 'Import folder (vault-relative)' });
     this.outputDirInput = dirWrap.createEl('input', {
       type: 'text',
       placeholder: '(vault root)',
       cls: 'sw-export-outdir-input',
     });
-    this.outputDirInput.style.cssText = 'width:100%;margin-top:4px';
+    this.outputDirInput.setCssStyles({ width: '100%', marginTop: '4px' });
     this.outputDirInput.value = this.getLastOutputDir();
     new FolderSuggest(this.app, this.outputDirInput);
     this.outputDirInput.addEventListener('change', () => this.saveLastOutputDir());
 
     // Overwrite-by-default: re-importing is normally meant to update the note.
     const owRow = contentEl.createDiv({ cls: 'sw-export-check-row' });
-    owRow.style.marginTop = '4px';
+    owRow.setCssStyles({ marginTop: '4px' });
     this.overwriteCb = owRow.createEl('input', { type: 'checkbox' });
     this.overwriteCb.id = 'sw-import-overwrite';
     this.overwriteCb.checked = true;
@@ -321,7 +316,7 @@ export class ImportModal extends Modal {
 
     // ── Buttons ──────────────────────────────────────────────────────────────
     const btnRow = contentEl.createDiv({ cls: 'sw-export-btn-row' });
-    btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px';
+    btnRow.setCssStyles({ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' });
 
     const cancelBtn = btnRow.createEl('button', { text: 'Cancel' });
     cancelBtn.addEventListener('click', () => this.close());
@@ -330,7 +325,7 @@ export class ImportModal extends Modal {
     this.importBtn.disabled = true;
     this.importBtn.addEventListener('click', () => this.run());
 
-    setTimeout(() => browseBtn.focus(), 50);
+    window.setTimeout(() => browseBtn.focus(), 50);
 
     // Probe installed tools and gate the Import button.
     void this.applyImportGating();
@@ -417,7 +412,7 @@ export class ImportModal extends Modal {
       }
     }
     const vaultRelPath = outFolder ? `${outFolder}/${filename}` : filename;
-    saveImportHistory(this.inputPath, { folder: outFolder, filename });
+    saveImportHistory(this.plugin, this.inputPath, { folder: outFolder, filename });
 
     let newFile: TFile;
     try {

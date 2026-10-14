@@ -64,7 +64,7 @@ function buildCitationSpan(
   ctx: MarkdownPostProcessorContext,
   sourceText?: Node
 ): HTMLSpanElement {
-  const span = document.createElement('span');
+  const span = createSpan();
   span.className = citationSpanClass(rendered);
   for (const [k, v] of Object.entries(
     citationSpanAttributes(rendered, ctx.sourcePath)
@@ -103,7 +103,7 @@ function buildCitationSpan(
       const resolved = getLitNoteForCitekey(citekey, ctx.sourcePath, plugin.app);
       const linkTarget = resolved?.linkText ?? '@' + citekey;
       span.classList.add('is-link');
-      const a = document.createElement('a');
+      const a = createEl('a');
       a.className = 'internal-link';
       a.setAttribute('data-href', linkTarget);
       a.setAttribute('href', linkTarget);
@@ -177,7 +177,6 @@ function buildFallbackFragment(
   return frag;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function processCiteKeys(plugin: ReferenceList) {
   return (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
     const sectionInfo = ctx.getSectionInfo(el);

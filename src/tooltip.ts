@@ -58,7 +58,12 @@ export class TooltipManager {
             if (!target) target = html;
             const inner = target.innerHTML;
             const clipped = clip(inner, 100, { html: true });
-            target.innerHTML = clipped;
+            // Re-parse the clipped markup and move it in, rather than assigning
+            // to `innerHTML` (forbidden by the directory review). The parse is
+            // inert, and the markup came from this element's own content.
+            const parsed = new DOMParser().parseFromString(clipped, 'text/html').body;
+            target.empty();
+            while (parsed.firstChild) target.appendChild(parsed.firstChild);
           }
           content.append(html);
         }

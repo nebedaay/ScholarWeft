@@ -1,23 +1,20 @@
-ScholarWeft 0.5.1 fixes how a literature note is taken over when its identity is missing, and tidies the settings.
+ScholarWeft 0.5.2 is a smaller, tidier build.
 
-### A renamed note is adopted, not duplicated
+### The Zotero picker is gone
 
-If you rename one of ScholarWeft's notes — or remove its `sw-zotero-id` — ScholarWeft now recognises it by its own `citekey` and takes it over **in place**, renaming it back to `@citekey.md` and restoring its identity property. It no longer writes a second note beside it.
+The **Import literature notes from Zotero…** command has been removed.
 
-This was a wiring bug: the note was looked up only by its Zotero item key, which the note no longer carried, so the conventional `@citekey.md` looked free and was created. Notes that another plugin made under its own naming (Zotero Integration writes a `citekey` property) are handled the same way — adopted and renamed rather than duplicated.
+It opened Zotero's own item picker, which searches *every* library in Zotero — including ones you have not enabled in ScholarWeft. Importing from those produced citations nothing could resolve, so the command could quietly create broken references. **Add Literature Notes/Citations** searches and filters the libraries you actually load, inside Obsidian, and does the same job without that trap — and without needing Better BibTeX.
 
-### Two notes can never share one identity
+Nothing else changes: the same command still creates or refreshes literature notes, inserts citations, or both.
 
-A note's `sw-zotero-id` must be unique. If two files claim the same item, later lookups would reach only the first, so updates and citation links would split between them. ScholarWeft now refuses to stamp a second file with an identity an existing note already holds: it reports the collision and leaves both files alone. The background review also skips such duplicates rather than offering to adopt them.
+### A much smaller download
 
-### Unmanaged notes are re-checked during the session
+The plugin is now **3.4 MB instead of 10.5 MB**, comfortably under the 5 MB line that matters for syncing. Release builds are minified, and the bundled export templates and documentation screenshots are stored at sensible sizes rather than at full resolution. The export templates keep small placeholder images, so it stays clear how images are handled in a compiled document.
 
-The review that offers to take over notes from other plugins used to run once, just after startup — so a note that lost its identity later in the session sat unnoticed until the next launch. It now re-checks every couple of minutes, acting silently when you have already chosen "Always adopt". A new command, **Review literature notes from other plugins**, runs it on demand and tells you how many notes remain.
+### Tidy-ups
 
-### One control shape for on/off settings
-
-The three automatic-update settings — **Update literature notes automatically**, **Update citekeys automatically**, and **Update notes when the template changes** — used Yes/No radio buttons while everything else used a toggle. They are now the same slider toggle as the rest of the settings.
-
-### Notes made from an older template keep their identity
-
-If your literature-note template was copied before the identity property was renamed, it still writes `zotero-key` — the property ZotLit reserves and claims. ScholarWeft rewrites that field to `sw-zotero-id` as it renders, so such a template keeps working instead of silently stripping the note's identity on every update.
+- The **Add Literature Notes/Citations** and **Import a Word/ODT document** dialogs now remember their last search, folder and destination in the plugin's own settings file rather than in browser storage.
+- Release assets carry a **build-provenance attestation**, so you can verify cryptographically that they were built from this repository by its release workflow.
+- The plugin description no longer names Obsidian (redundant in the plugin directory), and the author link points at the author's profile rather than the plugin's own repository.
+- Dead code left behind by earlier changes has been removed, and the codebase now passes the community directory's own linter with no errors.

@@ -149,9 +149,8 @@ export function getCiteprocCites(
 }
 
 function decodeHtml(str: string) {
-  const txt = document.createElement('textarea');
-  txt.innerHTML = str;
-  return txt.value;
+  // Inert parse: no script execution, no resource loading.
+  return new DOMParser().parseFromString(str, 'text/html').body.textContent ?? '';
 }
 
 function sanitize(val: string) {

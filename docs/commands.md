@@ -24,7 +24,6 @@ See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 | Command | Scope | Notes |
 |---|---|---|
 | Add Literature Notes/Citations (search and filter) | — | Search and filter your whole library inside Obsidian, then create or refresh the selected literature notes, insert citations, or both — no Zotero window, no Better BibTeX. See [Literature Notes](./literature-notes.md#importing-and-updating) |
-| Import literature notes from Zotero… | — | Open Zotero's own item picker and import what you select (needs Better BibTeX). The same import, driven from Zotero's side |
 | Create literature notes for citations lacking notes (current note) | Current note | Create a note for every cited work in this note that has none |
 | Create literature notes for citations lacking notes (vault) | Vault | The same, for every note in the vault |
 | Update this literature note | Current note | Re-render the active note from its Zotero item — only the managed fields and annotations region change (needs a `zotero-key`) |

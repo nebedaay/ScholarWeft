@@ -28,12 +28,11 @@ There are several ways to create literature notes using ScholarWeft, both throug
 
 ### Creating notes from the command palette
 
-- The **Add Literature Notes/Citations (search and filter)** command is ScholarWeft’s own way to search your Zotero items and filter by what you’re most likely to need. Unlike the Zotero command (see below), this command is aware of which libraries you’ve enabled, what you’ve already imported, and which items have annotations, notes, and other attachments you may want to access from inside Obsidian. It can add literature notes, insert citations, or both.
-- The **Import Literature Notes from Zotero...** command uses the native Zotero interface (requires the Better BibTeX plugin installed in Zotero) to search your Zotero libraries and insert literature notes for one or more items.
+- The **Add Literature Notes/Citations (search and filter)** command is ScholarWeft’s own way to search your Zotero items and filter by what you’re most likely to need. This command is aware of which libraries you’ve enabled, what you’ve already imported, and which items have annotations, notes, and other attachments you may want to access from inside Obsidian. It can add literature notes, insert citations, or both.
 - The **Create literature notes for citations lacking notes (current note)** and **…(vault)** commands in the command palette create a note for every cited work that doesn't already have one. This command facilitates linking your Obsidian notes to your literature by making sure there's an Obsidian note for everything you cite.
 - Individual notes can also be created from the “**Create literature note**” button (a page icon with a + sign) on each reference in the reference sidebar and in the tooltip that pops up when you mouse over a citation. Linked citations that have no literature note are easy to spot by their purple dotted underline. After importing the literature note, the underline turns blue.
 
-<img src="../images/add-literature-note-modal.png" width="100%" alt="Add Literature Notes/Citations"/>
+<img src="../images/add-literature-note-modal.jpg" width="100%" alt="Add Literature Notes/Citations"/>
 
 #### The Add Literature Notes/Citations (search and filter) command
 
@@ -56,9 +55,9 @@ ScholarWeft’s default template is carefully crafted to allow you to curate you
 
 Here’s an example of the default template’s output:
 
-<img src="../images/scholarweft-zotero-annotation-example.png" width="100%" alt="Zotero PDF annotation example">
+<img src="../images/scholarweft-zotero-annotation-example.jpg" width="100%" alt="Zotero PDF annotation example">
 
-<img src="../images/scholarweft-annotation-example.png" width="80%" alt="ScholarWeft annotation example">
+<img src="../images/scholarweft-annotation-example.jpg" width="80%" alt="ScholarWeft annotation example">
 
 A few things to note in this example:
 

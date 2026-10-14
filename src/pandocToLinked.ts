@@ -26,11 +26,6 @@ export interface ConversionReport {
   skipped: { text: string; reason: string }[];
 }
 
-// Escape regex chars
-function escRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 // Build the alias text for ONE citation key from its parsed prefix/suffix.
 // prefix + "@" + suffix, trimmed; trailing-dash narrative kept in suffix.
 // The lone "@" is the plugin's bare-@ proxy: it expands to the link's own
@@ -232,6 +227,7 @@ export function rewritePandocToLinked(
   });
 
   // Restore protected code blocks / inline code.
+  // eslint-disable-next-line no-control-regex -- NUL is the sentinel that marks a protected code span: it cannot occur in Markdown text, so no real content can be mistaken for a placeholder.
   out = out.replace(/\u0000CODE(\d+)\u0000/g, (_, i: string) => codeBlocks[+i]);
 
   if (changed) report.converted += 1;

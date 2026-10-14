@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/nebedaay/ScholarWeft/main/install/i
 | **Python 3** (+ `lxml`, `python-docx`, `requests`) | Compiling/exporting documents (every format); importing DOCX/ODT                                                                                                 |
 | **Pandoc**                             | Exporting to DOCX / ODT / LaTeX / PDF; importing DOCX / ODT                                                                                                                                      |
 | **Zotero**                             | Live, refreshable citation fields; citekey lookup; importing citation fields — *unless* you use a bibliography file instead                                                                      |
-| **Better BibTeX** (Zotero add-on)      | The **Import literature notes from Zotero…** picker; the BBT endpoint needed for exporting live Zotero citations on Zotero 6. Not required for export using Zotero 7/8, but still the easiest way to auto-generate citekeys inside Zotero        |
+| **Better BibTeX** (Zotero add-on)      | The BBT endpoint needed for exporting live Zotero citations on Zotero 6. Not required for export using Zotero 7/8, but still the easiest way to auto-generate citekeys inside Zotero        |
 | **LibreOffice**                        | PDF export through an ODT/DOCX template                                                                                                                                                          |
 | **A LaTeX distribution with LuaLaTeX** | PDF export through a `.tex` template                                                                                                                                                             |
 
@@ -64,7 +64,7 @@ Download: <https://www.zotero.org/download/>
 
 ## Better BibTeX
 
-A Zotero add-on that generates automatic, stable citekeys (e.g. `smithTitleYear`) and provides the JSON-RPC endpoint the plugin uses on Zotero 6. It also powers the **Import literature notes from Zotero…** picker (ScholarWeft opens Zotero's own item dialog through BBT). With Zotero 7/8 the plugin can use Zotero's native API for citations instead, so BBT is optional there — although it remains the easiest way to generate citekeys inside Zotero.
+A Zotero add-on that generates automatic, stable citekeys (e.g. `smithTitleYear`) and provides the JSON-RPC endpoint the plugin uses on Zotero 6. With Zotero 7/8 the plugin can use Zotero's native API for citations instead, so BBT is optional there — although it remains the easiest way to generate citekeys inside Zotero.
 
 Download: <https://retorque.re/zotero-better-bibtex/installation/>
 

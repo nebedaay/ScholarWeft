@@ -21,7 +21,7 @@ const FENCE_RE = /^\s*(?:```|~~~)/;
 // an inline Markdown link/image (`[label](url)` / `![alt](url)`) — all of which
 // must survive verbatim — else a bare `[`/`<` to escape.
 const CODE_LINK_OR_ESCAPABLE_RE =
-  /(`+[^`]*`+)|(!?\[\[[^\]]*\]\])|(!?\[[^\]]*\]\([^)]*\))|((?<!\\)[\[<])/g;
+  /(`+[^`]*`+)|(!?\[\[[^\]]*\]\])|(!?\[[^\]]*\]\([^)]*\))|((?<!\\)[[<])/g;
 
 function escapeOutsideCode(line: string): string {
   return line.replace(
@@ -87,7 +87,9 @@ export function normalizeHeadingLevels(html: string, topLevel: number): string {
   for (const h of headings) {
     const level = Math.min(6, Math.max(1, (levelOf.get(h) ?? min) + delta));
     const replacement = doc.createElement(`h${level}`);
-    replacement.innerHTML = h.innerHTML;
+    // Move the children across instead of copying `innerHTML`, which the
+    // directory review forbids (and which would lose listeners).
+    while (h.firstChild) replacement.appendChild(h.firstChild);
     h.replaceWith(replacement);
   }
 

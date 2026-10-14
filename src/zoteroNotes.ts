@@ -273,7 +273,7 @@ export async function insertZoteroNotesForFiles(
   const port = opts.zoteroPort || DEFAULT_ZOTERO_PORT;
   const result: InsertResult = { inserted: 0, skipped: [], noNotes: [], failed: [] };
   // Give ZotLit a moment to create/render the notes it was just asked for.
-  if (files.length) await new Promise((r) => setTimeout(r, 800));
+  if (files.length) await new Promise((r) => window.setTimeout(r, 800));
   let done = 0;
   for (const f of files) {
     try {

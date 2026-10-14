@@ -83,10 +83,10 @@ export class CitekeyReconcileModal extends Modal {
         });
         details.createEl('summary', {
           text: `Citations with no literature note (${citeOnly.length})`,
-        }).style.cursor = 'pointer';
+        }).setCssStyles({ cursor: 'pointer' });
         const ul = details.createEl('ul');
-        ul.style.maxHeight = '200px';
-        ul.style.overflowY = 'auto';
+        ul.setCssStyles({ maxHeight: '200px' });
+        ul.setCssStyles({ overflowY: 'auto' });
         for (const c of citeOnly) {
           ul.createEl('li', { text: `@${c.fromKey}  →  @${c.toKey}` });
         }
@@ -96,10 +96,10 @@ export class CitekeyReconcileModal extends Modal {
         const details = contentEl.createEl('details', { cls: 'sw-rename-details' });
         details.createEl('summary', {
           text: `Associated files (${derived.length})`,
-        }).style.cursor = 'pointer';
+        }).setCssStyles({ cursor: 'pointer' });
         const ul = details.createEl('ul');
-        ul.style.maxHeight = '200px';
-        ul.style.overflowY = 'auto';
+        ul.setCssStyles({ maxHeight: '200px' });
+        ul.setCssStyles({ overflowY: 'auto' });
         for (const d of derived) {
           const li = ul.createEl('li');
           this.link(li, d.path, d.path.split('/').pop());
@@ -119,9 +119,9 @@ export class CitekeyReconcileModal extends Modal {
           `BibTeX adds a trailing letter automatically, but a hand-edited citekey ` +
           `can collide. Change one of them, then run this again:`,
       });
-      heading.style.color = 'var(--text-warning, var(--text-error))';
+      heading.setCssStyles({ color: 'var(--text-warning, var(--text-error))' });
       const ul = contentEl.createEl('ul', { cls: 'sw-unresolved-list' });
-      ul.style.maxWidth = '100%';
+      ul.setCssStyles({ maxWidth: '100%' });
       for (const d of duplicateCitekeys) {
         const li = ul.createEl('li');
         li.createSpan({ text: `@${d.citekey}: ` });
@@ -139,9 +139,9 @@ export class CitekeyReconcileModal extends Modal {
           `Not renamed — the new name is already in use (${blocked.length}). ` +
           `Resolve the duplicate, then run this again:`,
       });
-      heading.style.color = 'var(--text-warning, var(--text-error))';
+      heading.setCssStyles({ color: 'var(--text-warning, var(--text-error))' });
       const ul = contentEl.createEl('ul', { cls: 'sw-unresolved-list' });
-      ul.style.maxWidth = '100%';
+      ul.setCssStyles({ maxWidth: '100%' });
       for (const r of blocked) {
         const li = ul.createEl('li');
         this.link(li, r.path, r.path.split('/').pop());
@@ -159,9 +159,9 @@ export class CitekeyReconcileModal extends Modal {
           `This usually means the item was deleted, or the library it lives in ` +
           `is not currently enabled in ScholarWeft's settings:`,
       });
-      heading.style.color = 'var(--text-warning, var(--text-error))';
+      heading.setCssStyles({ color: 'var(--text-warning, var(--text-error))' });
       const ul = contentEl.createEl('ul', { cls: 'sw-unresolved-list' });
-      ul.style.maxWidth = '100%';
+      ul.setCssStyles({ maxWidth: '100%' });
       for (const n of unresolved) {
         const li = ul.createEl('li');
         this.link(li, n.path, n.path.split('/').pop());
@@ -173,10 +173,10 @@ export class CitekeyReconcileModal extends Modal {
 
     // ── Buttons ───────────────────────────────────────────────────────────────
     const buttonRow = contentEl.createDiv({ cls: 'sw-rename-buttons' });
-    buttonRow.style.display = 'flex';
-    buttonRow.style.justifyContent = 'flex-end';
-    buttonRow.style.gap = '8px';
-    buttonRow.style.marginTop = '16px';
+    buttonRow.setCssStyles({ display: 'flex' });
+    buttonRow.setCssStyles({ justifyContent: 'flex-end' });
+    buttonRow.setCssStyles({ gap: '8px' });
+    buttonRow.setCssStyles({ marginTop: '16px' });
 
     if (!actionable) {
       const closeBtn = buttonRow.createEl('button', { text: 'Close', cls: 'mod-cta' });

@@ -38,9 +38,10 @@ import { setModalTitle } from './modalTitle';
 /**
  * Native "Add literature notes" dialogue.
  *
- * A sibling of the Better BibTeX picker ("Import literature notes from Zotero…"):
- * that one opens Zotero's own dialog; this one searches and filters WITHIN
- * Obsidian. Both stay available under distinct names.
+ * ScholarWeft's own search: it filters the libraries the plugin has LOADED,
+ * within Obsidian — no Zotero window, no Better BibTeX. (The Better BibTeX
+ * picker that searched all of Zotero was removed: it could reach libraries the
+ * plugin does not import, producing citations nothing could resolve.)
  *
  * Search behaviour mirrors the editor popup: `@` (title/author) by default, or
  * `@@` (adds abstract + publication) when "Search abstracts" is checked.
@@ -70,7 +71,6 @@ const TYPE_GROUP_LABELS: Record<ImportTypeGroup, string> = {
 };
 
 /** Where the dialogue remembers the last search + ordering (per app). */
-const LAST_SEARCH_KEY = 'scholar-weft:add-notes-search';
 const DEFAULT_PLACEHOLDER = 'Search by citekey, author, title…';
 const ABSTRACT_PLACEHOLDER =
   'Search citekey, author, title, abstract, publication…';
@@ -86,13 +86,12 @@ interface LastSearchState {
   noteWithoutLitNote?: boolean;
 }
 
-/** The remembered search/ordering, or `{}` when absent/unreadable. */
-function loadLastSearch(): Partial<LastSearchState> {
-  try {
-    return JSON.parse(localStorage.getItem(LAST_SEARCH_KEY) || '{}');
-  } catch {
-    return {};
-  }
+/** The remembered search/ordering (the plugin's data file), or `{}`. */
+function loadLastSearch(plugin: ReferenceList): Partial<LastSearchState> {
+  const saved = plugin.settings.addNotesLastSearch;
+  return saved && typeof saved === 'object'
+    ? (saved)
+    : {};
 }
 
 export class AddLiteratureNotesModal extends Modal {
@@ -135,7 +134,7 @@ export class AddLiteratureNotesModal extends Modal {
     // the toggle and the selects all start where the user left them and the
     // results come back. Filters are deliberately NOT restored — a stale
     // "Books only" could silently hide everything.
-    const saved = loadLastSearch();
+    const saved = loadLastSearch(this.plugin);
     this.query = typeof saved.query === 'string' ? saved.query : '';
     this.searchAbstract = saved.searchAbstract === true;
     this.sortMode =
@@ -299,7 +298,7 @@ export class AddLiteratureNotesModal extends Modal {
     // open and keep it (the vault's note set rarely changes mid-session), then
     // let the modal paint before the first (potentially long) render.
     void this.ensureLitNoteIndex();
-    requestAnimationFrame(() => this.refresh());
+    window.requestAnimationFrame(() => this.refresh());
     // Build the library-wide presence index in the background (first open only),
     // then re-run the filters so the has-notes/PDF/annotations boxes are usable.
     if (!this.plugin.bibManager.presenceReady) {
@@ -336,22 +335,29 @@ export class AddLiteratureNotesModal extends Modal {
 
   /** Remember the last search + ordering, so the next open starts there. */
   private persistSearch(): void {
-    try {
-      localStorage.setItem(
-        LAST_SEARCH_KEY,
-        JSON.stringify({
-          query: this.query,
-          searchAbstract: this.searchAbstract,
-          sortMode: this.sortMode,
-          sortDir: this.sortDir,
-          addTarget: this.addTarget,
-          noteWithoutLitNote: this.noteWithoutLitNote,
-        })
-      );
-    } catch {
-      /* localStorage unavailable — remembering is best-effort */
-    }
+    // Written to the plugin data file rather than `localStorage`. The search box
+    // fires this on EVERY keystroke, so hold the value in memory at once and
+    // write the data file once typing settles; `onClose` flushes any remainder.
+    this.plugin.settings.addNotesLastSearch = {
+      query: this.query,
+      searchAbstract: this.searchAbstract,
+      sortMode: this.sortMode,
+      sortDir: this.sortDir,
+      addTarget: this.addTarget,
+      noteWithoutLitNote: this.noteWithoutLitNote,
+    };
+    this.schedulePersistFlush();
   }
+
+  private schedulePersistFlush(): void {
+    if (this.persistTimer != null) window.clearTimeout(this.persistTimer);
+    this.persistTimer = window.setTimeout(() => {
+      this.persistTimer = null;
+      void this.plugin.saveSettings();
+    }, 400);
+  }
+
+  private persistTimer: number | null = null;
 
   private renderFilters(side: HTMLElement): void {
     // ── Show items with ──────────────────────────────────────────────────────
@@ -655,7 +661,7 @@ export class AddLiteratureNotesModal extends Modal {
   private async ensureLitNoteIndex(): Promise<void> {
     if (this.litNotesBuilt) return;
     this.litNotesBuilt = true;
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => window.setTimeout(r, 0));
     this.buildLitNoteIndex();
     if (this.containerEl.isConnected) this.refresh();
   }
@@ -1017,5 +1023,11 @@ export class AddLiteratureNotesModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+    // Flush a debounced search write: the last keystroke may still be pending.
+    if (this.persistTimer != null) {
+      window.clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+      void this.plugin.saveSettings();
+    }
   }
 }

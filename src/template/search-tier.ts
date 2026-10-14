@@ -18,7 +18,6 @@
  * rather than Fuse weights; see HANDOFF.md "Direction update 2026-09-26b".
  */
 
-import type { PartialCSLEntry } from '../bib/types';
 
 export type SearchTier = 'citekey' | 'title' | 'abstract';
 

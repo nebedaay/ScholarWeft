@@ -92,23 +92,23 @@ export class CitekeyRenameModal extends Modal {
         const summary = details.createEl('summary', {
           text: `Affected files (${fileCount})`,
         });
-        summary.style.cursor = 'pointer';
-        summary.style.marginBottom = '6px';
+        summary.setCssStyles({ cursor: 'pointer' });
+        summary.setCssStyles({ marginBottom: '6px' });
 
         const fileList = details.createEl('ul', { cls: 'sw-rename-file-list' });
-        fileList.style.maxHeight = '200px';
-        fileList.style.overflowY = 'auto';
-        fileList.style.paddingLeft = '1.4em';
-        fileList.style.marginTop = '6px';
+        fileList.setCssStyles({ maxHeight: '200px' });
+        fileList.setCssStyles({ overflowY: 'auto' });
+        fileList.setCssStyles({ paddingLeft: '1.4em' });
+        fileList.setCssStyles({ marginTop: '6px' });
 
         for (const [file, changes] of this.plan) {
           const li = fileList.createEl('li');
           li.createEl('strong', { text: file.path });
 
           const sub = li.createEl('ul');
-          sub.style.paddingLeft = '1.2em';
-          sub.style.fontSize = '0.87em';
-          sub.style.color = 'var(--text-muted)';
+          sub.setCssStyles({ paddingLeft: '1.2em' });
+          sub.setCssStyles({ fontSize: '0.87em' });
+          sub.setCssStyles({ color: 'var(--text-muted)' });
 
           const byPair = new Map<string, number[]>();
           for (const change of changes) {
@@ -134,11 +134,11 @@ export class CitekeyRenameModal extends Modal {
           : 'These citations have no known replacement:',
       });
       heading.style.marginTop = hasFixable ? '14px' : '0';
-      heading.style.color = 'var(--text-muted)';
+      heading.setCssStyles({ color: 'var(--text-muted)' });
 
       const ul = contentEl.createEl('ul', { cls: 'sw-unresolved-list' });
-      ul.style.color = 'var(--text-muted)';
-      ul.style.fontSize = '0.9em';
+      ul.setCssStyles({ color: 'var(--text-muted)' });
+      ul.setCssStyles({ fontSize: '0.9em' });
       for (const key of this.alsoUnresolved) {
         ul.createEl('li', { text: `@${key}` });
       }
@@ -148,10 +148,10 @@ export class CitekeyRenameModal extends Modal {
     let litNotesCheckbox: HTMLInputElement | null = null;
     if (this.showLitNotesOption && hasFixable) {
       const checkRow = contentEl.createDiv({ cls: 'sw-rename-checkbox-row' });
-      checkRow.style.display = 'flex';
-      checkRow.style.alignItems = 'center';
-      checkRow.style.gap = '8px';
-      checkRow.style.marginTop = '14px';
+      checkRow.setCssStyles({ display: 'flex' });
+      checkRow.setCssStyles({ alignItems: 'center' });
+      checkRow.setCssStyles({ gap: '8px' });
+      checkRow.setCssStyles({ marginTop: '14px' });
 
       litNotesCheckbox = checkRow.createEl('input', { type: 'checkbox' }) as HTMLInputElement;
       litNotesCheckbox.id = 'sw-lit-notes-checkbox';
@@ -165,10 +165,10 @@ export class CitekeyRenameModal extends Modal {
 
     // ── Button row ────────────────────────────────────────────────────────────
     const buttonRow = contentEl.createDiv({ cls: 'sw-rename-buttons' });
-    buttonRow.style.display = 'flex';
-    buttonRow.style.justifyContent = 'flex-end';
-    buttonRow.style.gap = '8px';
-    buttonRow.style.marginTop = '16px';
+    buttonRow.setCssStyles({ display: 'flex' });
+    buttonRow.setCssStyles({ justifyContent: 'flex-end' });
+    buttonRow.setCssStyles({ gap: '8px' });
+    buttonRow.setCssStyles({ marginTop: '16px' });
 
     if (hasFixable) {
       const cancelBtn = buttonRow.createEl('button', { text: 'Cancel' });

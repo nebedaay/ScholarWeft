@@ -23,7 +23,6 @@ import {
 import type { NoteContextRelatedItem } from './template/context';
 import type { RawZoteroChildren } from './template/children';
 import {
-  DEFAULT_LITERATURE_NOTE_FOLDER,
   isInFolder,
   literatureNoteFolderFor,
   rememberFolderName,

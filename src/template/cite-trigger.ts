@@ -38,7 +38,7 @@ export const MIN_SEARCH_CHARS = 3;
  */
 export function isWordStartBefore(charBefore: string | undefined): boolean {
   if (!charBefore) return true;
-  return /[\s\[(;,\-|]/.test(charBefore);
+  return /[\s[(;,\-|]/.test(charBefore);
 }
 
 export interface CitationTrigger {

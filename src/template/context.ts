@@ -24,7 +24,6 @@
 import type { CSLName, PartialCSLEntry } from '../bib/types';
 import { extraKeyToContextProperty, parseExtra } from '../bib/extra';
 import type { ItemExtra } from '../bib/extra';
-import { ZOTERO_TYPE_TO_CSL } from '../bib/zotero-csl';
 import { htmlToMarkdownText } from './markdown';
 
 /** A creator as retained from the native Zotero API (`_creators`). */

@@ -38,9 +38,11 @@ export function cslEntryHtmlToMarkdown(html: string): string {
   s = s.replace(/<\/div>\s*<div\b[^>]*>/gi, '\n\n');
   s = s.replace(/<[^>]+>/g, '');
 
-  const txt = document.createElement('textarea');
-  txt.innerHTML = s;
-  return txt.value
+  // Decode the entities the stripped tags left behind. `DOMParser` is inert —
+  // it neither runs scripts nor fetches resources — and gives the same text the
+  // old detached-`<textarea>` trick did, without assigning to `innerHTML`.
+  const txt = new DOMParser().parseFromString(s, 'text/html').body;
+  return (txt.textContent ?? '')
     .replace(/[ \t]+/g, ' ')
     .replace(/ *\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')

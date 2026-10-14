@@ -775,8 +775,25 @@ export function combineLocators(
   // token as written (no CSL localization — the third locator is a suffix).
   // Normalize a numeric/roman RANGE's hyphen to an en dash, matching how
   // citeproc/pandoc render locator ranges (`10-13` → `10–13`).
-  const enDash = (v: string) =>
-    v.replace(/(?<=[\p{L}\p{N}])-(?=[\p{L}\p{N}])/gu, '\u2013');
+  //
+  // Written without a lookbehind, which iOS before 16.4 cannot parse (and the
+  // directory review forbids). `Array.from` iterates code points, so a
+  // multi-unit character is never split.
+  const isWordChar = (c: string) => /^[\p{L}\p{N}]$/u.test(c);
+  const enDash = (v: string) => {
+    const chars = Array.from(v);
+    return chars
+      .map((c, i) =>
+        c === '-' &&
+        i > 0 &&
+        i < chars.length - 1 &&
+        isWordChar(chars[i - 1]) &&
+        isWordChar(chars[i + 1])
+          ? '\u2013'
+          : c
+      )
+      .join('');
+  };
   const others = all.filter((_, i) => i !== volIdx && i !== pageIdx);
   const text = others
     .map((p) => (p.label ? `${p.label} ${enDash(p.value)}` : enDash(p.value)))

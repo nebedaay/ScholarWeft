@@ -86,7 +86,7 @@ export function listZoteroInstalledStyles(customDataDir?: string): ZoteroStyle[]
       const fd = fs.openSync(filePath, 'r');
       const bytesRead = fs.readSync(fd, buf, 0, 2048, 0);
       fs.closeSync(fd);
-      const head = buf.slice(0, bytesRead).toString('utf-8');
+      const head = buf.subarray(0, bytesRead).toString('utf-8');
       const m = head.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
       if (m) title = m[1].trim();
     } catch { /* use filename stem */ }

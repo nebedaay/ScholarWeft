@@ -257,7 +257,7 @@ export async function isZoteroRunning(
         headers: { 'Zotero-Allowed-Request': '1' },
         throw: false,
       }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 150)),
+      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 150)),
     ]);
     return result?.text === 'ready';
   } catch {
@@ -424,7 +424,7 @@ async function zoteroNativeGet(
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 /** Fetch one page, retrying transient failures with exponential backoff. */
@@ -509,7 +509,7 @@ export async function isZoteroRunningNative(
   try {
     const result = await Promise.race<{ data: any; version: number } | null>([
       zoteroNativeGet(port, '/api/users/0/items?limit=1'),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2000)),
     ]);
     return result !== null && Array.isArray(result.data);
   } catch {

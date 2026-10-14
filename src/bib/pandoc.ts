@@ -1,4 +1,4 @@
-import { Platform, requestUrl } from 'obsidian';
+import { Platform } from 'obsidian';
 import { PartialCSLEntry } from './types';
 
 /**

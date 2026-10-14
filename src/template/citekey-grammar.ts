@@ -25,7 +25,7 @@
 export const CITEKEY_BODY = '[\\p{L}\\p{N}_.:#$%&+?<>~\\/-]';
 
 /** The punctuation Pandoc strips from the END of a key (`_` excluded). */
-const TRAILING_PUNCT = /[:.#$%&+?<>~/\-]+$/;
+const TRAILING_PUNCT = /[:.#$%&+?<>~/-]+$/;
 
 /** One compiled scanner. Draining it is synchronous, so its `lastIndex` cannot
  *  be clobbered by an interleaved call across an `await`.

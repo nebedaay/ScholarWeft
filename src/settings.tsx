@@ -29,14 +29,12 @@ import {
 import { probeTools, invalidateToolProbe } from './tools';
 import type { DepKey } from './dependencies';
 import { openDocs } from './docs';
-import { insertZoteroNotesVaultWide } from './zoteroNotes';
 import { copyDefaultTemplateToVault } from './noteImport';
 import {
   applyYamlFormatting,
   DEFAULT_YAML_TITLE_BACKGROUND,
   DEFAULT_YAML_TITLE_SIZE,
 } from './yamlFormatting';
-import { debugLog } from './helpers';
 import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
 import type { MissingLinkedNoteAction } from './template/missing-notes';
 
@@ -228,6 +226,20 @@ export interface ReferenceListSettings {
   exportLanguage?: string;
   /** Last export format chosen in the export modal — remembered across opens. */
   lastExportFormat?: 'md' | 'docx' | 'odt' | 'latex' | 'pdf';
+  /**
+   * Remembered state for the "Add Literature Notes/Citations" dialog: the last
+   * search, its ordering, and the add target. Opaque to the settings UI — the
+   * dialog owns the shape. Kept in the plugin data file (`data.json`) rather
+   * than `localStorage`, which the directory discourages.
+   */
+  addNotesLastSearch?: Record<string, unknown>;
+  /** Directory the "Import a Word/ODT document" file picker last opened. */
+  importLastDir?: string;
+  /** Last output folder chosen in the "Import a Word/ODT document" dialog. */
+  importLastOutputDir?: string;
+  /** Per-source-file import destination, so re-importing an updated document
+   *  updates the same note instead of guessing again. */
+  importHistory?: Record<string, { folder: string; filename: string }>;
   /** Default author name used when the note has no `author:` frontmatter property. */
   defaultAuthor?: string;
   /** When true, fall back to the Obsidian account display name if defaultAuthor is also empty. */
@@ -484,7 +496,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
   // ── Navigation ────────────────────────────────────────────────────────────
 
   private renderHome(containerEl: HTMLElement): void {
-    containerEl.createEl('h2', { text: t('ScholarWeft') });
+    new Setting(containerEl).setName(t('ScholarWeft')).setHeading();
 
     const items: { page: SettingsPage; name: string; desc: string }[] = [
       {
@@ -537,7 +549,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       e.preventDefault();
       this.goto('home');
     });
-    containerEl.createEl('h2', { text: t(PAGE_TITLES[this.page as Exclude<SettingsPage, 'home'>]) });
+    new Setting(containerEl)
+      .setName(t(PAGE_TITLES[this.page as Exclude<SettingsPage, 'home'>]))
+      .setHeading();
   }
 
   /** Live "not found" indicator for the Documents page (compiler/exporter). */
@@ -633,7 +647,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         btn.setIcon('folder-open').setTooltip(t('Browse…'));
         btn.onClick(() => {
           if (Platform.isDesktop) {
-            const fileInput = document.createElement('input');
+            const fileInput = createEl('input');
             fileInput.type = 'file';
             fileInput.accept = '.bib,.json,.yaml,.yml';
             fileInput.onchange = async () => {
@@ -940,7 +954,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       )
       .addText((text) =>
         text
-          .setPlaceholder('Archive, Old notes')
+          .setPlaceholder('Archive, old notes')
           .setValue(this.plugin.settings.convertExcludeFolders ?? '')
           .onChange((value) => {
             this.plugin.settings.convertExcludeFolders = value.trim();
@@ -1709,7 +1723,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             toggle.setDisabled(true);
             try {
               if (value) await cfg.run();
-              else await cfg.uninstall!();
+              else await cfg.uninstall();
             } finally {
               toggle.setDisabled(false);
               rerender();
@@ -1824,9 +1838,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           )
         )
         .then((setting) => {
-          let inputEl: HTMLInputElement;
           setting.addText((text) => {
-            inputEl = text.inputEl;
             text
               .setPlaceholder('/usr/local/bin/python3')
               .setValue(this.plugin.settings.pathToPython ?? '')
@@ -1848,7 +1860,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         .then((setting) => {
           setting.addText((text) =>
             text
-              .setPlaceholder('Export Templates')
+              .setPlaceholder('Export templates')
               .setValue(this.plugin.settings.exportTemplatesDir ?? '')
               .onChange((value) => {
                 this.plugin.settings.exportTemplatesDir = value;
@@ -1886,7 +1898,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         .then((setting) => {
           setting.addText((text) =>
             text
-              .setPlaceholder('Export Compiled')
+              .setPlaceholder('Export compiled')
               .setValue(this.plugin.settings.defaultOutputDir ?? '')
               .onChange((value) => {
                 this.plugin.settings.defaultOutputDir = value;
@@ -1905,7 +1917,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       )
       .addText((text) =>
         text
-          .setPlaceholder('First Last')
+          .setPlaceholder('First last')
           .setValue(this.plugin.settings.defaultAuthor ?? '')
           .onChange((value) => {
             this.plugin.settings.defaultAuthor = value;
@@ -1954,7 +1966,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           });
 
           const srcInput = row.createEl('input', { type: 'text' });
-          srcInput.placeholder = 'callout-type';
+          srcInput.placeholder = 'Callout type';
           srcInput.value = m.source;
           srcInput.title = t('Callout type or CSS class name (e.g. arabic-poetry)');
           srcInput.classList.add('sw-mapping-input');

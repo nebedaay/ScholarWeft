@@ -1,8 +1,7 @@
-// Template engines used to render ZotLit-compatible note templates.
+// Template engine used to render ZotLit-compatible note templates.
 //
-// Eta renders the `.eta.md` templates; Liquid renders `.liquid.md` (the filename
-// template). Both are bundled into main.js (combined ~88 KB minified) so the
-// engine always travels with the templates it renders.
+// Eta renders the `.eta.md` templates. It is bundled into main.js so the engine
+// always travels with the templates it renders.
 //
 // The Eta configuration mirrors ZotLit's (`packages/templates/src/index.ts`,
 // AGPL-3.0 — see NOTICE.md) because the bundled templates were written against
@@ -18,7 +17,6 @@
 //     only matters for an `include()` with no second argument.
 import { Eta } from 'eta';
 import type { EtaConfig } from 'eta';
-import { Liquid } from 'liquidjs';
 
 import { formatBlockquote } from './blockquote';
 import { NoteHelpers } from './note-helpers';
@@ -152,17 +150,12 @@ export class NoteTemplateEngine extends Eta {
         `const attachment_links = () => this.noteHelpers.attachmentLinks(${d}); ` +
         `const attachments_with_annotations = () => this.noteHelpers.attachmentsWithAnnotations(${d}); `,
       plugins: [includeDataPlugin],
-    } as unknown as EtaConfig);
+    } as unknown);
   }
 }
 
 export function makeEta(dataRoot: string = TEMPLATE_DATA_ROOT): NoteTemplateEngine {
   return new NoteTemplateEngine(dataRoot);
-}
-
-/** Liquid renders the filename template (`.liquid.md`). */
-export function makeLiquid(): Liquid {
-  return new Liquid({ greedy: false, strictFilters: true });
 }
 
 /** `bq` helper handed to Eta via `functionHeader`. */

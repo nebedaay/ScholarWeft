@@ -78,10 +78,10 @@ export async function copyTextToClipboard(text: string): Promise<void> {
     await navigator.clipboard.writeText(text);
   } catch {
     // Textarea execCommand fallback for older environments.
-    const ta = document.createElement('textarea');
+    const ta = createEl('textarea');
     ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
+    ta.setCssStyles({ position: 'fixed' });
+    ta.setCssStyles({ opacity: '0' });
     document.body.appendChild(ta);
     ta.focus();
     ta.select();

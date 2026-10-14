@@ -36,7 +36,10 @@ const bundleAssetsPlugin = {
 
 		build.onLoad({ filter: /.*/, namespace: 'bundled-assets-ns' }, async () => {
 			const binaryExts = new Set(['.docx', '.odt', '.pdf', '.png', '.jpg', '.jpeg']);
-			const skipPrefixes = ['__', '.'];
+			// Editor scratch files must never be bundled: `~$name.docx` is Word's
+			// lock/owner file (a few bytes of binary), and `.~lock.name#` is
+			// LibreOffice's. `__`/`.` cover the rest of the usual junk.
+			const skipPrefixes = ['__', '.', '~$', '~lock'];
 			const assets = {};
 
 			// Content hash, embedded alongside each asset so the runtime can
@@ -166,6 +169,11 @@ const options = {
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
+	// Release builds are minified: the bundle carries the plugin's own data
+	// (compiler scripts, export templates, docs screenshots) alongside the code,
+	// and the directory warns above 5 MB. Dev builds stay readable for
+	// debugging. `legalComments` keeps licence headers intact.
+	minify: prod,
 	outfile: "main.js",
 	plugins: [srcAliasPlugin, bundleAssetsPlugin],
 };

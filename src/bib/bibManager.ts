@@ -51,10 +51,10 @@ import {
   getCitationSegments,
   getCitations,
 } from 'src/parser/parser';
-import { App, FileSystemAdapter, Keymap, MarkdownView, Menu, Modal, Notice, TFile, TFolder, debounce, normalizePath, setIcon } from 'obsidian';
+import { App, FileSystemAdapter, Keymap, MarkdownView, Menu, TFile, debounce, normalizePath, setIcon } from 'obsidian';
 import { cite } from 'src/parser/citeproc';
 import { getLitNoteForCitekey } from 'src/lit-note';
-import { insertZoteroNotesForFiles } from 'src/zoteroNotes';import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
+import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
 import {
@@ -63,7 +63,6 @@ import {
 } from 'src/template/missing-notes';
 import {
   folderNameSnapshot,
-  literatureNoteFolderFor,
   libraryDisplayName,
   rememberLibraryName,
   seedFolderNames,
@@ -86,7 +85,6 @@ import {
 } from 'src/template/children-cache';
 import { buildChildPresence } from 'src/template/child-presence';
 import {
-  containsLiteral,
   foldDiacritics,
   queryAtoms,
   normTerm,
@@ -167,17 +165,6 @@ const RENDER_CACHE_VERSION = 7;
 const CITED_KEYS_INDEX_VERSION = 2;
 
 /**
- * Minimum length for a term to be REQUIRED as an individual Fuse hit when
- * admitting a candidate. Shorter terms (the `soc`/`crit` of a chunk reading) are
- * admitted on the scorer's account instead, because a 3-4 character prefix can
- * sit outside Fuse's threshold even when the entry plainly contains the phrase.
- * The scorer still enforces coverage, so this only widens what is CONSIDERED —
- * which is what keeps a wildcard broad search at least as broad as the full
- * term.
- */
-const MIN_MEAN_CHUNK_FOR_GATE = 6;
-
-/**
  * The published-venue text for an entry: the journal title, or the book title
  * for a chapter; the series; and the publisher.
  *
@@ -219,7 +206,7 @@ function authorTextOf(entry: PartialCSLEntry): string {
   const parts: string[] = [];
   for (const list of lists) {
     for (const name of list ?? []) {
-      const n = name as { family?: string; given?: string; literal?: string };
+      const n = name;
       const family = typeof n?.family === 'string' ? n.family : '';
       const given = typeof n?.given === 'string' ? n.given : '';
       const literal = typeof n?.literal === 'string' ? n.literal : '';
@@ -563,58 +550,6 @@ class ZoteroOfflineAlert {
   }
 }
 
-  /**
- * Ask before substituting ScholarWeft's own template when a ZotLit import
- * fails. Defaults to NOT substituting, because someone who enabled "create
- * notes with ZotLit" wants ZotLit's note shape; most would rather fix Zotero
- * and retry than get a note they didn't ask for.
- */
-function promptZotLitFallback(reason?: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const done = (v: boolean) => {
-      if (settled) return;
-      settled = true;
-      resolve(v);
-    };
-    class Prompt extends Modal {
-      onOpen() {
-        this.titleEl.setText('ZotLit could not create this note');
-        this.contentEl.createEl('p', {
-          text: reason ?? 'ZotLit could not create the note for this item.',
-        });
-        this.contentEl.createEl('p', {
-          cls: 'sw-modal-muted',
-          text:
-            'You can wait until ZotLit can create it (its steps are usually ' +
-            'fixing Zotero or trying again), or create a simpler note now using ' +
-            "ScholarWeft's built-in template.",
-        });
-        const row = this.contentEl.createDiv({ cls: 'sw-modal-buttons' });
-        const cancel = row.createEl('button', { text: 'Wait (do nothing)' });
-        cancel.onClickEvent(() => {
-          done(false);
-          this.close();
-        });
-        const useFallback = row.createEl('button', {
-          cls: 'mod-warning',
-          text: "Use ScholarWeft's default template",
-        });
-        useFallback.onClickEvent(() => {
-          done(true);
-          this.close();
-        });
-        cancel.focus();
-      }
-      onClose() {
-        this.contentEl.empty();
-        done(false); // closing = don't substitute
-      }
-    }
-    new Prompt(app).open();
-  });
-}
-
 /** The ranked page a tier search returns; `cancelled` marks an aborted scan. */
 export interface TierSearchResult {
   entries: Array<{ entry: PartialCSLEntry; terms: string[] }>;
@@ -901,7 +836,7 @@ export class BibManager {
           break;
         }
         retrying();
-        await new Promise((r) => setTimeout(r, Math.min(2000 * attempt, 15_000)));
+        await new Promise((r) => window.setTimeout(r, Math.min(2000 * attempt, 15_000)));
       }
 
       if (!loaded) {
@@ -976,7 +911,7 @@ export class BibManager {
     if (this._zoteroRecoveryScheduled) return;
     this._zoteroRecoveryScheduled = true;
     debugLog('[sw:bib] scheduling Zotero recovery probe');
-    setTimeout(async () => {
+    window.setTimeout(async () => {
       this._zoteroRecoveryScheduled = false;
       if (!this.plugin) return;
       // Still loading (e.g. the user already hit Refresh) — nothing to do.
@@ -1194,7 +1129,7 @@ export class BibManager {
       }
       // Yield every CHUNK entries. Sized so one slice stays well under a frame
       // on the abstract tier (~8 ms at 400 for a 9k library).
-      if (++n % 400 === 0) await new Promise<void>((r) => setTimeout(r, 0));
+      if (++n % 400 === 0) await new Promise<void>((r) => window.setTimeout(r, 0));
     }
     if (cancel?.()) return { entries: [], total: 0, cancelled: true };
     return this.finishTier(scored, ranked, matchedTerms, limit, offset);
@@ -1720,7 +1655,7 @@ export class BibManager {
     if (failed && !fromCache && !this._zoteroRetryScheduled) {
       this._zoteroRetryScheduled = true;
       debugLog('[sw:bib] Zotero load incomplete — scheduling a retry');
-      setTimeout(() => {
+      window.setTimeout(() => {
         this._zoteroRetryScheduled = false;
         if (!this.plugin) return;
         this.loadGlobalZBib(false)
@@ -2092,7 +2027,7 @@ export class BibManager {
     }
     const duplicateCitekeys: Array<{ citekey: string; paths: string[] }> = [];
     const duplicatePaths = new Set<string>();
-    for (const [target, list] of byTarget) {
+    for (const [, list] of byTarget) {
       if (list.length > 1) {
         duplicateCitekeys.push({
           citekey: list[0].toKey,
@@ -3749,7 +3684,7 @@ export class BibManager {
         } catch {
           // individual file failures shouldn't stop warming
         }
-        await new Promise((r) => setTimeout(r, 15)); // yield to the UI
+        await new Promise((r) => window.setTimeout(r, 15)); // yield to the UI
       }
       this.scheduleRenderedCacheSave();
     } finally {
@@ -4410,7 +4345,7 @@ export class BibManager {
       .map((n) => `${n.family ?? ''} ${n.given ?? ''} ${n.literal ?? ''}`)
       .join('|');
     const year =
-      ((entry as any).issued as any)?.['date-parts']?.[0]?.[0] ?? '';
+      ((entry as any).issued)?.['date-parts']?.[0]?.[0] ?? '';
     return fastHash(`${names}\u0001${year}`);
   }
 
@@ -4590,7 +4525,7 @@ export class BibManager {
           await this.createLiteratureNote(key, sourceFile, { open: false });
           created++;
           onProgress?.(created, missing.length);
-          await new Promise((r) => setTimeout(r, 250));
+          await new Promise((r) => window.setTimeout(r, 250));
         }
       }
       return { created, missing: [], missingKeys: missing };
@@ -4611,7 +4546,7 @@ export class BibManager {
       await this.createLiteratureNote(key, sourceFile, { open: false });
       created++;
       onProgress?.(created, total);
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => window.setTimeout(r, 250));
     }
     return { created, missing: refs.map((r) => r.indexedKey), missingKeys: missing };
   }

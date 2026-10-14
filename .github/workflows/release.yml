@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: write
+  # Artifact attestations: the OIDC token proves the assets were built by this
+  # workflow from this repository (the `attestations` scope stores the record).
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -40,6 +44,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('manifest.json','utf8')); m.version=process.env.TAG; fs.writeFileSync('manifest.json', JSON.stringify(m,null,'\t')+'\n');"
+
+      # Provenance for the release assets, so a user can cryptographically verify
+      # they were built from this repository by this workflow rather than
+      # substituted. Runs after the manifest steps so it signs the final files.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
 
       # The release body comes from release-notes.md, which is committed with
       # the release (see the "Releasing" section in CLAUDE.md). Stable releases

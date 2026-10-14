@@ -63,12 +63,12 @@ export interface CitationContentOptions {
 export function renderCitationContent(
   opts: CitationContentOptions
 ): DocumentFragment {
-  const frag = document.createDocumentFragment();
+  const frag = createFragment();
   const { cite } = opts;
 
   if (cite.reference) {
     cite.citations.forEach((c, i) => {
-      const item = document.createElement('span');
+      const item = createSpan();
       item.className = 'sw-reference-entry';
       item.setAttribute('data-citekey', c.id);
 
@@ -114,7 +114,7 @@ export function renderCitationContent(
         const cls = ['sw-citation-member'];
         if (m.isWikilink) cls.push('is-wikilink');
         if (m.hasLitNote) cls.push('has-lit-note');
-        const ms = document.createElement('span');
+        const ms = createSpan();
         ms.className = cls.join(' ');
         ms.textContent = part;
         frag.appendChild(ms);

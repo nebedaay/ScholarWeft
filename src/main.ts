@@ -37,15 +37,13 @@ import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
 import { DataExplorerView, dataExplorerViewType } from './dataExplorer';
 import { PromiseCapability, debugLog, SW_CACHE_DIR, SW_CACHE_DIR_LEGACY } from './helpers';
-import { isAbsolutePath, DEFAULT_ZOTERO_PORT, isZoteroRunning } from './bib/helpers';
-import { pickZoteroItems } from './zoteroPicker';
+import { isAbsolutePath } from './bib/helpers';
 import { findPandoc } from './bib/pandoc';
 import { BibManager, getScopedSettings } from './bib/bibManager';
 import { CiteSuggest } from './citeSuggest/citeSuggest';
 import { ExportModal } from './exportModal';
 import { ImportModal } from './importModal';
 import { setModalTitle } from './modals/modalTitle';
-import { formatImportSummary } from './template/import-summary';
 import {
   DEFAULT_NOTES_PER_MINUTE,
   estimateMinutes,
@@ -64,7 +62,6 @@ import { moveNoteIntoFolder } from './noteImport';
 import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
-import { getLitNoteForCitekey } from './lit-note';
 import { detectNoteFormat, readStableKey, hasLegacyKey, shouldMigrateKey, SW_ZOTERO_ID, LEGACY_ZOTERO_KEY } from './template/note-format';
 import {
   markRelatedMigrated,
@@ -74,12 +71,10 @@ import {
   type RelatedMigrationState,
 } from './template/related-migration';
 import {
-  DEFAULT_LITERATURE_NOTE_FOLDER,
   isInFolder,
   lastFolderName,
   literatureNoteFolderFor,
   rememberFolderName,
-  resolveLiteratureNoteFolder,
 } from './template/lit-folder';
 import { shouldRefreshOnRefocus } from './template/refocus';
 import { readTemplate } from './template/note-template-io';
@@ -90,7 +85,6 @@ import {
   detectCitationTrigger,
 } from './template/cite-trigger';
 import { installTemplaterTemplatesWithNotice } from './templaterTemplates';
-import { insertZoteroNotesVaultWide } from './zoteroNotes';
 
 /**
  * Heuristic: is this plugin another reference-list provider of the same
@@ -546,13 +540,6 @@ export default class ReferenceList extends Plugin {
       },
     });
 
-    this.addCommand({
-      id: 'import-literature-notes-from-zotero',
-      name: t('Import literature notes from Zotero…'),
-      callback: async () => {
-        await this.importLiteratureNotesFromZotero();
-      },
-    });
 
     this.addCommand({
       id: 'file-group-notes',
@@ -1009,7 +996,9 @@ export default class ReferenceList extends Plugin {
     if (waiting.length > 0 && attempt < 5) {
       this.settings.pendingSetup = waiting;
       await this.saveSettings();
-      setTimeout(() => void this.applyPendingSetup(attempt + 1), 2000);
+      window.setTimeout(() => {
+      void this.applyPendingSetup(attempt + 1);
+    }, 2000);
       return;
     }
     this.settings.pendingSetup = [];
@@ -1031,7 +1020,9 @@ export default class ReferenceList extends Plugin {
     const svc = zotlit?.services?.template;
     if (!svc?.setJavascriptTemplatesEnabled) {
       if (attempt < 5) {
-        setTimeout(() => void this.ensureZotlitJsTemplates(attempt + 1), 2000);
+        window.setTimeout(() => {
+      void this.ensureZotlitJsTemplates(attempt + 1);
+    }, 2000);
       }
       return;
     }
@@ -1300,7 +1291,7 @@ export default class ReferenceList extends Plugin {
     // so the first open of any cited note is instant. Safe to run while the
     // user works (each render is fast; small yields keep the UI responsive;
     // PDF lookups are skipped while warming).
-    setTimeout(() => {
+    window.setTimeout(() => {
       void this.bibManager.warmCitedFiles();
     }, 2500);
   }
@@ -1323,85 +1314,6 @@ export default class ReferenceList extends Plugin {
     if (!leaf) return;
     await leaf.setViewState({ type: dataExplorerViewType });
     this.app.workspace.revealLeaf(leaf);
-  }
-
-  /**
-   * Let the user pick one or more items in Zotero's native dialog (Better
-   * BibTeX CAYW) and import or refresh a literature note for each. Each item
-   * goes through the normal creation path, so `useOwnNoteTemplate` (and the
-   * ZotLit/fallback routes) are honoured.
-   */
-  async importLiteratureNotesFromZotero() {
-    const port = this.settings.zoteroPort || DEFAULT_ZOTERO_PORT;
-    if (!(await isZoteroRunning(port))) {
-      new Notice(
-        'Zotero’s picker isn’t responding. Make sure Zotero is running with ' +
-          'Better BibTeX installed (the picker needs it). If it is, another ' +
-          'integration may be holding the picker — close any open Zotero ' +
-          'citation dialog, or disable the other plugin (e.g. Zotero ' +
-          'Integration), then try again.',
-        12000
-      );
-      return;
-    }
-
-    // Any file works as the link anchor; prefer the active note.
-    const anchor =
-      this.app.workspace.getActiveFile() ?? this.app.vault.getMarkdownFiles()[0];
-    if (!anchor) {
-      new Notice('Open a note first — the import needs a file to anchor links to.');
-      return;
-    }
-
-    const waiting = new Notice('Pick one or more items in Zotero…', 0);
-    let picked;
-    try {
-      picked = await pickZoteroItems(port);
-    } catch (e) {
-      waiting.hide();
-      new Notice(`Zotero picker: ${(e as Error).message}`, 8000);
-      return;
-    }
-    waiting.hide();
-
-    if (!picked.length) {
-      new Notice('No items selected.');
-      return;
-    }
-
-    const citekeys: string[] = [];
-    for (const p of picked) {
-      const ck =
-        p.citekey && this.bibManager.bibCache.has(p.citekey)
-          ? p.citekey
-          : this.findCitekeyByZoteroKey(p.zoteroKey);
-      if (ck && !citekeys.includes(ck)) citekeys.push(ck);
-      else if (!ck) {
-        console.warn('[sw:import] picked item is not in the loaded library', p);
-      }
-    }
-    if (!citekeys.length) {
-      new Notice('The selected item(s) are not in the loaded Zotero library.');
-      return;
-    }
-
-    const run = new Notice(`Importing ${citekeys.length} literature note(s)…`, 0);
-    const importedKeys: string[] = [];
-    // Open the note when the user picked exactly one (and the setting allows).
-    const open = citekeys.length === 1 && this.settings.openImportedNote !== false;
-    for (const ck of citekeys) {
-      try {
-        await this.bibManager.createLiteratureNote(ck, anchor, { open });
-        importedKeys.push(ck);
-      } catch (e) {
-        console.warn('[sw:import] picker import failed for', ck, e);
-      }
-    }
-    run.hide();
-    new Notice(
-      formatImportSummary(importedKeys.map((k) => `@${k}`)),
-      8000
-    );
   }
 
   private findCitekeyByZoteroKey(zoteroKey: string | null): string | null {
@@ -1603,7 +1515,7 @@ export default class ReferenceList extends Plugin {
         `Updating literature notes… ${processed}/${files.length} (you can keep working)`
       );
       // Yield so typing/scrolling stays responsive during a long pass.
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => window.setTimeout(r, 0));
     }
     progress.hide();
     this.recordUpdateRate(updated, Date.now() - startedAt);
@@ -1729,17 +1641,17 @@ export default class ReferenceList extends Plugin {
       (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ??
       notice.containerEl;
     if (!el) return;
-    el.createEl('div', {
+    el.createDiv({
       text: `Updated ${keys.length} literature note${
         keys.length !== 1 ? 's' : ''
       }${skipped ? ` (skipped ${skipped})` : ''}:`,
     });
     const MAX = 20;
     for (const k of keys.slice(0, MAX)) {
-      el.createEl('div', { cls: 'sw-auto-update-key', text: `@${k}` });
+      el.createDiv({ cls: 'sw-auto-update-key', text: `@${k}` });
     }
     if (keys.length > MAX) {
-      el.createEl('div', { text: `…and ${keys.length - MAX} more.` });
+      el.createDiv({ text: `…and ${keys.length - MAX} more.` });
     }
   }
 
@@ -1832,7 +1744,7 @@ export default class ReferenceList extends Plugin {
       (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ??
       notice.containerEl;
     if (!el) return;
-    el.createEl('div', {
+    el.createDiv({
       text:
         (total
           ? `${total} literature note${total !== 1 ? 's' : ''} outside ${
@@ -2116,7 +2028,7 @@ export default class ReferenceList extends Plugin {
         `Updating notes… ${updated + skipped.length}/${files.length} (you can keep working)`
       );
       // Yield so typing/scrolling stays responsive during a long pass.
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => window.setTimeout(r, 0));
     }
     progress.hide();
     this.recordUpdateRate(updated, Date.now() - startedAt);
@@ -2168,16 +2080,16 @@ export default class ReferenceList extends Plugin {
       (notice as unknown as { noticeEl?: HTMLElement }).noticeEl ??
       notice.containerEl;
     if (!el) return;
-    el.createEl('div', { text: head });
-    el.createEl('div', {
+    el.createDiv({ text: head });
+    el.createDiv({
       text: `Skipped ${skipped.length}:`,
     });
     for (const s of skipped.slice(0, 20)) {
       const name = s.path.split('/').pop() ?? s.path;
-      el.createEl('div', { cls: 'sw-auto-update-key', text: `${name} — ${s.reason}` });
+      el.createDiv({ cls: 'sw-auto-update-key', text: `${name} — ${s.reason}` });
     }
     if (skipped.length > 20) {
-      el.createEl('div', { text: `…and ${skipped.length - 20} more (see console).` });
+      el.createDiv({ text: `…and ${skipped.length - 20} more (see console).` });
     }
     console.warn('[sw:template] skipped notes:', skipped);
   }
@@ -2556,7 +2468,7 @@ export default class ReferenceList extends Plugin {
   scheduleCitekeyReconcile() {
     if (this._reconcileQueued) return;
     this._reconcileQueued = true;
-    setTimeout(() => {
+    window.setTimeout(() => {
       this._reconcileQueued = false;
       void this.reviewCitekeyChanges(false).catch(console.error);
     }, 2000);
@@ -2661,7 +2573,7 @@ export default class ReferenceList extends Plugin {
     // "did the review see my note?" without opening a dialog. Only when the
     // count CHANGES, so the periodic pass does not spam the console.
     if (opts?.manual || foreign.length !== this._lastUnmanagedCount) {
-      console.log(
+      debugLog(
         `[sw:review] ${foreign.length} literature note(s) not managed by ScholarWeft (setting: ${setting})`,
         foreign.map((f) => f.path)
       );
@@ -2747,7 +2659,7 @@ export default class ReferenceList extends Plugin {
       foreign.push(file);
     }
     if (duplicates.length) {
-      console.warn(
+      debugLog(
         '[sw:review] note(s) duplicate an item that already has a managed note; left alone:',
         duplicates
       );
@@ -2811,7 +2723,7 @@ export default class ReferenceList extends Plugin {
     if (this._keyedNotesReviewQueued || this._keyedNotesReviewed) return;
     if (this.settings.keyedNotesReviewed === true) return;
     this._keyedNotesReviewQueued = true;
-    setTimeout(() => {
+    window.setTimeout(() => {
       this._keyedNotesReviewQueued = false;
       void this.reviewKeyedNotes().catch(console.error);
     }, 2500);
@@ -3214,13 +3126,13 @@ class BibSnapshotModal extends Modal {
       value: defaultPath,
       cls: 'sw-snapshot-input',
     });
-    input.style.width = '100%';
+    input.setCssStyles({ width: '100%' });
 
     const btnRow = contentEl.createDiv({ cls: 'sw-snapshot-btn-row' });
-    btnRow.style.display = 'flex';
-    btnRow.style.justifyContent = 'flex-end';
-    btnRow.style.gap = '8px';
-    btnRow.style.marginTop = '12px';
+    btnRow.setCssStyles({ display: 'flex' });
+    btnRow.setCssStyles({ justifyContent: 'flex-end' });
+    btnRow.setCssStyles({ gap: '8px' });
+    btnRow.setCssStyles({ marginTop: '12px' });
 
     const cancelBtn = btnRow.createEl('button', { text: t('Cancel') });
     cancelBtn.addEventListener('click', () => this.close());
@@ -3236,7 +3148,7 @@ class BibSnapshotModal extends Modal {
       if (e.key === 'Escape') this.close();
     });
 
-    setTimeout(() => { input.select(); }, 50);
+    window.setTimeout(() => { input.select(); }, 50);
   }
 
   private async doSave(rawPath: string) {

@@ -92,6 +92,7 @@ export function rewriteLinkedToPandoc(body: string): { out: string; changed: boo
     },
   });
 
+  // eslint-disable-next-line no-control-regex -- NUL is the sentinel that marks a masked span: it cannot occur in Markdown text, so no real content can be mistaken for a placeholder.
   out = out.replace(/\u0000(\d+)\u0000/g, (_, i: string) => masked[+i]);
   return { out, changed: out !== body };
 }
