@@ -23,12 +23,18 @@ export class TooltipManager {
 
     if (!el.dataset.source) return;
 
-    const file = app.vault.getAbstractFileByPath(el.dataset.source);
-    if (!file && !(file instanceof TFile)) {
+    const file = this.plugin.app.vault.getAbstractFileByPath(
+      el.dataset.source
+    );
+    // `&&` here let a TFolder through, and the casts below then lied.
+    if (!(file instanceof TFile)) {
       return;
     }
 
-    const view = (el as any).win || el.ownerDocument?.defaultView || window;
+    const view =
+      (el as HTMLElement & { win?: Window }).win ??
+      el.ownerDocument?.defaultView ??
+      window;
     view.clearTimeout(this.previewDBTimer);
     view.clearTimeout(this.previewDBTimerClose);
 
@@ -39,16 +45,16 @@ export class TooltipManager {
     if (el.dataset.noteIndex) {
       content = createDiv();
       const html = this.plugin.bibManager.getNoteForNoteIndex(
-        file as TFile,
+        file,
         el.dataset.noteIndex
       );
       content.append(...html);
     } else {
       for (const key of keys) {
         const html = this.plugin.bibManager.getBibForCiteKey(
-          file as TFile,
+          file,
           key
-        ) as HTMLElement;
+        );
 
         if (html) {
           if (!content) content = createFragment();
@@ -71,7 +77,7 @@ export class TooltipManager {
     }
 
     const modClasses = this.plugin.settings.hideLinks ? ' collapsed-links' : '';
-    const doc = ((el as any).doc || el.ownerDocument || document) as Document;
+    const doc = (el as HTMLElement & { doc?: Document }).doc ?? el.ownerDocument ?? document;
     const tooltip = (this.tooltip = doc.body.createDiv({
       cls: `sw-tooltip${modClasses}`,
     }));
@@ -140,8 +146,8 @@ export class TooltipManager {
     this.isHoveringTooltip = false;
     this.isScrollBound = false;
     const tView =
-      (this.tooltip as any)?.win ||
-      this.tooltip?.ownerDocument?.defaultView ||
+      (this.tooltip as HTMLElement & { win?: Window })?.win ??
+      this.tooltip?.ownerDocument?.defaultView ??
       window;
     tView.removeEventListener('scroll', this.boundScroll);
     this.tooltip?.remove();
@@ -157,7 +163,9 @@ export class TooltipManager {
    * full-width panel with a dismiss backdrop.
    */
   showMobileCard(el: HTMLElement) {
-    const file = app.vault.getAbstractFileByPath(el.dataset.source ?? '');
+    const file = this.plugin.app.vault.getAbstractFileByPath(
+      el.dataset.source ?? ''
+    );
     if (!(file instanceof TFile)) return;
 
     const keys = (el.dataset.citekey ?? '').split('|').filter(Boolean);
@@ -165,14 +173,14 @@ export class TooltipManager {
 
     let content: DocumentFragment | HTMLElement | null = null;
     for (const key of keys) {
-      const html = this.plugin.bibManager.getBibForCiteKey(file, key) as HTMLElement | null;
+      const html = this.plugin.bibManager.getBibForCiteKey(file, key);
       if (html) {
         if (!content) content = createFragment();
         content.append(html);
       }
     }
 
-    const doc = ((el as any).doc ?? el.ownerDocument ?? document) as Document;
+    const doc = (el as HTMLElement & { doc?: Document }).doc ?? el.ownerDocument ?? document;
     const backdrop = doc.body.createDiv({ cls: 'sw-mobile-backdrop' });
 
     // Tap outside the card → dismiss.
@@ -210,7 +218,9 @@ export class TooltipManager {
    */
   handleMobileTap(el: HTMLElement) {
     const action = this.plugin.settings.mobileClickAction ?? 'show';
-    const file = app.vault.getAbstractFileByPath(el.dataset.source ?? '');
+    const file = this.plugin.app.vault.getAbstractFileByPath(
+      el.dataset.source ?? ''
+    );
     if (!(file instanceof TFile)) return;
 
     const keys = (el.dataset.citekey ?? '').split('|').filter(Boolean);
@@ -225,7 +235,7 @@ export class TooltipManager {
       // Collect formatted citation HTML and copy as rich text + markdown.
       const entries: HTMLElement[] = [];
       for (const key of keys) {
-        const html = this.plugin.bibManager.getBibForCiteKey(file, key) as HTMLElement | null;
+        const html = this.plugin.bibManager.getBibForCiteKey(file, key);
         if (html) entries.push(html);
       }
       if (entries.length) {
@@ -371,7 +381,7 @@ export class TooltipManager {
         lpStartY = touch.clientY;
         lpTarget = target;
         lpFired  = false;
-        const win = (evt.view as Window) ?? window;
+        const win = evt.view ?? window;
         win.clearTimeout(lpTimer);
         lpTimer = win.setTimeout(() => {
           lpFired = true;
@@ -387,18 +397,18 @@ export class TooltipManager {
         if (!lpTimer) return;
         const touch = evt.changedTouches[0];
         if (Math.hypot(touch.clientX - lpStartX, touch.clientY - lpStartY) > LP_SLOP) {
-          lpCancel((evt.view as Window) ?? window);
+          lpCancel(evt.view ?? window);
         }
       },
 
       // Regular tap — finger lifted before timer, let click through normally.
       touchend: (evt: TouchEvent) => {
-        if (lpTimer) lpCancel((evt.view as Window) ?? window);
+        if (lpTimer) lpCancel(evt.view ?? window);
       },
 
       // Browser took over the touch (scroll, pinch, system interrupt) — cancel.
       touchcancel: (evt: TouchEvent) => {
-        if (lpTimer) lpCancel((evt.view as Window) ?? window);
+        if (lpTimer) lpCancel(evt.view ?? window);
       },
 
       // Swallow the synthetic click that follows a completed long-press so the

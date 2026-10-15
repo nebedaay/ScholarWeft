@@ -37,7 +37,9 @@ export function collectionTokens(
   keys: readonly string[] | null | undefined
 ): string[] {
   if (!Array.isArray(keys)) return [];
-  return keys.filter((k) => typeof k === 'string' && !!k).map((k) => collectionToken(groupID, k));
+  return keys
+    .filter((k): k is string => typeof k === 'string' && !!k)
+    .map((k) => collectionToken(groupID, k));
 }
 
 /**

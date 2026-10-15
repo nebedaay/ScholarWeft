@@ -60,7 +60,6 @@ import type {
   NoteContext,
   NoteContextAnnotation,
   NoteContextCreator,
-  NoteContextTag,
 } from './context';
 
 /** How child notes reach the literature note. */
@@ -512,7 +511,7 @@ export class NoteHelpers {
     for (const item of ctx.relatedItems) {
       if (item.citationKey) out.push(`[[@${item.citationKey}]]`);
     }
-    for (const tag of ctx.tags as NoteContextTag[]) {
+    for (const tag of ctx.tags) {
       if (tag.name) out.push(`[[${tag.name}]]`);
     }
     return out;

@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Pandoc is driven
+   through `require`: esbuild leaves an `import()` of an external module verbatim
+   in the CJS bundle, which fails in Electron's renderer. */
 import { Platform } from 'obsidian';
 import { PartialCSLEntry } from './types';
 
@@ -57,6 +60,8 @@ export async function bibToCSLViaPandoc(
   bibPath: string,
   pandocPath: string
 ): Promise<PartialCSLEntry[]> {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return [];
   const { execFile } = require('child_process') as typeof import('child_process');
   const { promisify } = require('util') as typeof import('util');
   const execFileAsync = promisify(execFile);
@@ -68,12 +73,16 @@ export async function bibToCSLViaPandoc(
   );
 
   try {
-    const parsed = JSON.parse(stdout.trim());
+    const parsed = JSON.parse(stdout.trim()) as {
+      references?: PartialCSLEntry[];
+    };
     // Pandoc wraps top-level CSL-JSON in an array directly.
     if (Array.isArray(parsed)) return parsed as PartialCSLEntry[];
-    if (parsed && Array.isArray(parsed.references)) return parsed.references as PartialCSLEntry[];
+    if (parsed && Array.isArray(parsed.references)) return parsed.references;
     return [];
   } catch {
     return [];
   }
 }
+
+/* eslint-enable @typescript-eslint/no-require-imports -- end of file */

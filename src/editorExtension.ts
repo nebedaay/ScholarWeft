@@ -130,7 +130,7 @@ class CiteWidget extends WidgetType {
             if (evt.button !== 0) return;
             const newPane = Keymap.isModEvent(evt);
             window.setTimeout(() => {
-              app.workspace.openLinkText(
+              void app.workspace.openLinkText(
                 this.linkText,
                 this.sourcePath,
                 newPane
@@ -209,7 +209,7 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
         const nextSignature = getCitationSignature(update.view);
         if (nextSignature !== this.citationSignature) {
           this.citationSignature = nextSignature;
-          update.view.state.field(bibManagerField).plugin.processReferences();
+          void update.view.state.field(bibManagerField).plugin.processReferences();
         }
       }
     }

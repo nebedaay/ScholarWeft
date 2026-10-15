@@ -34,24 +34,14 @@ export interface CachedCreator {
   literal?: string;
 }
 
-/** A cached CSL entry: the CSL fields plus the internal fields we retain. */
-export interface CachedEntry extends PartialCSLEntry {
-  /** Zotero's free-text `extra` field, kept verbatim. */
-  _extra?: string;
-  /** Tag names (types are not retained). */
-  _tags?: string[];
-  /** ISO timestamp of when Zotero added the item. */
-  _dateAdded?: string;
-  /**
-   * Ordered creators with Zotero's own `creatorType` role, retained on the
-   * native path. Absent for BBT entries, whose CSL role groups are used instead.
-   */
-  _creators?: CachedCreator[];
-  /** Zotero item key (`EKUBHHNW`). */
-  _zoteroKey?: string;
-  /** CSL fields we read by name; not all are in `PartialCSLEntry`. */
-  [key: string]: unknown;
-}
+/**
+ * A cached CSL entry: the CSL fields plus the internal fields we retain.
+ *
+ * Those internals now live on `PartialCSLEntry` itself (the mapper sets them, and
+ * `bib/` code reads them), so this is the same shape — kept as a named alias for
+ * the note-template code, which reads it as a template-facing concept.
+ */
+export type CachedEntry = PartialCSLEntry;
 
 /** ZotLit's `{ $helper, signature, value }` helper, at runtime a callable. */
 export type LinkHelper = (alias?: string, subpath?: string) => string | null;
@@ -614,13 +604,13 @@ export function noteLinkFor(notePath: string | null | undefined): LinkHelper {
  * what a render-only unit test needs.
  */
 export function buildNoteContext(
-  entry: PartialCSLEntry | CachedEntry | null | undefined,
+  entry: CachedEntry | null | undefined,
   children: NoteContextChildren = {}
 ): NoteContext {
   const e = (entry ?? {}) as CachedEntry;
 
   const rawGroup = e.groupID;
-  const groupID = isPersonal(rawGroup) ? null : (rawGroup as number);
+  const groupID = isPersonal(rawGroup) ? null : (rawGroup);
   const libraryID = groupID ?? 1;
   const key = str(e._zoteroKey) ?? str(e.key) ?? '';
   const itemType = cslTypeToZoteroItemType(e.type);

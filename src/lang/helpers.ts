@@ -1,7 +1,7 @@
 import en from './locale/en';
 
 // Active locale — swappable at runtime if additional locales are added.
-const locale: Record<string, string> = en as Record<string, string>;
+const locale: Record<string, string> = en;
 
 /**
  * Translate a UI string.  Falls back to the key itself when no translation

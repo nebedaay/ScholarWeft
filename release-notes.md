@@ -1,20 +1,30 @@
-ScholarWeft 0.5.2 is a smaller, tidier build.
+ScholarWeft 0.5.3 clears every error the community directory's own code review reports, and nearly every warning.
 
-### The Zotero picker is gone
+### The code review is now clean
 
-The **Import literature notes from Zotero…** command has been removed.
+The directory runs a linter over the plugin's source (the same rules the review page shows), and 0.5.2 was reported with **1720 issues — including six classes of error**. This release fixes all of them and reduces the total to **18**, none of which are errors:
 
-It opened Zotero's own item picker, which searches *every* library in Zotero — including ones you have not enabled in ScholarWeft. Importing from those produced citations nothing could resolve, so the command could quietly create broken references. **Add Literature Notes/Citations** searches and filters the libraries you actually load, inside Obsidian, and does the same job without that trap — and without needing Better BibTeX.
+- **Unsafe HTML** — four `innerHTML` assignments replaced with inert parsing (`DOMParser`, or moving child nodes), which is also what the review asks for.
+- **Inline styles** — 88 direct `element.style.x = …` assignments replaced with Obsidian's `setCssStyles`.
+- **Regular-expression lookbehind** — rewritten without it, because iOS before 16.4 cannot parse one.
+- **Settings headings** — built with Obsidian's heading API instead of raw `<h2>` elements.
+- **Directive comments** — every suppression now says why it is there.
+- **Node built-ins** — `fs`, `path`, `os`, `child_process` and `util` are now guarded by `Platform.isDesktop` (or reached through one guarded accessor), so the desktop-only paths degrade instead of crashing on mobile.
 
-Nothing else changes: the same command still creates or refreshes literature notes, inserts citations, or both.
+The remaining 18 are deliberate: seven read settings fields older builds wrote (deprecated, but an upgrade must still find them), two are the plugin's own gated debug loggers, and the rest need either Obsidian 1.13 or a change in behaviour to clear.
 
-### A much smaller download
+### Fixes found along the way
 
-The plugin is now **3.4 MB instead of 10.5 MB**, comfortably under the 5 MB line that matters for syncing. Release builds are minified, and the bundled export templates and documentation screenshots are stored at sensible sizes rather than at full resolution. The export templates keep small placeholder images, so it stays clear how images are handled in a compiled document.
+Typing the code to satisfy the review turned up real bugs, not just lint noise:
 
-### Tidy-ups
+- **`makeBibliography()` returns `false`**, not only a citation list, when there is nothing to render. The untyped code indexed it anyway — a crash waiting to happen. Now narrowed properly.
+- **A tooltip lookup** used `if (!file && !(file instanceof TFile))`, so a *folder* passed the guard and was then treated as a file. Now a correct `instanceof` check.
+- **`sourceFile()`** fell back to casting the vault **root folder** to a file. It now returns a real file or `null`.
+- **An old template** that still wrote `zotero-key` would have silently stripped a note's identity property. ScholarWeft now writes `sw-zotero-id` from it instead.
+- **Two notes can no longer share one `sw-zotero-id`**, which would have split updates and citation links between them.
+- A `!` in one note-list lookup was **masking a bitwise-or typo**.
 
-- The **Add Literature Notes/Citations** and **Import a Word/ODT document** dialogs now remember their last search, folder and destination in the plugin's own settings file rather than in browser storage.
-- Release assets carry a **build-provenance attestation**, so you can verify cryptographically that they were built from this repository by its release workflow.
-- The plugin description no longer names Obsidian (redundant in the plugin directory), and the author link points at the author's profile rather than the plugin's own repository.
-- Dead code left behind by earlier changes has been removed, and the codebase now passes the community directory's own linter with no errors.
+### Also in this release
+
+- The plugin is **smaller still** (3.4 MB) and its release assets carry a build-provenance attestation.
+- The **Zotero picker is gone** (see 0.5.2) — removed because Zotero's own picker searches every library, including ones the plugin does not load.

@@ -56,7 +56,7 @@ export interface ZoteroAdapter {
   getItemsForCiteKeys(
     citekeys: string[],
     groupId: number
-  ): Promise<any[] | null>;
+  ): Promise<unknown[] | null>;
 
   /**
    * Fetch CSL entries for specific citekeys. Used to render a note's citations
@@ -102,7 +102,7 @@ export class BBTAdapter implements ZoteroAdapter {
   getItemsForCiteKeys(
     citekeys: string[],
     groupId: number
-  ): Promise<any[] | null> {
+  ): Promise<unknown[] | null> {
     return getItemJSONFromCiteKeys(this.port, citekeys, groupId);
   }
 
@@ -114,7 +114,7 @@ export class BBTAdapter implements ZoteroAdapter {
     if (!Array.isArray(items)) return [];
     return items
       .filter((it) => it && typeof it.id === 'string' && it.id)
-      .map((it) => ({ ...it, groupID: groupId }) as PartialCSLEntry);
+      .map((it) => ({ ...it, groupID: groupId }));
   }
 }
 
@@ -156,7 +156,7 @@ export class NativeAdapter implements ZoteroAdapter {
   getItemsForCiteKeys(
     citekeys: string[],
     groupId: number
-  ): Promise<any[] | null> {
+  ): Promise<unknown[] | null> {
     return getItemJSONFromCiteKeysNative(this.port, citekeys, groupId);
   }
 

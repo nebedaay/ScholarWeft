@@ -1,3 +1,4 @@
+import type { CslEngine } from '../bib/types';
 import { Citation, CitationGroup, RenderedCitation } from './parser';
 
 export type CiteMode = 'suppress-author' | 'composite' | 'author-only';
@@ -159,7 +160,7 @@ function sanitize(val: string) {
 }
 
 export function cite(
-  engine: any,
+  engine: CslEngine,
   group: CitationGroup[],
   uncitedItemIDs?: string[]
 ) {

@@ -21,7 +21,7 @@ function validateGroups(
   });
 
   plugin.settings.zoteroGroups = validated;
-  plugin.saveSettings();
+  void plugin.saveSettings();
 }
 
 export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
@@ -63,7 +63,7 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
   );
 
   React.useEffect(() => {
-    pullUserGroups();
+    void pullUserGroups();
   }, []);
 
   return (
@@ -87,7 +87,9 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
                     setActiveGroups([...activeGroups]);
                   }
                 }
-                plugin.saveSettings(() => plugin.bibManager.reinit(true));
+                void plugin.saveSettings(() => {
+                    void plugin.bibManager.reinit(true);
+                  });
                 return !cur;
               });
             }}
@@ -101,7 +103,7 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
             name={t('Cannot connect to Zotero')}
             description={t('ZoteroConnectionHelp')}
           >
-            <button onClick={() => pullUserGroups()} className="mod-cta">
+            <button onClick={() => { void pullUserGroups(); }} className="mod-cta">
               Retry
             </button>
           </SettingItem>
@@ -121,8 +123,10 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
                   setUseNative((cur) => {
                     const next = !cur;
                     plugin.settings.useNativeZoteroAPI = next;
-                    plugin.saveSettings(() => plugin.bibManager.reinit(true));
-                    pullUserGroups(next);
+                    void plugin.saveSettings(() => {
+                    void plugin.bibManager.reinit(true);
+                  });
+                    void pullUserGroups(next);
                     return next;
                   });
                 }}
@@ -140,7 +144,7 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
               <input
                 onChange={(e) => {
                   plugin.settings.zoteroPort = e.target.value;
-                  plugin.saveSettings();
+                  void plugin.saveSettings();
                 }}
                 type="text"
                 spellCheck={false}
@@ -168,9 +172,9 @@ export function ZoteroPullSetting({ plugin }: { plugin: ReferenceList }) {
                           plugin.settings.zoteroGroups = activeGroups;
                           setActiveGroups([...activeGroups]);
                         }
-                        plugin.saveSettings(() =>
-                          plugin.bibManager.reinit(true)
-                        );
+                        void plugin.saveSettings(() => {
+                          void plugin.bibManager.reinit(true);
+                        });
                       }}
                       className={`checkbox-container${
                         isEnabled ? ' is-enabled' : ''

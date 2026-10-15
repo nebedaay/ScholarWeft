@@ -1,3 +1,4 @@
+import { winOf } from './dom-window';
 import { findTermSpans } from './search-excerpt';
 
 /**
@@ -16,7 +17,7 @@ export const MATCH_CLASS = 'sw-suggest-match';
 
 /** A bold, marked match element owned by `doc`. */
 function matchEl(doc: Document, text: string): HTMLElement {
-  const strong = doc.createElement('strong');
+  const strong = winOf(doc).createEl('strong');
   strong.className = MATCH_CLASS;
   strong.textContent = text;
   return strong;
@@ -64,7 +65,7 @@ export function highlightMatchesIn(root: HTMLElement, terms: readonly string[]):
     const text = textNode.textContent ?? '';
     const spans = findTermSpans(text, terms);
     if (spans.length === 0) continue;
-    const frag = doc.createDocumentFragment();
+    const frag = winOf(doc).createFragment();
     let at = 0;
     for (const s of spans) {
       if (s.start > at) frag.append(text.slice(at, s.start));

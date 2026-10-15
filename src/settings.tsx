@@ -1,6 +1,31 @@
-import { FuzzySuggestModal, Notice, Platform, PluginSettingTab, Setting, TFile, TFolder } from 'obsidian';
+import {
+  App,
+  FuzzySuggestModal,
+  Notice,
+  Platform,
+  PluginSettingTab,
+  Setting,
+  TFile,
+  TFolder,
+  TextComponent,
+} from 'obsidian';
 
 import { t } from './lang/helpers';
+
+/**
+ * Obsidian internals this tab reaches for — absent from the public typings, so
+ * declared here rather than reached through `as any`.
+ */
+type AppInternals = {
+  plugins?: {
+    manifests?: Record<string, unknown>;
+    plugins?: Record<string, unknown>;
+  };
+  setting?: {
+    open?(): void;
+    openTabById?(id: string): void;
+  };
+};
 import { findPandoc } from './bib/pandoc';
 import { getBibPath } from './bib/helpers';
 import {
@@ -226,6 +251,16 @@ export interface ReferenceListSettings {
   exportLanguage?: string;
   /** Last export format chosen in the export modal — remembered across opens. */
   lastExportFormat?: 'md' | 'docx' | 'odt' | 'latex' | 'pdf';
+  /** Last export template chosen, by stem (e.g. "book") — remembered. */
+  lastTemplate?: string;
+  /** Last output directory chosen in the export modal. */
+  lastOutputDir?: string;
+  /** Per-note export history: which template and folder each note last used, so
+   *  a re-export lands in the same place. Keyed by note path. */
+  fileExportHistory?: Record<
+    string,
+    { template?: string; outputDir?: string; format?: string }
+  >;
   /**
    * Remembered state for the "Add Literature Notes/Citations" dialog: the last
    * search, its ordering, and the add target. Opaque to the settings UI — the
@@ -380,13 +415,13 @@ const PAGE_TITLES: Record<Exclude<SettingsPage, 'home'>, string> = {
  * OS file picker can't return a stable file-system path.
  */
 class BibFilePickerModal extends FuzzySuggestModal<TFile> {
-  constructor(private onChoose: (path: string) => void) {
+  constructor(app: App, private onChoose: (path: string) => void) {
     super(app);
     this.setPlaceholder(t('Search…'));
   }
 
   getItems(): TFile[] {
-    return app.vault
+    return this.app.vault
       .getFiles()
       .filter((f) => BIB_EXTENSIONS.has(f.extension))
       .sort((a, b) => a.path.localeCompare(b.path));
@@ -406,13 +441,13 @@ class BibFilePickerModal extends FuzzySuggestModal<TFile> {
  * files (`.eta.md` templates included) and returns the chosen vault path.
  */
 class NoteTemplatePickerModal extends FuzzySuggestModal<TFile> {
-  constructor(private onChoose: (path: string) => void) {
+  constructor(app: App, private onChoose: (path: string) => void) {
     super(app);
     this.setPlaceholder(t('Search note templates…'));
   }
 
   getItems(): TFile[] {
-    return app.vault
+    return this.app.vault
       .getFiles()
       .filter((f) => f.extension === 'md')
       .sort((a, b) => a.path.localeCompare(b.path));
@@ -429,13 +464,13 @@ class NoteTemplatePickerModal extends FuzzySuggestModal<TFile> {
 
 /** Vault folder picker, used by the "copy the default template" button. */
 class VaultFolderPickerModal extends FuzzySuggestModal<TFolder> {
-  constructor(private onChoose: (folder: string) => void) {
+  constructor(app: App, private onChoose: (folder: string) => void) {
     super(app);
     this.setPlaceholder(t('Choose a folder…'));
   }
 
   getItems(): TFolder[] {
-    return app.vault
+    return this.app.vault
       .getAllLoadedFiles()
       .filter((f): f is TFolder => f instanceof TFolder)
       .sort((a, b) => a.path.localeCompare(b.path));
@@ -455,7 +490,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
   private page: SettingsPage = 'home';
 
   constructor(plugin: ReferenceList) {
-    super(app, plugin);
+    super(plugin.app, plugin);
     this.plugin = plugin;
   }
 
@@ -604,7 +639,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .addButton((btn) => {
         btn.setButtonText(t('Add file')).onClick(() => {
           this.plugin.settings.bibliographyPaths.push('');
-          this.plugin.saveSettings();
+          void this.plugin.saveSettings();
           this.display();
         });
       });
@@ -622,24 +657,28 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(bibPath)
           .onChange((value) => {
             this.plugin.settings.bibliographyPaths[index] = value;
-            this.plugin.saveSettings(() => this.plugin.bibManager.reinit(true));
+            void this.plugin.saveSettings(() => {
+        void this.plugin.bibManager.reinit(true);
+      });
           });
 
         new BibFileSuggest(this.app, text.inputEl);
 
-        text.inputEl.addEventListener('blur', async () => {
-          const raw = text.inputEl.value.trim();
+        text.inputEl.addEventListener('blur', () => {
+          void (async () => {
+            const raw = text.inputEl.value.trim();
           if (!raw) return;
           try {
             const resolved = await getBibPath(raw);
             if (resolved !== raw) {
               text.setValue(resolved);
               this.plugin.settings.bibliographyPaths[index] = resolved;
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             }
-          } catch {
-            // Path unresolvable — leave as-is.
-          }
+            } catch {
+              // Path unresolvable — leave as-is.
+            }
+          })();
         });
       });
 
@@ -652,22 +691,26 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             fileInput.accept = '.bib,.json,.yaml,.yml';
             fileInput.onchange = async () => {
               const file = fileInput.files?.[0];
-              const fsPath: string | undefined = (file as any)?.path;
+              const fsPath: string | undefined = (file as File & { path?: string }).path;
               if (!fsPath) return;
               let resolved = fsPath;
               try { resolved = await getBibPath(fsPath); } catch { /* keep absolute */ }
               inputEl.value = resolved;
               inputEl.dispatchEvent(new Event('input'));
               this.plugin.settings.bibliographyPaths[index] = resolved;
-              this.plugin.saveSettings(() => this.plugin.bibManager.reinit(true));
+              void this.plugin.saveSettings(() => {
+        void this.plugin.bibManager.reinit(true);
+      });
             };
             fileInput.click();
           } else {
-            new BibFilePickerModal((path) => {
+            new BibFilePickerModal(this.app, (path) => {
               inputEl.value = path;
               inputEl.dispatchEvent(new Event('input'));
               this.plugin.settings.bibliographyPaths[index] = path;
-              this.plugin.saveSettings(() => this.plugin.bibManager.reinit(true));
+              void this.plugin.saveSettings(() => {
+        void this.plugin.bibManager.reinit(true);
+      });
             }).open();
           }
         });
@@ -677,7 +720,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         btn.setIcon('trash').setTooltip(t('Remove'));
         btn.onClick(() => {
           this.plugin.settings.bibliographyPaths.splice(index, 1);
-          this.plugin.saveSettings(() => this.plugin.bibManager.reinit(true));
+          void this.plugin.saveSettings(() => {
+        void this.plugin.bibManager.reinit(true);
+      });
           this.display();
         });
       });
@@ -702,9 +747,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.zoteroDataDir ?? '')
             .onChange((value) => {
               this.plugin.settings.zoteroDataDir = value.trim();
-              this.plugin.saveSettings(() =>
-                this.plugin.bibManager.reinit(false)
-              );
+              void this.plugin.saveSettings(() => {
+                void this.plugin.bibManager.reinit(false);
+              });
             })
         );
     }
@@ -733,7 +778,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(searchEnabled)
           .onChange((value) => {
             this.plugin.settings.enableCiteKeyCompletion = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
             // Re-render so the dependent minimum-characters option appears or
             // disappears with the toggle.
             this.display();
@@ -757,7 +802,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(String(this.plugin.settings.citeSearchMinChars ?? 0))
             .onChange((value) => {
               this.plugin.settings.citeSearchMinChars = Number(value) || 0;
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             })
         );
 
@@ -773,7 +818,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.citeSearchAllowSpaces !== false)
             .onChange((value) => {
               this.plugin.settings.citeSearchAllowSpaces = value;
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             })
         );
     }
@@ -794,9 +839,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           isClearable
           onChange={(selection) => {
             this.plugin.settings.cslStyleURL = selection?.value;
-            this.plugin.saveSettings(() =>
-              this.plugin.bibManager.reinit(false)
-            );
+            void this.plugin.saveSettings(() => {
+              void this.plugin.bibManager.reinit(false);
+            });
           }}
         />
       </SettingItem>,
@@ -811,14 +856,14 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         )
       )
       .then((setting) => {
-        let pathText: any;
+        let pathText: TextComponent;
         setting.addText((text) => {
           pathText = text;
           text.setValue(this.plugin.settings.cslStylePath ?? '').onChange((value) => {
             this.plugin.settings.cslStylePath = value;
-            this.plugin.saveSettings(() =>
-              this.plugin.bibManager.reinit(false)
-            );
+            void this.plugin.saveSettings(() => {
+              void this.plugin.bibManager.reinit(false);
+            });
           });
         });
         if (Platform.isDesktop) {
@@ -826,9 +871,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             btn.setButtonText(t('Browse Zotero styles…')).onClick(() => {
               new ZoteroStylePicker(this.app, this.plugin, (style) => {
                 this.plugin.settings.cslStylePath = style.path;
-                this.plugin.saveSettings(() =>
-                  this.plugin.bibManager.reinit(false)
-                );
+                void this.plugin.saveSettings(() => {
+                    void this.plugin.bibManager.reinit(false);
+                });
                 // Refresh the text input to show the chosen path.
                 if (pathText?.inputEl) {
                   pathText.inputEl.value = style.path;
@@ -870,9 +915,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           onChange={(selection) => {
             if (selection) {
               this.plugin.settings.cslLang = selection.value;
-              this.plugin.saveSettings(() =>
-                this.plugin.bibManager.reinit(false)
-              );
+              void this.plugin.saveSettings(() => {
+                void this.plugin.bibManager.reinit(false);
+              });
             }
           }}
         />
@@ -893,7 +938,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .onChange((value) => {
             this.plugin.settings.renderLinkCitations = value;
             this.plugin.settings.formatLinkAliases = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -909,7 +954,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.renderCitations)
           .onChange((value) => {
             this.plugin.settings.renderCitations = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -925,7 +970,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.renderCitationsReadingMode)
           .onChange((value) => {
             this.plugin.settings.renderCitationsReadingMode = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -941,7 +986,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.renderCitationsAsLinks)
           .onChange((value) => {
             this.plugin.settings.renderCitationsAsLinks = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -958,7 +1003,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.convertExcludeFolders ?? '')
           .onChange((value) => {
             this.plugin.settings.convertExcludeFolders = value.trim();
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -967,7 +1012,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .addToggle((text) =>
         text.setValue(!!this.plugin.settings.hideLinks).onChange((value) => {
           this.plugin.settings.hideLinks = value;
-          this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         })
       );
 
@@ -983,10 +1028,10 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.showPdfLinks)
           .onChange((value) => {
             this.plugin.settings.showPdfLinks = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
             // PDF state lives in the rendered bibliography — refresh the
             // active view so buttons appear/disappear immediately.
-            this.plugin.processReferences();
+            void this.plugin.processReferences();
           })
       );
 
@@ -1002,7 +1047,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.prioritizeCiteKeyCompletion ?? true)
           .onChange((value) => {
             this.plugin.settings.prioritizeCiteKeyCompletion = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -1020,7 +1065,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(showDeco)
           .onChange((value) => {
             this.plugin.settings.showCitationDecorations = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
             this.display();
           })
       );
@@ -1037,7 +1082,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setName(t(name))
           .setDesc(t(desc))
           .then((setting) => {
-            const savedVal: string | undefined = (this.plugin.settings as any)[settingKey];
+            const savedVal: string | undefined = (
+        this.plugin.settings as unknown as Record<string, unknown>
+      )[settingKey] as string | undefined;
             const cssVal = savedVal ??
               getComputedStyle(document.body).getPropertyValue(cssVar).trim();
             const m = cssVal.match(/^(#[0-9a-fA-F]{3,8})/);
@@ -1048,7 +1095,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               return h.slice(0, 7);
             };
 
-            const colorInput = setting.controlEl.createEl('input') as HTMLInputElement;
+            const colorInput = setting.controlEl.createEl('input');
             colorInput.type = 'color';
             colorInput.value = expandHex(hexRaw);
             Object.assign(colorInput.style, {
@@ -1059,7 +1106,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               marginRight: '6px', verticalAlign: 'middle',
             });
 
-            const textInput = setting.controlEl.createEl('input') as HTMLInputElement;
+            const textInput = setting.controlEl.createEl('input');
             textInput.type = 'text';
             textInput.value = savedVal ?? cssVal;
             textInput.setAttribute('spellcheck', 'false');
@@ -1068,9 +1115,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             });
 
             const applyColor = (val: string) => {
-              (this.plugin.settings as any)[settingKey] = val;
+              (this.plugin.settings as unknown as Record<string, unknown>)[settingKey] = val;
               document.body.style.setProperty(cssVar, val);
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             };
 
             colorInput.addEventListener('input', () => {
@@ -1160,7 +1207,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(!!this.plugin.settings.showCitekeyTooltips)
           .onChange((value) => {
             this.plugin.settings.showCitekeyTooltips = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -1178,7 +1225,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.tooltipDelay)
           .onChange((value) => {
             this.plugin.settings.tooltipDelay = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           });
       });
 
@@ -1197,7 +1244,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.mobileClickAction ?? 'show')
           .onChange((value) => {
             this.plugin.settings.mobileClickAction = value as 'show' | 'copy' | 'link';
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
   }
@@ -1264,7 +1311,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             (this.plugin.settings.missingLinkedNoteAction ?? 'never') === value;
           input.addEventListener('change', () => {
             this.plugin.settings.missingLinkedNoteAction = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           });
           wrap.appendText(' ' + label);
         };
@@ -1299,7 +1346,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.literatureNoteFolder ?? '')
             .onChange((value) => {
               this.plugin.settings.literatureNoteFolder = value;
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             });
           new FolderSuggest(this.app, text.inputEl);
         });
@@ -1317,7 +1364,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         .addToggle((toggle) =>
           toggle.setValue(useDefaultTemplate).onChange((value) => {
             this.plugin.settings.useDefaultNoteTemplate = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
             this.display();
           })
         );
@@ -1336,15 +1383,15 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               .setValue(this.plugin.settings.noteTemplatePath ?? '')
               .onChange((value) => {
                 this.plugin.settings.noteTemplatePath = value.trim();
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
               });
             new NoteTemplateSuggest(this.app, text.inputEl);
           })
           .addButton((button) =>
             button.setButtonText(t('Browse…')).onClick(() => {
-              new NoteTemplatePickerModal((path) => {
+              new NoteTemplatePickerModal(this.app, (path) => {
                 this.plugin.settings.noteTemplatePath = path;
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
                 this.display();
               }).open();
             })
@@ -1360,7 +1407,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         )
         .addButton((button) =>
           button.setButtonText(t('Copy template')).onClick(() => {
-            new VaultFolderPickerModal((folder) => {
+            new VaultFolderPickerModal(this.app, (folder) => {
               void this.copyTemplateToFolder(folder);
             }).open();
           })
@@ -1379,7 +1426,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.ownNoteImageFolder ?? '')
             .onChange((value) => {
               this.plugin.settings.ownNoteImageFolder = value.trim();
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             })
         );
 
@@ -1395,7 +1442,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.openImportedNote !== false)
             .onChange((value) => {
               this.plugin.settings.openImportedNote = value;
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             })
         );
 
@@ -1417,7 +1464,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
                 | 'ask'
                 | 'convert'
                 | 'leave';
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             })
         );
 
@@ -1445,7 +1492,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         () => this.plugin.settings.autoUpdateNotes,
         (v) => {
           this.plugin.settings.autoUpdateNotes = v;
-          this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         }
       );
 
@@ -1455,7 +1502,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         () => this.plugin.settings.autoUpdateCitekeys,
         (v) => {
           this.plugin.settings.autoUpdateCitekeys = v;
-          this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         }
       );
 
@@ -1465,7 +1512,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         () => this.plugin.settings.autoUpdateTemplate,
         (v) => {
           this.plugin.settings.autoUpdateTemplate = v;
-          this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         }
       );
 
@@ -1483,7 +1530,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setDynamicTooltip()
             .onChange((value) => {
               this.plugin.settings.ownNoteNotesHeadingLevel = value;
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             })
         );
 
@@ -1666,7 +1713,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       hint?: string;
     }
   ): void {
-    const pm = (this.app as any).plugins;
+    const pm = (this.app as unknown as AppInternals).plugins;
     const installed = !!pm?.manifests?.[cfg.pluginId];
     const enabled = !!pm?.plugins?.[cfg.pluginId];
     const setting = new Setting(containerEl).setName(t(cfg.name));
@@ -1687,7 +1734,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
       setting.addButton((btn) =>
         btn.setButtonText(t('Open community plugins')).onClick(() => {
-          const s = (this.app as any).setting;
+          const s = (this.app as unknown as AppInternals).setting;
           s?.open?.();
           s?.openTabById?.('community-plugins');
         })
@@ -1700,7 +1747,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       );
       setting.addButton((btn) =>
         btn.setButtonText(t('Open community plugins')).onClick(() => {
-          const s = (this.app as any).setting;
+          const s = (this.app as unknown as AppInternals).setting;
           s?.open?.();
           s?.openTabById?.('community-plugins');
         })
@@ -1762,7 +1809,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           btn
             .setButtonText(t(cfg.openSettingsLabel ?? 'Open plugin settings'))
             .onClick(() => {
-              const s = (this.app as any).setting;
+              const s = (this.app as unknown as AppInternals).setting;
               s?.open?.();
               s?.openTabById?.(cfg.openSettingsId);
             })
@@ -1808,7 +1855,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               .setValue(this.plugin.settings.pathToPandoc ?? '')
               .onChange((value) => {
                 this.plugin.settings.pathToPandoc = value;
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
                 invalidateToolProbe();
               });
           });
@@ -1821,7 +1868,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               if (found) {
                 inputEl.value = found;
                 this.plugin.settings.pathToPandoc = found;
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
               }
             });
           });
@@ -1844,7 +1891,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               .setValue(this.plugin.settings.pathToPython ?? '')
               .onChange((value) => {
                 this.plugin.settings.pathToPython = value;
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
                 invalidateToolProbe();
               });
           });
@@ -1864,7 +1911,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               .setValue(this.plugin.settings.exportTemplatesDir ?? '')
               .onChange((value) => {
                 this.plugin.settings.exportTemplatesDir = value;
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
               })
           );
         });
@@ -1883,7 +1930,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               .setValue(this.plugin.settings.exportLanguage ?? '')
               .onChange((value) => {
                 this.plugin.settings.exportLanguage = value;
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
               })
           );
         });
@@ -1902,7 +1949,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
               .setValue(this.plugin.settings.defaultOutputDir ?? '')
               .onChange((value) => {
                 this.plugin.settings.defaultOutputDir = value;
-                this.plugin.saveSettings();
+                void this.plugin.saveSettings();
               })
           );
         });
@@ -1921,7 +1968,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.defaultAuthor ?? '')
           .onChange((value) => {
             this.plugin.settings.defaultAuthor = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -1937,7 +1984,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.useAccountNameAsAuthor ?? false)
           .onChange((value) => {
             this.plugin.settings.useAccountNameAsAuthor = value;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           })
       );
 
@@ -1962,7 +2009,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           cb.checked = m.enabled;
           cb.addEventListener('change', () => {
             mappings[i].enabled = cb.checked;
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           });
 
           const srcInput = row.createEl('input', { type: 'text' });
@@ -1972,7 +2019,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           srcInput.classList.add('sw-mapping-input');
           srcInput.addEventListener('change', () => {
             mappings[i].source = srcInput.value.trim();
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           });
 
           row.createSpan({ text: '→', cls: 'sw-mapping-arrow' });
@@ -1984,14 +2031,14 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           nameInput.classList.add('sw-mapping-input', 'sw-mapping-style');
           nameInput.addEventListener('change', () => {
             mappings[i].styleName = nameInput.value.trim();
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
           });
 
           const del = row.createEl('button', { text: '🗑', cls: 'sw-mapping-del' });
           del.title = t('Remove this mapping');
           del.addEventListener('click', () => {
             mappings.splice(i, 1);
-            this.plugin.saveSettings();
+            void this.plugin.saveSettings();
             renderMappingList(listEl);
           });
         }
@@ -2011,7 +2058,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
             .setValue(this.plugin.settings.styleMappingsEnabled ?? true)
             .onChange((value) => {
               this.plugin.settings.styleMappingsEnabled = value;
-              this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             })
         );
 
@@ -2030,7 +2077,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           source: '',
           styleName: '',
         });
-        this.plugin.saveSettings();
+        void this.plugin.saveSettings();
         renderMappingList(listEl);
       });
     }

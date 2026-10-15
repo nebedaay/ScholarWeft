@@ -1,9 +1,49 @@
-import { FileSystemAdapter, normalizePath, requestUrl } from 'obsidian';
+import { DataAdapter, FileSystemAdapter, normalizePath, requestUrl } from 'obsidian';
 import { debugLog, SW_CACHE_DIR } from 'src/helpers';
 import { CSLList, PartialCSLEntry } from './types';
 import { parseBibFile } from './bibtex';
 import { bibToCSLViaPandoc } from './pandoc';
 export { zoteroItemToCSL } from './zotero-csl';
+
+/**
+ * A stored CSL entry: the shared shape, indexable because the creator-role keys
+ * (`author`, `editor`, …) are chosen at runtime. (Distinct from
+ * `template/context`'s `CachedEntry`, which is the note-template view of one.)
+ */
+type StoredCSLEntry = PartialCSLEntry & Record<string, unknown>;
+
+/** A CSL entry as Better BibTeX returns it — `citekey`/`key` ride along. */
+type BbtCslEntry = StoredCSLEntry & {
+  citekey?: string;
+  'citation-key'?: string;
+  key?: string;
+};
+
+/**
+ * The vault adapter, captured when the plugin loads.
+ *
+ * These are module-level helpers with no plugin reference of their own, and the
+ * directory review asks that they reach the vault through the plugin rather than
+ * the global `app`. The plugin hands the adapter over once, in `onload`.
+ */
+let vaultAdapterRef: DataAdapter | null = null;
+
+/** Called once from `ReferenceList.onload`, before any bibliography work. */
+export function useVaultAdapter(adapter: DataAdapter): void {
+  vaultAdapterRef = adapter;
+}
+
+function vaultAdapter(): DataAdapter {
+  if (!vaultAdapterRef) {
+    throw new Error('ScholarWeft: the vault adapter has not been set yet.');
+  }
+  return vaultAdapterRef;
+}
+
+/** The adapter handed over by `useVaultAdapter`, for callers that need it too. */
+export function currentVaultAdapter(): DataAdapter {
+  return vaultAdapter();
+}
 
 export const DEFAULT_ZOTERO_PORT = '23119';
 
@@ -20,8 +60,8 @@ export function pathBasename(p: string): string {
 // ─── Vault adapter helpers ───────────────────────────────────────────────────
 
 async function ensureVaultDir(vaultRelPath: string): Promise<void> {
-  if (!(await app.vault.adapter.exists(vaultRelPath))) {
-    await app.vault.adapter.mkdir(vaultRelPath);
+  if (!(await vaultAdapter().exists(vaultRelPath))) {
+    await vaultAdapter().mkdir(vaultRelPath);
   }
 }
 
@@ -33,7 +73,7 @@ async function readFileText(filePath: string): Promise<string> {
     const buffer = await FileSystemAdapter.readLocalFile(filePath);
     return new TextDecoder('utf-8').decode(buffer);
   }
-  return app.vault.adapter.read(normalizePath(filePath));
+  return vaultAdapter().read(normalizePath(filePath));
 }
 
 // ─── Bibliography file resolution ───────────────────────────────────────────
@@ -53,11 +93,11 @@ async function readFileText(filePath: string): Promise<string> {
  * the canonical form should compare the two and save if different.
  */
 export async function getBibPath(bibPath: string): Promise<string> {
-  const adapter = app.vault.adapter;
+  const adapter = vaultAdapter();
   // getBasePath() is only available on desktop (FileSystemAdapter).
   const vaultBase: string | undefined =
-    typeof (adapter as any).getBasePath === 'function'
-      ? ((adapter as any).getBasePath() as string)
+    typeof (adapter as FileSystemAdapter).getBasePath === 'function'
+      ? (adapter as FileSystemAdapter).getBasePath()
       : undefined;
   const fwd = (p: string) => p.replace(/\\/g, '/'); // normalise Windows separators
 
@@ -110,8 +150,8 @@ export async function bibToCSL(
       let pandocPath = resolved;
       if (!isAbsolutePath(pandocPath)) {
         const vaultBase: string | undefined =
-          typeof (app.vault.adapter as any).getBasePath === 'function'
-            ? ((app.vault.adapter as any).getBasePath() as string)
+          typeof (vaultAdapter() as FileSystemAdapter).getBasePath === 'function'
+            ? ((vaultAdapter() as FileSystemAdapter).getBasePath())
             : undefined;
         if (vaultBase) {
           pandocPath = vaultBase.replace(/\/+$/, '').replace(/\\/g, '/') +
@@ -160,15 +200,15 @@ export async function getCSLLocale(
   _cacheDir: string,
   lang: string
 ): Promise<string> {
-  if (localeCache.has(lang)) return localeCache.get(lang)!;
+  if (localeCache.has(lang)) return localeCache.get(lang);
 
   const url = `https://raw.githubusercontent.com/citation-style-language/locales/master/locales-${lang}.xml`;
   const cachePath = normalizePath(`${CACHE_DIR}/locales-${lang}.xml`);
 
   await ensureVaultDir(CACHE_DIR);
 
-  if (await app.vault.adapter.exists(cachePath)) {
-    const data = await app.vault.adapter.read(cachePath);
+  if (await vaultAdapter().exists(cachePath)) {
+    const data = await vaultAdapter().read(cachePath);
     localeCache.set(lang, data);
     return data;
   }
@@ -182,7 +222,7 @@ export async function getCSLLocale(
     throw new Error(`Error downloading CSL locale: 404 Not Found for ${lang}`);
   }
 
-  await app.vault.adapter.write(cachePath, str);
+  await vaultAdapter().write(cachePath, str);
   localeCache.set(lang, str);
   return str;
 }
@@ -195,7 +235,7 @@ export async function getCSLStyle(
 ): Promise<string> {
   const key = explicitPath ?? url;
 
-  if (styleCache.has(key)) return styleCache.get(key)!;
+  if (styleCache.has(key)) return styleCache.get(key);
 
   if (explicitPath) {
     const raw = await readFileText(explicitPath);
@@ -214,14 +254,14 @@ export async function getCSLStyle(
 
   await ensureVaultDir(CACHE_DIR);
 
-  if (await app.vault.adapter.exists(cachePath)) {
-    const data = await app.vault.adapter.read(cachePath);
+  if (await vaultAdapter().exists(cachePath)) {
+    const data = await vaultAdapter().read(cachePath);
     // Reject stale error responses — valid CSL starts with '<'.
     if (data.trimStart().startsWith('<')) {
       styleCache.set(key, data);
       return data;
     }
-    await app.vault.adapter.remove(cachePath);
+    await vaultAdapter().remove(cachePath);
   }
 
   const resp = await requestUrl({ url: fullUrl, throw: false });
@@ -229,7 +269,7 @@ export async function getCSLStyle(
     throw new Error(`Error downloading CSL style: HTTP ${resp.status} from ${fullUrl}`);
   }
   const str = resp.text;
-  await app.vault.adapter.write(cachePath, str);
+  await vaultAdapter().write(cachePath, str);
   styleCache.set(key, str);
   return str;
 }
@@ -265,7 +305,12 @@ export async function isZoteroRunning(
   }
 }
 
-async function bbtPost(port: string, body: object): Promise<any> {
+/** A Better BibTeX JSON-RPC response. The payload depends on the method, so
+ *  the caller names it; `result` is absent when BBT reports an error. */
+async function bbtPost<T = unknown>(
+  port: string,
+  body: object
+): Promise<{ result?: T; error?: { message?: string } }> {
   const resp = await requestUrl({
     url: `http://127.0.0.1:${port}/better-bibtex/json-rpc`,
     method: 'POST',
@@ -276,14 +321,17 @@ async function bbtPost(port: string, body: object): Promise<any> {
   if (resp.status !== 200) {
     throw new Error(`Zotero BBT: HTTP ${resp.status}`);
   }
-  return resp.json;
+  return resp.json as { result?: T; error?: { message?: string } };
 }
 
 export async function getZUserGroups(
   port: string = DEFAULT_ZOTERO_PORT
 ): Promise<Array<{ id: number; name: string }> | null> {
   if (!(await isZoteroRunning(port))) return null;
-  const data = await bbtPost(port, { jsonrpc: '2.0', method: 'user.groups' });
+  const data = await bbtPost<Array<{ id: number; name: string }>>(port, {
+    jsonrpc: '2.0',
+    method: 'user.groups',
+  });
   return data.result ?? null;
 }
 
@@ -302,7 +350,7 @@ export async function getZModified(
   since: number
 ): Promise<CSLList | null> {
   if (!(await isZoteroRunning(port))) return null;
-  const data = await bbtPost(port, {
+  const data = await bbtPost<CSLList>(port, {
     jsonrpc: '2.0',
     method: 'item.search',
     params: [[['dateModified', 'isAfter', timestampToZDate(since)]], groupId],
@@ -326,9 +374,9 @@ export async function getZBib(
   await ensureVaultDir(CACHE_DIR);
 
   if (loadCached || !isRunning) {
-    if (await app.vault.adapter.exists(cachePath)) {
+    if (await vaultAdapter().exists(cachePath)) {
       return applyGroupID(
-        JSON.parse(await app.vault.adapter.read(cachePath)) as CSLList,
+        JSON.parse(await vaultAdapter().read(cachePath)) as CSLList,
         groupId
       );
     }
@@ -343,7 +391,7 @@ export async function getZBib(
   if (resp.status !== 200) throw new Error(`Zotero BBT export: HTTP ${resp.status}`);
 
   const str = resp.text;
-  await app.vault.adapter.write(cachePath, str);
+  await vaultAdapter().write(cachePath, str);
   return applyGroupID(JSON.parse(str) as CSLList, groupId);
 }
 
@@ -356,20 +404,20 @@ export async function refreshZBib(
   if (!(await isZoteroRunning(port))) return null;
 
   const cachePath = normalizePath(`${CACHE_DIR}/zotero-library-${groupId}.json`);
-  if (!(await app.vault.adapter.exists(cachePath))) return null;
+  if (!(await vaultAdapter().exists(cachePath))) return null;
 
-  const mList = (await getZModified(port, groupId, since)) as CSLList;
+  const mList = (await getZModified(port, groupId, since)) as BbtCslEntry[] | null;
   if (!mList?.length) return null;
 
   const modified = new Map<string, PartialCSLEntry>();
   const newKeys = new Set<string>();
 
   for (const mod of mList) {
-    mod.id = (mod as any).citekey || (mod as any)['citation-key'];
+    mod.id = mod.citekey || mod['citation-key'];
     if (!mod.id) continue;
     // BBT's item.search response includes `key` (the stable 8-char Zotero
     // item key). Promote it to _zoteroKey so stale-citekey detection works.
-    if (!mod._zoteroKey && (mod as any).key) mod._zoteroKey = (mod as any).key;
+    if (!mod._zoteroKey && mod.key) mod._zoteroKey = mod.key;
     modified.set(mod.id, mod);
     newKeys.add(mod.id);
   }
@@ -380,7 +428,7 @@ export async function refreshZBib(
     if (entry._zoteroKey) zoteroKeyToNewId.set(entry._zoteroKey, id);
   }
 
-  const rawList = JSON.parse(await app.vault.adapter.read(cachePath)) as CSLList;
+  const rawList = JSON.parse(await vaultAdapter().read(cachePath)) as CSLList;
 
   // Drop stale entries: same Zotero item (_zoteroKey) but old citekey.
   const list = rawList.filter((item) => {
@@ -395,18 +443,20 @@ export async function refreshZBib(
       list[i] = modified.get(list[i].id)!;
     }
   }
-  for (const key of newKeys) list.push(modified.get(key)!);
+  for (const key of newKeys) list.push(modified.get(key));
 
-  await app.vault.adapter.write(cachePath, JSON.stringify(list));
+  await vaultAdapter().write(cachePath, JSON.stringify(list));
   return { list: applyGroupID(list, groupId), modified };
 }
 
 // ─── Zotero native REST API (Zotero 7/8, no Better BibTeX) ──────────────────
 
-async function zoteroNativeGet(
+/** A page from Zotero's native local API. `data` is the JSON body, whose
+ *  shape depends on the endpoint (items, collections, …), so callers name it. */
+async function zoteroNativeGet<T = unknown>(
   port: string,
   apiPath: string
-): Promise<{ data: any; version: number; totalResults?: number }> {
+): Promise<{ data: T; version: number; totalResults?: number }> {
   const resp = await requestUrl({
     url: `http://127.0.0.1:${port}${apiPath}`,
     method: 'GET',
@@ -420,7 +470,7 @@ async function zoteroNativeGet(
   );
   const totalRaw = headers['total-results'] ?? headers['Total-Results'];
   const totalResults = totalRaw != null ? Number(totalRaw) : undefined;
-  return { data: resp.json, version, totalResults };
+  return { data: resp.json as T, version, totalResults };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -428,15 +478,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Fetch one page, retrying transient failures with exponential backoff. */
-async function fetchNativePageWithRetry(
+async function fetchNativePageWithRetry<T = unknown>(
   port: string,
   apiPath: string,
   attempts = 4
-): Promise<{ data: any; version: number; totalResults?: number }> {
+): Promise<{ data: T; version: number; totalResults?: number }> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await zoteroNativeGet(port, apiPath);
+      return await zoteroNativeGet<T>(port, apiPath);
     } catch (e) {
       lastErr = e;
       await sleep(500 * 2 ** i); // 0.5s, 1s, 2s …
@@ -450,17 +500,17 @@ async function fetchAllZoteroItemsNative(
   libraryType: 'users' | 'groups',
   libraryId: number | string,
   since?: number
-): Promise<{ items: any[]; version: number }> {
+): Promise<{ items: ZoteroItem[]; version: number }> {
   const limit = 100;
   let start = 0;
-  const allItems: any[] = [];
+  const allItems: ZoteroItem[] = [];
   let libraryVersion = 0;
   const sinceParam = since !== undefined ? `&since=${since}` : '';
   let hasMore = true;
   let expectedTotal: number | undefined;
 
   while (hasMore) {
-    const { data, version, totalResults } = await fetchNativePageWithRetry(
+    const { data, version, totalResults } = await fetchNativePageWithRetry<ZoteroItem[]>(
       port,
       `/api/${libraryType}/${libraryId}/items?format=json&itemType=-attachment&limit=${limit}&start=${start}${sinceParam}`
     );
@@ -492,7 +542,11 @@ async function fetchAllZoteroItemsNative(
   return { items: allItems, version: libraryVersion };
 }
 
-import { zoteroItemToCSL as _zoteroItemToCSL } from './zotero-csl';
+import {
+  zoteroItemToCSL as _zoteroItemToCSL,
+  type ZoteroItem,
+  type ZoteroTag,
+} from './zotero-csl';
 
 function nativeLibraryCoords(groupId: number): {
   libraryType: 'users' | 'groups';
@@ -507,7 +561,7 @@ export async function isZoteroRunningNative(
   port: string = DEFAULT_ZOTERO_PORT
 ): Promise<boolean> {
   try {
-    const result = await Promise.race<{ data: any; version: number } | null>([
+    const result = await Promise.race<{ data: unknown; version: number } | null>([
       zoteroNativeGet(port, '/api/users/0/items?limit=1'),
       new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2000)),
     ]);
@@ -518,6 +572,19 @@ export async function isZoteroRunningNative(
 }
 
 /** A Zotero collection as the local API returns it (only what we need). */
+/**
+ * The parsed bibliography cache file (`bib-cache.json`). Read defensively, so
+ * every field is optional.
+ */
+interface BibCacheFile {
+  items?: PartialCSLEntry[];
+  version?: number;
+  builtAt?: number;
+  itemCount?: number;
+  /** The CSL mapping version the cache was built with (see `needsMappingRemap`). */
+  mappingVersion?: number;
+}
+
 export interface ZoteroCollectionRaw {
   key: string;
   name: string;
@@ -539,7 +606,7 @@ export async function fetchCollectionsNative(
   const limit = 100;
   const out: ZoteroCollectionRaw[] = [];
   for (let start = 0; ; start += limit) {
-    const { data } = await fetchNativePageWithRetry(
+    const { data } = await fetchNativePageWithRetry<ZoteroItem[]>(
       port,
       `/api/${libraryType}/${libraryId}/collections?format=json&limit=${limit}&start=${start}`
     );
@@ -569,7 +636,9 @@ export async function getZUserGroupsNative(
   ];
 
   try {
-    const { data } = await zoteroNativeGet(port, '/api/users/0/groups');
+    const { data } = await zoteroNativeGet<
+      Array<{ id: number; data?: { name?: string } }>
+    >(port, '/api/users/0/groups');
     if (Array.isArray(data)) {
       for (const g of data) {
         groups.push({ id: g.id, name: g.data?.name ?? `Group ${g.id}` });
@@ -594,14 +663,16 @@ export async function getZBibNative(
   await ensureVaultDir(CACHE_DIR);
 
   if (loadCached || !isRunning) {
-    if (await app.vault.adapter.exists(cachePath)) {
-      const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
+    if (await vaultAdapter().exists(cachePath)) {
+      const cacheData = JSON.parse(
+      await vaultAdapter().read(cachePath)
+    ) as BibCacheFile;
       // A CSL-mapping change must re-map EVERY entry, but this persisted list is
       // only delta-refreshed otherwise. Serve it as-is only when it is current
       // (or Zotero is down — then the migration runs on the next load with it up).
       if (!needsMappingRemap(cacheData) || !isRunning) {
         return {
-          list: applyGroupID(cacheData.items as CSLList, groupId),
+          list: applyGroupID(cacheData.items, groupId),
           version: cacheData.version ?? 0,
         };
       }
@@ -624,7 +695,7 @@ export async function getZBibNative(
   }
 
   const itemCount = await fetchLibraryCountNative(port, groupId);
-  await app.vault.adapter.write(
+  await vaultAdapter().write(
     cachePath,
     JSON.stringify({
       items: cslItems,
@@ -684,7 +755,8 @@ export async function fetchTrashedItemKeysNative(
         `/api/${libraryType}/${libraryId}/items/trash?format=json&limit=${limit}&start=${start}`
       );
       if (!Array.isArray(data) || data.length === 0) break;
-      for (const it of data) {
+      for (const raw of data) {
+        const it = raw as ZoteroItem;
         const key = String(it?.key ?? it?.data?.key ?? '');
         if (key) out.add(key);
       }
@@ -743,14 +815,14 @@ async function fetchItemsSinceNative(
   libraryID: number,
   itemType: string,
   since: number
-): Promise<{ items: any[]; version: number }> {
+): Promise<{ items: ZoteroItem[]; version: number }> {
   const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
   const limit = 100;
   let start = 0;
-  const out: any[] = [];
+  const out: ZoteroItem[] = [];
   let version = 0;
   for (;;) {
-    const { data, version: v } = await zoteroNativeGet(
+    const { data, version: v } = await zoteroNativeGet<ZoteroItem[]>(
       port,
       `/api/${libraryType}/${libraryId}/items?itemType=${itemType}&since=${since}&format=json&limit=${limit}&start=${start}`
     );
@@ -783,7 +855,7 @@ export async function fetchChildDeltaNative(
     const att = await fetchItemsSinceNative(port, libraryID, 'attachment', since);
     const ann = await fetchItemsSinceNative(port, libraryID, 'annotation', since);
     const toItem = (
-      it: any
+      it: ZoteroItem
     ): { key: string; parentItem: string; dateModified: string } | null => {
       const key = String(it?.key ?? it?.data?.key ?? '');
       const parentItem = String(it?.data?.parentItem ?? '');
@@ -817,7 +889,7 @@ export async function fetchItemParentNative(
   if (!itemKey || !(await isZoteroRunningNative(port))) return null;
   const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
   try {
-    const { data } = await zoteroNativeGet(
+    const { data } = await zoteroNativeGet<ZoteroItem>(
       port,
       `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`
     );
@@ -869,27 +941,29 @@ export async function refreshZBibNative(
   if (!(await isZoteroRunningNative(port))) return null;
 
   const cachePath = normalizePath(`${CACHE_DIR}/zotero-native-library-${groupId}.json`);
-  if (!(await app.vault.adapter.exists(cachePath))) return null;
+  if (!(await vaultAdapter().exists(cachePath))) return null;
 
   // One-time migration: caches written before per-item `_version` tracking
   // have no versions on most entries, so per-key render-cache invalidation
   // can't work. The same pass backfills `_creators` (ordered creators with
   // Zotero's own creatorType), which older caches lack. Force a full re-fetch
   // (since=0) so every entry gets both written back; skipped once migrated.
-  const cacheData = JSON.parse(await app.vault.adapter.read(cachePath));
+  const cacheData = JSON.parse(
+      await vaultAdapter().read(cachePath)
+    ) as BibCacheFile;
 
   // Force a full re-fetch when the CSL MAPPING changed — the delta would never
   // re-map an item unchanged in Zotero.
   if (needsMappingRemap(cacheData)) sinceVersion = 0;
 
-  const list0 = cacheData.items as CSLList;
+  const list0 = cacheData.items as StoredCSLEntry[];
   let versionedCount = 0;
   let creatorsMissing = false;
   for (const it of list0) {
     if (it._version != null) versionedCount++;
     const hasCreators =
-      !Array.isArray((it as any)._creators) &&
-      CSL_CREATOR_KEYS.some((k) => Array.isArray((it as any)[k]) && (it as any)[k].length);
+      !Array.isArray(it._creators) &&
+      CSL_CREATOR_KEYS.some((k) => Array.isArray(it[k]) && (it[k] as unknown[]).length);
     if (hasCreators) creatorsMissing = true;
   }
   if (list0.length && (versionedCount < list0.length || creatorsMissing)) {
@@ -935,7 +1009,7 @@ export async function refreshZBibNative(
     if (entry._zoteroKey) zoteroKeyToNewId.set(entry._zoteroKey, id);
   }
 
-  const rawList = cacheData.items as CSLList;
+  const rawList = cacheData.items;
 
   // Old cache citekey → new citekey, matched by the STABLE Zotero key (`_zoteroKey`).
   // A rename must be REMAPPED in the search recents, not merely dropped.
@@ -964,7 +1038,7 @@ export async function refreshZBibNative(
       list[i] = modified.get(list[i].id)!;
     }
   }
-  for (const key of newKeys) list.push(modified.get(key)!);
+  for (const key of newKeys) list.push(modified.get(key));
 
   // Drop items now in the Zotero TRASH. This MUST run even when the delta is
   // EMPTY: `/items` never returns trashed items, so a trashed item can never
@@ -984,7 +1058,7 @@ export async function refreshZBibNative(
       list.push(...kept);
     }
     for (const [k, v] of [...modified.entries()]) {
-      const zk = (v as any)._zoteroKey;
+      const zk = v._zoteroKey;
       if (typeof zk === 'string' && trashed.has(zk)) modified.delete(k);
     }
   }
@@ -992,7 +1066,7 @@ export async function refreshZBibNative(
   // Nothing changed at all → let the caller keep the existing cache.
   if (!rawItems?.length && pruned === 0) return null;
 
-  await app.vault.adapter.write(
+  await vaultAdapter().write(
     cachePath,
     JSON.stringify({
       items: list,
@@ -1012,15 +1086,24 @@ export async function refreshZBibNative(
   };
 }
 
+/** What the per-citekey lookup returns: the key, a deep link, and its PDFs. */
+export interface NativeItemJSON {
+  citekey: string;
+  citationKey: string;
+  /** A `zotero://select/…` deep link for the item. */
+  select: string;
+  attachments: Array<{ path: string }>;
+}
+
 export async function getItemJSONFromCiteKeysNative(
   port: string = DEFAULT_ZOTERO_PORT,
   citeKeys: string[],
   libraryID: number
-): Promise<any[] | null> {
+): Promise<NativeItemJSON[] | null> {
   if (!(await isZoteroRunningNative(port))) return null;
 
   const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
-  const results: any[] = [];
+  const results: NativeItemJSON[] = [];
 
   // Parallelize per-key fetches (concurrency ~6) — sequential HTTP to the
   // local Zotero API for 30+ keys is what made cold renders take minutes.
@@ -1028,15 +1111,15 @@ export async function getItemJSONFromCiteKeysNative(
   const queue = [...citeKeys];
   const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
     while (queue.length) {
-      const citeKey = queue.shift()!;
+      const citeKey = queue.shift();
       try {
-        const { data } = await zoteroNativeGet(
+        const { data } = await zoteroNativeGet<ZoteroItem[]>(
           port,
           `/api/${libraryType}/${libraryId}/items?format=json&q=${encodeURIComponent(citeKey)}&limit=10`
         );
         if (!Array.isArray(data)) continue;
 
-        const match = data.find((item: any) => item.data?.citationKey === citeKey);
+        const match = data.find((item) => item.data?.citationKey === citeKey);
         if (!match) continue;
 
         const itemKey = match.key;
@@ -1045,7 +1128,7 @@ export async function getItemJSONFromCiteKeysNative(
             ? `zotero://select/library/items/${itemKey}`
             : `zotero://select/groups/${libraryID}/items/${itemKey}`;
 
-        const { data: children } = await zoteroNativeGet(
+        const { data: children } = await zoteroNativeGet<ZoteroItem[]>(
           port,
           `/api/${libraryType}/${libraryId}/items/${itemKey}/children?format=json&itemType=attachment`
         );
@@ -1057,14 +1140,14 @@ export async function getItemJSONFromCiteKeysNative(
         // PDF links "used to work". Support both shapes.
         const attachments = Array.isArray(children)
           ? children
-              .filter((c: any) => {
+              .filter((c) => {
                 if (c.data?.contentType !== 'application/pdf') return false;
                 const href = c.links?.enclosure?.href;
                 return href || c.data?.path;
               })
-              .map((c: any) => {
-                const href = c.links?.enclosure?.href as string | undefined;
-                const path = c.data?.path as string | undefined;
+              .map((c) => {
+                const href = c.links?.enclosure?.href;
+                const path = c.data?.path;
                 // Normalize file:///... → plain filesystem path; strip query.
                 const raw = href ?? path;
                 const clean =
@@ -1088,9 +1171,9 @@ export async function getItemJSONFromCiteKeysNative(
 
 /** The item's children, bucketed the way the note-context mappers want them. */
 export interface RawZoteroChildren {
-  attachments: any[];
-  annotations: any[];
-  notes: any[];
+  attachments: ZoteroItem[];
+  annotations: ZoteroItem[];
+  notes: ZoteroItem[];
 }
 
 /**
@@ -1120,9 +1203,9 @@ export async function fetchItemChildrenNative(
   const base = `/api/${libraryType}/${libraryId}/items/${itemKey}/children`;
   const safeGet = async (
     path: string
-  ): Promise<{ data: any } | null> => {
+  ): Promise<{ data: ZoteroItem[] } | null> => {
     try {
-      return await zoteroNativeGet(port, path);
+      return await zoteroNativeGet<ZoteroItem[]>(port, path);
     } catch {
       return null;
     }
@@ -1132,9 +1215,9 @@ export async function fetchItemChildrenNative(
     safeGet(`${base}?itemType=annotation&format=json`),
   ]);
 
-  const attachments: any[] = [];
-  const annotations: any[] = [];
-  const notes: any[] = [];
+  const attachments: ZoteroItem[] = [];
+  const annotations: ZoteroItem[] = [];
+  const notes: ZoteroItem[] = [];
   const seen = new Set<string>();
 
   for (const item of [
@@ -1180,14 +1263,14 @@ export async function fetchItemTagsNative(
   if (!(await isZoteroRunningNative(port))) return null;
   const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
   try {
-    const { data } = await zoteroNativeGet(
+    const { data } = await zoteroNativeGet<ZoteroItem>(
       port,
       `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`
     );
     const tags = data?.data?.tags;
     if (!Array.isArray(tags)) return null;
     return tags
-      .map((t: any) => t?.tag)
+      .map((t: ZoteroTag) => t?.tag)
       .filter((t: unknown): t is string => typeof t === 'string' && !!t);
   } catch {
     return null;
@@ -1207,7 +1290,7 @@ export async function fetchItemRelationsNative(
   if (!(await isZoteroRunningNative(port))) return [];
   const { libraryType, libraryId } = nativeLibraryCoords(libraryID);
   try {
-    const { data } = await zoteroNativeGet(
+    const { data } = await zoteroNativeGet<ZoteroItem>(
       port,
       `/api/${libraryType}/${libraryId}/items/${itemKey}?format=json`
     );
@@ -1246,9 +1329,9 @@ export async function citekeysForItemKeys(
     { length: Math.min(6, queue.length) },
     async () => {
       while (queue.length) {
-        const key = queue.shift()!;
+        const key = queue.shift();
         try {
-          const { data } = await zoteroNativeGet(
+          const { data } = await zoteroNativeGet<ZoteroItem>(
             port,
             `/api/${libraryType}/${libraryId}/items/${key}?format=json`
           );
@@ -1289,18 +1372,16 @@ export async function getCSLEntriesForCiteKeysNative(
     { length: Math.min(CONCURRENCY, queue.length) },
     async () => {
       while (queue.length) {
-        const citeKey = queue.shift()!;
+        const citeKey = queue.shift();
         if (seen.has(citeKey)) continue;
         seen.add(citeKey);
         try {
-          const { data } = await zoteroNativeGet(
+          const { data } = await zoteroNativeGet<ZoteroItem[]>(
             port,
             `/api/${libraryType}/${libraryId}/items?format=json&itemType=-attachment&limit=25&q=${encodeURIComponent(citeKey)}`
           );
           if (!Array.isArray(data)) continue;
-          const match = data.find(
-            (it: any) => it.data?.citationKey === citeKey
-          );
+          const match = data.find((it) => it.data?.citationKey === citeKey);
           if (!match) continue;
           const csl = _zoteroItemToCSL(match, groupId);
           if (csl) out.push(csl);
@@ -1318,11 +1399,11 @@ export async function getItemJSONFromCiteKeys(
   port: string = DEFAULT_ZOTERO_PORT,
   citeKeys: string[],
   libraryID: number
-): Promise<any[] | null> {
+): Promise<PartialCSLEntry[] | null> {
   if (!(await isZoteroRunning(port))) return null;
 
   try {
-    const data = await bbtPost(port, {
+    const data = await bbtPost<string>(port, {
       jsonrpc: '2.0',
       method: 'item.export',
       params: [citeKeys, '36a3b0b5-bad0-4a04-b79b-441c7cef77db', libraryID],
@@ -1333,9 +1414,10 @@ export async function getItemJSONFromCiteKeys(
       return null;
     }
 
-    return Array.isArray(data.result)
-      ? JSON.parse(data.result[2]).items
-      : JSON.parse(data.result).items;
+    const parsed = Array.isArray(data.result)
+      ? (JSON.parse(String(data.result[2])) as { items?: PartialCSLEntry[] })
+      : (JSON.parse(String(data.result)) as { items?: PartialCSLEntry[] });
+    return parsed.items ?? null;
   } catch (e) {
     console.error(e);
     return null;
@@ -1369,7 +1451,7 @@ export async function searchZoteroNative(
     const url = `/api/${libraryType}/${libraryId}/items?q=${encoded}&format=json&itemType=-attachment&limit=${limit}`;
     debugLog('[sw:zotero-search] GET', `http://127.0.0.1:${port}${url}`);
     try {
-      const { data } = await zoteroNativeGet(port, url);
+      const { data } = await zoteroNativeGet<ZoteroItem[]>(port, url);
       debugLog('[sw:zotero-search] response type=', typeof data, Array.isArray(data) ? `array[${data.length}]` : String(data)?.slice(0, 100));
       if (!Array.isArray(data)) continue;
       for (const item of data) {
@@ -1415,7 +1497,8 @@ export async function searchZoteroBBT(
         params: [conditions, groupId],
       });
       if (!Array.isArray(data?.result)) continue;
-      for (const it of data.result) {
+      for (const raw of data.result) {
+        const it = raw as { citekey?: string; 'citation-key'?: string };
         const id: string = it?.citekey ?? it?.['citation-key'] ?? '';
         if (!id || seen.has(id)) continue;
         seen.add(id);
@@ -1449,13 +1532,13 @@ export async function fetchLibraryChildRowsNative(
     const att = await fetchItemsSinceNative(port, libraryID, 'attachment', 0);
     const ann = await fetchItemsSinceNative(port, libraryID, 'annotation', 0);
     const note = await fetchItemsSinceNative(port, libraryID, 'note', 0);
-    const parentOf = (it: any): string => String(it?.data?.parentItem ?? '');
+    const parentOf = (it: ZoteroItem): string => String(it?.data?.parentItem ?? '');
     return {
       attachments: att.items
         .map((it) => ({
           itemKey: String(it?.key ?? it?.data?.key ?? ''),
           parentItem: parentOf(it),
-          contentType: (it?.data?.contentType ?? null) as string | null,
+          contentType: (it?.data?.contentType ?? null),
         }))
         .filter((r) => r.itemKey && r.parentItem),
       annotations: ann.items

@@ -96,8 +96,8 @@ export function orderByRecency<T extends RecentCandidate>(
 ): T[] {
   const rank = mruRank(recent);
   return [...entries].sort((a, b) => {
-    const ra = rank.has(a.id) ? rank.get(a.id)! : Number.POSITIVE_INFINITY;
-    const rb = rank.has(b.id) ? rank.get(b.id)! : Number.POSITIVE_INFINITY;
+    const ra = rank.has(a.id) ? rank.get(a.id) : Number.POSITIVE_INFINITY;
+    const rb = rank.has(b.id) ? rank.get(b.id) : Number.POSITIVE_INFINITY;
     if (ra !== rb) return ra - rb;
     const da = dateAdded(a);
     const db = dateAdded(b);

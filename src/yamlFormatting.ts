@@ -42,8 +42,8 @@ export function buildYamlFormattingCss(
   const background =
     (opts.titleBackground ?? '').trim() || DEFAULT_YAML_TITLE_BACKGROUND;
   const size =
-    Number.isFinite(opts.titleSize) && (opts.titleSize as number) > 0
-      ? (opts.titleSize as number)
+    Number.isFinite(opts.titleSize) && (opts.titleSize) > 0
+      ? (opts.titleSize)
       : DEFAULT_YAML_TITLE_SIZE;
 
   return `/*

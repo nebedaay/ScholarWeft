@@ -37,10 +37,32 @@ export interface TemplaterInstallResult {
 /** How to treat an existing "/" rule when installing our root rule. */
 export type TemplaterRuleMode = 'default' | 'keep' | 'replace';
 
+/**
+ * Obsidian's plugin manager, as this module drives it (not in the typings).
+ * Templater is toggled through it rather than through a public API.
+ */
+type AppInternals = {
+  plugins?: {
+    plugins?: Record<string, unknown>;
+    disablePlugin?(id: string): Promise<void>;
+    enablePlugin?(id: string): Promise<void>;
+  };
+};
+
+/** A Templater folder-template rule, as its `data.json` stores it. */
+type FolderRule = { folder?: unknown; template?: unknown };
+
+/** Templater's own `data.json` (only the keys this module touches). */
+type TemplaterData = {
+  folder_templates?: unknown[];
+  trigger_on_file_creation?: unknown;
+  [key: string]: unknown;
+};
+
 const normFolder = (f: unknown): string =>
   typeof f === 'string' ? f.replace(/^\/+|\/+$/g, '') : '';
 const isRootRule = (r: unknown): boolean =>
-  !!r && typeof r === 'object' && normFolder((r as any).folder) === '';
+  !!r && typeof r === 'object' && normFolder((r as FolderRule).folder) === '';
 const isOurRule = (r: unknown): boolean =>
   !!r &&
   typeof r === 'object' &&
@@ -131,7 +153,7 @@ export async function installTemplaterTemplates(
     return result;
   }
 
-  const anyApp = app as any;
+  const anyApp = app as unknown as AppInternals;
   const templater = anyApp.plugins?.plugins?.[TEMPLATER_PLUGIN_ID];
   result.templaterDetected = !!templater;
   if (templater) {
@@ -154,7 +176,7 @@ export async function installTemplaterTemplates(
       let data: Record<string, unknown>;
       if (existing && existing.trim()) {
         try {
-          data = JSON.parse(existing);
+          data = JSON.parse(existing) as TemplaterData;
         } catch {
           result.error =
             "Templater's settings file couldn't be parsed, so it was left " +
@@ -179,7 +201,9 @@ export async function installTemplaterTemplates(
       // just appended ours (or would shadow it). Ask (or honour the caller's choice).
       const otherRoot = rules.find((r) => isRootRule(r) && !isOurRule(r));
       if (otherRoot) {
-        const existingTemplate = String((otherRoot as any).template ?? '');
+        const otherTemplate = (otherRoot as FolderRule).template;
+  const existingTemplate =
+    typeof otherTemplate === 'string' ? otherTemplate : '';
         result.existingRootTemplate = existingTemplate;
         if (ruleMode === 'default') {
           // Stop and let the caller ask. `finally` re-enables Templater; nothing
@@ -289,7 +313,7 @@ export async function uninstallTemplaterTemplates(
   restoredRule?: string;
   error?: string;
 }> {
-  const anyApp = plugin.app as any;
+  const anyApp = plugin.app as unknown as AppInternals;
   const adapter = plugin.app.vault.adapter;
   const result: {
     removed: boolean;
@@ -326,7 +350,7 @@ export async function uninstallTemplaterTemplates(
     if (!raw?.trim()) return result;
     let data: Record<string, unknown>;
     try {
-      data = JSON.parse(raw);
+      data = JSON.parse(raw) as TemplaterData;
     } catch {
       result.error = "Templater's settings file couldn't be parsed — left untouched.";
       return result;
@@ -343,14 +367,15 @@ export async function uninstallTemplaterTemplates(
     const hasRootNow = withoutOurs.some((r) => isRootRule(r));
     if (!hasRootNow && (await adapter.exists(bakPath))) {
       try {
-        const prior = JSON.parse(await adapter.read(bakPath));
+        const prior = JSON.parse(await adapter.read(bakPath)) as TemplaterData;
         const priorRules: unknown[] = Array.isArray(prior?.['folder_templates'])
           ? prior['folder_templates']
           : [];
         const priorRoot = priorRules.find((r) => isRootRule(r) && !isOurRule(r));
         if (priorRoot) {
           withoutOurs.push(priorRoot);
-          result.restoredRule = String((priorRoot as any).template ?? '');
+          const priorTemplate = (priorRoot as FolderRule).template;
+  result.restoredRule = typeof priorTemplate === 'string' ? priorTemplate : '';
           changed = true;
         }
         // Restore the trigger only if the backup shows it was off before.

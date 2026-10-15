@@ -114,7 +114,7 @@ export class CitekeyRenameModal extends Modal {
           for (const change of changes) {
             const pairKey = `${change.oldKey}→${change.newKey}`;
             if (!byPair.has(pairKey)) byPair.set(pairKey, []);
-            byPair.get(pairKey)!.push(...change.lines);
+            byPair.get(pairKey)?.push(...change.lines);
           }
           for (const [pair, lines] of byPair) {
             const [oldK, newK] = pair.split('→');
@@ -153,7 +153,7 @@ export class CitekeyRenameModal extends Modal {
       checkRow.setCssStyles({ gap: '8px' });
       checkRow.setCssStyles({ marginTop: '14px' });
 
-      litNotesCheckbox = checkRow.createEl('input', { type: 'checkbox' }) as HTMLInputElement;
+      litNotesCheckbox = checkRow.createEl('input', { type: 'checkbox' });
       litNotesCheckbox.id = 'sw-lit-notes-checkbox';
       litNotesCheckbox.checked = true;
 
@@ -178,7 +178,8 @@ export class CitekeyRenameModal extends Modal {
         text: 'Fix stale citekeys',
         cls: 'mod-cta',
       });
-      confirmBtn.addEventListener('click', async () => {
+      confirmBtn.addEventListener('click', () => {
+      void (async () => {
         confirmBtn.disabled = true;
         confirmBtn.textContent = 'Updating…';
         try {
@@ -186,6 +187,7 @@ export class CitekeyRenameModal extends Modal {
         } finally {
           this.close();
         }
+        })();
       });
     } else {
       // Nothing to fix — just a Close button.

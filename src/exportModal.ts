@@ -1,4 +1,7 @@
-import { App, Modal, Notice, Platform, TFile } from 'obsidian';
+/* eslint-disable @typescript-eslint/no-require-imports -- Electron's dialog and
+   Node's fs are loaded with `require`: esbuild leaves an `import()` of an
+   external module verbatim in the CJS bundle, which fails in the renderer. */
+import { App, FileSystemAdapter, Modal, Notice, Platform, TFile } from 'obsidian';
 import type ReferenceList from './main';
 import type { StyleMapping } from './settings';
 import { runDocumentCompiler } from './exportCompiler';
@@ -122,6 +125,8 @@ interface FileExportHistory {
  * format 'md'    → all three (unlikely to be used, but show all)
  */
 function listTemplates(dir: string, format: ExportFormat): string[] {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return [];
   try {
     const fs = require('fs') as typeof import('fs');
     if (!fs.existsSync(dir)) return [];
@@ -130,7 +135,7 @@ function listTemplates(dir: string, format: ExportFormat): string[] {
       format === 'odt'   ? ['.odt']  :
       format === 'latex' ? ['.tex']  :
       ['.docx', '.odt', '.tex']; // pdf, md — show all
-    return (fs.readdirSync(dir) as string[])
+    return fs.readdirSync(dir)
       .filter((f) => exts.some((ext) => f.toLowerCase().endsWith(ext)))
       .sort();
   } catch {
@@ -284,7 +289,7 @@ export class ExportModal extends Modal {
     contentEl.addClass('sw-export-modal');
     setModalTitle(this, 'Compile / Export Document');
 
-    const adapter = this.plugin.app.vault.adapter as any;
+    const adapter = this.plugin.app.vault.adapter as FileSystemAdapter;
     const vaultBase: string =
       typeof adapter?.getBasePath === 'function' ? adapter.getBasePath() : '';
 
@@ -361,7 +366,7 @@ export class ExportModal extends Modal {
     // templateSwitched only applies when there is no file history AND the
     // note's frontmatter template differs from the globally last-used one.
     const lastTpl = fileHistory?.template ??
-      (this.plugin.settings as any).lastTemplate ?? '';
+      this.plugin.settings.lastTemplate ?? '';
     const lastTplStem = lastTpl.replace(/\.(docx|odt|tex)$/i, '');
     const templateSwitched = !fileHistory && !!fmTpl && fmTpl !== lastTplStem;
     this.buildTemplateDropdown(
@@ -409,7 +414,7 @@ export class ExportModal extends Modal {
     outLeft.createEl('label', { text: 'Output directory' });
     // Default: last-used directory; fall back to the current note's folder.
     const initialOutputDir =
-      fileHistory?.outputDir ?? (this.plugin.settings as any).lastOutputDir ?? noteFolder;
+      fileHistory?.outputDir ?? this.plugin.settings.lastOutputDir ?? noteFolder;
     this.outputDirInput = outLeft.createEl('input', {
       type: 'text',
       value: initialOutputDir,
@@ -419,7 +424,9 @@ export class ExportModal extends Modal {
     this.outputDirInput.setCssStyles({ width: '100%', marginTop: '4px' });
     const chooseBtn = outWrap.createEl('button', { text: 'Choose…' });
     chooseBtn.setCssStyles({ whiteSpace: 'nowrap', flexShrink: '0' });
-    chooseBtn.addEventListener('click', () => this.pickOutputDir());
+    chooseBtn.addEventListener('click', () => {
+      void this.pickOutputDir();
+    });
 
     // "Same folder as source" checkbox — checked when the dir box is empty,
     // clears the box (→ same-as-source) when checked, unchecked on any edit.
@@ -683,9 +690,11 @@ export class ExportModal extends Modal {
       text: 'Compile',
       cls: 'mod-cta',
     });
-    this.runButton.addEventListener('click', () => this.run());
+    this.runButton.addEventListener('click', () => {
+      void this.run();
+    });
     this.filenameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.run();
+      if (e.key === 'Enter') void this.run();
       if (e.key === 'Escape') this.close();
     });
 
@@ -725,7 +734,7 @@ export class ExportModal extends Modal {
         ? `Requires ${missing.map((k) => DEPENDENCIES[k].label).join(', ')}`
         : '';
     }
-    if ((this.formatSelect.selectedOptions[0] as HTMLOptionElement | undefined)?.disabled) {
+    if (this.formatSelect.selectedOptions[0]?.disabled) {
       const firstOk = Array.from(this.formatSelect.options).find((o) => !o.disabled);
       if (firstOk) this.formatSelect.value = firstOk.value;
     }
@@ -927,7 +936,7 @@ export class ExportModal extends Modal {
     // have no native endnote objects and always use the body form instead.
     const nativeOk = format === 'docx' || format === 'odt' || format === 'pdf';
     this.notesModeNative.disabled = !nativeOk;
-    this.notesModeNative.parentElement!.style.opacity = nativeOk ? '' : '0.55';
+    this.notesModeNative.parentElement.style.opacity = nativeOk ? '' : '0.55';
     // The body form is always available: with per-chapter numbering its Notes
     // section is divided by chapter; with continuous numbering it is one list.
     this.notesModeBodyRow.setCssStyles({ display: '' });
@@ -952,7 +961,7 @@ export class ExportModal extends Modal {
     // Compiled-markdown row: show for any exported (non-md) format.
     this.keepIntermediateMdRow.style.display = isMd ? 'none' : '';
     // Citation-style override: meaningless for markdown-only output.
-    this.cslOverrideCb.parentElement!.style.display = isMd ? 'none' : '';
+    this.cslOverrideCb.parentElement.style.display = isMd ? 'none' : '';
     this.cslStyleRow.style.display =
       !isMd && this.cslOverrideCb.checked ? '' : 'none';
     this.refreshDepNote();
@@ -977,7 +986,7 @@ export class ExportModal extends Modal {
       ? listTemplates(this.pluginTplDir, format)
       : [];
     if (pluginTpls.length > 0) {
-      const grp = this.templateSelect.createEl('optgroup') as HTMLOptGroupElement;
+      const grp = this.templateSelect.createEl('optgroup');
       grp.label = 'Built-in templates';
       for (const t of pluginTpls) {
         const o = grp.createEl('option', { text: t });
@@ -990,7 +999,7 @@ export class ExportModal extends Modal {
       ? listTemplates(this.userTplDir, format)
       : [];
     if (userTpls.length > 0) {
-      const grp = this.templateSelect.createEl('optgroup') as HTMLOptGroupElement;
+      const grp = this.templateSelect.createEl('optgroup');
       grp.label = 'Your templates';
       for (const t of userTpls) {
         const o = grp.createEl('option', { text: t });
@@ -1031,7 +1040,7 @@ export class ExportModal extends Modal {
           opt.title = 'Requires a LaTeX distribution (LuaLaTeX)';
         }
       }
-      if ((this.templateSelect.selectedOptions[0] as HTMLOptionElement | undefined)?.disabled) {
+      if (this.templateSelect.selectedOptions[0]?.disabled) {
         const firstOk = Array.from(this.templateSelect.options).find((o) => !o.disabled);
         if (firstOk) this.templateSelect.value = firstOk.value;
       }
@@ -1050,7 +1059,9 @@ export class ExportModal extends Modal {
    *  markdown ("<stem> - compiled.md" in the output folder, else beside the
    *  note), or null when not on desktop. Mirrors write_intermediate(). */
   private compiledMdPath(): string | null {
-    const adapter = this.plugin.app.vault.adapter as any;
+    // Node built-ins do not exist on mobile; this path is desktop-only.
+    if (!Platform.isDesktop) return null;
+    const adapter = this.plugin.app.vault.adapter as FileSystemAdapter;
     if (typeof adapter?.getBasePath !== 'function') return null;
     const vaultBase: string = adapter.getBasePath();
     const raw = this.outputDirInput?.value.trim() ?? '';
@@ -1073,6 +1084,8 @@ export class ExportModal extends Modal {
   /** Show the "skip recompilation" row only when a compiled markdown exists
    *  for the current output folder and the output is not markdown-only. */
   private updateSkipRecompileRow(): void {
+    // Node built-ins do not exist on mobile; this path is desktop-only.
+    if (!Platform.isDesktop) return;
     if (!this.skipRecompileRow) return;
     const fmt = this.formatSelect.value as ExportFormat;
     let exists = false;
@@ -1097,7 +1110,9 @@ export class ExportModal extends Modal {
       | undefined;
     const v = fm?.[key];
     if (v === undefined || v === null) return undefined;
-    return String(v);
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    return '';
   }
 
   /** An integer frontmatter property (handles Obsidian's quoted "2" form). */
@@ -1187,7 +1202,7 @@ export class ExportModal extends Modal {
 
   /** Read this file's export history entry, or null if none exists. */
   private getFileHistory(): FileExportHistory | null {
-    const hist = (this.plugin.settings as any).fileExportHistory as
+    const hist = this.plugin.settings.fileExportHistory as
       Record<string, FileExportHistory> | undefined;
     return hist?.[this.file.path] ?? null;
   }
@@ -1289,7 +1304,7 @@ export class ExportModal extends Modal {
    * property is left untouched, and its remembered value is kept.
    */
   private resetToNoteProperties(): void {
-    const s = this.plugin.settings as any;
+    const s = this.plugin.settings;
     const hist = s.fileExportHistory?.[this.file.path] as
       | FileExportHistory
       | undefined;
@@ -1434,16 +1449,31 @@ export class ExportModal extends Modal {
     try {
       // Obsidian on macOS/Windows ships with @electron/remote for dialog access.
       // Try the modern package first, then fall back to the legacy remote API.
-      let dialog: any = null;
-      try { dialog = require('@electron/remote').dialog; } catch { /* not bundled */ }
-      if (!dialog) dialog = (require('electron') as any).remote?.dialog ?? null;
+      type RemoteDialog = {
+        showOpenDialog(opts: {
+          title?: string;
+          defaultPath?: string;
+          properties: string[];
+        }): Promise<{ canceled: boolean; filePaths: string[] }>;
+      };
+      let dialog: RemoteDialog | null = null;
+      try {
+        dialog = (require('@electron/remote') as { dialog: RemoteDialog }).dialog;
+      } catch {
+        /* not bundled */
+      }
+      if (!dialog) {
+        dialog =
+          (require('electron') as { remote?: { dialog?: RemoteDialog } }).remote
+            ?.dialog ?? null;
+      }
       if (!dialog) throw new Error('no remote dialog');
       // Start the browser at the current input value, then the last-used
       // directory, so the user doesn't have to navigate from Downloads each time.
       const startPath =
         this.outputDirInput.value.trim() ||
         this.getFileHistory()?.outputDir ||
-        (this.plugin.settings as any).lastOutputDir ||
+        this.plugin.settings.lastOutputDir ||
         '';
       const result = await dialog.showOpenDialog({
         title: 'Select output directory',
@@ -1501,6 +1531,8 @@ export class ExportModal extends Modal {
   }
 
   private async run() {
+    // Node built-ins do not exist on mobile; this path is desktop-only.
+    if (!Platform.isDesktop) return;
     if (!Platform.isDesktop) {
       new Notice('Document compile/export is only available on desktop.');
       return;
@@ -1583,7 +1615,7 @@ export class ExportModal extends Modal {
       // recognised as a deliberate edit and overrides the remembered value.
       yamlObserved: this.observedYaml(),
     };
-    const s = this.plugin.settings as any;
+    const s = this.plugin.settings;
     if (!s.fileExportHistory) s.fileExportHistory = {};
     s.fileExportHistory[this.file.path] = entry;
     // Keep history bounded (oldest-first; drop entries beyond 200).
@@ -1634,6 +1666,8 @@ export class ExportModal extends Modal {
    * Zotero is unavailable.
    */
   private async writeStaticBibliography(keys: string[]): Promise<string | null> {
+    // Node built-ins do not exist on mobile; this path is desktop-only.
+    if (!Platform.isDesktop) return null;
     const entries: Record<string, unknown>[] = [];
     for (const k of keys) {
       const e = this.plugin.bibManager.bibCache.get(k) as unknown as
@@ -1669,3 +1703,5 @@ export class ExportModal extends Modal {
     this.contentEl.empty();
   }
 }
+
+/* eslint-enable @typescript-eslint/no-require-imports -- end of file */

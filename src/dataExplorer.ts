@@ -174,9 +174,7 @@ export class DataExplorerView extends ItemView {
     }
     this.setPreview('Rendering…');
 
-    const entry = (this.plugin.bibManager?.bibCache?.get(citekey) ?? null) as
-      | CachedEntry
-      | null;
+    const entry = this.plugin.bibManager?.bibCache?.get(citekey) ?? null;
     if (!entry) {
       this.setPreview(`Item “${citekey}” is no longer in the library.`, true);
       return;
@@ -201,7 +199,7 @@ export class DataExplorerView extends ItemView {
         this.setPreview(
           JSON.stringify(
             ctx,
-            (_k, v) => (typeof v === 'function' ? undefined : v),
+            (_k: string, v: unknown) => (typeof v === 'function' ? undefined : v),
             2
           )
         );

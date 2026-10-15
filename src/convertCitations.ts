@@ -24,7 +24,6 @@ import {
   getCitations,
   mergeContainerExpression,
 } from './parser/parser';
-import type { CitationSegments } from './parser/parser';
 import { convertLinksToPandoc } from './parser/compound';
 
 // Matches [[@key|alias]] / [[@key]] (from transformLinkAliases specialRe).
@@ -241,7 +240,7 @@ function referenceBlock(entry: string): string {
 
 /** Citekeys used by full-reference insertions, in document order (deduped). */
 export function collectReferenceKeys(text: string): string[] {
-  const groups = (getCitationSegments(text, false, true) as CitationSegments[])
+  const groups = (getCitationSegments(text, false, true))
     .filter((g) => g.reference);
   const keys = new Set<string>();
   for (const g of groups) {
@@ -258,7 +257,7 @@ export function substituteReferenceInsertions(
   text: string,
   lookup: (key: string) => string | undefined
 ): string {
-  const groups = (getCitationSegments(text, false, true) as CitationSegments[])
+  const groups = (getCitationSegments(text, false, true))
     .filter((g) => g.reference);
   if (!groups.length) return text;
 

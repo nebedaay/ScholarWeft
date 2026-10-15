@@ -49,12 +49,34 @@ const SUGGEST_DEBUG = false;
  */
 const SUGGEST_DEBOUNCE_MS = 50;
 const LOG = SUGGEST_DEBUG
-  ? (...args: any[]) => console.log('[sw:suggest]', ...args)
-  : (..._args: any[]) => {};
+  ? (...args: unknown[]) => console.log('[sw:suggest]', ...args)
+  : (..._args: unknown[]) => {};
+
+/**
+ * A placeholder row: a Fuse result carrying a flag the row renderer reads.
+ * (Obsidian's suggester internals are reached through `SuggestInternals`.)
+ */
+type FlaggedResult = Fuse.FuseResult<PartialCSLEntry> & {
+  loading?: boolean;
+  noResults?: boolean;
+};
+
+/** The EditorSuggest internals this suggester drives (not in the typings). */
+type SuggestInternals = {
+  suggestEl?: HTMLElement;
+  scope?: {
+    register(
+      mods: string[],
+      key: string,
+      cb: (evt: KeyboardEvent) => void
+    ): void;
+  };
+  suggestions?: { useSelectedItem(evt: KeyboardEvent): void };
+};
 
 // Returns a compact metadata string for a CSL entry: "Smith · 2020 · Nature"
 function getEntryMeta(item: PartialCSLEntry): string {
-  const e = item as any;
+  const e = item;
   const parts: string[] = [];
 
   const first = e.author?.[0];
@@ -64,7 +86,7 @@ function getEntryMeta(item: PartialCSLEntry): string {
   if (year) parts.push(String(year));
 
   const container = e['container-title'];
-  if (container && String(container).length < 50) parts.push(String(container));
+  if (typeof container === 'string' && container.length < 50) parts.push(container);
 
   return parts.filter(Boolean).join(' · ');
 }
@@ -81,11 +103,11 @@ function loadingSuggestion(): Fuse.FuseResult<PartialCSLEntry>[] {
       refIndex: -1,
       score: 0,
       loading: true,
-    } as any,
+    } as FlaggedResult,
   ];
 }
-function isLoadingSuggestion(s: Fuse.FuseResult<PartialCSLEntry>): boolean {
-  return (s as any)?.loading === true || s?.item?.id === LOADING_ITEM_ID;
+function isLoadingSuggestion(s: FlaggedResult): boolean {
+  return s?.loading === true || s?.item?.id === LOADING_ITEM_ID;
 }
 
 // A non-selectable placeholder shown when a non-empty query matches nothing.
@@ -103,11 +125,11 @@ function noResultsSuggestion(): Fuse.FuseResult<PartialCSLEntry>[] {
       refIndex: -1,
       score: 0,
       noResults: true,
-    } as any,
+    } as FlaggedResult,
   ];
 }
-function isNoResultsSuggestion(s: Fuse.FuseResult<PartialCSLEntry>): boolean {
-  return (s as any)?.noResults === true || s?.item?.id === NO_RESULTS_ITEM_ID;
+function isNoResultsSuggestion(s: FlaggedResult): boolean {
+  return s?.noResults === true || s?.item?.id === NO_RESULTS_ITEM_ID;
 }
 /** A row that renders a message and can never be inserted. */
 function isPlaceholderSuggestion(
@@ -142,16 +164,16 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     // `this.app` from this same argument — no need to redeclare/reassign it.
     this.plugin = plugin;
 
-    (this as any).suggestEl.addClass('sw-suggest');
+    (this as unknown as SuggestInternals).suggestEl.addClass('sw-suggest');
     this.installScrollGuard();
-    (this as any).scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
-      (this as any).suggestions.useSelectedItem(evt);
+    (this as unknown as SuggestInternals).scope.register(['Mod'], 'Enter', (evt: KeyboardEvent) => {
+      (this as unknown as SuggestInternals).suggestions.useSelectedItem(evt);
       return false;
     });
     // Tab cycles through previous queries while the popup is open (it would
     // otherwise indent the paragraph). Registered with no modifiers so it only
     // fires in this scope; Shift+Tab is left to Obsidian.
-    (this as any).scope.register([], 'Tab', () => {
+    (this as unknown as SuggestInternals).scope.register([], 'Tab', () => {
       this.cycleHistory();
       return false;
     });
@@ -177,7 +199,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
    * and the matching CSS `overscroll-behavior: contain` backs it up.
    */
   private installScrollGuard(): void {
-    const suggestEl = (this as any).suggestEl as HTMLElement | undefined;
+    const suggestEl = (this as unknown as SuggestInternals).suggestEl;
     if (!suggestEl) return;
     suggestEl.addEventListener(
       'wheel',
@@ -186,7 +208,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         // the list / container is actually scrollable, so the boundary test is
         // right even if the DOM shape changes.
         const candidates = [
-          suggestEl.querySelector('.suggestion') as HTMLElement | null,
+          suggestEl.querySelector('.suggestion'),
           suggestEl,
         ].filter(Boolean) as HTMLElement[];
         const scroller =
@@ -372,7 +394,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         return terminalSuggestion(searchQuery, indexReady);
       }
 
-      LOG(`tier=${tier}, docs=`, (fuse as any)?._docs?.length ?? 0);
+      LOG(`tier=${tier}, docs=`, (fuse as { _docs?: unknown[] })?._docs?.length ?? 0);
 
       // Below the scorer's minimum (MIN_SEARCH_CHARS) there is nothing to rank,
       // so serve by RECENCY and citekey PREFIX instead: 0 characters shows the
@@ -615,7 +637,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
       if (typeof m?.value !== 'string' || !Array.isArray(m.indices)) continue;
       for (const range of m.indices) {
         if (!Array.isArray(range)) continue;
-        const [a, b] = range;
+        const [a, b] = range as unknown[];
         if (typeof a !== 'number' || typeof b !== 'number') continue;
         const term = m.value.substring(a, b + 1);
         if (term) out.push(term);
@@ -626,7 +648,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
 
   /** Author/editor names for display, matching `authorTextOf` in bibManager. */
   private authorTextFor(item: PartialCSLEntry): string {
-    const e = item as { author?: any[]; editor?: any[] };
+    const e = item;
     const parts: string[] = [];
     for (const list of [e.author, e.editor]) {
       for (const n of list ?? []) {
@@ -746,7 +768,7 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
         void this.plugin.bibManager
           .ensureLitNoteForCitekey(id, activeFile)
           .then((created) => {
-            if (created) this.plugin.processReferences();
+            if (created) void this.plugin.processReferences();
           })
           .catch((e) =>
             console.warn('[sw:suggest] could not add a literature note for', id, e)

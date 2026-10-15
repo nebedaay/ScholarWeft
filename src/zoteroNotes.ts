@@ -1,3 +1,4 @@
+import type { ZoteroItem } from './bib/zotero-csl';
 import { App, TFile, requestUrl } from 'obsidian';
 import { debugLog } from './helpers';
 import { promoteShortFirstLine } from './template/markdown';
@@ -75,7 +76,7 @@ export function joinChildNotes(parts: string[]): string {
   return parts.filter((p) => p && p.trim()).join('\n\n---\n\n');
 }
 
-async function getJson(port: string, path: string): Promise<any> {
+async function getJson(port: string, path: string): Promise<unknown> {
   const resp = await requestUrl({
     url: `http://127.0.0.1:${port}${path}`,
     method: 'GET',
@@ -111,7 +112,7 @@ export async function fetchChildNotes(
 
   let lastErr = '';
   for (const base of paths) {
-    let data: any;
+    let data: unknown;
     try {
       data = await getJson(
         port,
@@ -121,12 +122,12 @@ export async function fetchChildNotes(
       lastErr = (e as Error).message;
       continue;
     }
-    const arr: any[] = Array.isArray(data) ? data : [];
+    const arr = (Array.isArray(data) ? data : []) as ZoteroItem[];
     return arr
       .filter(
         (d) => d?.data?.itemType === 'note' && typeof d.data.note === 'string'
       )
-      .map((d) => ({ key: d.key ?? d.data.key, html: d.data.note as string }));
+      .map((d) => ({ key: d.key ?? d.data.key, html: d.data.note }));
   }
   throw new Error(lastErr || 'Zotero: could not fetch child notes');
 }
@@ -174,7 +175,7 @@ async function zoteroKeyOf(app: App, file: TFile): Promise<string | null> {
   // ZotLit — including an export from the Zotero–ZotLit companion — writes the
   // value under `citekey`. Accept all three, or such notes are silently treated
   // as having no Zotero item (`noNotes`) and never get their child notes.
-  const k = readStableKey(fm) ?? fm?.citekey;
+  const k = readStableKey(fm) ?? (fm?.citekey as string | undefined);
   return typeof k === 'string' && k.trim() ? k.trim() : null;
 }
 

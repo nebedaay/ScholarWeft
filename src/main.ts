@@ -2,9 +2,11 @@ import { Prec } from '@codemirror/state';
 import {
   Editor,
   Events,
+  FileSystemAdapter,
   MarkdownFileInfo,
   MarkdownView,
   Menu,
+  MenuItem,
   Modal,
   Notice,
   Platform,
@@ -37,9 +39,10 @@ import { TooltipManager } from './tooltip';
 import { ReferenceListView, viewType } from './view';
 import { DataExplorerView, dataExplorerViewType } from './dataExplorer';
 import { PromiseCapability, debugLog, SW_CACHE_DIR, SW_CACHE_DIR_LEGACY } from './helpers';
-import { isAbsolutePath } from './bib/helpers';
+import { currentVaultAdapter, isAbsolutePath } from './bib/helpers';
 import { findPandoc } from './bib/pandoc';
 import { BibManager, getScopedSettings } from './bib/bibManager';
+import { useVaultAdapter } from './bib/helpers';
 import { CiteSuggest } from './citeSuggest/citeSuggest';
 import { ExportModal } from './exportModal';
 import { ImportModal } from './importModal';
@@ -108,6 +111,60 @@ import { convertNoteToPandoc, convertVaultToPandoc } from './linkedToPandoc';
 import { setupAssets } from './assetSetup';
 import { applyYamlFormatting } from './yamlFormatting';
 
+/**
+ * Obsidian internals this plugin reaches for — none are in the public API, so
+ * each is declared here rather than reached through `as any` (which the
+ * directory review reports as an unsafe member access at every use).
+ */
+type AppInternals = {
+  viewRegistry?: { viewByType?: Record<string, unknown> };
+  plugins?: {
+    enabledPlugins?: Iterable<string>;
+    manifests?: Record<string, { id?: string; name?: string }>;
+    disablePlugin?(id: string): Promise<void>;
+    disablePluginAndSave?(id: string): Promise<void>;
+    plugins?: Record<
+      string,
+      {
+        services?: {
+          template?: {
+            javascriptTemplatesEnabled?: boolean;
+            setJavascriptTemplatesEnabled?: (on: boolean) => Promise<void>;
+          };
+        };
+      }
+    >;
+  };
+};
+
+/** The `Menu` internals this plugin uses (absent from the public typings). */
+type MenuInternals = Menu & {
+  addSections(ids: string[]): MenuInternals;
+  setParentElement(el: HTMLElement): MenuInternals;
+};
+
+/** A `Notice` doubling as a progress bar (Obsidian's internal `setProgress`). */
+type ProgressNotice = Notice & {
+  setProgress?: (done: number, total: number) => void;
+};
+
+/**
+ * A settings file as loaded from disk, including fields older builds wrote.
+ * `loadData()` is untyped, and the migration below both reads and deletes these.
+ */
+type LegacySettings = Partial<ReferenceListSettings> & {
+  pathToBibliography?: string;
+  addNoteForLinkedCitations?: boolean;
+  [key: string]: unknown;
+};
+
+/** The persisted cited-keys index (`cited-keys.json`). */
+interface CitedKeysIndex {
+  builtAt?: number;
+  version?: number;
+  [key: string]: unknown;
+}
+
 const bibliographyExtensions = new Set(['bib', 'json', 'yaml', 'yml']);
 
 /**
@@ -161,7 +218,8 @@ function bibliographyMatchesPath(
 
   if (isAbsolutePath(bibliography)) {
     // Absolute path: compare normalised strings directly.
-    const vaultRoot = (app.vault.adapter as any).getBasePath?.() ?? '';
+    const vaultRoot =
+      (currentVaultAdapter() as FileSystemAdapter).getBasePath() ?? '';
     const targetAbs = vaultRoot ? `${vaultRoot}/${targetPath}` : targetPath;
     return bibliography.replace(/\\/g, '/') === targetAbs.replace(/\\/g, '/');
   }
@@ -280,7 +338,7 @@ export default class ReferenceList extends Plugin {
     // Obsidian marks the plugin as failed (toggle disabled, settings
     // unavailable). Whichever copy loads first owns the view; this one still
     // loads and works.
-    const viewRegistry = (this.app as any).viewRegistry;
+    const viewRegistry = (this.app as unknown as AppInternals).viewRegistry;
     if (viewRegistry?.viewByType && viewType in viewRegistry.viewByType) {
       console.warn(
         `ScholarWeft: view type "${viewType}" is already registered — the ancestral "Pandoc Reference List" plugin (or an earlier ScholarWeft) is enabled. Disable it and restart Obsidian to restore ScholarWeft's reference sidebar.`
@@ -307,6 +365,9 @@ export default class ReferenceList extends Plugin {
     }
 
     this.emitter = new Events();
+    // Hand the vault adapter to the module-level bibliography helpers, which
+    // have no plugin reference of their own (and must not use the global `app`).
+    useVaultAdapter(this.app.vault.adapter);
     this.bibManager = new BibManager(this);
     // Restore the persisted citation index now that bibManager exists.
     if (this._pendingCitedKeysIndex) {
@@ -390,7 +451,9 @@ export default class ReferenceList extends Plugin {
         // Calling rerender(true) triggers a full re-parse so formatted citations
         // appear without the user having to switch away and back.
         this.app.workspace.getLeavesOfType('markdown').forEach((leaf) => {
-          const mv = leaf.view as any;
+          const mv = leaf.view as MarkdownView & {
+            previewMode?: { rerender?: (force?: boolean) => void };
+          };
           if (mv?.getMode?.() === 'preview') {
             mv.previewMode?.rerender?.(true);
           }
@@ -457,10 +520,10 @@ export default class ReferenceList extends Plugin {
     ]);
 
     // Attempt to auto-detect Pandoc on desktop if not already configured.
-    findPandoc().then((found) => {
+    void findPandoc().then((found) => {
       if (found && !this.settings.pathToPandoc) {
         this.settings.pathToPandoc = found;
-        this.saveSettings();
+        void this.saveSettings();
       }
     });
 
@@ -482,7 +545,7 @@ export default class ReferenceList extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       const hasLeaf = this.app.workspace.getLeavesOfType(viewType).length > 0;
       if (!hasLeaf) {
-        this.initLeaf();
+        void this.initLeaf();
       }
       this.checkConflictingPlugins();
       void this.applyPendingSetup();
@@ -496,7 +559,7 @@ export default class ReferenceList extends Plugin {
       id: 'focus-reference-list-view',
       name: t('Show reference list'),
       callback: async () => {
-        this.initLeaf();
+        void this.initLeaf();
       },
     });
 
@@ -525,7 +588,7 @@ export default class ReferenceList extends Plugin {
       id: 'open-data-explorer',
       name: t('Open Zotero data explorer'),
       callback: async () => {
-        this.initDataExplorerLeaf();
+        void this.initDataExplorerLeaf();
       },
     });
 
@@ -606,18 +669,18 @@ export default class ReferenceList extends Plugin {
       callback: async () => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view?.file) return;
-        const progress = new Notice('Creating literature notes…', 0);
+        const progress = new Notice('Creating literature notes…', 0) as ProgressNotice;
         // Force the progress bar visible immediately (indeterminate until the
         // first item completes).
-        (progress as any).setProgress?.(0, 0);
+        progress.setProgress?.(0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes(
           { file: view.file },
-          (done, total) => (progress as any).setProgress?.(done, total)
+          (done, total) => progress.setProgress?.(done, total)
         );
         progress.hide();
         // Re-render the sidebar reference list so per-entry buttons flip from
         // "Create literature note" to "Open literature note".
-        this.processReferences();
+        void this.processReferences();
         new Notice(
           missingKeys.length
             ? `Created literature notes for ${created}/${missingKeys.length} missing citations.`
@@ -631,17 +694,17 @@ export default class ReferenceList extends Plugin {
       id: 'create-missing-lit-notes-vault',
       name: t('Create literature notes for citations lacking notes (vault)'),
       callback: async () => {
-        const progress = new Notice('Creating literature notes…', 0);
+        const progress = new Notice('Creating literature notes…', 0) as ProgressNotice;
         // Force the progress bar visible immediately (indeterminate until the
         // first item completes).
-        (progress as any).setProgress?.(0, 0);
+        progress.setProgress?.(0, 0);
         const { created, missingKeys } = await this.bibManager.createMissingLitNotes(
           { allVault: true },
-          (done, total) => (progress as any).setProgress?.(done, total)
+          (done, total) => progress.setProgress?.(done, total)
         );
         progress.hide();
         // Re-render the sidebar so entry buttons reflect the new notes.
-        this.processReferences();
+        void this.processReferences();
         new Notice(
           missingKeys.length
             ? `Created literature notes for ${created}/${missingKeys.length} missing citations vault-wide.`
@@ -766,7 +829,7 @@ export default class ReferenceList extends Plugin {
 
             const activeView = app.workspace.getActiveViewOfType(MarkdownView);
             if (activeView && file === activeView.file) {
-              this.processReferences();
+              void this.processReferences();
             }
           },
           100,
@@ -786,7 +849,7 @@ export default class ReferenceList extends Plugin {
             app.workspace.iterateRootLeaves((rootLeaf) => {
               if (rootLeaf === leaf) {
                 if (leaf.view instanceof MarkdownView) {
-                  this.processReferences();
+                  void this.processReferences();
                 } else {
                   this.view?.setNoContentMessage();
                 }
@@ -822,7 +885,7 @@ export default class ReferenceList extends Plugin {
             const activeView = app.workspace.getActiveViewOfType(MarkdownView);
             if (activeView?.file instanceof TFile) {
               this.bibManager.fileCache.delete(activeView.file);
-              this.processReferences();
+              void this.processReferences();
             }
           },
           100,
@@ -853,7 +916,7 @@ export default class ReferenceList extends Plugin {
             // live-preview viewport (vanishing paragraphs).
             if (this.app.workspace.getActiveFile()?.path === file.path) {
               this.bibManager.invalidateFile(file);
-              this.processReferences();
+              void this.processReferences();
             }
           },
           150,
@@ -886,7 +949,7 @@ export default class ReferenceList extends Plugin {
       )
     );
 
-    (async () => {
+    void (async () => {
       this.initStatusBar();
       this.setStatusBarLoading();
 
@@ -905,7 +968,7 @@ export default class ReferenceList extends Plugin {
       if (activeView?.file) {
         this.bibManager.invalidateFile(activeView.file);
       }
-      this.processReferences();
+      void this.processReferences();
     })();
   }
 
@@ -918,7 +981,7 @@ export default class ReferenceList extends Plugin {
    * remains — the user asked to be reminded rather than have it silenced.
    */
   private checkConflictingPlugins(): void {
-    const pm = (this.app as any).plugins;
+    const pm = (this.app as unknown as AppInternals).plugins;
     if (!pm) return;
     const acked = new Set(this.settings.conflictKeepPlugins ?? []);
     const enabled: string[] = Array.from(pm.enabledPlugins ?? []);
@@ -959,7 +1022,9 @@ export default class ReferenceList extends Plugin {
     // and no-ops on already-recorded keys, so this stays safe to call.
     const content = await this.app.vault.cachedRead(file);
     if (!/^##[ \t]+Notes[ \t]*$/m.test(content)) return null;
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as
+      | Record<string, unknown>
+      | undefined;
     const raw = readStableKey(fm) ?? fm?.citekey;
     if (typeof raw !== 'string' || !raw.trim()) return null;
     return /^([A-Za-z0-9]+)(?:g(\d+))?$/.test(raw.trim()) ? raw.trim() : null;
@@ -975,7 +1040,7 @@ export default class ReferenceList extends Plugin {
   private async applyPendingSetup(attempt = 0): Promise<void> {
     const pending = this.settings.pendingSetup ?? [];
     if (pending.length === 0) return;
-    const loaded = (this.app as any).plugins?.plugins ?? {};
+    const loaded = (this.app as unknown as AppInternals).plugins?.plugins ?? {};
     const ready: string[] = [];
     const waiting: string[] = [];
     for (const item of pending) {
@@ -1016,7 +1081,7 @@ export default class ReferenceList extends Plugin {
    * leave that choice alone once we've seen it off while ZotLit was loaded.
    */
   private async ensureZotlitJsTemplates(attempt = 0) {
-    const zotlit = (this.app as any).plugins?.plugins?.['zotlit'];
+    const zotlit = (this.app as unknown as AppInternals).plugins?.plugins?.['zotlit'];
     const svc = zotlit?.services?.template;
     if (!svc?.setJavascriptTemplatesEnabled) {
       if (attempt < 5) {
@@ -1058,10 +1123,12 @@ export default class ReferenceList extends Plugin {
 
       let changed = false;
       try {
-        await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-          const nextBibliography = updateBibliographyPath(
-            file,
-            frontmatter.bibliography,
+        await this.app.fileManager.processFrontMatter(
+          file,
+          (frontmatter: Record<string, unknown>) => {
+            const nextBibliography = updateBibliographyPath(
+              file,
+              frontmatter.bibliography,
             oldPath,
             newPath
           );
@@ -1098,9 +1165,11 @@ export default class ReferenceList extends Plugin {
     ico.addEventListener('click', () => {
       if (isOpen) return;
       const { settings } = this;
-      const menu = (new Menu() as any)
+      // `addSections`/`setParentElement` are Obsidian internals, absent from
+      // the typings.
+      const menu = (new Menu() as MenuInternals)
         .addSections(['settings', 'actions'])
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('settings')
             .setIcon('lucide-message-square')
@@ -1108,10 +1177,10 @@ export default class ReferenceList extends Plugin {
             .setChecked(!!settings.showCitekeyTooltips)
             .onClick(() => {
               this.settings.showCitekeyTooltips = !settings.showCitekeyTooltips;
-              this.saveSettings();
+              void this.saveSettings();
             })
         )
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('settings')
             .setIcon('lucide-at-sign')
@@ -1120,10 +1189,10 @@ export default class ReferenceList extends Plugin {
             .onClick(() => {
               this.settings.enableCiteKeyCompletion =
                 !settings.enableCiteKeyCompletion;
-              this.saveSettings();
+              void this.saveSettings();
             })
         )
-        .addItem((item: any) =>
+        .addItem((item: MenuItem) =>
           item
             .setSection('actions')
             .setIcon('lucide-rotate-cw')
@@ -1138,15 +1207,15 @@ export default class ReferenceList extends Plugin {
                   const cache = this.bibManager.fileCache.get(file);
                   if (cache.source !== this.bibManager) {
                     this.bibManager.fileCache.delete(file);
-                    this.processReferences();
+                    void this.processReferences();
                     return;
                   }
                 }
               }
 
-              this.bibManager.reinit(true);
+              void this.bibManager.reinit(true);
               await this.bibManager.initPromise.promise;
-              this.processReferences();
+              void this.processReferences();
             })
         );
 
@@ -1224,7 +1293,7 @@ export default class ReferenceList extends Plugin {
     // onLayoutReady auto-open doesn't fire on every subsequent desktop restart.
     if (!this.settings.panelAutoOpened) {
       this.settings.panelAutoOpened = true;
-      this.saveSettings();
+      void this.saveSettings();
     }
 
     await this.initPromise.promise;
@@ -1232,7 +1301,7 @@ export default class ReferenceList extends Plugin {
 
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeView) {
-      this.processReferences();
+      void this.processReferences();
     }
   }
 
@@ -1299,21 +1368,21 @@ export default class ReferenceList extends Plugin {
   revealLeaf() {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (!leaves?.length) return;
-    this.app.workspace.revealLeaf(leaves[0]);
+    void this.app.workspace.revealLeaf(leaves[0]);
   }
 
   /** Open (or reveal) the Zotero data explorer in the right sidebar. */
   async initDataExplorerLeaf() {
     const existing = this.app.workspace.getLeavesOfType(dataExplorerViewType);
     if (existing.length) {
-      this.app.workspace.revealLeaf(existing[0]);
+      void this.app.workspace.revealLeaf(existing[0]);
       return;
     }
     // getRightLeaf(false) can be null on mobile / before the workspace is ready.
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: dataExplorerViewType });
-    this.app.workspace.revealLeaf(leaf);
+    void this.app.workspace.revealLeaf(leaf);
   }
 
   private findCitekeyByZoteroKey(zoteroKey: string | null): string | null {
@@ -1791,7 +1860,7 @@ export default class ReferenceList extends Plugin {
         groupName: this.bibManager.libraryNameFor(gid),
       });
       if (f.parent?.path === target) continue;
-      (byGroup.get(gid) ?? byGroup.set(gid, []).get(gid)!).push(f);
+      (byGroup.get(gid) ?? byGroup.set(gid, []).get(gid))?.push(f);
     }
 
     // Group folders whose name no longer matches the library name. Detected by
@@ -1896,7 +1965,7 @@ export default class ReferenceList extends Plugin {
         const folder = this.app.vault.getAbstractFileByPath(from);
         debugLog('[sw:move] rename folder', from, '->', to, 'found=', !!folder);
         if (folder) {
-          await fm.renameFile(folder as never, to);
+          await fm.renameFile(folder, to);
           renamed++;
         }
       } catch (e) {
@@ -2137,7 +2206,7 @@ export default class ReferenceList extends Plugin {
   }
 
   async loadSettings() {
-    const saved = (await this.loadData()) ?? {};
+    const saved = ((await this.loadData()) ?? {}) as LegacySettings;
 
     // Restore the persisted citation index from its own file (.scholar-weft/
     // cited-keys.json) — NOT from data.json, which saveSettings() rewrites and
@@ -2145,7 +2214,7 @@ export default class ReferenceList extends Plugin {
     try {
       const indexPath = normalizePath(`${this.cacheDir}/cited-keys.json`);
       const cached = await this.app.vault.adapter.read(indexPath);
-      const parsed = JSON.parse(cached);
+      const parsed = JSON.parse(cached) as CitedKeysIndex;
       // A v1 index (no `builtAt`) predates the incremental reconciler. Infer a
       // scan watermark from the index file's own mtime — it was last written
       // after every entry was scanned — so the first reconcile after upgrading
@@ -2227,7 +2296,11 @@ export default class ReferenceList extends Plugin {
   private suggestPosition: 'front' | 'back' | null = null;
 
   private positionSuggest() {
-    const suggests = (this.app.workspace as any).editorSuggest?.suggests as unknown[] | undefined;
+    const suggests = (
+      this.app.workspace as unknown as {
+        editorSuggest?: { suggests?: unknown[] };
+      }
+    ).editorSuggest?.suggests;
     if (!Array.isArray(suggests) || !this.citeSuggest) return;
     const idx = suggests.indexOf(this.citeSuggest);
     if (idx === -1) return;
@@ -2443,7 +2516,7 @@ export default class ReferenceList extends Plugin {
 
         cb && cb();
 
-        this.processReferences();
+        void this.processReferences();
       }
     },
     5000,
@@ -2511,7 +2584,9 @@ export default class ReferenceList extends Plugin {
       }
       if (!shouldMigrateKey(fm, content)) continue;
       try {
-        await fileManager.processFrontMatter(file, (front) => {
+        await fileManager.processFrontMatter(
+          file,
+          (front: Record<string, unknown>) => {
           const value = front[LEGACY_ZOTERO_KEY];
           delete front[LEGACY_ZOTERO_KEY];
           if (value !== undefined && value !== null && value !== '') {
@@ -2624,7 +2699,9 @@ export default class ReferenceList extends Plugin {
     const foreign: TFile[] = [];
     const duplicates: string[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as
+        | Record<string, unknown>
+        | undefined;
       const own = fm?.[SW_ZOTERO_ID];
       if (typeof own === 'string' && own) continue;
 
@@ -2768,7 +2845,7 @@ export default class ReferenceList extends Plugin {
       if (groupName) {
         const groupFolder = literatureNoteFolderFor({
           base: folder,
-          groupID: gid!,
+          groupID: gid,
           groupName,
         });
         if (groupFolder && !isInFolder(file.path, groupFolder)) {
@@ -3026,7 +3103,7 @@ export default class ReferenceList extends Plugin {
     const { settings, view } = this;
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     const scopedSettings = activeView
-      ? getScopedSettings(activeView.file)
+      ? getScopedSettings(activeView.file, this.app)
       : null;
 
     // A settings save can re-trigger this while the plugin is being re-created
@@ -3141,10 +3218,12 @@ class BibSnapshotModal extends Modal {
       text: t('Save'),
       cls: 'mod-cta',
     });
-    saveBtn.addEventListener('click', () => this.doSave(input.value.trim()));
+    saveBtn.addEventListener('click', () => {
+        void this.doSave(input.value.trim());
+      });
 
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this.doSave(input.value.trim());
+      if (e.key === 'Enter') void this.doSave(input.value.trim());
       if (e.key === 'Escape') this.close();
     });
 
@@ -3175,7 +3254,9 @@ class BibSnapshotModal extends Modal {
 
       // Add path to the note's bibliography frontmatter key.
       // Pandoc and other tools read this; the plugin uses it for colour comparison.
-      await this.app.fileManager.processFrontMatter(this.file, (fm) => {
+      await this.app.fileManager.processFrontMatter(
+        this.file,
+        (fm: { bibliography?: string | string[] }) => {
         const existing: string[] = Array.isArray(fm.bibliography)
           ? fm.bibliography
           : fm.bibliography ? [fm.bibliography] : [];
@@ -3186,7 +3267,7 @@ class BibSnapshotModal extends Modal {
       });
 
       new Notice(`Bibliography saved to ${savePath}`);
-      this.plugin.bibManager.reinit(true);
+      void this.plugin.bibManager.reinit(true);
       this.close();
     } catch (e) {
       new Notice(`Failed to save bibliography: ${(e as Error).message}`);

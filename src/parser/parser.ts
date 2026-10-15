@@ -88,7 +88,7 @@ function newState(): State {
     shouldCancelSeek: false,
     semicolonAppendedAt: -1,
     segment: [] as Segment[],
-    currentSegment: null as Segment,
+    currentSegment: null,
   };
 }
 
@@ -1219,7 +1219,7 @@ function transformLinkAliases(
         // Stop the token at ']' too: reading mode wraps the anchor text in
         // brackets ("[@key]"), so a token like /@[^\s,;]*/ would swallow the
         // closing bracket and break the citation.
-        const token = /^@[^\s,;\]\[]*/.exec(str.slice(i));
+        const token = /^@[^\s,;[\]]*/.exec(str.slice(i));
         if (token) {
           push('@', i);
           // Map the key characters to the original positions AFTER the '@'
@@ -1366,7 +1366,7 @@ function getCitationSegmentsRaw(
     // would pull an ordinary citation into a `|reference` group. The public
     // wrapper merges AFTER mapping, so reference groups are skipped correctly.
     const groups = getCitationSegmentsRaw(text, ignoreLinks);
-    if (!groups.length) return groups as CitationSegments[];
+    if (!groups.length) return groups;
     return groups.map((group) => {
       const remapped = group.map((seg) => ({
         ...seg,

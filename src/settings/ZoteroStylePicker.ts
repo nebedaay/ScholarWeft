@@ -1,7 +1,7 @@
-import { App, FuzzySuggestModal, Notice } from 'obsidian';
+import { App, FuzzySuggestModal, Notice, Platform } from 'obsidian';
 import type ReferenceList from '../main';
 
-declare const require: (id: string) => any;
+declare const require: (id: string) => unknown;
 
 export interface ZoteroStyle {
   title: string;
@@ -14,11 +14,14 @@ export interface ZoteroStyle {
  * then the default Zotero data dir location for macOS, Windows, and Linux.
  */
 export function zoteroStyleDirs(customDataDir?: string): string[] {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return [];
   if (typeof require !== 'function') return [];
   const os = require('os') as typeof import('os');
   const path = require('path') as typeof import('path');
   const home = os.homedir();
-  const platform = (window as any).process?.platform;
+  const platform = (window as unknown as { process?: { platform?: string } })
+    .process?.platform;
 
   const dataDirs: string[] = [];
   const custom = (customDataDir ?? '').trim();
@@ -54,6 +57,8 @@ export function zoteroStyleDirs(customDataDir?: string): string[] {
  * Falls back to the filename stem when the title can't be extracted.
  */
 export function listZoteroInstalledStyles(customDataDir?: string): ZoteroStyle[] {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return [];
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
 
@@ -107,6 +112,8 @@ export function resolveZoteroStylePath(
   value: string,
   customDataDir?: string
 ): string | null {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return null;
   const v = (value ?? '').trim();
   if (!v) return null;
   if (/^https?:\/\//i.test(v)) return v;

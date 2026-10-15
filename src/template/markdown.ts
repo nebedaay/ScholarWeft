@@ -11,6 +11,7 @@
 // beneath it. We do that on the parsed DOM before conversion, so the shift is
 // exact and never confuses a `#` that is part of the note's prose.
 
+import { winOf } from './dom-window';
 import { htmlToMarkdown } from 'obsidian';
 
 /** Heading tag name → its level, e.g. `H3` → 3. */
@@ -26,7 +27,13 @@ const CODE_LINK_OR_ESCAPABLE_RE =
 function escapeOutsideCode(line: string): string {
   return line.replace(
     CODE_LINK_OR_ESCAPABLE_RE,
-    (match, code, wikilink, mdlink, char) =>
+    (
+      _match: string,
+      code: string,
+      wikilink: string,
+      mdlink: string,
+      char: string
+    ) =>
       code ?? wikilink ?? mdlink ?? `\\${char}`
   );
 }
@@ -86,7 +93,10 @@ export function normalizeHeadingLevels(html: string, topLevel: number): string {
 
   for (const h of headings) {
     const level = Math.min(6, Math.max(1, (levelOf.get(h) ?? min) + delta));
-    const replacement = doc.createElement(`h${level}`);
+    // `createEl` is typed against the known tag names; the level is computed.
+    const replacement = winOf(doc).createEl(
+      `h${level}` as keyof HTMLElementTagNameMap
+    );
     // Move the children across instead of copying `innerHTML`, which the
     // directory review forbids (and which would lose listeners).
     while (h.firstChild) replacement.appendChild(h.firstChild);

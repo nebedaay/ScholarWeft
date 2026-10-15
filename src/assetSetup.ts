@@ -50,7 +50,13 @@ export async function recordTemplateOptIn(
     templateOptIns: [],
   };
   try {
-    const parsed = JSON.parse(await plugin.app.vault.adapter.read(stampPath));
+    const parsed = JSON.parse(
+      await plugin.app.vault.adapter.read(stampPath)
+    ) as {
+      version?: number;
+      hashes?: Record<string, string>;
+      templateOptIns?: string[];
+    };
     if (parsed?.version === 1) {
       data = {
         version: 1,
@@ -103,7 +109,11 @@ export async function setupAssets(plugin: ReferenceList): Promise<void> {
   try {
     const raw = await app.vault.adapter.read(stampPath);
     originalStampJson = raw;
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as {
+      version?: number;
+      hashes?: Record<string, string>;
+      templateOptIns?: string[];
+    };
     if (parsed?.version === 1 && parsed.hashes) stamp = parsed.hashes;
     if (parsed?.version === 1 && Array.isArray(parsed.templateOptIns)) {
       optedIn = parsed.templateOptIns;

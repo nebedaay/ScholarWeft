@@ -61,18 +61,18 @@ function creatorToCSL(
   if (!creator || typeof creator !== 'object' || Array.isArray(creator)) return null;
   const c = creator as Record<string, unknown>;
 
-  if (c.literal) {
-    const lit = String(c.literal).trim();
+  if (typeof c.literal === 'string') {
+    const lit = c.literal.trim();
     if (lit) return { literal: lit };
   }
 
   const result: { family?: string; given?: string } = {};
-  if (c.lastName) {
-    const family = String(c.lastName).trim();
+  if (typeof c.lastName === 'string') {
+    const family = c.lastName.trim();
     if (family) result.family = family;
   }
-  if (c.firstName) {
-    const given = String(c.firstName).trim();
+  if (typeof c.firstName === 'string') {
+    const given = c.firstName.trim();
     if (given) result.given = given;
   }
   // Don't emit an empty name object — it confuses citeproc.
@@ -139,7 +139,7 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
   // version stopped invoking it).
   let parsed: BibTeXParser.Library;
   try {
-    parsed = BibTeXParser.parse(raw) as BibTeXParser.Library;
+    parsed = BibTeXParser.parse(raw);
   } catch (err) {
     console.error('scholar-weft: BibTeX parser threw — file may be severely malformed:', err);
     return [];
@@ -152,7 +152,9 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
         ? e.message
         : typeof e === 'object' && e !== null
         ? JSON.stringify(e)
-        : String(e);
+        : e instanceof Error
+      ? e.message
+      : String(e as string | number | boolean);
     console.warn('scholar-weft: BibTeX parse error:', detail);
   });
 
@@ -176,7 +178,7 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
         entry.fields !== undefined &&
         typeof entry.fields === 'object' &&
         !Array.isArray(entry.fields)
-          ? (entry.fields as Record<string, unknown>)
+          ? (entry.fields)
           : {};
 
       // type: normalise to lowercase; default to 'document'.
@@ -323,14 +325,14 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
 }
 
 export function parseCSLJSON(raw: string): PartialCSLEntry[] {
-  return JSON.parse(raw);
+  return JSON.parse(raw) as PartialCSLEntry[];
 }
 
 export function parseCSLYAML(raw: string): PartialCSLEntry[] {
-  const data = parseYaml(raw);
+  const data = parseYaml(raw) as { references?: PartialCSLEntry[] };
   // pandoc CSL-YAML: top-level array or { references: [...] }
   if (Array.isArray(data)) return data as PartialCSLEntry[];
-  if (Array.isArray(data?.references)) return data.references as PartialCSLEntry[];
+  if (Array.isArray(data?.references)) return data.references;
   return [];
 }
 

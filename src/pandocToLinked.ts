@@ -1,3 +1,4 @@
+import { SegmentType } from './parser/parser';
 import { Notice, TFile } from 'obsidian';
 import type ReferenceList from './main';
 import { getCitationSegments } from 'src/parser/parser';
@@ -60,18 +61,18 @@ function parseBracket(raw: string): ParsedCite | null {
 
   for (const seg of group) {
     switch (seg.type) {
-      case 'bracket':
+      case SegmentType.bracket:
         break;
-      case 'suppressor':
+      case SegmentType.suppressor:
         // "-@key" — suppress author. Applies to the NEXT key.
         pendingSuppress = true;
         break;
-      case 'prefix':
+      case SegmentType.prefix:
         pendingPrefix += seg.val;
         break;
-      case 'at':
+      case SegmentType.at:
         break;
-      case 'key':
+      case SegmentType.key:
         {
           // Trim trailing sentence punctuation that may have been absorbed into
           // the key (e.g. "[@sukayrijAlkawkabAlwahhajnd.]" — the period is not
@@ -89,21 +90,21 @@ function parseBracket(raw: string): ParsedCite | null {
           aliases.push(current);
         }
         break;
-      case 'suffix':
+      case SegmentType.suffix:
         if (current) current.suffix += seg.val;
         else pendingPrefix += seg.val;
         break;
-      case 'locatorSuffix':
+      case SegmentType.locatorSuffix:
         // ", " / " " before a locator or its label — append verbatim so
         // simple locators survive: [@key, 6] -> [[@key|@@, 6]]
         if (current) current.suffix += seg.val;
         else pendingPrefix += seg.val;
         break;
-      case 'locator':
+      case SegmentType.locator:
         if (current) current.suffix += seg.val;
         else pendingPrefix += seg.val;
         break;
-      case 'locatorLabel':
+      case SegmentType.locatorLabel:
         // Only append the label when it literally appears in the source.
         // The parser INFERS a default label for bare-number locators
         // ("page" for "[@key, 6]") — emitting that would rewrite ", 6"
@@ -113,7 +114,7 @@ function parseBracket(raw: string): ParsedCite | null {
           else pendingPrefix += seg.val;
         }
         break;
-      case 'separator':
+      case SegmentType.separator:
         // next cite
         pendingPrefix = '';
         pendingSuppress = false;

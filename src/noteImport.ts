@@ -8,7 +8,7 @@
 // and the `%%sw-managed%%` region are refreshed; the user's own properties and
 // writing are preserved.
 
-import { App, Notice, TFile, normalizePath } from 'obsidian';
+import { App, Notice, Platform, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { debugLog } from './helpers';
 import type { ForeignNoteAnswer } from './modals/foreignNoteModal';
@@ -63,7 +63,7 @@ import {
 } from './template/children-cache';
 import { renderNote } from './template/render';
 
-declare const require: (id: string) => any;
+declare const require: (id: string) => unknown;
 
 const EMPTY_CHILDREN: RawZoteroChildren = {
   attachments: [],
@@ -72,8 +72,11 @@ const EMPTY_CHILDREN: RawZoteroChildren = {
 };
 
 function expandHome(p: string): string {
-  if (p === '~' || p === '~/') return require('os').homedir();
-  if (p.startsWith('~/')) return require('os').homedir() + p.slice(1);
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return p;
+  if (p === '~' || p === '~/') return (require('os') as typeof import('os')).homedir();
+  if (p.startsWith('~/'))
+    return (require('os') as typeof import('os')).homedir() + p.slice(1);
   return p;
 }
 
@@ -84,6 +87,8 @@ function expandHome(p: string): string {
  * value just yields links that don't resolve, never a failure.
  */
 export function resolveZoteroDataDir(configured?: string): string | null {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return null;
   const custom = (configured ?? '').trim();
   if (custom) return expandHome(custom);
   try {
@@ -91,7 +96,8 @@ export function resolveZoteroDataDir(configured?: string): string | null {
     const fs = require('fs') as typeof import('fs');
     const path = require('path') as typeof import('path');
     const home = os.homedir();
-    const platform = (window as any).process?.platform;
+    const platform = (window as unknown as { process?: { platform?: string } })
+    .process?.platform;
     const candidates =
       platform === 'win32'
         ? [path.join(process.env.APPDATA ?? '', 'Zotero', 'Zotero')]
@@ -184,7 +190,8 @@ export async function fetchChildren(
             const citationKey = citekeys.get(k) ?? null;
             // A related item with no citekey can't be linked; keep it out of the
             // list rather than emitting a broken `[[@]]`.
-            return { key: k, citationKey, title: null as string | null };
+            const title: string | null = null;
+            return { key: k, citationKey, title };
           });
           return { ...base, relatedItems: relatedItems.filter((r) => r.citationKey) };
         })()
@@ -235,7 +242,10 @@ function vaultPaths(app: App): Set<string> {
 function recordedCitekeyFor(app: App, notePath: string): string | null {
   const file = app.vault.getAbstractFileByPath(notePath);
   if (!(file instanceof TFile)) return null;
-  const ck = app.metadataCache.getFileCache(file)?.frontmatter?.citekey;
+  const fm = app.metadataCache.getFileCache(file)?.frontmatter as
+    | Record<string, unknown>
+    | undefined;
+  const ck = fm?.citekey;
   return typeof ck === 'string' && ck ? ck : null;
 }
 
@@ -403,6 +413,8 @@ async function copyExcerptImages(
   groupID: number | null,
   dataDir: string | null
 ): Promise<Map<string, string>> {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return new Map();
   const copied = new Map<string, string>();
   const raws = children.annotations ?? [];
   if (!raws.length || !dataDir) return copied;

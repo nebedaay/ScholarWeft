@@ -191,14 +191,16 @@ export class CitekeyReconcileModal extends Modal {
       text: 'Update citekeys',
       cls: 'mod-cta',
     });
-    confirmBtn.addEventListener('click', async () => {
+    confirmBtn.addEventListener('click', () => {
+      void (async () => {
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Updating…';
-      try {
-        await this.onConfirm();
-      } finally {
-        this.close();
-      }
+        try {
+          await this.onConfirm();
+        } finally {
+          this.close();
+        }
+      })();
     });
   }
 

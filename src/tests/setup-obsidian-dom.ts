@@ -148,3 +148,14 @@ if (!proto.setAttr) {
     else this.setAttribute(name, String(value));
   };
 }
+
+// Obsidian augments `Document` with the window it belongs to, which is how the
+// `doc.win.createEl(...)` form resolves. jsdom documents get the global window.
+if (!(Document.prototype as unknown as { win?: Window }).win) {
+  Object.defineProperty(Document.prototype, 'win', {
+    configurable: true,
+    get() {
+      return this.defaultView ?? window;
+    },
+  });
+}

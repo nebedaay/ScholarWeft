@@ -41,7 +41,9 @@ export class ReferenceListView extends ItemView {
         const leafRoot = this.leaf.getRoot();
         if (leafRoot) {
           const tooltipPos =
-            (leafRoot as any).side === 'right' ? 'left' : 'right';
+            (leafRoot as unknown as { side?: string }).side === 'right'
+      ? 'left'
+      : 'right';
           e.setAttribute('aria-label-position', tooltipPos);
         }
       });
@@ -71,7 +73,7 @@ export class ReferenceListView extends ItemView {
               if (activeView?.file) {
                 const file = activeView.file;
                 unresolvedBadge.onClickEvent(() => {
-                  this.plugin.showUnresolvedCitekeyDialog(file);
+                  void this.plugin.showUnresolvedCitekeyDialog(file);
                 });
               }
             }
@@ -129,7 +131,7 @@ export class ReferenceListView extends ItemView {
           const q = input.value.toLowerCase().trim();
           bib.findAll('.csl-entry-wrapper').forEach((wrapper) => {
             const visible = !q || (wrapper.textContent ?? '').toLowerCase().includes(q);
-            (wrapper as HTMLElement).style.display = visible ? '' : 'none';
+            (wrapper).style.display = visible ? '' : 'none';
           });
         });
       }

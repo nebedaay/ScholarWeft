@@ -42,7 +42,13 @@ jest.mock('../bibtex', () => ({
 }));
 
 import { BibManager } from '../bibManager';
-import { bibPathsToCSL, needsMappingRemap, MAPPING_VERSION, searchZoteroBBT } from '../helpers';
+import {
+  bibPathsToCSL,
+  needsMappingRemap,
+  MAPPING_VERSION,
+  searchZoteroBBT,
+  useVaultAdapter,
+} from '../helpers';
 import { parseBibFile } from '../bibtex';
 import { ZOTERO_TYPE_TO_CSL, zoteroItemToCSL } from '../zotero-csl';
 import { parseExtra } from '../extra';
@@ -142,6 +148,9 @@ beforeEach(() => {
       create: jest.fn(),
     },
   };
+  // The module-level helpers reach the vault through the adapter the plugin
+  // hands over in `onload`; the suite supplies the mock it already built.
+  useVaultAdapter((global as any).app.vault.adapter);
 
   (global as any).createDiv = (options?: any, callback?: (el: HTMLDivElement) => void) => {
     const el = document.createElement('div');

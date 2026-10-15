@@ -17,6 +17,17 @@ export type TemplateLinkHelper = (
  * Final path segment with a trailing extension removed.
  * `basename('a/b/c.md')` → `c`; `basename('a/b/', '')` → `b`.
  */
+/**
+ * The bits of the Temporal API the template helpers use. It is a newer global,
+ * so it is declared here rather than relied on from `lib`.
+ */
+type TemporalLike = {
+  Instant: new (value: string) => {
+    toZonedDateTimeISO(tz: unknown): { toPlainDate(): { toString(): string } };
+  };
+  Now: { timeZoneId(): string };
+};
+
 export function basename(path: string, ext = '.md'): string {
   if (ext !== '' && isOnlySlashes(path)) return path === ext ? '' : path;
 
@@ -126,9 +137,9 @@ export function replaceSuffixMarkers(
 export function coerceOutput(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString();
-  const T = (window as { Temporal?: any }).Temporal;
+  const T = (window as { Temporal?: TemporalLike }).Temporal;
   if (T && value instanceof T.Instant) {
-    return (value as any)
+    return value
       .toZonedDateTimeISO(T.Now.timeZoneId())
       .toPlainDate()
       .toString();

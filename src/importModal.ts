@@ -1,4 +1,11 @@
-import { App, Modal, Notice, Platform, TFile } from 'obsidian';
+import {
+  App,
+  FileSystemAdapter,
+  Modal,
+  Notice,
+  Platform,
+  TFile,
+} from 'obsidian';
 import type ReferenceList from './main';
 import { runImportScript } from './importCompiler';
 import { rewritePandocToLinked } from './pandocToLinked';
@@ -9,7 +16,7 @@ import { DEPENDENCIES, renderDependencyNote } from './dependencies';
 import type { DepKey } from './dependencies';
 import { setModalTitle } from './modals/modalTitle';
 
-declare const require: (id: string) => any;
+declare const require: (id: string) => unknown;
 
 
 interface ImportHistoryEntry {
@@ -46,13 +53,15 @@ function saveImportHistory(
  */
 function pathForDroppedFile(file: File): string | undefined {
   try {
-    const { webUtils } = require('electron');
+    const { webUtils } = require('electron') as {
+      webUtils?: { getPathForFile(file: File): string };
+    };
     if (webUtils?.getPathForFile) {
       const p = webUtils.getPathForFile(file);
       if (p) return p;
     }
   } catch { /* older Electron */ }
-  return (file as any).path;
+  return (file as File & { path?: string }).path;
 }
 
 /**
@@ -91,12 +100,14 @@ export class ImportModal extends Modal {
     const stored = this.plugin.settings.importLastDir;
     if (stored) return stored;
     // Fall back to the vault root.
-    const adapter = this.plugin.app.vault.adapter as any;
+    const adapter = this.plugin.app.vault.adapter as FileSystemAdapter;
     return typeof adapter?.getBasePath === 'function' ? adapter.getBasePath() : '';
   }
 
   /** Persist the directory of the chosen file for next time. */
   private saveLastDir(filePath: string): void {
+    // Node built-ins do not exist on mobile; this path is desktop-only.
+    if (!Platform.isDesktop) return;
     try {
       const nodePath = require('path') as typeof import('path');
       this.plugin.settings.importLastDir = nodePath.dirname(filePath);
@@ -205,7 +216,9 @@ export class ImportModal extends Modal {
       e.preventDefault();
       e.stopPropagation();
       dropZone.setCssStyles({ background: '' });
-      const file = e.dataTransfer?.files?.[0] as any;
+      const file = e.dataTransfer?.files?.[0] as
+      | (File & { path?: string })
+      | undefined;
       if (!file) return;
       const filePath: string | undefined = pathForDroppedFile(file);
       if (!filePath) {
@@ -217,16 +230,25 @@ export class ImportModal extends Modal {
         new Notice('[ScholarWeft] Please drop a .docx or .odt file.');
         return;
       }
-      this.selectFile(filePath, file.name as string);
+      this.selectFile(filePath, file.name);
     });
 
     // Browse button: native file dialog via @electron/remote, with last-used dir.
-    browseBtn.addEventListener('click', async () => {
-      let filePath: string | undefined;
+    browseBtn.addEventListener('click', () => {
+      void (async () => {
+        let filePath: string | undefined;
       let fileName: string | undefined;
 
       try {
-        const { dialog } = require('@electron/remote');
+        const { dialog } = require('@electron/remote') as {
+          dialog: {
+            showOpenDialog(opts: {
+              defaultPath?: string;
+              properties: string[];
+              filters: Array<{ name: string; extensions: string[] }>;
+            }): Promise<{ canceled: boolean; filePaths: string[] }>;
+          };
+        };
         const result = await dialog.showOpenDialog({
           defaultPath: this.getDefaultDir(),
           properties: ['openFile'],
@@ -244,7 +266,7 @@ export class ImportModal extends Modal {
           input.type = 'file';
           input.accept = '.docx,.odt';
           input.addEventListener('change', () => {
-            const f = input.files?.[0] as any;
+            const f = input.files?.[0] as (File & { path?: string }) | undefined;
             if (f?.path) { filePath = f.path; fileName = f.name; }
             resolve();
           });
@@ -253,9 +275,10 @@ export class ImportModal extends Modal {
         });
       }
 
-      if (filePath && fileName) {
-        this.selectFile(filePath, fileName);
-      }
+        if (filePath && fileName) {
+          this.selectFile(filePath, fileName);
+        }
+      })();
     });
 
     // ── Options ──────────────────────────────────────────────────────────────
@@ -323,7 +346,9 @@ export class ImportModal extends Modal {
 
     this.importBtn = btnRow.createEl('button', { text: 'Import', cls: 'mod-cta' });
     this.importBtn.disabled = true;
-    this.importBtn.addEventListener('click', () => this.run());
+    this.importBtn.addEventListener('click', () => {
+      void this.run();
+    });
 
     window.setTimeout(() => browseBtn.focus(), 50);
 
@@ -332,6 +357,10 @@ export class ImportModal extends Modal {
   }
 
   private async run() {
+    // Node built-ins do not exist on mobile; this path is desktop-only.
+    if (!Platform.isDesktop) {
+    	throw new Error('ScholarWeft: this feature is available on the desktop app only.');
+    }
     if (!this.inputPath) return;
     if (!Platform.isDesktop) {
       new Notice('Document import is only available on desktop.');
@@ -450,7 +479,10 @@ export class ImportModal extends Modal {
       try {
         const { created, missingKeys } = await this.plugin.bibManager.createMissingLitNotes(
           { file: newFile },
-          (done: number, total: number) => (litProgress as any).setProgress?.(done, total)
+                  (done: number, total: number) =>
+          (litProgress as Notice & {
+            setProgress?: (done: number, total: number) => void;
+          }).setProgress?.(done, total)
         );
         litProgress.hide();
         if (missingKeys.length) {
@@ -466,10 +498,11 @@ export class ImportModal extends Modal {
       }
     }
 
-    this.plugin.processReferences();
+    void this.plugin.processReferences();
   }
 
   onClose() {
     this.contentEl.empty();
   }
 }
+

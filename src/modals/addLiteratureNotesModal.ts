@@ -251,7 +251,7 @@ export class AddLiteratureNotesModal extends Modal {
       this.refresh();
     });
     this.dirSelect.addEventListener('change', () => {
-      this.sortDir = this.dirSelect!.value as SortDirection;
+      this.sortDir = this.dirSelect.value as SortDirection;
       this.persistSearch();
       this.refresh();
     });
@@ -825,14 +825,14 @@ export class AddLiteratureNotesModal extends Modal {
 
   /** Fill already-drawn rows with their rendered reference, when ready. */
   private fillReferences(): void {
-    for (const row of Array.from(
+    for (const row of Array.from<HTMLElement>(
       this.listEl.querySelectorAll('.sw-add-notes__row')
-    ) as HTMLElement[]) {
+    )) {
       const key = row.dataset.citekey;
       if (!key) continue;
       const entry = this.renderedRefs.get(key);
       if (!entry) continue;
-      const refEl = row.querySelector('.sw-add-notes__ref') as HTMLElement | null;
+      const refEl = row.querySelector('.sw-add-notes__ref');
       if (!refEl) continue;
       // Highlight the current search's terms on the CLONE, so the cached
       // element stays clean for the next search.
@@ -923,17 +923,23 @@ export class AddLiteratureNotesModal extends Modal {
     return parts.join('; ');
   }
 
-  private sourceFile(): TFile {
+  /**
+   * A real file to anchor links from: the active note, else any Markdown file.
+   * (The old fallback cast the vault ROOT FOLDER to a TFile, which is not one.)
+   * `null` when the vault has no Markdown file at all.
+   */
+  private sourceFile(): TFile | null {
     return (
       this.app.workspace.getActiveFile() ??
-      (this.app.vault.getRoot() as unknown as TFile)
+      this.app.vault.getMarkdownFiles()[0] ??
+      null
     );
   }
 
   private redrawSelection(): void {
-    for (const row of Array.from(
+    for (const row of Array.from<HTMLElement>(
       this.listEl.querySelectorAll('.sw-add-notes__row')
-    ) as HTMLElement[]) {
+    )) {
       const key = row.dataset.citekey;
       row.toggleClass('is-selected', !!key && this.selected.has(key));
     }
@@ -998,6 +1004,10 @@ export class AddLiteratureNotesModal extends Modal {
     if (mode !== 'notes' && mode !== 'both') return;
 
     const source = this.sourceFile();
+    if (!source) {
+      new Notice('Open a note first — the import needs a file to anchor links to.');
+      return;
+    }
     const progress = new Notice(`Creating literature notes… 0/${citekeys.length}`, 0);
     // Open the note when the user asked for exactly one (and the setting allows).
     const open =

@@ -1,7 +1,7 @@
 import { EditorView } from '@codemirror/view';
 import CSL from 'citeproc';
 import type ReferenceList from 'src/main';
-import { CSLName, PartialCSLEntry } from './types';
+import { CSLName, CslEngine, PartialCSLEntry } from './types';
 import Fuse from 'fuse.js';
 import {
   bibPathsToCSL,
@@ -49,11 +49,13 @@ import {
 import {
   RenderedCitation,
   getCitationSegments,
+  SegmentType,
   getCitations,
 } from 'src/parser/parser';
 import { App, FileSystemAdapter, Keymap, MarkdownView, Menu, TFile, debounce, normalizePath, setIcon } from 'obsidian';
 import { cite } from 'src/parser/citeproc';
 import { getLitNoteForCitekey } from 'src/lit-note';
+import type { ZoteroItem } from './zotero-csl';
 import { resolveZoteroStylePath } from 'src/settings/ZoteroStylePicker';
 import { createOrUpdateOwnNote } from 'src/noteImport';
 import { resolveLiteratureNoteFolder } from 'src/template/lit-folder';
@@ -219,9 +221,50 @@ function authorTextOf(entry: PartialCSLEntry): string {
   return parts.join(' ');
 }
 
+/**
+ * Any of this plugin's own JSON cache files. Every field is read defensively
+ * (`typeof x === 'object'`), so one permissive shape covers them all — and it
+ * keeps `JSON.parse` results from being `any` at every access.
+ */
+interface CacheFile {
+  items?: PartialCSLEntry[];
+  version?: number;
+  builtAt?: number;
+  versions?: Record<string, number>;
+  lastSearches?: Record<string, unknown>;
+  attachments?: Record<string, string>;
+  libraryFolders?: Record<string, string>;
+  notes?: Record<string, unknown>;
+  entries?: Record<string, unknown>;
+  keys?: Record<string, unknown>;
+  queryHistory?: Record<string, unknown>;
+  globalQueryHistory?: Record<string, unknown>;
+  recentKeys?: unknown;
+  globalRecentKeys?: unknown;
+  links?: Record<string, string>;
+  pdfs?: Record<string, string[]>;
+}
+
+/** A Better BibTeX item, as `item.search` returns it. */
+interface BbtItem {
+  citekey?: string;
+  citationKey?: string;
+  attachments?: Array<{ path?: string }>;
+}
+
+/** Obsidian's reading-view preview internals (not part of the public API). */
+interface PreviewModeLike {
+  renderer?: {
+    lastText?: string | null;
+    sections: Array<{ el: HTMLElement; rendered?: boolean }>;
+    queueRender(): void;
+  };
+  rerender?(force?: boolean): void;
+}
+
 // Fuse getFn wrapper that strips diacritics from indexed string fields.
-const fuseFn = (obj: any, path: string | string[]) => {
-  const val = Fuse.config.getFn(obj, path);
+const fuseFn = (obj: PartialCSLEntry, path: string | string[]) => {
+  const val = Fuse.config.getFn(obj, path) as string | string[] | undefined;
   if (typeof val === 'string') return normalizeDiacritics(val);
   if (Array.isArray(val)) return val.map(v => typeof v === 'string' ? normalizeDiacritics(v) : v);
   return val;
@@ -329,7 +372,7 @@ export interface FileCache {
   source: {
     bibCache?: Map<string, PartialCSLEntry>;
     fuse?: Fuse<PartialCSLEntry>;
-    engine?: any;
+    engine?: CslEngine;
   };
 }
 
@@ -396,7 +439,7 @@ function fastHash(input: string): string {
   return (h >>> 0).toString(16);
 }
 
-export function getScopedSettings(file: TFile): ScopedSettings | null {
+export function getScopedSettings(file: TFile, app: App): ScopedSettings | null {
   const metadata = app.metadataCache.getFileCache(file);
   const output: ScopedSettings = {};
 
@@ -451,16 +494,27 @@ function extractRawLocales(style: string, localeName?: string) {
   return normalizeLocales(locales);
 }
 
+/**
+ * The citeproc module's statics this plugin reads. `citeproc` ships no typings,
+ * so the surface is declared here rather than reached through `any`.
+ */
+const cslModule = CSL as unknown as {
+  Engine: new (...args: unknown[]) => CslEngine;
+  LANGS?: Record<string, unknown>;
+  LANG_BASES?: Record<string, string>;
+};
+
 function normalizeLocales(locales: string[]) {
   const obj: Record<string, boolean> = {};
   for (let locale of locales) {
     locale = locale.split('-').slice(0, 2).join('-');
-    if (CSL.LANGS[locale]) {
+    if (cslModule.LANGS?.[locale]) {
       obj[locale] = true;
     } else {
       locale = locale.split('-')[0];
-      if (CSL.LANG_BASES[locale]) {
-        locale = CSL.LANG_BASES[locale].split('_').join('-');
+      const base = cslModule.LANG_BASES?.[locale];
+      if (base) {
+        locale = base.split('_').join('-');
         obj[locale] = true;
       }
     }
@@ -532,7 +586,7 @@ class ZoteroOfflineAlert {
       const container = this.app?.workspace?.containerEl;
       if (!container) return null;
       return (
-        (container.querySelector('.workspace-split.mod-vertical') as HTMLElement) ??
+        (container.querySelector('.workspace-split.mod-vertical')) ??
         container
       );
     } catch {
@@ -559,6 +613,15 @@ export interface TierSearchResult {
 
 export class BibManager {
   plugin: ReferenceList;
+  /**
+   * The Obsidian app, taken from the plugin rather than the global `app`.
+   * The directory review asks for the plugin's own reference; `plugin` is set in
+   * the constructor and cleared on unload, and every caller here runs while the
+   * manager is live.
+   */
+  private get app(): App {
+    return this.plugin.app;
+  }
   fileCache: SimpleLRU<TFile, FileCache>;
   initPromise: PromiseCapability<void>;
   langCache: Map<string, string> = new Map();
@@ -569,7 +632,7 @@ export class BibManager {
   fuseTitle: Fuse<PartialCSLEntry>;
   /** `@@` tier: adds abstract and venue, ranked below title/author/citekey. */
   fuseAbstract: Fuse<PartialCSLEntry>;
-  engine: any;
+  engine: CslEngine;
 
   /**
    * Per-NOTE citekeys in most-recently-used order (most recent first),
@@ -716,7 +779,7 @@ export class BibManager {
           await this.buildGlobalEngine();
           this.bibEpoch++;
           this.fileCache.clear();
-          plugin.processReferences();
+          void plugin.processReferences();
         };
         reload().catch(console.error);
       })
@@ -880,7 +943,7 @@ export class BibManager {
    */
   showZoteroOffline() {
     if (!this._zoteroAlert) {
-      this._zoteroAlert = new ZoteroOfflineAlert(app, () => {
+      this._zoteroAlert = new ZoteroOfflineAlert(this.app, () => {
         void this.retryNow();
       });
     }
@@ -896,7 +959,7 @@ export class BibManager {
   async retryNow(): Promise<void> {
     await this.loadAllSources({ fromCache: false, maxRetries: 2 });
     this.fileCache.clear();
-    this.plugin?.processReferences();
+    void this.plugin?.processReferences();
   }
 
   /**
@@ -925,7 +988,7 @@ export class BibManager {
         debugLog('[sw:bib] Zotero is back — completing the library load');
         await this.loadAllSources({ fromCache: false });
         this.fileCache.clear();
-        this.plugin.processReferences();
+        void this.plugin.processReferences();
       } catch (e) {
         debugLog('[sw:bib] Zotero recovery probe failed', e);
         this.scheduleZoteroRecovery(Math.min(delayMs * 2, 60_000));
@@ -1227,7 +1290,7 @@ export class BibManager {
       entries: ordered
         .slice(Math.max(0, offset), Math.max(0, offset) + limit)
         .map(([id]) => ({
-          entry: ranked.get(id)!,
+          entry: ranked.get(id),
           terms: matchedTerms.get(id) ?? [],
         }))
         .filter((r) => !!r.entry),
@@ -1370,8 +1433,16 @@ export class BibManager {
     // Load existing cache file once up-front.
     const cacheMap = new Map<string, { mtime: number; size: number; pandoc: string; entries: PartialCSLEntry[] }>();
     try {
-      if (await app.vault.adapter.exists(BIB_CACHE_PATH)) {
-        const raw = JSON.parse(await app.vault.adapter.read(BIB_CACHE_PATH));
+      if (await this.app.vault.adapter.exists(BIB_CACHE_PATH)) {
+        const raw = JSON.parse(
+          await this.app.vault.adapter.read(BIB_CACHE_PATH)
+        ) as Array<{
+          path: string;
+          mtime: number;
+          size: number;
+          pandoc: string;
+          entries: PartialCSLEntry[];
+        }>;
         if (Array.isArray(raw)) {
           for (const entry of raw) cacheMap.set(entry.path, entry);
         }
@@ -1406,7 +1477,7 @@ export class BibManager {
 
       if (!isAbsolutePath(resolved)) {
         try {
-          const stat = await app.vault.adapter.stat(normalizePath(resolved));
+          const stat = await this.app.vault.adapter.stat(normalizePath(resolved));
           const cached = cacheMap.get(resolved);
           if (stat && cached &&
               cached.mtime === stat.mtime &&
@@ -1431,7 +1502,7 @@ export class BibManager {
 
         if (!isAbsolutePath(resolved)) {
           try {
-            const stat = await app.vault.adapter.stat(normalizePath(resolved));
+            const stat = await this.app.vault.adapter.stat(normalizePath(resolved));
             if (stat) {
               cacheMap.set(resolved, { mtime: stat.mtime, size: stat.size, pandoc, entries: bib });
               cacheModified = true;
@@ -1458,16 +1529,16 @@ export class BibManager {
     // Flush updated cache to disk.
     if (cacheModified) {
       try {
-        if (!(await app.vault.adapter.exists(CACHE_DIR))) {
-          await app.vault.adapter.mkdir(CACHE_DIR);
+        if (!(await this.app.vault.adapter.exists(CACHE_DIR))) {
+          await this.app.vault.adapter.mkdir(CACHE_DIR);
         }
-        await app.vault.adapter.write(BIB_CACHE_PATH, JSON.stringify([...cacheMap.values()]));
+        await this.app.vault.adapter.write(BIB_CACHE_PATH, JSON.stringify([...cacheMap.values()]));
       } catch {
         // Cache write failure is non-fatal.
       }
     }
 
-    if (settingsModified) this.plugin.saveSettings();
+    if (settingsModified) void this.plugin.saveSettings();
     debugLog('[sw:bib] bibCache now has', this.bibCache.size, 'entries after .bib load');
   }
 
@@ -1610,7 +1681,7 @@ export class BibManager {
     }
 
     const adapter = this.getZoteroAdapter();
-    debugLog('[sw:bib] using adapter:', (adapter as any).constructor?.name ?? typeof adapter);
+    debugLog('[sw:bib] using adapter:', (adapter as { constructor?: { name?: string } }).constructor?.name ?? typeof adapter);
 
     // Is Zotero actually up? Checked once up front so "unreachable" is reported
     // honestly rather than inferred from an empty result.
@@ -1646,7 +1717,7 @@ export class BibManager {
     }
 
     debugLog('[sw:bib] bibCache now has', this.bibCache.size, 'entries after Zotero load');
-    this.plugin.saveSettings();
+    void this.plugin.saveSettings();
 
     // A failed group leaves the library partial, and the Fuse index built from
     // it is treated as complete — so a key that arrived later in the fetch can
@@ -1662,7 +1733,7 @@ export class BibManager {
           .then(() => this.buildGlobalEngine())
           .then(() => {
             this.fileCache.clear();
-            this.plugin.processReferences();
+            void this.plugin.processReferences();
           })
           .catch(console.error);
       }, 60_000);
@@ -1814,7 +1885,7 @@ export class BibManager {
           } else {
             for (const [k, v] of res.modified.entries()) {
               this.mergeZoteroEntry(v);
-              modifiedEntries.set(k, this.bibCache.get(k)!);
+              modifiedEntries.set(k, this.bibCache.get(k));
             }
           }
         } catch (e) {
@@ -1877,10 +1948,10 @@ export class BibManager {
         console.warn('[sw] group-note filing failed:', e);
       }
 
-      this.plugin.saveSettings();
+      void this.plugin.saveSettings();
       this.updateFuse(modifiedEntries);
       this.fileCache.clear();
-      this.plugin.processReferences();
+      void this.plugin.processReferences();
 
       // Reconcile the vault's literature notes against the refreshed library,
       // matching each note to its item by stable `zotero-key`.
@@ -2158,9 +2229,12 @@ export class BibManager {
       if (!r.rekeyFrontmatter) return;
       const target = vault.getAbstractFileByPath(r.newPath);
       if (target instanceof TFile) {
-        await fileManager.processFrontMatter(target, (fm) => {
-          fm.citekey = r.toKey;
-        });
+        await fileManager.processFrontMatter(
+          target,
+          (fm: Record<string, unknown>) => {
+            fm.citekey = r.toKey;
+          }
+        );
       }
     };
 
@@ -2296,7 +2370,7 @@ export class BibManager {
     style: string,
     styleCache: Map<string, string>,
     bibCache: Map<string, PartialCSLEntry>
-  ) {
+  ): CslEngine {
     const styleXML = styleCache.get(style);
     if (!styleXML) {
       throw new Error(
@@ -2308,7 +2382,7 @@ export class BibManager {
         'attempting to build citproc engine with empty CSL locale'
       );
     }
-    const engine = new CSL.Engine(
+    const engine = new cslModule.Engine(
       {
         retrieveLocale: (id: string) => {
           return langCache.get(id);
@@ -2405,7 +2479,7 @@ export class BibManager {
   private ensureZLink(key: string) {
     if (this.zCitekeyToLinks.has(key)) return;
     const item = this.bibCache.get(key);
-    const zKey = (item as any)?._zoteroKey;
+    const zKey = item?._zoteroKey;
     if (!zKey) return;
     const groupId = item?.groupID ?? 1;
     this.zCitekeyToLinks.set(
@@ -2475,10 +2549,10 @@ export class BibManager {
     // renders nothing for them. Only the copy handed to the engine is stripped;
     // the shared bibCache keeps its fields for every other consumer.
     const bibSource = opts.suppressUrls
-      ? new Map(resolved.map((k) => [k, stripUrlFields(this.bibCache.get(k)!)] as const))
+      ? new Map(resolved.map((k) => [k, stripUrlFields(this.bibCache.get(k))] as const))
       : this.bibCache;
 
-    let engine: any;
+    let engine: CslEngine;
     try {
       engine = this.buildEngine(
         lang,
@@ -2496,7 +2570,8 @@ export class BibManager {
     for (const key of resolved) engine.retrieveItem(key);
 
     const bib = engine.makeBibliography();
-    if (bib?.length) {
+    // citeproc returns `false` when there is nothing to render.
+    if (bib && bib.length) {
       const ids: string[][] = bib[0].entry_ids ?? [];
       bib[1].forEach((entry: string, i: number) => {
         const key = ids[i]?.[0];
@@ -2642,7 +2717,7 @@ export class BibManager {
       ? this.fileCache.get(file)
       : null;
     const citeBibMap = new Map<string, string>();
-    const settings = getScopedSettings(file);
+    const settings = getScopedSettings(file, this.app);
 
     processed.forEach((p) =>
       p.citations.forEach((c) => {
@@ -2660,7 +2735,7 @@ export class BibManager {
     if (
       !this.warmingSkipLRU &&
       sweepsNoteOnResolve(this.plugin.settings.missingLinkedNoteAction) &&
-      app.workspace.getActiveFile()?.path === file.path
+      this.app.workspace.getActiveFile()?.path === file.path
     ) {
       void this.ensureLinkedNotesForFile(file, content).catch((e) =>
         console.warn('[sw:notes] linked-note sweep failed', e)
@@ -2681,10 +2756,10 @@ export class BibManager {
       !this.backendLoading &&
       (!cachedDoc || !cachedDoc.source) &&
       hashMatches &&
-      this.entryVersionsMatch(persisted!, this.bibCache)
+      this.entryVersionsMatch(persisted, this.bibCache)
     ) {
       // Whole-note replay: content AND every cited Zotero entry unchanged.
-      const result = this.fileCacheFromPersisted(file, persisted!);
+      const result = this.fileCacheFromPersisted(file, persisted);
       if (!this.warmingSkipLRU) this.fileCache.set(file, result);
       this.dispatchResult(file, result, hash);
       return result.bib;
@@ -2766,7 +2841,7 @@ export class BibManager {
     // `cite()` cluster processing for notes that cite a just-edited entry.
     let citations: RenderedCitation[];
     const { changed, allAuthorYearStable } = hashMatches && persisted
-      ? this.changedKeyStatus(persisted!, source.bibCache)
+      ? this.changedKeyStatus(persisted, source.bibCache)
       : { changed: [], allAuthorYearStable: false };
     if (
       hashMatches &&
@@ -2783,7 +2858,7 @@ export class BibManager {
       for (const key of changed) {
         source.engine.retrieveItem(key);
       }
-      citations = persisted!.citations;
+      citations = persisted.citations;
       if (!shouldContinue()) return undefined;
     } else {
       citations = cite(source.engine, filtered);
@@ -2800,7 +2875,8 @@ export class BibManager {
 
     const bib = source.engine.makeBibliography();
 
-    if (!bib?.length) {
+    // citeproc returns `false` when there is nothing to render.
+    if (!bib || !bib.length) {
       return setNull();
     }
 
@@ -2808,7 +2884,7 @@ export class BibManager {
     const entries = bib[1];
     const htmlStr = [metadata.bibstart];
 
-    metadata.entry_ids?.forEach((e: string, i: number) => {
+    metadata.entry_ids?.forEach((e: string[], i: number) => {
       let entry = entries[i];
       // citeproc can list an entry id with no rendered entry for it (seen with
       // a completely contentless item), which left `entries[i]` undefined and
@@ -2882,7 +2958,7 @@ export class BibManager {
           const buf = await FileSystemAdapter.readLocalFile(p);
           text = new TextDecoder().decode(buf);
         } else {
-          text = await app.vault.adapter.read(normalizePath(p));
+          text = await this.app.vault.adapter.read(normalizePath(p));
         }
         for (const m of text.matchAll(/@\w+\s*\{\s*([^,\s\n]+)\s*,/gm)) {
           keys.add(m[1].trim());
@@ -2923,7 +2999,7 @@ export class BibManager {
     citekeys.forEach((key) => {
       if (this.zCitekeyToLinks.has(key)) return;
       const item = this.bibCache.get(key);
-      const zKey = (item as any)?._zoteroKey;
+      const zKey = item?._zoteroKey;
       if (!zKey) return;
       const groupId = item?.groupID ?? 1;
       const link =
@@ -2965,10 +3041,11 @@ export class BibManager {
         );
         if (items?.length) {
           for (const item of items) {
-            const key = item.citekey || item.citationKey;
-            if (item.attachments?.length) {
+            const bbt = item as BbtItem;
+            const key = bbt.citekey || bbt.citationKey;
+            if (bbt.attachments?.length) {
               const attLinks: string[] = [];
-              for (const att of item.attachments) {
+              for (const att of bbt.attachments) {
                 if (/\.pdf$/.test(att.path)) {
                   attLinks.push(att.path);
                 }
@@ -2989,10 +3066,10 @@ export class BibManager {
   /** Persist the Zotero link maps (debounced by caller). */
   async saveZLinks() {    try {
       const dir = normalizePath(SW_CACHE_DIR);
-      if (!(await app.vault.adapter.exists(dir))) {
-        await app.vault.adapter.mkdir(dir);
+      if (!(await this.app.vault.adapter.exists(dir))) {
+        await this.app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write(
+      await this.app.vault.adapter.write(
         normalizePath(`${SW_CACHE_DIR}/zlinks.json`),
         JSON.stringify({
           links: Object.fromEntries(this.zCitekeyToLinks),
@@ -3007,18 +3084,18 @@ export class BibManager {
   /** Restore the persisted Zotero link maps (call once at startup). */
   async loadZLinks() {
     try {
-      const raw = await app.vault.adapter.read(
+      const raw = await this.app.vault.adapter.read(
         normalizePath(`${SW_CACHE_DIR}/zlinks.json`)
       );
-      const data = JSON.parse(raw);
+      const data = JSON.parse(raw) as CacheFile;
       if (data?.links) {
         for (const [k, v] of Object.entries(data.links)) {
-          this.zCitekeyToLinks.set(k, v as string);
+          this.zCitekeyToLinks.set(k, v);
         }
       }
       if (data?.pdfs) {
         for (const [k, v] of Object.entries(data.pdfs)) {
-          this.zCitekeyToPDFLinks.set(k, v as string[]);
+          this.zCitekeyToPDFLinks.set(k, v);
         }
       }
     } catch {
@@ -3063,10 +3140,10 @@ export class BibManager {
   async saveRecentKeys(): Promise<void> {
     try {
       const dir = normalizePath(SW_CACHE_DIR);
-      if (!(await app.vault.adapter.exists(dir))) {
-        await app.vault.adapter.mkdir(dir);
+      if (!(await this.app.vault.adapter.exists(dir))) {
+        await this.app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write(
+      await this.app.vault.adapter.write(
         normalizePath(`${SW_CACHE_DIR}/recent-keys.json`),
         JSON.stringify({
           recentKeys: this.recentKeys,
@@ -3083,10 +3160,10 @@ export class BibManager {
   /** Restore the per-note MRU lists + last queries (call once at startup). */
   async loadRecentKeys(): Promise<void> {
     try {
-      const raw = await app.vault.adapter.read(
+      const raw = await this.app.vault.adapter.read(
         normalizePath(`${SW_CACHE_DIR}/recent-keys.json`)
       );
-      const data = JSON.parse(raw);
+      const data = JSON.parse(raw) as CacheFile;
       const map = data?.recentKeys;
       if (map && typeof map === 'object' && !Array.isArray(map)) {
         const out: RecentKeysMap = {};
@@ -3112,19 +3189,22 @@ export class BibManager {
           (k: unknown): k is string => typeof k === 'string' && !!k
         );
       }
-      const toEntry = (e: any): QueryEntry | null =>
-        e && typeof e.query === 'string' && e.query
+      const toEntry = (e: unknown): QueryEntry | null => {
+        if (!e || typeof e !== 'object') return null;
+        const o = e as { query?: unknown; doubleAt?: unknown; at?: unknown };
+        return typeof o.query === 'string' && o.query
           ? {
-              query: e.query,
-              doubleAt: !!e.doubleAt,
-              at: typeof e.at === 'number' ? e.at : 0,
+              query: o.query,
+              doubleAt: !!o.doubleAt,
+              at: typeof o.at === 'number' ? o.at : 0,
             }
           : null;
+      };
 
       const history = data?.queryHistory;
       if (history && typeof history === 'object' && !Array.isArray(history)) {
         const out: QueryHistoryMap = {};
-        for (const [path, list] of Object.entries(history as Record<string, unknown>)) {
+        for (const [path, list] of Object.entries(history)) {
           if (!Array.isArray(list)) continue;
           const entries = list
             .map(toEntry)
@@ -3136,7 +3216,7 @@ export class BibManager {
         // Migrate the earlier single-per-note `lastSearches` shape.
         const out: QueryHistoryMap = {};
         for (const [path, entryRaw] of Object.entries(
-          data.lastSearches as Record<string, any>
+          data.lastSearches
         )) {
           const entry = toEntry(entryRaw);
           if (entry) out[path] = [entry];
@@ -3274,10 +3354,10 @@ export class BibManager {
   /** Load the fetched-children cache (once at startup). */
   async loadChildrenCache(): Promise<void> {
     try {
-      const raw = await app.vault.adapter.read(
+      const raw = await this.app.vault.adapter.read(
         normalizePath(`${SW_CACHE_DIR}/children-cache.json`)
       );
-      const data = JSON.parse(raw);
+      const data = JSON.parse(raw) as ChildrenCacheData;
       if (data && typeof data === 'object') this.childrenCache = data;
     } catch {
       /* first run */
@@ -3288,10 +3368,10 @@ export class BibManager {
   async saveChildrenCache(): Promise<void> {
     try {
       const dir = normalizePath(SW_CACHE_DIR);
-      if (!(await app.vault.adapter.exists(dir))) {
-        await app.vault.adapter.mkdir(dir);
+      if (!(await this.app.vault.adapter.exists(dir))) {
+        await this.app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write(
+      await this.app.vault.adapter.write(
         normalizePath(`${SW_CACHE_DIR}/children-cache.json`),
         JSON.stringify(this.childrenCache)
       );
@@ -3331,10 +3411,10 @@ export class BibManager {
   /** Load the template timeline (once at startup). */
   async loadTemplateHistory(): Promise<void> {
     try {
-      const raw = await app.vault.adapter.read(
+      const raw = await this.app.vault.adapter.read(
         normalizePath(`${SW_CACHE_DIR}/template-history.json`)
       );
-      const data = JSON.parse(raw);
+      const data = JSON.parse(raw) as CacheFile;
       if (Array.isArray(data?.entries)) {
         this.templateTimeline = {
           entries: data.entries.filter(
@@ -3353,10 +3433,10 @@ export class BibManager {
   private async saveTemplateHistory(): Promise<void> {
     try {
       const dir = normalizePath(SW_CACHE_DIR);
-      if (!(await app.vault.adapter.exists(dir))) {
-        await app.vault.adapter.mkdir(dir);
+      if (!(await this.app.vault.adapter.exists(dir))) {
+        await this.app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write(
+      await this.app.vault.adapter.write(
         normalizePath(`${SW_CACHE_DIR}/template-history.json`),
         JSON.stringify(this.templateTimeline)
       );
@@ -3397,10 +3477,10 @@ export class BibManager {
   /** Restore the Zotero child-delta watermark + attachment map (once at startup). */
   async loadSyncState(): Promise<void> {
     try {
-      const raw = await app.vault.adapter.read(
+      const raw = await this.app.vault.adapter.read(
         normalizePath(`${SW_CACHE_DIR}/sync-state.json`)
       );
-      const data = JSON.parse(raw);
+      const data = JSON.parse(raw) as CacheFile;
       this.syncState = {
         versions:
           data?.versions && typeof data.versions === 'object' ? data.versions : {},
@@ -3422,14 +3502,14 @@ export class BibManager {
   async saveSyncState(): Promise<void> {
     try {
       const dir = normalizePath(SW_CACHE_DIR);
-      if (!(await app.vault.adapter.exists(dir))) {
-        await app.vault.adapter.mkdir(dir);
+      if (!(await this.app.vault.adapter.exists(dir))) {
+        await this.app.vault.adapter.mkdir(dir);
       }
       this.syncState = {
         ...this.syncState,
         libraryFolders: folderNameSnapshot(),
       };
-      await app.vault.adapter.write(
+      await this.app.vault.adapter.write(
         normalizePath(`${SW_CACHE_DIR}/sync-state.json`),
         JSON.stringify(this.syncState)
       );
@@ -3519,7 +3599,7 @@ export class BibManager {
     );
     if (!cached) return true;
     const list = (kind === 'attachment' ? cached.attachments : cached.annotations) ?? [];
-    const prev = (list as any[]).find(
+    const prev = (list as ZoteroItem[]).find(
       (c) => String(c?.key ?? c?.data?.key ?? '') === key
     );
     const prevModified = prev?.data?.dateModified;
@@ -3653,7 +3733,7 @@ export class BibManager {
       if (this.citedKeysBuiltAt === 0) await this.reconcileCitedKeysIndex();
 
       const openPaths = new Set<string>();
-      app.workspace.getLeavesOfType('markdown').forEach((l) => {
+      this.app.workspace.getLeavesOfType('markdown').forEach((l) => {
         const v = l.view as MarkdownView;
         if (v?.file?.path) openPaths.add(v.file.path);
       });
@@ -3663,7 +3743,7 @@ export class BibManager {
         if (!keys.size) continue; // no citations — nothing to warm
         if (openPaths.has(path)) continue; // already open — rendered on demand
         if (this.renderedCache.has(path)) continue; // already cached
-        const file = app.vault.getAbstractFileByPath(path);
+        const file = this.app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile) candidates.push(file);
       }
 
@@ -3676,7 +3756,7 @@ export class BibManager {
 
       for (const file of candidates) {
         try {
-          const content = await app.vault.cachedRead(file);
+          const content = await this.app.vault.cachedRead(file);
           // getReferenceList persists the rendered entry itself when it
           // produces a bibliography (persistFileCache at the end of the
           // full path); LRU + PDF lookups are skipped while warming.
@@ -3755,7 +3835,7 @@ export class BibManager {
 
         // Use ZotLit's frontmatter-based note index when available; fall back
         // to filename-based detection for non-ZotLit setups.
-        const litNote = getLitNoteForCitekey(citekey, file.path, app);
+        const litNote = getLitNoteForCitekey(citekey, file.path, this.app);
         // Show "Create literature note" whenever no note exists. Creation is
         // routed to ZotLit when the setting is on (see createLiteratureNote).
         const canCreateNote = !litNote;
@@ -3765,7 +3845,7 @@ export class BibManager {
         // Rebuild the button row every time: persisted HTML may carry stale
         // buttons (e.g. "Create literature note" when a note now exists, or
         // no Zotero link because the map was empty at render time).
-        const wrapper = e.parentElement!;
+        const wrapper = e.parentElement;
         wrapper.findAll('.sw-entry-btns').forEach((b) => b.remove());
 
         wrapper.createDiv({ cls: 'sw-entry-btns' }, (div) => {
@@ -3784,7 +3864,7 @@ export class BibManager {
               div.setAttr('aria-label', t('Open literature note'));
               div.onClickEvent((evt) => {
                 const newPane = Keymap.isModEvent(evt);
-                app.workspace.openLinkText(litNote.linkText, file.path, newPane);
+                void this.app.workspace.openLinkText(litNote.linkText, file.path, newPane);
               });
             });
           } else if (canCreateNote) {
@@ -3914,7 +3994,7 @@ export class BibManager {
     // duplicate citekey in another library cannot decide the render.
     const entry = (opts.stableKey
       ? this.entryForStableKey(opts.stableKey)
-      : null) ?? (this.bibCache.get(citekey) as any);
+      : null) ?? this.bibCache.get(citekey);
 
     // Our own single-file template path. Falls through to the basic fallback
     // below only if the template asset is missing.
@@ -3931,7 +4011,7 @@ export class BibManager {
     const title = entry?.title ?? citekey;
     const year = entry?.issued?.['date-parts']?.[0]?.[0] ?? '';
     const authors: string[] = (entry?.author ?? [])
-      .map((a: any) => [a.family, a.given].filter(Boolean).join(', ') || a.literal || '')
+      .map((a: CSLName) => [a.family, a.given].filter(Boolean).join(', ') || a.literal || '')
       .filter(Boolean);
 
     // Build the stable-identity value for this note.
@@ -3955,8 +4035,8 @@ export class BibManager {
     const filename = `@${citekey}.md`;
     const notePath = folder ? normalizePath(`${folder}/${filename}`) : filename;
 
-    if (await app.vault.adapter.exists(notePath)) {
-      await app.workspace.openLinkText(notePath, sourceFile.path, true);
+    if (await this.app.vault.adapter.exists(notePath)) {
+      await this.app.workspace.openLinkText(notePath, sourceFile.path, true);
       return { ok: true, changed: false };
     }
 
@@ -3974,12 +4054,12 @@ export class BibManager {
 
     const content = `${lines.join('\n')}\n\n# ${title}\n\n`;
 
-    if (folder && !(await app.vault.adapter.exists(normalizePath(folder)))) {
-      await app.vault.adapter.mkdir(normalizePath(folder));
+    if (folder && !(await this.app.vault.adapter.exists(normalizePath(folder)))) {
+      await this.app.vault.adapter.mkdir(normalizePath(folder));
     }
 
-    await app.vault.create(notePath, content);
-    await app.workspace.openLinkText(notePath, sourceFile.path, true);
+    await this.app.vault.create(notePath, content);
+    await this.app.workspace.openLinkText(notePath, sourceFile.path, true);
     return { ok: true, changed: true };
   }
 
@@ -3996,11 +4076,11 @@ export class BibManager {
     citekey: string,
     sourceFile: TFile
   ): Promise<boolean> {
-    const entry = this.bibCache.get(citekey) as any;
+    const entry = this.bibCache.get(citekey);
     if (!entry) return false;
     // Re-check here too: the caller checks, but a concurrent path may have
     // created the note in between.
-    if (getLitNoteForCitekey(citekey, sourceFile.path, app)) return false;
+    if (getLitNoteForCitekey(citekey, sourceFile.path, this.app)) return false;
 
     const res = await createOrUpdateOwnNote(
       this.plugin,
@@ -4030,7 +4110,7 @@ export class BibManager {
     for (const key of keys) {
       if (this.linkedNoteSweepAttempted.has(key)) continue;
       this.linkedNoteSweepAttempted.add(key);
-      if (getLitNoteForCitekey(key, file.path, app)) continue;
+      if (getLitNoteForCitekey(key, file.path, this.app)) continue;
       if (!this.bibCache.has(key)) continue;
       try {
         if (await this.ensureLitNoteForCitekey(key, file)) created++;
@@ -4080,11 +4160,11 @@ export class BibManager {
   private async citekeysInFile(file: TFile): Promise<Set<string>> {
     const keys = new Set<string>();
     try {
-      const content = await app.vault.read(file);
+      const content = await this.app.vault.read(file);
       const segs = getCitationSegments(content, false, true);
       for (const g of segs) {
         for (const s of g) {
-          if (s.type === 'key') keys.add(s.val);
+          if (s.type === SegmentType.key) keys.add(s.val);
         }
       }
     } catch {
@@ -4110,7 +4190,7 @@ export class BibManager {
    */
   async reconcileCitedKeysIndex(): Promise<number> {
     // Share one pass across concurrent startup callers.
-    if (this.citedKeysReconcile) return this.citedKeysReconcile;
+    if (this.citedKeysReconcile !== null) return this.citedKeysReconcile;
     this.citedKeysReconcile = this.doReconcileCitedKeysIndex().finally(() => {
       this.citedKeysReconcile = null;
     });
@@ -4124,7 +4204,7 @@ export class BibManager {
     const scanStart = Date.now();
     const watermark = this.citedKeysBuiltAt;
 
-    const files = app.vault
+    const files = this.app.vault
       .getMarkdownFiles()
       .filter((f) => this.isIndexablePath(f.path));
     this.indexMdCount = files.length;
@@ -4233,8 +4313,8 @@ export class BibManager {
     if (this.renderedCacheLoaded) return;
     this.renderedCacheLoaded = true;
     try {
-      const raw = await app.vault.adapter.read(this.renderedCachePath());
-      const data = JSON.parse(raw);
+      const raw = await this.app.vault.adapter.read(this.renderedCachePath());
+      const data = JSON.parse(raw) as CacheFile;
       // Bump RENDER_CACHE_VERSION whenever rendering behaviour changes
       // (parser fixes, CSL changes, …): a mismatched persisted cache is
       // discarded so every note re-renders with the new code instead of
@@ -4257,10 +4337,10 @@ export class BibManager {
     for (const [p, v] of this.renderedCache) notes[p] = v;
     try {
       const dir = normalizePath(SW_CACHE_DIR);
-      if (!(await app.vault.adapter.exists(dir))) {
-        await app.vault.adapter.mkdir(dir);
+      if (!(await this.app.vault.adapter.exists(dir))) {
+        await this.app.vault.adapter.mkdir(dir);
       }
-      await app.vault.adapter.write(
+      await this.app.vault.adapter.write(
         this.renderedCachePath(),
         JSON.stringify({ version: RENDER_CACHE_VERSION, notes })
       );
@@ -4345,7 +4425,7 @@ export class BibManager {
       .map((n) => `${n.family ?? ''} ${n.given ?? ''} ${n.literal ?? ''}`)
       .join('|');
     const year =
-      ((entry as any).issued)?.['date-parts']?.[0]?.[0] ?? '';
+      entry.issued?.['date-parts']?.[0]?.[0] ?? '';
     return fastHash(`${names}\u0001${year}`);
   }
 
@@ -4413,7 +4493,7 @@ export class BibManager {
       bib,
       citations: entry.citations,
       citeBibMap: new Map(Object.entries(entry.citeBibMap ?? {})),
-      settings: getScopedSettings(file),
+      settings: getScopedSettings(file, this.app),
       source,
     };
   }
@@ -4484,26 +4564,26 @@ export class BibManager {
       for (const k of this.getCitedKeys()) citekeys.add(k);
     } else {
       // default: active note
-      const view = app.workspace.getActiveViewOfType(MarkdownView);
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (view?.file) {
         await this.indexFileCitekeys(view.file);
         (await this.citekeysInFile(view.file)).forEach((k) => citekeys.add(k));
       }
     }
 
-    const sourcePath = opts.file?.path ?? app.workspace.getActiveFile()?.path ?? '';
+    const sourcePath = opts.file?.path ?? this.app.workspace.getActiveFile()?.path ?? '';
     const missing: string[] = [];
     for (const key of citekeys) {
-      const exists = getLitNoteForCitekey(key, sourcePath, app);
+      const exists = getLitNoteForCitekey(key, sourcePath, this.app);
       if (exists) continue;
       missing.push(key);
     }
     if (!missing.length) return { created: 0, missing, missingKeys: missing };
 
     // Build {indexedKey, itemID?, entry?} refs from the bib cache.
-    const refs: { indexedKey: string; itemID?: number; entry?: any }[] = [];
+    const refs: { indexedKey: string; itemID?: number; entry?: PartialCSLEntry }[] = [];
     for (const key of missing) {
-      const entry = this.bibCache.get(key) as any;
+      const entry = this.bibCache.get(key);
       const zoteroItemKey: string | undefined = entry?._zoteroKey;
       const groupId: number | undefined = entry?.groupID;
       if (!zoteroItemKey) continue;
@@ -4518,10 +4598,10 @@ export class BibManager {
       // (createLiteratureNote falls back from ZotLit to the plugin template).
       let created = 0;
       const sourceFile =
-        opts.file ?? app.workspace.getActiveFile() ?? app.vault.getMarkdownFiles()[0];
+        opts.file ?? this.app.workspace.getActiveFile() ?? this.app.vault.getMarkdownFiles()[0];
       if (sourceFile) {
         for (const key of missing) {
-          if (getLitNoteForCitekey(key, sourcePath, app)) continue;
+          if (getLitNoteForCitekey(key, sourcePath, this.app)) continue;
           await this.createLiteratureNote(key, sourceFile, { open: false });
           created++;
           onProgress?.(created, missing.length);
@@ -4537,12 +4617,12 @@ export class BibManager {
     // path created isn't re-opened).
     const sourceFile =
       opts.file ??
-      app.workspace.getActiveFile() ??
-      app.vault.getMarkdownFiles()[0];
+      this.app.workspace.getActiveFile() ??
+      this.app.vault.getMarkdownFiles()[0];
     const total = missing.length;
     for (const key of missing) {
       if (!sourceFile) break;
-      if (getLitNoteForCitekey(key, sourcePath, app)) continue;
+      if (getLitNoteForCitekey(key, sourcePath, this.app)) continue;
       await this.createLiteratureNote(key, sourceFile, { open: false });
       created++;
       onProgress?.(created, total);
@@ -4560,10 +4640,11 @@ export class BibManager {
     }
     if (hash) this.dispatchedHashes.set(file.path, hash);
 
-    app.workspace.getLeavesOfType('markdown').forEach((l) => {
+    this.app.workspace.getLeavesOfType('markdown').forEach((l) => {
       const view = l.view as MarkdownView;
       if (view.file === file) {
-        const previewMode = (view as any).previewMode;
+        const previewMode = (view as MarkdownView & { previewMode?: PreviewModeLike })
+          .previewMode;
         const renderer = previewMode?.renderer;
         if (renderer) {
           renderer.lastText = null;
@@ -4579,8 +4660,8 @@ export class BibManager {
           renderer.queueRender();
         } else if (typeof previewMode?.rerender === 'function') {
           previewMode.rerender(true);
-        } else if (typeof (view as any).onMarkdownFold === 'function') {
-          (view as any).onMarkdownFold();
+        } else if (typeof (view as MarkdownView & { onMarkdownFold?: () => void }).onMarkdownFold === 'function') {
+          (view as MarkdownView & { onMarkdownFold?: () => void }).onMarkdownFold();
         }
 
         // Do NOT dispatch to CodeMirror while the citation popup is open: the
@@ -4593,7 +4674,7 @@ export class BibManager {
           typeof this.plugin.isCitationSuggestOpen === 'function'
             ? this.plugin.isCitationSuggestOpen()
             : false;
-        const cm = (view.editor as any).cm as EditorView;
+        const cm = (view.editor as unknown as { cm: EditorView }).cm;
         if (!suggestOpen && cm.dispatch) {
           cm.dispatch({
             effects: [setCiteKeyCache.of(result)],
@@ -4690,7 +4771,7 @@ export class BibManager {
    *  entry is still current (mtime + library version unchanged) — no raw
    *  [@key] flash, no forced re-render. */
   getCacheForPath(filePath: string) {
-    const file = app.vault.getAbstractFileByPath(filePath);
+    const file = this.app.vault.getAbstractFileByPath(filePath);
     if (file && file instanceof TFile && this.fileCache.has(file)) {
       const cache = this.fileCache.get(file);
       return cache;
@@ -4711,7 +4792,7 @@ export class BibManager {
   }
 
   getResolution(filePath: string, key: string) {
-    const file = app.vault.getAbstractFileByPath(filePath);
+    const file = this.app.vault.getAbstractFileByPath(filePath);
     if (file && file instanceof TFile && this.fileCache.has(file)) {
       const cache = this.fileCache.get(file);
       return {
@@ -4727,10 +4808,10 @@ export class BibManager {
   }
 
   getCitationsForSection(filePath: string, lineStart: number, lineEnd: number) {
-    const file = app.vault.getAbstractFileByPath(filePath);
+    const file = this.app.vault.getAbstractFileByPath(filePath);
     if (file && file instanceof TFile && this.fileCache.has(file)) {
       const cache = this.fileCache.get(file);
-      const mCache = app.metadataCache.getCache(filePath);
+      const mCache = this.app.metadataCache.getCache(filePath);
 
       // Prefer an EXACT metadataCache section match (fast path). Obsidian's
       // getSectionInfo(el) and metadataCache.sections can disagree on the

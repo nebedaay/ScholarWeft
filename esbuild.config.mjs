@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+// Node 18+ ships the list; a superset of the old `builtin-modules` package.
+import { builtinModules as builtins } from "node:module";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";

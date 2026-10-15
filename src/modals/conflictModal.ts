@@ -16,12 +16,18 @@ export interface ConflictingPlugin {
  */
 export class ConflictModal extends Modal {
   private conflicts: ConflictingPlugin[];
-  private onResolve: (disableIds: string[], dontAskAgain: boolean) => void;
+  /** May be async: the caller disables plugins before it returns. */
+  private onResolve: (
+    disableIds: string[],
+    dontAskAgain: boolean
+  ) => void | Promise<void>;
 
   constructor(
     app: App,
     conflicts: ConflictingPlugin[],
-    onResolve: (disableIds: string[], dontAskAgain: boolean) => void
+    onResolve: (disableIds: string[], dontAskAgain: boolean) =>
+      | void
+      | Promise<void>
   ) {
     super(app);
     this.conflicts = conflicts;
@@ -47,13 +53,13 @@ export class ConflictModal extends Modal {
     new Setting(contentEl)
       .addButton((b) =>
         b.setButtonText(disableLabel).setCta().onClick(() => {
-          this.onResolve(this.conflicts.map((c) => c.id), false);
+          void this.onResolve(this.conflicts.map((c) => c.id), false);
           this.close();
         })
       )
       .addButton((b) =>
         b.setButtonText("Keep both and don't ask again").onClick(() => {
-          this.onResolve([], true);
+          void this.onResolve([], true);
           this.close();
         })
       );

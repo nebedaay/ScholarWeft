@@ -1,4 +1,4 @@
-import { PartialCSLEntry } from './types';
+import { PartialCSLEntry, CSLDate } from './types';
 
 // Pure Zotero-item-to-CSL-JSON conversion. No I/O, no Obsidian deps.
 
@@ -43,7 +43,176 @@ export const ZOTERO_TYPE_TO_CSL: Record<string, string> = {
   webpage: 'webpage',
 };
 
-export function parseZoteroDate(dateStr: string): any {
+/**
+ * The Zotero API's shapes, as far as this mapper reads them.
+ *
+ * Zotero's payloads are dynamic — each item type carries its own field names —
+ * so most values are optional, and a field Zotero sends as a number (some
+ * version counts) is accepted as one. Typing them here is what keeps the whole
+ * mapper off `any`: without it every `data.someField` is an unsafe member
+ * access, which the directory's review reports by the hundred.
+ */
+type ZoteroField = string | number | undefined;
+
+export interface ZoteroCreator {
+  creatorType?: string;
+  /** A single-field (institutional) creator. */
+  name?: string;
+  lastName?: string;
+  firstName?: string;
+}
+
+export interface ZoteroTag {
+  tag?: string;
+}
+
+export interface ZoteroItemData {
+  citationKey?: string;
+  deleted?: boolean;
+  itemType?: string;
+  /** The item's own key (the native API repeats it inside `data`). */
+  key?: string;
+  /** Parent item key (attachments/annotations point at theirs). */
+  parentItem?: string;
+  /** Attachment MIME type, e.g. `application/pdf`. */
+  contentType?: string;
+  /** Attachment path as the native API reports it (often absent locally). */
+  path?: string;
+  /** Zotero's `relations` map (used to find related items). */
+  relations?: Record<string, unknown>;
+  /** A child note's HTML body. */
+  note?: string;
+  /** A collection's name (the collections endpoint returns items). */
+  name?: string;
+  /** A collection's parent key, or false/null at the top level. */
+  parentCollection?: string | false | null;
+
+  // Name: every type has its own, and only case/statute/email differ from title.
+  title?: ZoteroField;
+  caseName?: ZoteroField;
+  nameOfAct?: ZoteroField;
+  subject?: ZoteroField;
+
+  creators?: ZoteroCreator[];
+
+  date?: ZoteroField;
+  dateDecided?: ZoteroField;
+  dateEnacted?: ZoteroField;
+  issueDate?: ZoteroField;
+  filingDate?: ZoteroField;
+
+  publicationTitle?: ZoteroField;
+  bookTitle?: ZoteroField;
+  encyclopediaTitle?: ZoteroField;
+  dictionaryTitle?: ZoteroField;
+  blogTitle?: ZoteroField;
+  websiteTitle?: ZoteroField;
+  forumTitle?: ZoteroField;
+  proceedingsTitle?: ZoteroField;
+  programTitle?: ZoteroField;
+  reporter?: ZoteroField;
+  code?: ZoteroField;
+  journalAbbreviation?: ZoteroField;
+
+  volume?: ZoteroField;
+  reporterVolume?: ZoteroField;
+  codeVolume?: ZoteroField;
+  issue?: ZoteroField;
+  pages?: ZoteroField;
+  firstPage?: ZoteroField;
+  codePages?: ZoteroField;
+  numberOfVolumes?: ZoteroField;
+  numberOfPages?: ZoteroField;
+  numPages?: ZoteroField;
+  edition?: ZoteroField;
+  publisher?: ZoteroField;
+  institution?: ZoteroField;
+  university?: ZoteroField;
+  repository?: ZoteroField;
+  organization?: ZoteroField;
+  place?: ZoteroField;
+  repositoryLocation?: ZoteroField;
+
+  DOI?: ZoteroField;
+  URL?: ZoteroField;
+  ISBN?: ZoteroField;
+  ISSN?: ZoteroField;
+  abstractNote?: ZoteroField;
+  language?: ZoteroField;
+
+  thesisType?: ZoteroField;
+  reportType?: ZoteroField;
+  manuscriptType?: ZoteroField;
+  letterType?: ZoteroField;
+  mapType?: ZoteroField;
+  type?: ZoteroField;
+
+  number?: ZoteroField;
+  reportNumber?: ZoteroField;
+  patentNumber?: ZoteroField;
+  docketNumber?: ZoteroField;
+  documentNumber?: ZoteroField;
+  publicLawNumber?: ZoteroField;
+  billNumber?: ZoteroField;
+
+  court?: ZoteroField;
+  issuingAuthority?: ZoteroField;
+  legislativeBody?: ZoteroField;
+  committee?: ZoteroField;
+  country?: ZoteroField;
+  artworkMedium?: ZoteroField;
+  interviewMedium?: ZoteroField;
+  format?: ZoteroField;
+  section?: ZoteroField;
+  eventPlace?: ZoteroField;
+  archive?: ZoteroField;
+  archiveLocation?: ZoteroField;
+  callNumber?: ZoteroField;
+  applicationNumber?: ZoteroField;
+  versionNumber?: ZoteroField;
+  status?: ZoteroField;
+  series?: ZoteroField;
+  seriesTitle?: ZoteroField;
+  seriesNumber?: ZoteroField;
+  conferenceName?: ZoteroField;
+  shortTitle?: ZoteroField;
+
+  extra?: ZoteroField;
+  tags?: ZoteroTag[];
+  collections?: unknown[];
+  dateAdded?: ZoteroField;
+  dateModified?: ZoteroField;
+}
+
+/** A Zotero API item: `data` holds the fields, `key`/`version` sit alongside. */
+export interface ZoteroItem {
+  key?: string;
+  version?: number;
+  data?: ZoteroItemData;
+  /** The LOCAL API exposes an attachment's file path here, not in `data.path`. */
+  links?: { enclosure?: { href?: string } };
+}
+
+/** One name in a CSL creator list. */
+export interface CSLCreator {
+  literal?: string;
+  family?: string;
+  given?: string;
+}
+
+/**
+ * The CSL entry this mapper assembles.
+ *
+ * Deliberately a loose record rather than `PartialCSLEntry`: it carries far more
+ * than the shared shape (every CSL field the mapping fills, plus the internal
+ * `_` extras), and several keys — the creator roles — are chosen at runtime. The
+ * one place the richer object is narrowed to the shared type is the return.
+ */
+type BuiltCSLEntry = Record<string, unknown>;
+
+export type { CSLDate };
+
+export function parseZoteroDate(dateStr: string): CSLDate | undefined {
   if (!dateStr) return undefined;
   const fullMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
   if (fullMatch) return { 'date-parts': [[+fullMatch[1], +fullMatch[2], +fullMatch[3]]] };
@@ -54,9 +223,9 @@ export function parseZoteroDate(dateStr: string): any {
   return { raw: dateStr };
 }
 
-function zoteroCreatorToCSL(creator: any): any {
+function zoteroCreatorToCSL(creator: ZoteroCreator): CSLCreator {
   if (creator.name) return { literal: creator.name };
-  const r: any = {};
+  const r: CSLCreator = {};
   if (creator.lastName) r.family = creator.lastName;
   if (creator.firstName) r.given = creator.firstName;
   return r;
@@ -83,15 +252,18 @@ const CREATOR_TYPE_TO_CSL_ROLE: Record<string, string> = {
   castMember: 'performer',
 };
 
-export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | null {
+export function zoteroItemToCSL(
+  item: ZoteroItem,
+  groupId: number
+): PartialCSLEntry | null {
   const data = item.data;
   if (!data?.citationKey) return null;
   // Items in the Zotero trash are not part of the library — never cite them.
   if (data.deleted) return null;
 
-  const csl: any = {
+  const csl: BuiltCSLEntry = {
     id: data.citationKey,
-    type: ZOTERO_TYPE_TO_CSL[data.itemType] || 'document',
+    type: ZOTERO_TYPE_TO_CSL[data.itemType ?? ''] || 'document',
     groupID: groupId,
   };
 
@@ -104,9 +276,10 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   if (title) csl.title = title;
 
   if (data.creators?.length) {
-    const byRole: Record<string, any[]> = {};
+    const byRole: Record<string, CSLCreator[]> = {};
     for (const creator of data.creators) {
-      const role = CREATOR_TYPE_TO_CSL_ROLE[creator.creatorType] || 'author';
+      const role =
+        CREATOR_TYPE_TO_CSL_ROLE[creator.creatorType ?? ''] || 'author';
       if (!byRole[role]) byRole[role] = [];
       byRole[role].push(zoteroCreatorToCSL(creator));
     }
@@ -118,7 +291,7 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   const date =
     data.date ?? data.dateDecided ?? data.dateEnacted ??
     data.issueDate ?? data.filingDate;
-  if (date) csl.issued = parseZoteroDate(date);
+  if (date) csl.issued = parseZoteroDate(String(date));
 
   // `reporter` (case) and `code` (statute/bill) are the containing work, like
   // `publicationTitle` for an article.
@@ -197,8 +370,8 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   if (data.extra) csl._extra = data.extra;
   if (data.tags?.length) {
     const tags = data.tags
-      .map((t: any) => t?.tag)
-      .filter((t: unknown): t is string => typeof t === 'string' && !!t);
+      .map((t) => t?.tag)
+      .filter((t): t is string => typeof t === 'string' && !!t);
     if (tags.length) csl._tags = tags;
   }
   // Zotero collection KEYS the item belongs to (names live in the collection
@@ -206,7 +379,7 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   // per-item request. Not a CSL field.
   if (Array.isArray(data.collections) && data.collections.length) {
     const keys = data.collections.filter(
-      (k: unknown): k is string => typeof k === 'string' && !!k
+      (k): k is string => typeof k === 'string' && !!k
     );
     if (keys.length) csl._collections = keys;
   }
@@ -219,9 +392,11 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   // builder falls back to the CSL groups when `_creators` is absent.
   if (data.creators?.length) {
     const creators = data.creators
-      .filter((c: any) => c && typeof c === 'object')
-      .map((c: any) => {
-        const out: any = { role: c.creatorType || 'author' };
+      .filter((c): c is ZoteroCreator => !!c && typeof c === 'object')
+      .map((c) => {
+        const out: CSLCreator & { role: string } = {
+          role: c.creatorType || 'author',
+        };
         if (c.name) out.literal = c.name;
         else {
           if (c.lastName) out.family = c.lastName;
@@ -229,7 +404,7 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
         }
         return out;
       })
-      .filter((c: any) => c.literal || c.family || c.given);
+      .filter((c) => c.literal || c.family || c.given);
     if (creators.length) csl._creators = creators;
   }
 
@@ -243,5 +418,9 @@ export function zoteroItemToCSL(item: any, groupId: number): PartialCSLEntry | n
   // re-rendering every note when anything in the library changes.
   if (item.version != null) csl._version = item.version;
 
-  return csl as PartialCSLEntry;
+  // The accumulator is a loose record, so the narrowing to the shared type is
+  // explicit: `id` is always set (from `citationKey`), while `title` is only set
+  // when the item has one — which `PartialCSLEntry` cannot express. Behaviour is
+  // unchanged from the `any`-typed original; only the type is now honest.
+  return csl as unknown as PartialCSLEntry;
 }

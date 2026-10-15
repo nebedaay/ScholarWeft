@@ -1,4 +1,4 @@
-import { TFile } from 'obsidian';
+import { FileSystemAdapter, Platform, TFile } from 'obsidian';
 import type ReferenceList from './main';
 import type { ExportFormat } from './exportModal';
 import type { StyleMapping } from './settings';
@@ -39,13 +39,27 @@ async function convertCitationsForExport(
 // We use require() instead of dynamic import() for the same reason as
 // src/bib/pandoc.ts — esbuild 0.13.x leaves import() of external modules
 // verbatim in the CJS bundle, which fails in Electron's renderer.
-declare const require: (id: string) => any;
+declare const require: (id: string) => unknown;
+
+/** Obsidian's account internals (not in the public typings). */
+type AppInternals = { account?: { name?: string } };
+
+/** An `execFile` failure, which carries the child's streams. */
+type ExecError = {
+  stdout?: string;
+  stderr?: string;
+  message?: string;
+};
 
 function execFileAsync(
   file: string,
   args: string[],
   options?: { env?: Record<string, string | undefined> }
 ): Promise<{ stdout: string; stderr: string }> {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) {
+  	throw new Error('ScholarWeft: this feature is available on the desktop app only.');
+  }
   const { execFile } = require('child_process') as typeof import('child_process');
   const { promisify } = require('util') as typeof import('util');
   return promisify(execFile)(file, args, {
@@ -56,9 +70,9 @@ function execFileAsync(
 
 /** Absolute path to the plugin's bundled scripts/ directory (desktop). */
 function pluginScriptsDir(plugin: ReferenceList): string | null {
-  const adapter = plugin.app.vault.adapter as any;
+  const adapter = plugin.app.vault.adapter as FileSystemAdapter;
   if (typeof adapter?.getBasePath !== 'function') return null; // mobile
-  const base = adapter.getBasePath() as string;
+  const base = adapter.getBasePath();
   const dir = plugin.manifest.dir;
   if (!dir) return null;
   return `${base}/${dir}/scripts`;
@@ -69,15 +83,19 @@ function pluginScriptsDir(plugin: ReferenceList): string | null {
  *  delete mid-export — it otherwise races the deletion with an async read and
  *  logs a spurious ENOENT. */
 function hiddenSidecar(p: string, suffix: string): string {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return p;
   const path = require('path') as typeof import('path');
   return path.join(path.dirname(p), `.${path.basename(p)}${suffix}`);
 }
 
 /** Expand a leading ~ or ~/ in a user-supplied path to the home directory. */
 function expandTilde(p: string): string {
-  if (p === '~') return require('os').homedir();
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) return p;
+  if (p === '~') return (require('os') as typeof import('os')).homedir();
   if (p.startsWith('~/') || p.startsWith('~\\')) {
-    return require('os').homedir() + p.slice(1);
+    return (require('os') as typeof import('os')).homedir() + p.slice(1);
   }
   return p;
 }
@@ -185,6 +203,10 @@ export async function runDocumentCompiler(
   file: TFile,
   opts: Omit<CompilerOptions, 'endnotesMode'> & { endnotes?: CompilerOptions['endnotesMode'] }
 ): Promise<CompileResult> {
+  // Node built-ins do not exist on mobile; this path is desktop-only.
+  if (!Platform.isDesktop) {
+  	throw new Error('ScholarWeft: this feature is available on the desktop app only.');
+  }
   const endnotesMode: CompilerOptions['endnotesMode'] =
     opts.endnotes ?? 'none';
   const scriptsDir = pluginScriptsDir(plugin);
@@ -208,8 +230,8 @@ export async function runDocumentCompiler(
     };
   }
 
-  const adapter = plugin.app.vault.adapter as any;
-  const vaultBase = adapter.getBasePath() as string;
+  const adapter = plugin.app.vault.adapter as FileSystemAdapter;
+  const vaultBase = adapter.getBasePath();
   const absMaster = `${vaultBase}/${file.path}`;
   const isExport = opts.format !== 'md';
 
@@ -281,7 +303,7 @@ export async function runDocumentCompiler(
   // Pass the Obsidian account display name as a fallback author so the
   // merge script can set dc:creator even when `author:` is absent from YAML.
   const accountName: string | undefined =
-    (plugin.app as any).account?.name ?? undefined;
+    (plugin.app as unknown as AppInternals).account?.name ?? undefined;
   if (accountName) args.push('--default-author', accountName);
 
   // Always pass --templates-dir; fall back to <vault>/Export Templates/ when
@@ -319,10 +341,14 @@ export async function runDocumentCompiler(
   const script = `${scriptsDir}/DocumentCompiler.py`;
   // Pass resolved tool paths through so the script doesn't depend on PATH,
   // and the vault root so the script never has to guess it.
-  const baseEnv = ((window as any).process?.env ?? {}) as Record<string, string>;
+  const baseEnv = (
+      (window as unknown as { process?: { env?: Record<string, string> } }).process
+        ?.env ?? {}
+    );
+
   const env: Record<string, string | undefined> = { ...baseEnv, SW_PYTHON: py };
   {
-    const a = plugin.app.vault.adapter as any;
+    const a = plugin.app.vault.adapter as FileSystemAdapter;
     if (typeof a?.getBasePath === 'function') env.SW_VAULT = a.getBasePath();
   }
   // Zotero styles folder + the plugin's configured live-render style, so the
@@ -352,17 +378,20 @@ export async function runDocumentCompiler(
       outputPath: rawOutputPath || undefined,
     };
   };
-  const toError = (e: any): CompileResult => ({
+  const toError = (e: ExecError): CompileResult => ({
     ok: false,
     stdout: e?.stdout || '',
-    stderr: (e?.stderr || String(e?.message ?? e)).trim(),
+    stderr: (
+      e?.stderr ||
+      (typeof e?.message === 'string' ? e.message : '')
+    ).trim(),
   });
 
   if (!isExport) {
     try {
       return toResult(await execCompiler(buildArgs(absMaster)));
     } catch (e) {
-      return toError(e);
+      return toError(e as ExecError);
     }
   }
 
@@ -441,12 +470,12 @@ export async function runDocumentCompiler(
   } catch (e) {
     // Fallback: the external Node.js converter (historical path).
     const node = await findNode();
-    if (!node) return toError(e);
+    if (!node) return toError(e as ExecError);
     env.SW_NODE = node;
     try {
       return toResult(await execCompiler(buildArgs(absMaster)));
     } catch (e2) {
-      return toError(e2);
+      return toError(e2 as ExecError);
     }
   }
 }

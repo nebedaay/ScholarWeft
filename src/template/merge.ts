@@ -146,11 +146,11 @@ function reconcile(
   const has = !!existing && existing.length > 0;
   switch (merge) {
     case 'keep':
-      return has ? existing! : generated;
+      return has ? existing : generated;
     case 'append':
       if (!has) return generated;
-      if (isListBlock(existing!) && isListBlock(generated)) {
-        return appendListItems(existing!, generated);
+      if (isListBlock(existing) && isListBlock(generated)) {
+        return appendListItems(existing, generated);
       }
       // Shape mismatch (e.g. a scalar where a list is rendered): fall back to
       // letting the template win rather than corrupting the existing value.
@@ -162,10 +162,10 @@ function reconcile(
       // When the note had nothing, fall back to the existing value: the Zotero
       // list lives in the owning property, so `related` stays the user's.
       if (!has) return existing ?? [];
-      if (isListBlock(existing!) && isListBlock(generated)) {
-        return subtractListItems(existing!, generated);
+      if (isListBlock(existing) && isListBlock(generated)) {
+        return subtractListItems(existing, generated);
       }
-      return existing!;
+      return existing;
     case 'replace':
     default:
       return generated;
