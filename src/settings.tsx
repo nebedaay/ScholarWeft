@@ -574,7 +574,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       cls: 'sw-settings-card-desc',
       text: t('Read the guides (setup, dependencies, citations, export, …) in the app.'),
     });
-    docsCard.addEventListener('click', () => openDocs('README.md'));
+    docsCard.addEventListener('click', () => openDocs(this.app, 'README.md'));
   }
 
   private renderPageHeader(containerEl: HTMLElement): void {
@@ -600,6 +600,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     if (!probe.latex) missing.push('latex');
     if (missing.length === 0) return;
     renderDependencyNote(
+      this.app,
       el,
       missing,
       t('Not found on this computer — document export/import options that need these are disabled until they are installed:')
@@ -612,6 +613,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
     el.empty();
     if (probe.zotero) return;
     renderDependencyNote(
+      this.app,
       el,
       ['zotero'],
       t('Zotero is not running (or not installed). Bibliography files still work; live citations and citekey lookup need Zotero.')
@@ -622,6 +624,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
   private renderBibliography(containerEl: HTMLElement): void {
     renderDependencyNote(
+      this.app,
       containerEl,
       ['zotero'],
       t('Reading a bibliography file needs nothing installed. Connect Zotero to resolve and insert live citations.')
@@ -759,6 +762,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
   private renderCitations(containerEl: HTMLElement): void {
     renderDependencyNote(
+      this.app,
       containerEl,
       [],
       t('These settings control how citations are found and rendered inside Obsidian. They need no external tools.')
@@ -1253,6 +1257,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
   private renderLiteratureNotes(containerEl: HTMLElement): void {
     renderDependencyNote(
+      this.app,
       containerEl,
       ['zotero'],
       t('Creating literature notes needs Zotero for citekey and metadata lookup.'),
@@ -1830,6 +1835,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
   private renderDocuments(containerEl: HTMLElement): void {
     renderDependencyNote(
+      this.app,
       containerEl,
       ['python', 'pandoc', 'libreoffice', 'latex', 'zotero', 'bbt'],
       t('Compiling, exporting, and importing call external tools. PDF via an ODT/DOCX template needs LibreOffice; PDF via a .tex template needs LuaLaTeX; live citation fields need Zotero (and Better BibTeX for automatic citekeys).')

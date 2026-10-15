@@ -7,6 +7,7 @@
 import { App, Component, MarkdownRenderer, Modal } from 'obsidian';
 import { BUNDLED_ASSETS } from 'bundled:assets';
 import { setModalTitle } from './modals/modalTitle';
+import { utf8ToBase64 } from './helpers';
 
 export const GITHUB_DOCS_BASE =
   'https://github.com/nebedaay/ScholarWeft/blob/main/docs/';
@@ -53,7 +54,7 @@ function inlineBundledImages(markdown: string): string {
         : 'image/png';
       const base64 = asset.binary
         ? asset.content
-        : btoa(unescape(encodeURIComponent(asset.content)));
+        : utf8ToBase64(asset.content);
       return `${pre}data:${mime};base64,${base64}${post}`;
     }
   );
@@ -169,6 +170,6 @@ export class DocsModal extends Modal {
 }
 
 /** Open the docs modal (optionally at a specific page). */
-export function openDocs(name = 'README.md'): void {
+export function openDocs(app: App, name = 'README.md'): void {
   new DocsModal(app, name).open();
 }

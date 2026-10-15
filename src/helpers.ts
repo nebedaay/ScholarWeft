@@ -19,7 +19,9 @@ export class PromiseCapability<T> {
       };
       this.reject = (reason) => {
         this.settled = true;
-        reject(reason);
+        // A rejection should always carry an Error, so the reason has a stack
+        // and a readable message rather than a bare string or object.
+        reject(reason instanceof Error ? reason : new Error(describeError(reason)));
       };
     });
   }
@@ -28,8 +30,41 @@ export class PromiseCapability<T> {
 /** Log only in development builds. */
 export function debugLog(...args: unknown[]): void {
   if (process.env.NODE_ENV !== 'production') {
-    console.log(...args);
+    // `debug` (not `log`): Obsidian's review allows warn/error/debug only.
+    console.debug(...args);
   }
+}
+
+/**
+ * A readable message for an unknown thrown value. `String(value)` alone would
+ * render a plain object as "[object Object]", so objects go through JSON.
+ */
+export function describeError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  if (typeof e === 'number' || typeof e === 'boolean') return String(e);
+  try {
+    return JSON.stringify(e) ?? 'Unknown error';
+  } catch {
+    return 'Unserializable error';
+  }
+}
+
+/**
+ * UTF-8 text → base64. Replaces the deprecated
+ * `btoa(unescape(encodeURIComponent(text)))` idiom: `unescape` is a legacy
+ * browser feature, and encoding the bytes explicitly is clearer and faster.
+ */
+export function utf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  // Chunked: spreading a huge byte array would exceed the argument limit of
+  // String.fromCharCode.
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 
 /**
@@ -74,21 +109,8 @@ export async function copyElToClipboard(el: HTMLElement): Promise<void> {
 
 /** Copy a plain string to the clipboard. */
 export async function copyTextToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // Textarea execCommand fallback for older environments.
-    const ta = createEl('textarea');
-    ta.value = text;
-    ta.setCssStyles({ position: 'fixed' });
-    ta.setCssStyles({ opacity: '0' });
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    try {
-      document.execCommand('copy');
-    } finally {
-      document.body.removeChild(ta);
-    }
-  }
+  // The async Clipboard API is present in every Obsidian runtime (desktop
+  // Electron and the mobile WebView), so the old hidden-textarea
+  // `document.execCommand('copy')` fallback is no longer needed.
+  await navigator.clipboard.writeText(text);
 }

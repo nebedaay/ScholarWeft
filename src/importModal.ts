@@ -161,6 +161,7 @@ export class ImportModal extends Modal {
     this.depNote.empty();
     if (missing.length > 0) {
       renderDependencyNote(
+        this.app,
         this.depNote,
         missing,
         'Document import needs the following, which was not found (or Zotero is not running):'

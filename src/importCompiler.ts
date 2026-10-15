@@ -12,7 +12,7 @@ function execFileAsync(
 ): Promise<{ stdout: string; stderr: string }> {
   // Node built-ins do not exist on mobile; this path is desktop-only.
   if (!Platform.isDesktop) {
-  	throw new Error('ScholarWeft: this feature is available on the desktop app only.');
+    throw new Error('ScholarWeft: this feature is available on the desktop app only.');
   }
   const { execFile } = require('child_process') as typeof import('child_process');
   const { promisify } = require('util') as typeof import('util');
@@ -20,11 +20,6 @@ function execFileAsync(
     maxBuffer: 50 * 1024 * 1024,
     ...options,
   });
-  // `promisify` types the result loosely; the child writes both streams.
-  return promisify(execFile)(file, args, {
-    maxBuffer: 50 * 1024 * 1024,
-    ...options,
-  }) as Promise<{ stdout: string; stderr: string }>;
 }
 
 /** Absolute path to the plugin's bundled scripts/ directory (desktop only). */

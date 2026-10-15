@@ -974,26 +974,34 @@ export class BibManager {
     if (this._zoteroRecoveryScheduled) return;
     this._zoteroRecoveryScheduled = true;
     debugLog('[sw:bib] scheduling Zotero recovery probe');
-    window.setTimeout(async () => {
-      this._zoteroRecoveryScheduled = false;
-      if (!this.plugin) return;
-      // Still loading (e.g. the user already hit Refresh) — nothing to do.
-      if (!this.backendLoading) return;
-      try {
-        const running = await this.isZoteroAvailable();
-        if (!running) {
-          this.scheduleZoteroRecovery(Math.min(delayMs * 2, 60_000));
-          return;
-        }
-        debugLog('[sw:bib] Zotero is back — completing the library load');
-        await this.loadAllSources({ fromCache: false });
-        this.fileCache.clear();
-        void this.plugin.processReferences();
-      } catch (e) {
-        debugLog('[sw:bib] Zotero recovery probe failed', e);
-        this.scheduleZoteroRecovery(Math.min(delayMs * 2, 60_000));
-      }
+    window.setTimeout(() => {
+      void this.probeZoteroRecovery(delayMs);
     }, delayMs);
+  }
+
+  /**
+   * One recovery attempt: if Zotero has come back, finish the library load.
+   * Reschedules itself with a doubled delay while Zotero stays unavailable.
+   */
+  private async probeZoteroRecovery(delayMs: number): Promise<void> {
+    this._zoteroRecoveryScheduled = false;
+    if (!this.plugin) return;
+    // Still loading (e.g. the user already hit Refresh) — nothing to do.
+    if (!this.backendLoading) return;
+    try {
+      const running = await this.isZoteroAvailable();
+      if (!running) {
+        this.scheduleZoteroRecovery(Math.min(delayMs * 2, 60_000));
+        return;
+      }
+      debugLog('[sw:bib] Zotero is back — completing the library load');
+      await this.loadAllSources({ fromCache: false });
+      this.fileCache.clear();
+      void this.plugin.processReferences();
+    } catch (e) {
+      debugLog('[sw:bib] Zotero recovery probe failed', e);
+      this.scheduleZoteroRecovery(Math.min(delayMs * 2, 60_000));
+    }
   }
 
   async reinit(clearBibData: boolean) {

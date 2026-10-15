@@ -11,6 +11,7 @@ import {
 } from '@codemirror/view';
 import { Tree } from '@lezer/common';
 import {
+  App,
   Keymap,
   editorInfoField,
   editorLivePreviewField,
@@ -77,6 +78,7 @@ export function editorTooltipHandler(manager: TooltipManager) {
 }
 
 class CiteWidget extends WidgetType {
+  app: App;
   cite: RenderedCitation;
   sourcePath?: string;
   linkText?: string;
@@ -87,6 +89,7 @@ class CiteWidget extends WidgetType {
   referenceHtml: string[];
 
   constructor(
+    app: App,
     cite: RenderedCitation,
     sourcePath?: string,
     linkText?: string,
@@ -96,6 +99,7 @@ class CiteWidget extends WidgetType {
     referenceHtml: string[] = []
   ) {
     super();
+    this.app = app;
     this.cite = cite;
     this.sourcePath = sourcePath;
     this.linkText = linkText;
@@ -130,7 +134,7 @@ class CiteWidget extends WidgetType {
             if (evt.button !== 0) return;
             const newPane = Keymap.isModEvent(evt);
             window.setTimeout(() => {
-              void app.workspace.openLinkText(
+              void this.app.workspace.openLinkText(
                 this.linkText,
                 this.sourcePath,
                 newPane
@@ -162,6 +166,7 @@ class CiteWidget extends WidgetType {
 }
 
 const citeDeco = (
+  app: App,
   cite: RenderedCitation,
   sourcePath?: string,
   linkText?: string,
@@ -172,6 +177,7 @@ const citeDeco = (
 ) =>
   Decoration.replace({
     widget: new CiteWidget(
+      app,
       cite,
       sourcePath,
       linkText,
@@ -318,7 +324,7 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                 const resolved = getLitNoteForCitekey(
                   seg.val,
                   obsView?.file?.path ?? '',
-                  app
+                  bibManager.plugin.app
                 );
                 memberStates.push({
                   key: seg.val,
@@ -361,6 +367,7 @@ export const citeKeyPlugin = ViewPlugin.fromClass(
                   start,
                   end,
                   citeDeco(
+                    bibManager.plugin.app,
                     rendered,
                     obsView?.file.path,
                     linkText,

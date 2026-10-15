@@ -232,8 +232,8 @@ function updateBibliographyPath(
   bibliography: unknown,
   oldPath: string,
   newPath: string
-) {
-  const getUpdatedPath = (value: unknown) => {
+): unknown {
+  const getUpdatedPath = (value: unknown): unknown => {
     if (
       typeof value === 'string' &&
       bibliographyMatchesPath(sourceFile, value, oldPath)
@@ -245,14 +245,15 @@ function updateBibliographyPath(
   };
 
   if (Array.isArray(bibliography)) {
+    const items: unknown[] = bibliography;
     let changed = false;
-    const updated = bibliography.map((value) => {
+    const updated = items.map((value) => {
       const next = getUpdatedPath(value);
       changed ||= next !== value;
       return next;
     });
 
-    return changed ? updated : bibliography;
+    return changed ? updated : items;
   }
 
   return getUpdatedPath(bibliography);
@@ -2261,17 +2262,24 @@ export default class ReferenceList extends Plugin {
     // default (true) takes effect for existing users.
     if (saved.formatLinkAliases === false) delete saved.formatLinkAliases;
 
+    // Legacy keys, read through a view without their `@deprecated` markers:
+    // this migration is their only remaining use.
+    const legacy: {
+      pathToBibliography?: string;
+      addNoteForLinkedCitations?: boolean;
+    } = saved;
+
     // Migrate single pathToBibliography → bibliographyPaths array.
-    if (saved.pathToBibliography && !saved.bibliographyPaths?.length) {
-      saved.bibliographyPaths = [saved.pathToBibliography];
-      delete saved.pathToBibliography;
+    if (legacy.pathToBibliography && !saved.bibliographyPaths?.length) {
+      saved.bibliographyPaths = [legacy.pathToBibliography];
+      delete legacy.pathToBibliography;
     }
 
     // The linked-note auto-insert setting became a three-way radio. A saved
     // `true` from the brief boolean version means "insert on insertion".
     if (
       saved.missingLinkedNoteAction === undefined &&
-      saved.addNoteForLinkedCitations === true
+      legacy.addNoteForLinkedCitations === true
     ) {
       saved.missingLinkedNoteAction = 'onInsert';
     }

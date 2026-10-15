@@ -758,6 +758,7 @@ export class ExportModal extends Modal {
     const missing = this.formatMissing(fmt);
     if (missing.length > 0) {
       renderDependencyNote(
+        this.app,
         this.depNote,
         missing,
         'This output format needs the following, which was not found on this computer:'

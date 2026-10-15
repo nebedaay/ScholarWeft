@@ -1,6 +1,7 @@
 import * as BibTeXParser from '@retorquere/bibtex-parser';
 import { parseYaml } from 'obsidian';
 import { PartialCSLEntry } from './types';
+import { describeError } from '../helpers';
 
 // Mapping from BibTeX/BibLaTeX entry types to CSL types.
 const BIBTEX_TYPE_TO_CSL: Record<string, string> = {
@@ -147,15 +148,7 @@ export function parseBibTeX(raw: string): PartialCSLEntry[] {
 
   // Log any structural errors the parser reported with enough detail to diagnose.
   (parsed?.errors ?? []).forEach((e: unknown) => {
-    const detail =
-      e instanceof Error
-        ? e.message
-        : typeof e === 'object' && e !== null
-        ? JSON.stringify(e)
-        : e instanceof Error
-      ? e.message
-      : String(e as string | number | boolean);
-    console.warn('scholar-weft: BibTeX parse error:', detail);
+    console.warn('scholar-weft: BibTeX parse error:', describeError(e));
   });
 
   const entries = parsed?.entries;

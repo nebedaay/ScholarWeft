@@ -4,6 +4,7 @@
  *
  * Keep in sync with docs/dependencies.md.
  */
+import type { App } from 'obsidian';
 import { openDocs } from './docs';
 
 export interface DependencyInfo {
@@ -69,6 +70,7 @@ export const DEPENDENCIES_DOC_URL =
  * the docs links) — used for the Better BibTeX citekey-formula suggestion.
  */
 export function renderDependencyNote(
+  app: App,
   containerEl: HTMLElement,
   deps: DepKey[],
   intro: string,
@@ -94,7 +96,7 @@ export function renderDependencyNote(
   });
   read.addEventListener('click', (e) => {
     e.preventDefault();
-    openDocs('dependencies.md');
+    openDocs(app, 'dependencies.md');
   });
   links.createSpan({ text: ' · ' });
   links

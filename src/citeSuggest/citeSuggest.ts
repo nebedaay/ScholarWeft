@@ -49,7 +49,7 @@ const SUGGEST_DEBUG = false;
  */
 const SUGGEST_DEBOUNCE_MS = 50;
 const LOG = SUGGEST_DEBUG
-  ? (...args: unknown[]) => console.log('[sw:suggest]', ...args)
+  ? (...args: unknown[]) => console.debug('[sw:suggest]', ...args)
   : (..._args: unknown[]) => {};
 
 /**
@@ -757,11 +757,12 @@ export class CiteSuggest extends EditorSuggest<Fuse.FuseResult<PartialCSLEntry>>
     const kind = insertionKind(insertCtx);
     const insertedLinked =
       linked && ((kind === 'bare' && !forcePandoc) || kind === 'wikilink');
+    // Read through a view without the `@deprecated` marker: the legacy boolean
+    // is only consulted for settings saved before the migration ran.
+    const legacy: { addNoteForLinkedCitations?: boolean } = this.plugin.settings;
     const missingNoteAction =
       this.plugin.settings.missingLinkedNoteAction ??
-      (this.plugin.settings.addNoteForLinkedCitations === true
-        ? 'onInsert'
-        : 'never');
+      (legacy.addNoteForLinkedCitations === true ? 'onInsert' : 'never');
     if (insertedLinked && insertsNoteOnInsertion(missingNoteAction)) {
       const activeFile = this.plugin.app.workspace.getActiveFile();
       if (activeFile) {

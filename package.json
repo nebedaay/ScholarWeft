@@ -1,12 +1,13 @@
 {
   "name": "scholar-weft",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "ScholarWeft for Obsidian — weaves Zotero references into Obsidian's linked-note universe with linked citations, a live reference sidebar, and a book compiler that exports to Word.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
     "deploy": "npm run build && cp main.js manifest.json styles.css \"${SW_PLUGIN_DIR:?set SW_PLUGIN_DIR to your vault's .obsidian/plugins/scholar-weft folder}\"/",
+    "deploy:dev": "npm run build && node tools/deploy-dev.mjs",
     "check-types": "tsc --noemit",
     "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
@@ -26,7 +27,6 @@
     "@babel/core": "7.17.9",
     "@babel/preset-env": "7.16.11",
     "@babel/preset-typescript": "7.16.7",
-    "@codemirror/language": "https://github.com/lishid/cm-language",
     "@eslint/js": "^9.39.5",
     "@eslint/json": "^0.14.0",
     "@types/jest": "27.4.1",
@@ -45,6 +45,7 @@
     "xml-js": "1.6.11"
   },
   "dependencies": {
+    "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.38.6",
     "@lezer/common": "^1.5.3",

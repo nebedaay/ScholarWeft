@@ -29,8 +29,14 @@ export class SimpleLRU<K, V> {
   set(key: K, value: V): this {
     if (this.cache.has(key)) this.cache.delete(key);
     else if (this.cache.size >= this.max) {
-      // Evict the oldest entry (first key in the Map).
-      const oldest = this.cache.keys().next().value as K | undefined;
+      // Evict the oldest entry (first key in the Map). Reading the iterator's
+      // `value` directly is typed `any` under this project's ES2018 lib, so
+      // take the first key with a loop instead.
+      let oldest: K | undefined;
+      for (const key of this.cache.keys()) {
+        oldest = key;
+        break;
+      }
       if (oldest !== undefined) {
         const evicted = this.cache.get(oldest);
         this.cache.delete(oldest);

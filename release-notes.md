@@ -1,30 +1,19 @@
-ScholarWeft 0.5.3 clears every error the community directory's own code review reports, and nearly every warning.
+ScholarWeft 0.5.4 clears 26 more of the community directory's review findings — and fixes a packaging bug that made a fresh clone impossible to build.
 
-### The code review is now clean
+### The review, continued
 
-The directory runs a linter over the plugin's source (the same rules the review page shows), and 0.5.2 was reported with **1720 issues — including six classes of error**. This release fixes all of them and reduces the total to **18**, none of which are errors:
+The directory re-scanned 0.5.3 and moved the plugin from one bar to two ("Caution"), reporting **111 issues, down from 1720**, none of them errors. This release clears 26 of the 31 TypeScript ones. The rest are almost all CSS notices about the plugin's own citation-underline styling, which the scanner marks "only partially supported" even though every property involved works in every Obsidian version the plugin supports.
 
-- **Unsafe HTML** — four `innerHTML` assignments replaced with inert parsing (`DOMParser`, or moving child nodes), which is also what the review asks for.
-- **Inline styles** — 88 direct `element.style.x = …` assignments replaced with Obsidian's `setCssStyles`.
-- **Regular-expression lookbehind** — rewritten without it, because iOS before 16.4 cannot parse one.
-- **Settings headings** — built with Obsidian's heading API instead of raw `<h2>` elements.
-- **Directive comments** — every suppression now says why it is there.
-- **Node built-ins** — `fs`, `path`, `os`, `child_process` and `util` are now guarded by `Platform.isDesktop` (or reached through one guarded accessor), so the desktop-only paths degrade instead of crashing on mobile.
+- **Five unsafe-`any` findings, one root cause.** `@codemirror/language` was listed under `devDependencies` — pinned to a `git+ssh://` fork — while its siblings (`state`, `view`, `lezer/common`) sat under `dependencies`. The scanner installs only `dependencies`, so the module never resolved, and `syntaxTree`, `tree` and the token-class node property all became `any`.
+- **That was also a real bug, not just lint noise.** The lockfile resolved that package over `git+ssh`, so anyone without SSH keys to GitHub could not install the dependencies at all. It is now an ordinary registry dependency, with the single Obsidian-only export declared locally.
+- **Six redundant type assertions** removed, and two promises fixed: an `async` callback passed where a `void` return was expected, and a rejection carrying a bare value instead of an `Error`.
+- **The global `app` object is gone** from the last three places that used it; `app` is now threaded through the docs modal, the citation widget and the dependency notes.
+- **Two debug loggers** now use `console.debug` — the review allows `warn`, `error` and `debug`, and objects only to `console.log`.
+- **Four deprecated calls** removed: `unescape`, `document.execCommand('copy')` (the async Clipboard API is present in every Obsidian runtime, so the hidden-textarea fallback was dead code), and two legacy settings reads that the upgrade migration still needs but now reaches without touching the deprecated members.
 
-The remaining 18 are deliberate: seven read settings fields older builds wrote (deprecated, but an upgrade must still find them), two are the plugin's own gated debug loggers, and the rest need either Obsidian 1.13 or a change in behaviour to clear.
+### Still outstanding
 
-### Fixes found along the way
+Two things are deliberately left alone:
 
-Typing the code to satisfy the review turned up real bugs, not just lint noise:
-
-- **`makeBibliography()` returns `false`**, not only a citation list, when there is nothing to render. The untyped code indexed it anyway — a crash waiting to happen. Now narrowed properly.
-- **A tooltip lookup** used `if (!file && !(file instanceof TFile))`, so a *folder* passed the guard and was then treated as a file. Now a correct `instanceof` check.
-- **`sourceFile()`** fell back to casting the vault **root folder** to a file. It now returns a real file or `null`.
-- **An old template** that still wrote `zotero-key` would have silently stripped a note's identity property. ScholarWeft now writes `sw-zotero-id` from it instead.
-- **Two notes can no longer share one `sw-zotero-id`**, which would have split updates and citation links between them.
-- A `!` in one note-list lookup was **masking a bitwise-or typo**.
-
-### Also in this release
-
-- The plugin is **smaller still** (3.4 MB) and its release assets carry a build-provenance attestation.
-- The **Zotero picker is gone** (see 0.5.2) — removed because Zotero's own picker searches every library, including ones the plugin does not load.
+- The settings tab does not yet implement Obsidian 1.13's declarative settings API, so its settings will not appear in Obsidian's settings search on 1.13+. Adopting it needs a real 1.13 app to test against, because getting it wrong risks rendering every control twice.
+- The CSS notices describe the plugin's own rendering — the colour-coded citation underlines. Clearing them means changing how citations look, so they wait for a visual pass.

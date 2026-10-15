@@ -58,7 +58,7 @@ function execFileAsync(
 ): Promise<{ stdout: string; stderr: string }> {
   // Node built-ins do not exist on mobile; this path is desktop-only.
   if (!Platform.isDesktop) {
-  	throw new Error('ScholarWeft: this feature is available on the desktop app only.');
+    throw new Error('ScholarWeft: this feature is available on the desktop app only.');
   }
   const { execFile } = require('child_process') as typeof import('child_process');
   const { promisify } = require('util') as typeof import('util');
@@ -205,7 +205,7 @@ export async function runDocumentCompiler(
 ): Promise<CompileResult> {
   // Node built-ins do not exist on mobile; this path is desktop-only.
   if (!Platform.isDesktop) {
-  	throw new Error('ScholarWeft: this feature is available on the desktop app only.');
+    throw new Error('ScholarWeft: this feature is available on the desktop app only.');
   }
   const endnotesMode: CompilerOptions['endnotesMode'] =
     opts.endnotes ?? 'none';
@@ -378,20 +378,20 @@ export async function runDocumentCompiler(
       outputPath: rawOutputPath || undefined,
     };
   };
-  const toError = (e: ExecError): CompileResult => ({
-    ok: false,
-    stdout: e?.stdout || '',
-    stderr: (
-      e?.stderr ||
-      (typeof e?.message === 'string' ? e.message : '')
-    ).trim(),
-  });
+  const toError = (e: unknown): CompileResult => {
+    const err = (e ?? {}) as ExecError;
+    return {
+      ok: false,
+      stdout: err.stdout || '',
+      stderr: (err.stderr || (typeof err.message === 'string' ? err.message : '')).trim(),
+    };
+  };
 
   if (!isExport) {
     try {
       return toResult(await execCompiler(buildArgs(absMaster)));
     } catch (e) {
-      return toError(e as ExecError);
+      return toError(e);
     }
   }
 
@@ -470,12 +470,12 @@ export async function runDocumentCompiler(
   } catch (e) {
     // Fallback: the external Node.js converter (historical path).
     const node = await findNode();
-    if (!node) return toError(e as ExecError);
+    if (!node) return toError(e);
     env.SW_NODE = node;
     try {
       return toResult(await execCompiler(buildArgs(absMaster)));
     } catch (e2) {
-      return toError(e2 as ExecError);
+      return toError(e2);
     }
   }
 }
