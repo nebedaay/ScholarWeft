@@ -1378,8 +1378,11 @@ Annotation callouts
 
 /* Every annotation kind keeps its own glyph but ONE icon colour. The callout's
    --callout-color stays per-kind (pale for highlights, blue for the rest), so
-   the icon colour is set directly. */
-.callout[data-callout^="sw-annotation-"] > .callout-title > .callout-icon {
+   the icon colour is set directly — including on the SVG, because core CSS
+   paints `svg.svg-icon` with `var(--callout-color)` and would otherwise win
+   over the colour inherited from the wrapper. */
+.callout[data-callout^="sw-annotation-"] > .callout-title > .callout-icon,
+.callout[data-callout^="sw-annotation-"] > .callout-title > .callout-icon svg.svg-icon {
     color: rgb(0, 30, 200);
 }
 
