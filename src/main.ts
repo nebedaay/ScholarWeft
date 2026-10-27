@@ -554,7 +554,17 @@ export default class ReferenceList extends Plugin {
       // `initLeaf`: the reference-list leaf is usually restored from the last
       // session, so `initLeaf` returns early and never reaches it.
       void this.runStartupTasks();
+      this.refreshAnnotationCalloutIcons();
+      window.setTimeout(() => this.refreshAnnotationCalloutIcons(), 1500);
     });
+
+    // A callout's icon is set once, when it renders. Re-apply it when a note is
+    // (re)opened in case the render beat the plugin stylesheet (see the method).
+    this.registerEvent(
+      this.app.workspace.on('file-open', () => {
+        window.setTimeout(() => this.refreshAnnotationCalloutIcons(), 50);
+      })
+    );
 
     this.addCommand({
       id: 'focus-reference-list-view',
@@ -1314,6 +1324,34 @@ export default class ReferenceList extends Plugin {
    * anything living after that branch would never run. (That bug hid the
    * `zotero-key` → `sw-zotero-id` migration and the citation-index rebuild.)
    */
+  /**
+   * Obsidian sets a callout's icon ONCE, from the computed `--callout-icon`, and
+   * never revisits it. A note restored at startup can render before this
+   * plugin's stylesheet is in effect, so its outer annotation callouts keep the
+   * core `lucide-pencil` even though the (live) CSS colours are already right.
+   * Re-read the icon from the now-loaded stylesheet; the CSS stays the single
+   * source of truth, this only re-applies it.
+   */
+  private refreshAnnotationCalloutIcons(): void {
+    const doc = this.app.workspace.containerEl.ownerDocument;
+    const win = doc.defaultView;
+    if (!win) return;
+    doc
+      .querySelectorAll<HTMLElement>('.callout[data-callout^="sw-annotation-"]')
+      .forEach((callout) => {
+        // `:scope >` so a nested excerpt callout's icon is never touched.
+        const iconEl = callout.querySelector<HTMLElement>(
+          ':scope > .callout-title > .callout-icon'
+        );
+        if (!iconEl) return;
+        const icon = win
+          .getComputedStyle(callout)
+          .getPropertyValue('--callout-icon')
+          .trim();
+        if (icon) setIcon(iconEl, icon);
+      });
+  }
+
   private async runStartupTasks(): Promise<void> {
     await this.initPromise.promise;
     await this.bibManager.initPromise.promise;

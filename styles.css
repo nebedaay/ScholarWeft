@@ -1376,6 +1376,13 @@ Annotation callouts
 }
 
 
+/* Every annotation kind keeps its own glyph but ONE icon colour. The callout's
+   --callout-color stays per-kind (pale for highlights, blue for the rest), so
+   the icon colour is set directly. */
+.callout[data-callout^="sw-annotation-"] > .callout-title > .callout-icon {
+    color: rgb(0, 30, 200);
+}
+
 /* Inner callouts */
 
 /* Comments */
