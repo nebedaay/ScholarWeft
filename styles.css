@@ -1353,25 +1353,25 @@ Annotation callouts
 
 .callout[data-callout^="sw-annotation-"][data-callout$="-sw-underline"] {
     --callout-color: rgb(0, 30, 200);
-    --callout-icon: 'lucide-underline';
+    --callout-icon: lucide-underline;
     --icon-color-hover: rgb(30, 30, 0);
 }
 
 .callout[data-callout^="sw-annotation-"][data-callout$="-sw-note"] {
     --callout-color: rgb(0, 30, 200);
-    --callout-icon: 'lucide-notebook-pen';
+    --callout-icon: lucide-notebook-pen;
     --icon-color-hover: rgb(30, 30, 0);
 }
 
 .callout[data-callout^="sw-annotation-"][data-callout$="-sw-text"] {
     --callout-color: rgb(0, 30, 200);
-    --callout-icon: 'lucide-pen';
+    --callout-icon: lucide-pen;
     --icon-color-hover: rgb(30, 30, 0);
 }
 
 .callout[data-callout^="sw-annotation-"][data-callout$="-sw-ink"] {
     --callout-color: rgb(0, 30, 200);
-    --callout-icon: 'lucide-line-squiggle';
+    --callout-icon: lucide-line-squiggle;
     --icon-color-hover: rgb(30, 30, 0);
 }
 
