@@ -1,19 +1,25 @@
-ScholarWeft 0.5.4 clears 26 more of the community directory's review findings — and fixes a packaging bug that made a fresh clone impossible to build.
+ScholarWeft 0.5.5 gives Zotero annotation callouts their own `sw-` namespace, scopes the plugin's stylesheet to its own material, and fixes two long-standing annotation-rendering bugs.
 
-### The review, continued
+### Annotation callouts
 
-The directory re-scanned 0.5.3 and moved the plugin from one bar to two ("Caution"), reporting **111 issues, down from 1720**, none of them errors. This release clears 26 of the 31 TypeScript ones. The rest are almost all CSS notices about the plugin's own citation-underline styling, which the scanner marks "only partially supported" even though every property involved works in every Obsidian version the plugin supports.
+Annotations are now generated as `[!sw-annotation sw-yellow sw-highlight]`, with `[!sw-excerpt sw-highlight-text]` inside and `[!sw-comment]` for comments. The old ids (`[!yellow-highlight-annotation]`, `[!ann-highlight-text-yellow]`) were built by string concatenation, so any other plugin that put “annotation” in the same place could be caught by ScholarWeft's CSS — Midad's `[!mas-annotation-*]` bullet lists, for instance, were being rendered as coloured chips. The new ids are prefixed with `sw-`, which makes that collision impossible, and the inner excerpt no longer repeats the colour because it inherits it from the outer callout.
 
-- **Five unsafe-`any` findings, one root cause.** `@codemirror/language` was listed under `devDependencies` — pinned to a `git+ssh://` fork — while its siblings (`state`, `view`, `lezer/common`) sat under `dependencies`. The scanner installs only `dependencies`, so the module never resolved, and `syntaxTree`, `tree` and the token-class node property all became `any`.
-- **That was also a real bug, not just lint noise.** The lockfile resolved that package over `git+ssh`, so anyone without SSH keys to GitHub could not install the dependencies at all. It is now an ordinary registry dependency, with the single Obsidian-only export declared locally.
-- **Six redundant type assertions** removed, and two promises fixed: an `async` callback passed where a `void` return was expected, and a rejection carrying a bare value instead of an `Error`.
-- **The global `app` object is gone** from the last three places that used it; `app` is now threaded through the docs modal, the citation widget and the dependency notes.
-- **Two debug loggers** now use `console.debug` — the review allows `warn`, `error` and `debug`, and objects only to `console.log`.
-- **Four deprecated calls** removed: `unescape`, `document.execCommand('copy')` (the async Clipboard API is present in every Obsidian runtime, so the hidden-textarea fallback was dead code), and two legacy settings reads that the upgrade migration still needs but now reaches without touching the deprecated members.
+**If you have existing annotation notes:** they keep the old ids and will show without the annotation styling until they are regenerated. Run **Update all literature notes in the vault** once after updating; Zotero-driven auto-updates also refresh them as items change.
 
-### Still outstanding
+### Stylesheet
 
-Two things are deliberately left alone:
+- Every annotation variable and CSS function is now `--sw-`-prefixed (`--sw-hue`, `--sw-yellow`…, `--sw-annot-*`, `--sw-light`/`--sw-bright`/`--sw-dark`). The old bare names could collide with a theme or another plugin; Midad had been borrowing `--gold` and `--bright()` without defining them.
+- The three global SVG presentation properties are gone from `:root` — they applied to every SVG in the app, not just callouts.
+- `.csl-entry` and `.csl-entry-wrapper` are citeproc's classes (ZotLit and other reference plugins emit them), so they keep their names, but every rule is now scoped to ScholarWeft's own containers.
+- The obsolete `.hl-*` custom-highlight rules are removed; Obsidian's native highlight colours (`==🟢text==`) do that job now.
 
-- The settings tab does not yet implement Obsidian 1.13's declarative settings API, so its settings will not appear in Obsidian's settings search on 1.13+. Adopting it needs a real 1.13 app to test against, because getting it wrong risks rendering every control twice.
-- The CSS notices describe the plugin's own rendering — the colour-coded citation underlines. Clearing them means changing how citations look, so they wait for a visual pass.
+### Fixes
+
+- **Text-comment callouts render again.** `[!sw-excerpt sw-text]Text comment…` needed a space after the closing bracket; without it Obsidian treated the block as an ordinary quote rather than a callout.
+- **Annotation icons are correct on first load.** Obsidian sets a callout's icon once, when it renders; a note restored at startup could render before the plugin's stylesheet was in effect and keep the default pencil. The plugin now re-applies the computed icon when the layout is ready and when a note is opened.
+- **All annotation icons share one colour** — the same blue — while each annotation kind keeps its own glyph. Highlight icons previously inherited the pale highlight accent and looked white.
+- Icon values are no longer quoted, so `--callout-icon` resolves exactly as documented.
+
+### Under the hood
+
+Callout selectors now use prefixes and suffixes (`^="sw-annotation-"`, `$="-sw-image"`) instead of substring matches on “annotation” and “ann-”, and the annotation colour variables only apply inside ScholarWeft's own callouts. The stylesheet no longer styles citeproc output outside ScholarWeft's panels.
