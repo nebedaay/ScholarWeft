@@ -170,7 +170,7 @@ function annotationHeader(
   if (a.type === 'image') return `> [!sw-excerpt sw-${colorRaw} sw-image]`;
   if (a.type === 'ink') return `> [!sw-excerpt sw-${colorRaw} sw-ink]`;
   if (a.type === 'text' || a.type === 'note') {
-    return `> [!sw-excerpt sw-${colorRaw} sw-text]Text comment—click to view in context:`;
+    return `> [!sw-excerpt sw-${colorRaw} sw-text] Text comment—click to view in context:`;
   }
   return null;
 }

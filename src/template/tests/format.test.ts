@@ -153,6 +153,21 @@ describe('renderAnnotationCallout() — image/ink', () => {
   });
 });
 
+describe('renderAnnotationCallout() — text comments', () => {
+  it.each(['text', 'note'] as const)(
+    'leaves whitespace after the closing bracket so Obsidian parses the %s callout',
+    (type) => {
+      const out = renderAnnotationCallout(
+        annotation({ type, colorName: 'yellow', comment: 'A comment' })
+      );
+      // Obsidian's callout regex requires `(?:\s|$)` straight after `]`; without
+      // the space the header is plain blockquote text.
+      expect(out).toContain('[!sw-excerpt sw-yellow sw-text] Text comment');
+      expect(out).toContain('> A comment');
+    }
+  );
+});
+
 describe('renderCallout()', () => {
   it('renders a titled callout with a multi-line body', () => {
     expect(renderCallout({ type: 'ABSTRACT', title: 'Abstract', body: 'One.\n\nTwo.' })).toBe(
