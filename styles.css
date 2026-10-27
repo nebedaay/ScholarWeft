@@ -1493,7 +1493,7 @@ Annotation callouts
 }
 
 /* Links to coloured annotation pages at the end of the callout */
-.callout[data-callout*="annotation"] {
+.callout[data-callout$="annotation"] {
     p {
       & a, a:link, a:visited, a:hover, a:active {
         color: --dark(var(--hue));
