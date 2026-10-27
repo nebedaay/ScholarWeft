@@ -152,7 +152,7 @@ function imgAlias(a: NoteContextAnnotation, alias: string): string | null {
 }
 
 /**
- * The content block for ONE annotation (the `[!ann-…]` sub-callout + its body):
+ * The content block for ONE annotation (the `[!sw-excerpt …]` sub-callout + its body):
  * excerpt text, an image/ink embed, or a text-comment body. Continuation media
  * is rendered by repeating this for each folded annotation.
  */
@@ -165,12 +165,12 @@ function annotationHeader(
   colorRaw: string
 ): string | null {
   if ((a.type === 'highlight' || a.type === 'underline') && a.text) {
-    return `> [!ann-${a.type}-text-${colorRaw}]`;
+    return `> [!sw-excerpt sw-${colorRaw} sw-${a.type}-text]`;
   }
-  if (a.type === 'image') return `> [!ann-image-${colorRaw}]`;
-  if (a.type === 'ink') return `> [!ann-ink-${colorRaw}]`;
+  if (a.type === 'image') return `> [!sw-excerpt sw-${colorRaw} sw-image]`;
+  if (a.type === 'ink') return `> [!sw-excerpt sw-${colorRaw} sw-ink]`;
   if (a.type === 'text' || a.type === 'note') {
-    return `> [!ann-text-${colorRaw}]Text comment—click to view in context:`;
+    return `> [!sw-excerpt sw-${colorRaw} sw-text]Text comment—click to view in context:`;
   }
   return null;
 }
@@ -219,11 +219,11 @@ export function renderAnnotationCallout(
   const tags: NoteContextTag[] = includeTags ? (a.tags ?? []) : [];
 
   const inner: string[] = [
-    `[!${colorRaw}-${a.type}-annotation] ${colorCap} ${typeCap}`,
+    `[!sw-annotation sw-${colorRaw} sw-${a.type}] ${colorCap} ${typeCap}`,
   ];
 
   if (a.comment || tags.length) {
-    inner.push('> [!ann-comment]');
+    inner.push('> [!sw-comment]');
     if (a.comment) inner.push(...calloutLines(htmlFieldToMarkdown(a.comment)));
     for (const tag of tags) inner.push(`> - [[${tag.name}]]`);
   }
@@ -261,7 +261,7 @@ export function renderAnnotationCallout(
 }
 
 export interface CalloutOptions {
-  /** Callout id, e.g. `note` or `Yellow-highlight-annotation`. */
+  /** Callout id, e.g. `note` or `sw-annotation sw-yellow sw-highlight`. */
   type: string;
   title?: string;
   /** May be multi-line. */

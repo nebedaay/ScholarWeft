@@ -59,8 +59,8 @@ describe('renderAnnotationCallout()', () => {
     const out = renderAnnotationCallout(
       annotation({ type: 'highlight', text: 'x' })
     );
-    expect(out).toContain('> [!yellow-highlight-annotation] Yellow Highlight');
-    expect(out).toContain('> > [!ann-highlight-text-yellow]');
+    expect(out).toContain('[!sw-annotation sw-yellow sw-highlight] Yellow Highlight');
+    expect(out).toContain('> > [!sw-excerpt sw-yellow sw-highlight-text]');
     expect(out).toContain('> - [[Yellow annotations|Yellow]]');
     expect(out).toContain('- ([p. 116](zotero://open/');
   });
@@ -114,7 +114,7 @@ describe('renderAnnotationCallout() — image/ink', () => {
     const out = renderAnnotationCallout(
       annotation({ type: 'ink', colorName: 'red', imgLink })
     );
-    expect(out).toContain('> [!red-ink-annotation] Red Ink');
+    expect(out).toContain('[!sw-annotation sw-red sw-ink] Red Ink');
     expect(out).toContain('> > ![[img.png]]');
     expect(out).toContain('> > - [[img.png|view ink image]]');
   });
@@ -123,7 +123,7 @@ describe('renderAnnotationCallout() — image/ink', () => {
     const out = renderAnnotationCallout(
       annotation({ type: 'image', colorName: 'blue', imgLink })
     );
-    expect(out).toContain('> [!blue-image-annotation] Blue Image');
+    expect(out).toContain('[!sw-annotation sw-blue sw-image] Blue Image');
     expect(out).toContain('> > - [[image annotations|images]]');
   });
 
@@ -149,7 +149,7 @@ describe('renderAnnotationCallout() — image/ink', () => {
     expect(out).toContain('> >\n> > ![[b.png]]');
     expect(out).not.toContain('> ...');
     // The sub-callout id appears once, not per image.
-    expect(out.match(/\[!ann-image-blue\]/g)).toHaveLength(1);
+    expect(out.match(/\[!sw-excerpt sw-blue sw-image\]/g)).toHaveLength(1);
   });
 });
 

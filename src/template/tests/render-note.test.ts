@@ -334,8 +334,8 @@ describe('sw-note.eta.md — end-to-end render', () => {
   it('renders the annotation callout under its attachment heading', () => {
     expect(out).toContain('## Annotations');
     expect(out).toContain('### [Bughyat.pdf](zotero://open/library/items/PDF1)');
-    expect(out).toContain('[!red-ink-annotation] Red Ink');
-    expect(out).toContain('[!ann-comment]');
+    expect(out).toContain('[!sw-annotation sw-red sw-ink] Red Ink');
+    expect(out).toContain('[!sw-comment]');
     expect(out).toContain('An *idea*');
     expect(out).toContain('- [[tawāḍuʿ]]');
     expect(out).toContain(

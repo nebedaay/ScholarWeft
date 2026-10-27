@@ -129,90 +129,87 @@ settings:
 */
 
 
-@function --light(--hue) {
-  result: hsla(var(--hue), var(--annot-sat), var(--annot-lt), var(--annot-lt-opac));
+@function --sw-light(--sw-hue) {
+  result: hsla(var(--sw-hue), var(--sw-annot-sat), var(--sw-annot-lt), var(--sw-annot-lt-opac));
 }
 
-@function --bright(--hue) {
-  result: hsla(var(--hue), var(--annot-sat), var(--annot-br), var(--annot-br-opac));
+@function --sw-bright(--sw-hue) {
+  result: hsla(var(--sw-hue), var(--sw-annot-sat), var(--sw-annot-br), var(--sw-annot-br-opac));
 }
 
-@function --dark(--hue) {
-  result: hsla(var(--hue), var(--annot-sat), var(--annot-dk), var(--annot-dk-opac));
+@function --sw-dark(--sw-hue) {
+  result: hsla(var(--sw-hue), var(--sw-annot-sat), var(--sw-annot-dk), var(--sw-annot-dk-opac));
 }
 
-@function --muted-lt(--hue) {
-  result: hsla(var(--hue), var(--muted-sat), var(--muted-lt), var(--annot-dk-opac));
+@function --sw-muted-lt(--sw-hue) {
+  result: hsla(var(--sw-hue), var(--sw-muted-sat), var(--sw-muted-lt), var(--sw-annot-dk-opac));
 }
 
-@function --muted-dk(--hue) {
-  result: hsla(var(--hue), var(--muted-sat), var(--muted-dk), var(--annot-dk-opac));
+@function --sw-muted-dk(--sw-hue) {
+  result: hsla(var(--sw-hue), var(--sw-muted-sat), var(--sw-muted-dk), var(--sw-annot-dk-opac));
 }
 
-@function --hl(--hue) {
-  result: hsla(var(--hue), var(--annot-sat), var(--annot-lt), var(--annot-hl-opac));
+@function --sw-hl(--sw-hue) {
+  result: hsla(var(--sw-hue), var(--sw-annot-sat), var(--sw-annot-lt), var(--sw-annot-hl-opac));
 }
 
-@function --hl-gradient(--hue) {
-  result: linear-gradient(180deg, transparent 0%, --hl(var(--hue)) 0%, --light(var(--hue)) 80%, --bright(var(--hue)) 195%);
+@function --sw-hl-gradient(--sw-hue) {
+  result: linear-gradient(180deg, transparent 0%, --sw-hl(var(--sw-hue)) 0%, --sw-light(var(--sw-hue)) 80%, --sw-bright(var(--sw-hue)) 195%);
 }
 
 
 :root {
-    shape-rendering: geometricPrecision;
-    color-interpolation-filters: sRGB;
-    stroke-linecap: round;
-  --annot-padding: 0.6em 0em;
-  --annot-border-width: 1px;
-  --annot-border-radius: var(--callout-radius, 5px);
-  --annot-border-opac: 80%;
-  --annot-bg-opac: 15%;
-  --annot-border-color: hsla(200, 15%, 39%, var(--annot-border-opac));
-  --annot-bg-color: hsla(200, 15%, 39%, var(--annot-bg-opac));
-  --annot-gap: 0.75rem;
+  --sw-annot-padding: 0.6em 0em;
+  --sw-annot-border-width: 1px;
+  --sw-annot-border-radius: var(--callout-radius, 5px);
+  --sw-annot-border-opac: 80%;
+  --sw-annot-bg-opac: 15%;
+  --sw-annot-border-color: hsla(200, 15%, 39%, var(--sw-annot-border-opac));
+  --sw-annot-bg-color: hsla(200, 15%, 39%, var(--sw-annot-bg-opac));
+  --sw-annot-gap: 0.75rem;
   
-  --annot-sat: 100%;
-  --annot-lt: 87%;
-  --annot-br: 60%;
-  --annot-br-opac: 100%;
-  --annot-dk: 23%;
-  --annot-hl-opac: 60%;
-  --annot-lt-opac: 95%;
-  --annot-dk-opac: 100%;
-  --annot-gray-sat: 0%;
-  --muted-sat: 55%;
-  --muted-lt: 90%;
-  --muted-dk: 65%;
+  --sw-annot-sat: 100%;
+  --sw-annot-lt: 87%;
+  --sw-annot-br: 60%;
+  --sw-annot-br-opac: 100%;
+  --sw-annot-dk: 23%;
+  --sw-annot-hl-opac: 60%;
+  --sw-annot-lt-opac: 95%;
+  --sw-annot-dk-opac: 100%;
+  --sw-annot-gray-sat: 0%;
+  --sw-muted-sat: 55%;
+  --sw-muted-lt: 90%;
+  --sw-muted-dk: 65%;
 
-  --yellow: 55;
-  --purple: 265;
-  --orange: 28;
-  --red: 0;
-  --green: 115;
-  --magenta: 300;
-  --blue: 205;
-  --gray: 100;
-  --hue: var(--gray);
+  --sw-yellow: 55;
+  --sw-purple: 265;
+  --sw-orange: 28;
+  --sw-red: 0;
+  --sw-green: 115;
+  --sw-magenta: 300;
+  --sw-blue: 205;
+  --sw-gray: 100;
+  --sw-hue: var(--sw-gray);
 
-  --gold: 48;
+  --sw-gold: 48;
 
   
-  --comment-icon-color: hsla(0, 0%, 95%, 75%);
-  --comment-icon-size: 2rem;
-  --comment-bg: hsla(52, 60%, 85%, 100%);
-  --comment-bg-end: hsla(52, 60%, 58%, 100%);
-  --annotation-bg: hsla(220, 80%, 90%, 96%);
-  --annotation-bg-end: hsla(220, 75%, 80%, 96%);
-  --annotation-bg-shadow: hsla(220, 80%, 75%, 90%);
-  --highlight-text-bg: hsla(64, 80%, 98%, 95%);
-  --highlight-text-shadow: hsla(64, 0%, 40%, 50%);
+  --sw-comment-icon-color: hsla(0, 0%, 95%, 75%);
+  --sw-comment-icon-size: 2rem;
+  --sw-comment-bg: hsla(52, 60%, 85%, 100%);
+  --sw-comment-bg-end: hsla(52, 60%, 58%, 100%);
+  --sw-annotation-bg: hsla(220, 80%, 90%, 96%);
+  --sw-annotation-bg-end: hsla(220, 75%, 80%, 96%);
+  --sw-annotation-bg-shadow: hsla(220, 80%, 75%, 90%);
+  --sw-highlight-text-bg: hsla(64, 80%, 98%, 95%);
+  --sw-highlight-text-shadow: hsla(64, 0%, 40%, 50%);
   
-  --annotation-radius: 20px 5px;
-  --comment-radius: 80% 20px / 20px 20px;
-  --hl-radius: 100px 3px 100px 5px;
+  --sw-annotation-radius: 20px 5px;
+  --sw-comment-radius: 80% 20px / 20px 20px;
+  --sw-hl-radius: 100px 3px 100px 5px;
 
     
-  --comment-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z'/%3E%3Cpath d='M7 11h10'/%3E%3Cpath d='M7 15h6'/%3E%3Cpath d='M7 7h8'/%3E%3C/svg%3E");
+  --sw-comment-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z'/%3E%3Cpath d='M7 11h10'/%3E%3Cpath d='M7 15h6'/%3E%3Cpath d='M7 7h8'/%3E%3C/svg%3E");
 
   --quote-icon-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'/%3E%3Cpath d='M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z'/%3E%3C/svg%3E");
 
@@ -242,8 +239,7 @@ body {
      theme that overrides the blend, e.g. AnuPpuccin, hides the problem). Opt out
      so those callout colours render as authored — scoped to annotation callouts
      so other callouts (and themes that set their own blend) are left alone. */
-  .callout[data-callout$="-annotation"],
-  .callout[data-callout*="ann-"] {
+  .callout[data-callout^="sw-"] {
     --callout-blend-mode: normal!important;
   }
 }
@@ -306,7 +302,7 @@ body {
   color: var(--text-muted);
 }
 
-.csl-entry-wrapper {
+:is(.sw-reference-list, .sw-tooltip, .sw-reference, .sw-mobile-card, .sw-add-notes__ref) .csl-entry-wrapper {
   --icon-size: var(--icon-s);
   --icon-stroke: var(--icon-s-stroke-width);
 
@@ -326,7 +322,7 @@ body {
   justify-content: flex-start;
 }
 
-.csl-entry {
+:is(.sw-reference-list, .sw-tooltip, .sw-reference, .sw-mobile-card, .sw-add-notes__ref) .csl-entry {
   font-size: var(--sw-font-size);
   /* flex: 1 + min-width: 0 are both required for text to wrap inside a flex
      container — without min-width: 0 the item never shrinks below its content
@@ -338,7 +334,7 @@ body {
   gap: var(--size-4-2);
 }
 
-.csl-entry:has(> div + div) {
+:is(.sw-reference-list, .sw-tooltip, .sw-reference, .sw-mobile-card, .sw-add-notes__ref) .csl-entry:has(> div + div) {
   display: flex;
 }
 
@@ -1326,13 +1322,13 @@ Annotation callouts
 
 */
 /* Set hues and other defaults on outer callouts */
-.callout[data-callout$="-annotation"] {
-    --hue: var(--gray); /* default */
-    border-radius: var(--annotation-radius);
-    border-color: var(--annotation-bg) var(--annotation-bg-shadow) var(--annotation-bg-shadow) var(--annotation-bg);
-    background-image: radial-gradient(circle at 50% 70%, var(--annotation-bg) 0%, var(--annotation-bg-end) 100%);
+.callout[data-callout^="sw-annotation-"] {
+    --sw-hue: var(--sw-gray); /* default */
+    border-radius: var(--sw-annotation-radius);
+    border-color: var(--sw-annotation-bg) var(--sw-annotation-bg-shadow) var(--sw-annotation-bg-shadow) var(--sw-annotation-bg);
+    background-image: radial-gradient(circle at 50% 70%, var(--sw-annotation-bg) 0%, var(--sw-annotation-bg-end) 100%);
     /* Default is highlight annotation */
-    --callout-color: var(--annotation-bg);
+    --callout-color: var(--sw-annotation-bg);
     --callout-icon: lucide-highlighter;
     --icon-color-hover: rgb(30, 30, 0);
     font-family: "Noto Serif";
@@ -1340,40 +1336,40 @@ Annotation callouts
 }
 
 /* Set hues for each color */
-.callout[data-callout*="yellow"], .hl-yellow { --hue: var(--yellow); }
-.callout[data-callout*="orange"], .hl-orange { --hue: var(--orange); }
-.callout[data-callout*="red"], .hl-red { --hue: var(--red); }
-.callout[data-callout*="purple"], .hl-purple { --hue: var(--purple); --annot-br: 72%;  --annot-lt: 90%; }
-.callout[data-callout*="magenta"], .hl-magenta { --hue: var(--magenta); }
-.callout[data-callout*="blue"], .hl-blue { --hue: var(--blue); }
-.callout[data-callout*="green"], .hl-green { --hue: var(--green); }
-.callout[data-callout*="gray"], .hl-gray { --hue: var(--gray); --annot-sat: var(--annot-gray-sat); --muted-sat: var(--annot-gray-sat); }
+.callout[data-callout*="-sw-yellow"] { --sw-hue: var(--sw-yellow); }
+.callout[data-callout*="-sw-orange"] { --sw-hue: var(--sw-orange); }
+.callout[data-callout*="-sw-red"] { --sw-hue: var(--sw-red); }
+.callout[data-callout*="-sw-purple"] { --sw-hue: var(--sw-purple); --sw-annot-br: 72%;  --sw-annot-lt: 90%; }
+.callout[data-callout*="-sw-magenta"] { --sw-hue: var(--sw-magenta); }
+.callout[data-callout*="-sw-blue"] { --sw-hue: var(--sw-blue); }
+.callout[data-callout*="-sw-green"] { --sw-hue: var(--sw-green); }
+.callout[data-callout*="-sw-gray"] { --sw-hue: var(--sw-gray); --sw-annot-sat: var(--sw-annot-gray-sat); --sw-muted-sat: var(--sw-annot-gray-sat); }
 
-.callout[data-callout*="image-annotation"] {
+.callout[data-callout^="sw-annotation-"][data-callout$="-sw-image"] {
     --callout-color: rgb(0, 30, 200);
     --callout-icon: lucide-image;
     --icon-color-hover: rgb(30, 30, 0);
 }
 
-.callout[data-callout*="underline-annotation"] {
+.callout[data-callout^="sw-annotation-"][data-callout$="-sw-underline"] {
     --callout-color: rgb(0, 30, 200);
     --callout-icon: 'lucide-underline';
     --icon-color-hover: rgb(30, 30, 0);
 }
 
-.callout[data-callout*="note-annotation"] {
+.callout[data-callout^="sw-annotation-"][data-callout$="-sw-note"] {
     --callout-color: rgb(0, 30, 200);
     --callout-icon: 'lucide-notebook-pen';
     --icon-color-hover: rgb(30, 30, 0);
 }
 
-.callout[data-callout*="text-annotation"] {
+.callout[data-callout^="sw-annotation-"][data-callout$="-sw-text"] {
     --callout-color: rgb(0, 30, 200);
     --callout-icon: 'lucide-pen';
     --icon-color-hover: rgb(30, 30, 0);
 }
 
-.callout[data-callout*="ink-annotation"] {
+.callout[data-callout^="sw-annotation-"][data-callout$="-sw-ink"] {
     --callout-color: rgb(0, 30, 200);
     --callout-icon: 'lucide-line-squiggle';
     --icon-color-hover: rgb(30, 30, 0);
@@ -1383,32 +1379,33 @@ Annotation callouts
 /* Inner callouts */
 
 /* Comments */
-.callout[data-callout*="ann-"] {
+.callout[data-callout^="sw-excerpt-"],
+.callout[data-callout^="sw-comment"] {
     margin: 3px;
     .callout-title {
         display: none;
     }
 }
 
-.callout[data-callout*="ann-comment"] { 
-    --callout-color: var(--comment-bg);
-    background-image: radial-gradient(circle at 80% 50%, --muted-lt(var(--hue)) 0%, --muted-dk(var(--hue)) 100%);
+.callout[data-callout^="sw-comment"] { 
+    --callout-color: var(--sw-comment-bg);
+    background-image: radial-gradient(circle at 80% 50%, --sw-muted-lt(var(--sw-hue)) 0%, --sw-muted-dk(var(--sw-hue)) 100%);
     padding: 12px 8px;
     border: 1px solid;
-    border-color: var(--comment-bg) var(--comment-bg-end) var(--comment-bg-end) var(--comment-bg);
+    border-color: var(--sw-comment-bg) var(--sw-comment-bg-end) var(--sw-comment-bg-end) var(--sw-comment-bg);
     max-width: 80%;
-    border-radius: var(--comment-radius) !important;
+    border-radius: var(--sw-comment-radius) !important;
     /* Comment icon */
     .callout-content::before { 
         content: '';
         display: inline-block;
-        width: var(--comment-icon-size);
-        height: var(--comment-icon-size);
+        width: var(--sw-comment-icon-size);
+        height: var(--sw-comment-icon-size);
         margin-right: 0.5rem;
         float: left;
         vertical-align: middle;
-        background-color: --light(var(--hue));
-        mask-image: var(--comment-icon);
+        background-color: --sw-light(var(--sw-hue));
+        mask-image: var(--sw-comment-icon);
         mask-size: contain;
         mask-repeat: no-repeat;
         mask-position: center;
@@ -1416,11 +1413,12 @@ Annotation callouts
 }
 
 
-.callout[data-callout*="ann-highlight-text"], .callout[data-callout*="ann-underline-text"] {
-    background-color: var(--highlight-text-bg)!important;
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-highlight-text"],
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-underline-text"] {
+    background-color: var(--sw-highlight-text-bg)!important;
     border-radius: 15px 15px / 5px 5px;
     border: 2px solid;
-    border-color: var(--highlight-text-shadow) transparent transparent var(--highlight-text-shadow);
+    border-color: var(--sw-highlight-text-shadow) transparent transparent var(--sw-highlight-text-shadow);
     margin:  0px 0px 0px 2rem!important;
     display: inline-block;
     .callout-content {
@@ -1435,21 +1433,22 @@ Annotation callouts
         color: black;
         font-family: "EB Garamond";
         font-size: 110%;
-        border-radius: var(--hl-radius);
+        border-radius: var(--sw-hl-radius);
         box-decoration-break: clone;
     }
 }
 
 
 
-.callout[data-callout*="ann-highlight-text"], .callout[data-callout*="ann-underline-text"] {
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-highlight-text"],
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-underline-text"] {
      .callout-content::before {
         content: '';
         display: inline-block;
         width: 1em;
         height: 1em;
         margin-right: 0.5rem;
-        background-color: --bright(var(--hue));
+        background-color: --sw-bright(var(--sw-hue));
         mask-image: var(--quote-icon-right);
         mask-size: contain;
         mask-repeat: no-repeat;
@@ -1462,7 +1461,7 @@ Annotation callouts
         width: 1em;
         height: 1em;
         vertical-align: middle;
-        background-color: --bright(var(--hue));
+        background-color: --sw-bright(var(--sw-hue));
         mask-image: var(--quote-icon-right);
         mask-size: contain;
         mask-repeat: no-repeat;
@@ -1470,33 +1469,34 @@ Annotation callouts
     }
 }
 
-.callout[data-callout*="ann-highlight-text"] .callout-content {
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-highlight-text"] .callout-content {
     p, li {
-        background-image: --hl-gradient(var(--hue));
+        background-image: --sw-hl-gradient(var(--sw-hue));
     }
 }
 
-.callout[data-callout*="ann-underline-text-"] .callout-content {
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-underline-text"] .callout-content {
     p, li {
         text-decoration: underline solid 4px;
-        text-decoration-color: --light(var(--hue));
+        text-decoration-color: --sw-light(var(--sw-hue));
     }
 }
 
-.callout[data-callout*="ann-image-"], .callout[data-callout*="ann-ink-"] {
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-image"],
+.callout[data-callout^="sw-excerpt-"][data-callout$="-sw-ink"] {
   .callout-content img {
     display: block;
     padding:8px;
     border-radius: 5px;
-    background: --bright(var(--hue));
+    background: --sw-bright(var(--sw-hue));
   }
 }
 
 /* Links to coloured annotation pages at the end of the callout */
-.callout[data-callout$="annotation"] {
+.callout[data-callout^="sw-annotation-"] {
     p {
       & a, a:link, a:visited, a:hover, a:active {
-        color: --dark(var(--hue));
+        color: --sw-dark(var(--sw-hue));
       }
     }
     ul {
@@ -1513,29 +1513,14 @@ Annotation callouts
             padding: 3px 10px;
             height: 25px;
             font-size: 9pt;
-            color: --light(var(--hue));
+            color: --sw-light(var(--sw-hue));
             border-radius: 12px;
-            background: --dark(var(--hue));
+            background: --sw-dark(var(--sw-hue));
             & a, a:link, a:visited, a:hover, a:active {
-              color: --bright(var(--hue));
+              color: --sw-bright(var(--sw-hue));
             }
         }
     }
-}
-
-
-/* custom color highlights */
-
-.cm-highlight:has([class*="hl-"]) {
-    background-color: transparent!important;
-}
-
-[class^="hl-"] {
-    background-image: --hl-gradient(var(--hue));
-    border-radius: var(--hl-radius);
-    box-decoration-break: clone;
-    background-color: transparent;
-    padding: 5px 0px;
 }
 
 
