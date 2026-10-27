@@ -160,17 +160,16 @@ function imgAlias(a: NoteContextAnnotation, alias: string): string | null {
  * The sub-callout header for the PRIMARY annotation, chosen by its type. `null`
  * when the type has no content block.
  */
-function annotationHeader(
-  a: NoteContextAnnotation,
-  colorRaw: string
-): string | null {
+function annotationHeader(a: NoteContextAnnotation): string | null {
+  // No colour in the inner id: the outer callout already sets --sw-hue and the
+  // excerpt is nested inside it, so the colour is inherited.
   if ((a.type === 'highlight' || a.type === 'underline') && a.text) {
-    return `> [!sw-excerpt sw-${colorRaw} sw-${a.type}-text]`;
+    return `> [!sw-excerpt sw-${a.type}-text]`;
   }
-  if (a.type === 'image') return `> [!sw-excerpt sw-${colorRaw} sw-image]`;
-  if (a.type === 'ink') return `> [!sw-excerpt sw-${colorRaw} sw-ink]`;
+  if (a.type === 'image') return `> [!sw-excerpt sw-image]`;
+  if (a.type === 'ink') return `> [!sw-excerpt sw-ink]`;
   if (a.type === 'text' || a.type === 'note') {
-    return `> [!sw-excerpt sw-${colorRaw} sw-text] Text comment—click to view in context:`;
+    return `> [!sw-excerpt sw-text] Text comment—click to view in context:`;
   }
   return null;
 }
@@ -233,7 +232,7 @@ export function renderAnnotationCallout(
   // The annotation's own content, then any image/ink folded in by "+"
   // continuations — all inside ONE sub-callout, so a selection spanning pages
   // reads as a single quote (like merged text).
-  const header = annotationHeader(a, colorRaw);
+  const header = annotationHeader(a);
   if (header) {
     const body = annotationBodyLines(a);
     // Each image/ink continuation is its own block; a blank line between blocks

@@ -60,7 +60,7 @@ describe('renderAnnotationCallout()', () => {
       annotation({ type: 'highlight', text: 'x' })
     );
     expect(out).toContain('[!sw-annotation sw-yellow sw-highlight] Yellow Highlight');
-    expect(out).toContain('> > [!sw-excerpt sw-yellow sw-highlight-text]');
+    expect(out).toContain('> > [!sw-excerpt sw-highlight-text]');
     expect(out).toContain('> - [[Yellow annotations|Yellow]]');
     expect(out).toContain('- ([p. 116](zotero://open/');
   });
@@ -149,7 +149,7 @@ describe('renderAnnotationCallout() — image/ink', () => {
     expect(out).toContain('> >\n> > ![[b.png]]');
     expect(out).not.toContain('> ...');
     // The sub-callout id appears once, not per image.
-    expect(out.match(/\[!sw-excerpt sw-blue sw-image\]/g)).toHaveLength(1);
+    expect(out.match(/\[!sw-excerpt sw-image\]/g)).toHaveLength(1);
   });
 });
 
@@ -162,7 +162,7 @@ describe('renderAnnotationCallout() — text comments', () => {
       );
       // Obsidian's callout regex requires `(?:\s|$)` straight after `]`; without
       // the space the header is plain blockquote text.
-      expect(out).toContain('[!sw-excerpt sw-yellow sw-text] Text comment');
+      expect(out).toContain('[!sw-excerpt sw-text] Text comment');
       expect(out).toContain('> A comment');
     }
   );
