@@ -1,8 +1,30 @@
 # Setup — from zero to Zotero–Obsidian–document integration
 
-This page walks through **everything**, in order, with the exact menu items and clicks. Do the steps for your operating system. Anything in a grey box is a **terminal command**: copy one line at a time, paste it, and press Return/Enter.
+This page has two parts: a **quick start** that installs ScholarWeft from Obsidian's community directory and gets your first linked citation working, then the **full setup**, which connects Zotero properly, sets up literature notes and annotations, and installs the document tools for import and export. Do the steps for your operating system. Anything in a grey box is a **terminal command**: copy one line at a time, paste it, and press Return/Enter.
 
-## The easy way: run the setup script
+## Quick start: install ScholarWeft and cite something
+
+This is the whole installation for linked citations. It takes a few minutes, needs no terminal, and works on desktop and mobile.
+
+1. **Open Obsidian.** If you don't have it yet, download it from <https://obsidian.md/download> and choose **Create new vault**. (The [full setup](#the-full-setup-zotero-notes-and-documents) covers the installer-version check for older installations.)
+2. **Install the plugin.** Open **Settings → Community plugins**. If **Restricted mode** is on, turn it off, then click **Browse**, search for **ScholarWeft**, and click **Install**, then **Enable**.
+3. **Give ScholarWeft something to cite.** It reads either a bibliography file or your Zotero library:
+   - **Zotero:** start Zotero and complete [Step 2](#2-install-zotero-and-switch-on-the-local-connection) (the local-connection checkbox is **off by default**) and [Step 3](#3-better-bibtex-recommended) (Better BibTeX, which generates stable citekeys).
+   - **A `.bib` file, no Zotero:** open **Settings → ScholarWeft → Bibliography**, switch the Zotero toggle off, and add your file under **Bibliography files**.
+4. **Cite.** In a note, type `[[@` and pick a reference. The citation renders as *(Author Year)* and links to that work's literature note. See [Linked Citations](./linked-citations.md) for the alias syntax.
+
+That is the core of ScholarWeft. Everything else — searching Zotero and importing literature notes, annotations, document import/export — is optional and builds on it.
+
+## The full setup: Zotero, notes, and documents
+
+Use this part when you want ScholarWeft to **search and import references from Zotero**, **create and update literature notes with annotations**, **import DOCX/ODT documents**, or **compile and export DOCX/ODT/PDF**. It also verifies the Zotero connection those features depend on.
+
+- **Zotero connection and citekeys** — [Step 2](#2-install-zotero-and-switch-on-the-local-connection) and [Step 3](#3-better-bibtex-recommended).
+- **Document tools** (Python, Pandoc, LibreOffice, LaTeX, fonts) — [Step 5](#5-optional-document-importexport-tools).
+- **ScholarWeft settings** — [Step 6](#6-configure-scholarweft).
+- **The setup script** below automates the whole long path. Run it first if you like; the numbered steps are the manual equivalent and your fallback if a step fails.
+
+## Automate the full setup: run the setup script
 
 ### Two things to check first
 
@@ -91,7 +113,7 @@ It is **interactive** (`y` / `n` / `q` as single keypresses before each step), s
 
 Download: <https://obsidian.md/download>
 
-> **Already have Obsidian?** Check its **Installer version** (**Settings → About**, or **Show debug info**). The installer being behind the app version is normal and harmless — but newer plugins won't load on an installer **below 1.13.4**. If yours is below that, reinstall Obsidian; the [setup script](#the-easy-way-run-the-setup-script) offers a one-step **Refresh Obsidian**, or download the latest from <https://obsidian.md/download> and replace your copy. Your vaults, plugins, and settings are untouched.
+> **Already have Obsidian?** Check its **Installer version** (**Settings → About**, or **Show debug info**). The installer being behind the app version is normal and harmless — but newer plugins won't load on an installer **below 1.13.4**. If yours is below that, reinstall Obsidian; the [setup script](#automate-the-full-setup-run-the-setup-script) offers a one-step **Refresh Obsidian**, or download the latest from <https://obsidian.md/download> and replace your copy. Your vaults, plugins, and settings are untouched.
 
 **macOS**
 
@@ -134,7 +156,7 @@ Download: <https://www.zotero.org/download/> — install the **Zotero** app (not
 > 2. **Another vault is already connected to Zotero.** Zotero accepts one local connection at a time, so a second vault — or a second Obsidian window on another vault — can't reach it while the first holds the connection. **Close the other vault(s)** and click Retry. If you work in several vaults, you don't need to shut them all down permanently — just switch the connection by closing the one that's using it.
 > 3. **The checkbox above is off** — re-tick it.
 >
-> (The [setup script](#the-easy-way-run-the-setup-script) can tick the checkbox for you when Zotero is closed.)
+> (The [setup script](#automate-the-full-setup-run-the-setup-script) can tick the checkbox for you when Zotero is closed.)
 
 ---
 
@@ -147,7 +169,7 @@ Better BibTeX (BBT) is a Zotero add-on that gives every item a stable **citekey*
 3. Click the **gear ⚙** icon (top-right of the Plugins window) → **Install Plugin From File…**.
 4. Select the downloaded `.xpi` file. Restart Zotero if it asks.
 5. Check it worked: **Tools** or **Settings** (depending on your operating system) should now have a **Better BibTeX** submenu.
-6. At the top of that Better BibTeX submenu, set the **Citation key formula** to `(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '')`. This keeps citekeys short and free of punctuation and unusual characters (first author, two-word short title, year). (The [setup script](#the-easy-way-run-the-setup-script) can set this for you.)
+6. At the top of that Better BibTeX submenu, set the **Citation key formula** to `(auth(15).lower + shorttitle(2,2) + year).clean.replace(/[^a-zA-Z0-9]/g, '')`. This keeps citekeys short and free of punctuation and unusual characters (first author, two-word short title, year). (The [setup script](#automate-the-full-setup-run-the-setup-script) can set this for you.)
 
 BBT generates citekeys automatically. If an item has no citekey yet, right-click it → **Better BibTeX → Pin Citation Key** (or just leave it — BBT fills it in).
 
@@ -155,16 +177,25 @@ BBT generates citekeys automatically. If an item has no citekey yet, right-click
 
 ## 4. Install the ScholarWeft plugin
 
-### Option A — BRAT (recommended; keeps it updated)
+The [quick start](#quick-start-install-scholarweft-and-cite-something) already does this. Use one of these options if you skipped it or want a different update channel.
+
+### Option A — Community plugins (recommended; stable releases)
+
+1. In **Obsidian**: **Settings → Community plugins → Browse**, search `ScholarWeft`, **Install**, **Enable**.
+2. Obsidian keeps it updated like any other community plugin. The listing is at <https://community.obsidian.md/plugins/scholar-weft>.
+
+### Option B — BRAT (pre-release/beta versions)
+
+Use BRAT only if you want prereleases; stable versions update through the normal Community-plugins updater.
 
 1. In **Obsidian**: **Settings → Community plugins → Browse**, search `BRAT`, **Install**, **Enable**.
 2. Still in Settings, scroll the left list to **BRAT** and open it.
 3. Click the `+` icon to the right of **Beta plugin list**.
 4. In the `Repository` box, paste exactly: `nebedaay/ScholarWeft`, check the box **Enable after installing the plugin**, and click **Add Plugin**.
 
-BRAT checks for updates automatically; you can force one from BRAT's settings (**Check for updates**).
+A release whose tag contains a hyphen (e.g. `0.6.0-beta.1`) is a GitHub prerelease: the normal updater and the community directory cannot see it, but BRAT with beta versions enabled can.
 
-### Option B — manual install
+### Option C — manual install
 
 1. Open the latest release page: <https://github.com/nebedaay/ScholarWeft/releases/latest>
 2. Download these three files: **`main.js`**, **`manifest.json`**, **`styles.css`**.
@@ -185,7 +216,7 @@ To install the document import/export tools, you’ll need to open a **terminal*
 
 ### Option A: The script (it already did this and the rest)
 
-The [setup script at the top of this page](#the-easy-way-run-the-setup-script) installs these document tools too — run it rather than doing this step by hand, unless you prefer the manual route or that step failed in the script. It reuses any Python, Pandoc, LibreOffice or LaTeX you already have.
+The [setup script at the top of this page](#automate-the-full-setup-run-the-setup-script) installs these document tools too — run it rather than doing this step by hand, unless you prefer the manual route or that step failed in the script. It reuses any Python, Pandoc, LibreOffice or LaTeX you already have.
 
 ### Option B: By hand
 
@@ -300,7 +331,7 @@ luaotfload-tool --update    # every OS, once
 
 **Recommended if you want every new note to start with the same few properties.** ScholarWeft works best when every note carries a `created` date, a larger category (`up`), `related` notes, and alternative names (`aliases`). Based on Nick Milo's *Linking Your Thinking* philosophy, this optional step installs a **Basic note template** with those four properties and sets up the **Templater** plugin to apply it to every note you create in your vault — so you never have to add them by hand.
 
-**The easy way:** the [setup script](#the-easy-way-run-the-setup-script) offers this step (it installs the Templater plugin; the configuration is finished from inside Obsidian on your next launch). Otherwise, do it from ScholarWeft's settings:
+**The easy way:** the [setup script](#automate-the-full-setup-run-the-setup-script) offers this step (it installs the Templater plugin; the configuration is finished from inside Obsidian on your next launch). Otherwise, do it from ScholarWeft's settings:
 
 1. In **Obsidian**: **Settings → Community plugins → Browse**, search `Templater`, **Install**, then **Enable**.
 2. Open **Settings → ScholarWeft → Addons for displaying and linking notes** and click **Install the Basic note template and apply it to new notes**.
@@ -340,7 +371,7 @@ Open **Settings → ScholarWeft**.
 
 ## Troubleshooting
 
-**A plugin won't enable, or errors when you enable it.** Your Obsidian **installer** is probably **below 1.13.4**. (An installer older than the app version is normal and harmless — the threshold is what matters.) Check **Settings → About** (or **Show debug info**) for the **Installer version**. Re-run the [setup script](#the-easy-way-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> — your vault and settings are untouched.
+**A plugin won't enable, or errors when you enable it.** Your Obsidian **installer** is probably **below 1.13.4**. (An installer older than the app version is normal and harmless — the threshold is what matters.) Check **Settings → About** (or **Show debug info**) for the **Installer version**. Re-run the [setup script](#automate-the-full-setup-run-the-setup-script) and answer **yes** to *Refresh Obsidian*, or reinstall Obsidian from <https://obsidian.md/download> — your vault and settings are untouched.
 
 **“Cannot connect to Zotero.”** Three usual causes, in order:
 

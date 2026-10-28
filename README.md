@@ -64,13 +64,25 @@ Most features work with **no external tools** (no Pandoc, no Zotero) when you us
 
 Basic citation work needs nothing installed. Document import/export and live Zotero fields require installing some combination of Python 3, Pandoc, Zotero/Better BibTeX, LibreOffice, and/or a LaTeX distribution — see **[Dependencies](./docs/dependencies.md)** for the exact mapping and download links. The plugin detects what is installed and greys out options that can't run.
 
-## Install via BRAT
+## Install
 
-1. Disable Restricted Mode, then install and enable [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the Community Plugins list.
-2. In BRAT's settings, add `nebedaay/ScholarWeft` to the **Beta plugin list**.
-3. Enable **ScholarWeft** in Community Plugins. BRAT keeps it updated.
+**From Obsidian's community plugins directory (recommended):**
 
-**New to all of this?** **[Setup](./docs/setup.md)** is a complete, click-by-click walkthrough, and it opens with a **setup script** that can do the whole thing for you — install/update the Obsidian and Zotero apps, add ScholarWeft to Obsidian and Better BibTeX to Zotero, switch on Zotero's local connection, and install the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts). It is interactive (asks before each step), safe to re-run, and prints a summary of what succeeded/failed/was skipped. Copy the one-line command for your OS from the top of [Setup](./docs/setup.md#the-easy-way-run-the-setup-script).
+1. In Obsidian, open **Settings → Community plugins** and turn off **Restricted mode** if this is a new vault.
+2. Click **Browse**, search for **ScholarWeft**, then **Install** and **Enable**.
+3. That's it — Obsidian updates it like any other community plugin.
+
+ScholarWeft is listed at <https://community.obsidian.md/plugins/scholar-weft>. This is all you need for **linked citations**: give it a `.bib` file under **Settings → ScholarWeft → Bibliography**, or connect Zotero (see [Setup](./docs/setup.md)). The community listing and the normal updater carry stable releases only.
+
+**Pre-release/beta versions — BRAT:**
+
+Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the Community plugins list, then add `nebedaay/ScholarWeft` to its **Beta plugin list**. A release whose tag contains a hyphen (e.g. `0.6.0-beta.1`) is published as a GitHub prerelease: the normal updater and the community directory cannot see it, but BRAT can.
+
+**Manual install (development or off-line):**
+
+Download `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/nebedaay/ScholarWeft/releases/latest) into `<your vault>/.obsidian/plugins/scholar-weft/`, then enable the plugin. [Setup](./docs/setup.md) has the click-by-click version.
+
+**New to all of this?** **[Setup](./docs/setup.md)** opens with a **five-minute quick start** — install from Community plugins and make your first citation — and then the full setup: connecting Zotero and Better BibTeX, creating literature notes with annotations, installing the document tools (Python, Pandoc, LibreOffice, LaTeX, fonts), and troubleshooting. It also offers an interactive **setup script** that automates the long part: install/update Obsidian and Zotero, add ScholarWeft and Better BibTeX, switch on Zotero's local connection, and install the document tools. It asks before each step, is safe to re-run, and prints a summary of what succeeded, failed or was skipped.
 
 ## Network use and file access
 
