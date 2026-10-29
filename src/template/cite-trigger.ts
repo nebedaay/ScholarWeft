@@ -88,8 +88,11 @@ export function detectCitationTrigger(
         continue;
       }
       const query = line.slice(i + 1);
-      // `@@`: a period closes the trigger; spaces are always allowed.
-      if (query.includes('.')) continue;
+      // `@@`: a period or a closing bracket ends the trigger; spaces are always
+      // allowed. The `]` matters: once a linked citation is closed (`[[@key]]`),
+      // the `@` must stop being a trigger instead of leaving the popup open
+      // until the next period.
+      if (query.includes('.') || query.includes(']')) continue;
       if (query.trim().length < minChars) return null;
       return { atPos, query: DOUBLE_AT_PREFIX + query, isDoubleAt: true };
     }
@@ -98,8 +101,10 @@ export function detectCitationTrigger(
     if (!isWordStartBefore(line[i - 1])) continue;
     const query = line.slice(i + 1);
     // Sentence punctuation ends the citation. With spaces allowed, only
-    // `.,;!?` stop it; without, a space also ends the token.
-    const stop = allowSpaces ? /[.,;!?\n]/ : /[\s.,;!?\n]/;
+    // `.,;!?` and a closing bracket stop it; without, a space also ends the
+    // token. `]` is essential: `[[@key]]` / `[@key]` must stop triggering as
+    // soon as the citation is closed, not wait for a period.
+    const stop = allowSpaces ? /[.,;!?\]\n]/ : /[\s.,;!?\]\n]/;
     if (stop.test(query)) continue;
     if (query.trim().length < minChars) return null;
     return { atPos: i, query, isDoubleAt: false };

@@ -84,6 +84,27 @@ describe('detectCitationTrigger()', () => {
     expect(detectCitationTrigger('@smith,')).toBeNull();
   });
 
+  it('stops once a citation is closed with a closing bracket', () => {
+    // Regression: the popup stayed open after `]]` because the `@` inside the
+    // finished citation was still a valid trigger with a query ending in `]]`,
+    // and only a period closed it.
+    expect(detectCitationTrigger('[[@smith2005]]')).toBeNull();
+    expect(detectCitationTrigger('[@smith2005]')).toBeNull();
+    expect(detectCitationTrigger('[[@smith2005|Smith]]')).toBeNull();
+    expect(detectCitationTrigger('[[@smith2005|see @]]')).toBeNull();
+    expect(detectCitationTrigger('[[@smith2005|see @, p. 10]]')).toBeNull();
+    expect(detectCitationTrigger('[[@smith2005|@ -]]')).toBeNull();
+    expect(detectCitationTrigger('[[@@social critique]]')).toBeNull();
+    expect(detectCitationTrigger('[[@smi]')).toBeNull();
+    expect(detectCitationTrigger('[see @smith, p. 5]')).toBeNull();
+  });
+
+  it('still opens inside an unclosed link and on a new @ after a closed one', () => {
+    expect(detectCitationTrigger('[[@smi')).toMatchObject({ atPos: 2, query: 'smi' });
+    expect(detectCitationTrigger('[[@smi|')).toMatchObject({ atPos: 2 });
+    expect(detectCitationTrigger('[[@smith2005]] @')).toMatchObject({ atPos: 15, query: '' });
+  });
+
   it('triggers on the NEW @ after an earlier citation (rightmost wins)', () => {
     // Regression: a greedy, start-anchored regex matched the OLD `@` on the
     // line, so typing a fresh `@` after any citation did nothing. The trigger
