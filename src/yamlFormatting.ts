@@ -55,11 +55,11 @@ ${YAML_FORMATTING_MARKER}. Edit it from Settings → ScholarWeft → Addons for 
 
 
 @function --arrow-gradient(--hue) {
-  result: linear-gradient(0deg,  --bright(var(--orange)) 25%, --light(var(--hue)) 25%, --bright(var(--hue)) 40%, --dark(var(--hue)) 100%);
+  result: linear-gradient(0deg,  --sw-bright(var(--sw-orange)) 25%, --sw-light(var(--hue)) 25%, --sw-bright(var(--hue)) 40%, --sw-dark(var(--hue)) 100%);
 }
 
 @function --dashboard-gradient(--hue) {
-    result: radial-gradient(circle at 60% 50%, --light(var(--hue)) 0%, --bright(var(--hue)) 200%);
+    result: radial-gradient(circle at 60% 50%, --sw-light(var(--hue)) 0%, --sw-bright(var(--hue)) 200%);
 }
 
 :root {
@@ -116,16 +116,16 @@ Arrows on the "up" and "related" property items
 }
 
 .metadata-property[data-property-key="up"] .multi-select-pill-content::before {
-        background-image: --arrow-gradient(var(--green));
+        background-image: --arrow-gradient(var(--sw-green));
 }
 
 .metadata-property[data-property-key="related"] .multi-select-pill-content::before {
-    background-image: --arrow-gradient(var(--blue));
+    background-image: --arrow-gradient(var(--sw-blue));
     rotate:90deg;
 }
 
 .metadata-property[data-property-key="child"] .multi-select-pill-content::before {
-    background-image: --arrow-gradient(var(--blue));
+    background-image: --arrow-gradient(var(--sw-blue));
     rotate:180deg;
 }
 `;

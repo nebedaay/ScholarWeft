@@ -24,7 +24,7 @@ export class ReferenceListView extends ItemView {
       'collapsed-links',
       !!this.plugin.settings.hideLinks
     );
-    this.setNoContentMessage();
+    this.setLoadingMessage();
   }
 
   setViewContent(bib: HTMLElement) {
@@ -140,6 +140,10 @@ export class ReferenceListView extends ItemView {
     } else if (!bib) {
       this.setNoContentMessage();
     }
+  }
+
+  setLoadingMessage() {
+    this.setMessage(t('Loading references…'));
   }
 
   setNoContentMessage() {

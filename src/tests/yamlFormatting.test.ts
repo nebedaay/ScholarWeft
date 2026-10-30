@@ -38,6 +38,13 @@ describe('buildYamlFormattingCss', () => {
     expect(css).toContain('@function --dashboard-gradient(--hue)');
   });
 
+  it('calls the plugin --sw-* helpers, not the retired bare names', () => {
+    const css = buildYamlFormattingCss();
+    expect(css).toContain('--sw-bright(var(--sw-orange))');
+    expect(css).toContain('--arrow-gradient(var(--sw-green))');
+    expect(css).not.toMatch(/--bright\(|--light\(|--dark\(|var\(--green\)/);
+  });
+
   it('marks the file as plugin-generated', () => {
     expect(buildYamlFormattingCss()).toContain(YAML_FORMATTING_MARKER);
   });

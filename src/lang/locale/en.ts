@@ -128,6 +128,7 @@ export default {
   'Copy reference': 'Copy reference',
   'Copy list': 'Copy list',
   'Unresolved citations': 'Unresolved citations',
+  'Loading references…': 'Loading references…',
   'No citations found in the current document.':
     'No citations found in the current document.',
   References: 'References',
