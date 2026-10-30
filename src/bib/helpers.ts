@@ -783,7 +783,7 @@ const LIBRARY_RESYNC_MS = 7 * 24 * 60 * 60 * 1000;
  * FULL refetch, the same one-time-migration pattern as the `_version` /
  * `_creators` backfill.
  */
-export const MAPPING_VERSION = 2;
+export const MAPPING_VERSION = 3;
 
 /** Does a persisted library cache predate the current CSL mapping? */
 export function needsMappingRemap(

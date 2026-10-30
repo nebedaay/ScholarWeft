@@ -45,3 +45,37 @@ describe('zoteroItemToCSL — retained fields', () => {
     expect(csl._creators).toBeUndefined();
   });
 });
+
+describe('zoteroItemToCSL — URL', () => {
+  it('maps the native API lowercase url to the CSL URL', () => {
+    const csl = zoteroItemToCSL(
+      {
+        key: 'K3',
+        data: {
+          citationKey: 'paper2026',
+          itemType: 'journalArticle',
+          title: 'A paper',
+          url: 'https://example.org/paper',
+        },
+      },
+      1
+    )!;
+    expect(csl.URL).toBe('https://example.org/paper');
+  });
+
+  it('still accepts the CSL-style uppercase URL', () => {
+    const csl = zoteroItemToCSL(
+      {
+        key: 'K4',
+        data: {
+          citationKey: 'book2026',
+          itemType: 'book',
+          title: 'B',
+          URL: 'https://example.org/book',
+        },
+      },
+      1
+    )!;
+    expect(csl.URL).toBe('https://example.org/book');
+  });
+});

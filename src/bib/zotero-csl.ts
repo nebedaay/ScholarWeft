@@ -135,6 +135,8 @@ export interface ZoteroItemData {
 
   DOI?: ZoteroField;
   URL?: ZoteroField;
+  /** Zotero's native API spells this lowercase. */
+  url?: ZoteroField;
   ISBN?: ZoteroField;
   ISSN?: ZoteroField;
   abstractNote?: ZoteroField;
@@ -319,7 +321,8 @@ export function zoteroItemToCSL(
   const place = data.place ?? data.repositoryLocation;
   if (place) csl['publisher-place'] = place;
   if (data.DOI) csl.DOI = data.DOI;
-  if (data.URL) csl.URL = data.URL;
+  const url = data.URL ?? data.url;
+  if (url) csl.URL = url;
   if (data.ISBN) csl.ISBN = data.ISBN;
   if (data.ISSN) csl.ISSN = data.ISSN;
   if (data.abstractNote) csl.abstract = data.abstractNote;
