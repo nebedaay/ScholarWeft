@@ -61,7 +61,7 @@ import {
   stableKeyGroupID,
   unmanagedNoteCitekey,
 } from './template/note-lookup';
-import { moveNoteIntoFolder } from './noteImport';
+import { moveNoteIntoFolder, restorePendingCursor } from './noteImport';
 import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
@@ -330,6 +330,20 @@ export default class ReferenceList extends Plugin {
     // generated snippet if this vault still has one. Always call it — the
     // migration has to run even when the addon is off.
     await applyYamlFormatting(this, this.settings.yamlFormattingEnabled === true);
+
+    // A literature-note update rewrites the file; restore the body cursor when
+    // a background tab that was open at the time is next shown.
+    this.registerEvent(
+      this.app.workspace.on('active-leaf-change', (leaf) => {
+        if (leaf?.view instanceof MarkdownView) restorePendingCursor(leaf.view);
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on('file-open', () => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (view) restorePendingCursor(view);
+      })
+    );
 
     // Register the sidebar view, but tolerate the view type already existing —
     // e.g. the OLD "scholar-weave" plugin (same code, same view type) is still

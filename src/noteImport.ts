@@ -75,20 +75,87 @@ function captureOpenCursors(
  * yet), retry briefly; if it never matches, leave the cursor alone rather than
  * move it into the wrong place.
  */
+interface PendingCursor {
+  path: string;
+  content: string;
+  anchor: CursorAnchor;
+  at: number;
+}
+
+/**
+ * Background tabs often keep their old editor text until they are activated,
+ * long after the 500 ms retry window. Hold their anchors here and restore them
+ * when the tab is next shown (`restorePendingCursor`, wired to
+ * active-leaf-change / file-open in main.ts).
+ */
+const pendingCursors = new WeakMap<MarkdownView, PendingCursor>();
+const PENDING_CURSOR_MS = 10 * 60 * 1000;
+
 function restoreOpenCursors(
   anchors: OpenCursorAnchor[],
   content: string,
   attempt = 0
 ): void {
   if (!anchors.length) return;
-  const ready = anchors.filter(({ view }) => view.file && view.editor.getValue() === content);
-  if (ready.length !== anchors.length && attempt < 20) {
-    window.setTimeout(() => restoreOpenCursors(anchors, content, attempt + 1), 25);
+  const waiting: OpenCursorAnchor[] = [];
+  for (const item of anchors) {
+    let ready = false;
+    try {
+      ready = !!item.view.file && item.view.editor.getValue() === content;
+    } catch {
+      /* view closing */
+    }
+    if (ready) {
+      item.view.editor.setCursor(resolveCursorAnchor(content, item.anchor));
+    } else {
+      waiting.push(item);
+    }
+  }
+  if (!waiting.length) return;
+  if (attempt < 20) {
+    window.setTimeout(() => restoreOpenCursors(waiting, content, attempt + 1), 25);
     return;
   }
-  for (const { view, anchor } of ready) {
-    view.editor.setCursor(resolveCursorAnchor(content, anchor));
+  const at = Date.now();
+  for (const { view, anchor } of waiting) {
+    const path = view.file?.path;
+    if (path) pendingCursors.set(view, { path, content, anchor, at });
   }
+}
+
+/**
+ * Restore a background tab's cursor when it is activated, once its editor has
+ * loaded the rewritten text. Retries briefly because the editor updates after
+ * the leaf-change event.
+ */
+export function restorePendingCursor(view: MarkdownView, attempt = 0): void {
+  const pending = pendingCursors.get(view);
+  if (!pending) return;
+  if (Date.now() - pending.at > PENDING_CURSOR_MS) {
+    pendingCursors.delete(view);
+    return;
+  }
+  if (
+    !view.file ||
+    normalizePath(view.file.path) !== normalizePath(pending.path)
+  ) {
+    pendingCursors.delete(view);
+    return;
+  }
+  let content = '';
+  try {
+    content = view.editor.getValue();
+  } catch {
+    return;
+  }
+  if (content !== pending.content) {
+    if (attempt < 20) {
+      window.setTimeout(() => restorePendingCursor(view, attempt + 1), 25);
+    }
+    return;
+  }
+  view.editor.setCursor(resolveCursorAnchor(pending.content, pending.anchor));
+  pendingCursors.delete(view);
 }
 
 import {
