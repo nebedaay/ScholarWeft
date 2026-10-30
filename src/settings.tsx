@@ -1589,9 +1589,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
   }
 
   /**
-   * "Format YAML properties": a managed CSS snippet that makes the
-   * title / short-title / up / related properties stand out. The snippet is the
-   * user's own `sw-yaml-formatting.css`, with two configurable values.
+   * "Format YAML properties": styling for the title / short-title / up /
+   * related properties. The CSS is in the plugin's stylesheet, activated by a
+   * body class; these controls set the two configurable values.
    */
   private renderYamlFormatting(containerEl: HTMLElement): void {
     const enabled = this.plugin.settings.yamlFormattingEnabled === true;
@@ -1600,7 +1600,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Format YAML properties'))
       .setDesc(
         t(
-          'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.'
+          'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Applied directly by the plugin; turn it off to remove the styling.'
         )
       )
       .addToggle((toggle) =>

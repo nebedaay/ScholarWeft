@@ -2057,3 +2057,62 @@ Annotation callouts
   display: flex;
   gap: var(--size-4-2);
 }
+
+/* ── YAML frontmatter properties ("Format YAML properties" addon) ───────────
+   yamlFormatting.ts toggles body.sw-yaml-formatting and sets the two title
+   variables inline from settings. Without the class these rules are inert.
+   The arrow gradient reuses the --sw-* colour functions/variables defined at
+   the top of this file, so there is no second copy to drift. */
+
+@function --sw-arrow-gradient(--hue) {
+  result: linear-gradient(0deg, --sw-bright(var(--sw-orange)) 25%, --sw-light(var(--hue)) 25%, --sw-bright(var(--hue)) 40%, --sw-dark(var(--hue)) 100%);
+}
+
+body.sw-yaml-formatting {
+  --sw-yaml-title-background: #ffee99;
+  --sw-yaml-title-size: 2rem;
+  --sw-yaml-up-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-arrow-up-from-dot-icon lucide-arrow-up-from-dot'%3E%3Cpath d='m5 9 7-7 7 7'/%3E%3Cpath d='M12 16V2'/%3E%3Ccircle cx='12' cy='21' r='1'/%3E%3C/svg%3E");
+}
+
+body.sw-yaml-formatting .metadata-property[data-property-key="title"] .metadata-property-value {
+  font-size: var(--sw-yaml-title-size) !important;
+  padding: 1rem;
+  text-align: center;
+}
+
+body.sw-yaml-formatting .metadata-property[data-property-key="title"] .metadata-property-value,
+body.sw-yaml-formatting .metadata-property[data-property-key="short-title"] .metadata-property-value,
+body.sw-yaml-formatting .metadata-property[data-property-key="shorttitle"] .metadata-property-value {
+  background: var(--sw-yaml-title-background);
+}
+
+body.sw-yaml-formatting .metadata-property[data-property-key="up"] .multi-select-pill-content::before,
+body.sw-yaml-formatting .metadata-property[data-property-key="related"] .multi-select-pill-content::before,
+body.sw-yaml-formatting .metadata-property[data-property-key="child"] .multi-select-pill-content::before {
+  content: "";
+  padding: 0;
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.2rem;
+  float: left;
+  vertical-align: middle;
+  mask-image: var(--sw-yaml-up-icon);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+
+body.sw-yaml-formatting .metadata-property[data-property-key="up"] .multi-select-pill-content::before {
+  background-image: --sw-arrow-gradient(var(--sw-green));
+}
+
+body.sw-yaml-formatting .metadata-property[data-property-key="related"] .multi-select-pill-content::before {
+  background-image: --sw-arrow-gradient(var(--sw-blue));
+  rotate: 90deg;
+}
+
+body.sw-yaml-formatting .metadata-property[data-property-key="child"] .multi-select-pill-content::before {
+  background-image: --sw-arrow-gradient(var(--sw-blue));
+  rotate: 180deg;
+}

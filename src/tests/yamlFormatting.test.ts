@@ -1,59 +1,43 @@
 import {
-  buildYamlFormattingCss,
   DEFAULT_YAML_TITLE_BACKGROUND,
   DEFAULT_YAML_TITLE_SIZE,
+  YAML_FORMATTING_BODY_CLASS,
   YAML_FORMATTING_MARKER,
+  yamlFormattingValues,
 } from '../yamlFormatting';
 
-describe('buildYamlFormattingCss', () => {
-  it('substitutes the configured values', () => {
-    const css = buildYamlFormattingCss({
-      titleBackground: '#123456',
-      titleSize: 1.5,
-    });
-    expect(css).toContain('--title-background: #123456;');
-    expect(css).toContain('--title-size: 1.5rem;');
+describe('yamlFormattingValues()', () => {
+  it('uses the configured background and size', () => {
+    expect(
+      yamlFormattingValues({ titleBackground: '#123456', titleSize: 1.5 })
+    ).toEqual({ background: '#123456', sizeRem: '1.5rem' });
   });
 
   it('falls back to the defaults', () => {
-    const css = buildYamlFormattingCss();
-    expect(css).toContain(
-      `--title-background: ${DEFAULT_YAML_TITLE_BACKGROUND};`
-    );
-    expect(css).toContain(`--title-size: ${DEFAULT_YAML_TITLE_SIZE}rem;`);
+    expect(yamlFormattingValues()).toEqual({
+      background: DEFAULT_YAML_TITLE_BACKGROUND,
+      sizeRem: `${DEFAULT_YAML_TITLE_SIZE}rem`,
+    });
   });
 
-  it('ignores an empty or invalid size', () => {
-    expect(buildYamlFormattingCss({ titleSize: NaN })).toContain(
-      `--title-size: ${DEFAULT_YAML_TITLE_SIZE}rem;`
-    );
-    expect(buildYamlFormattingCss({ titleSize: 0 })).toContain(
-      `--title-size: ${DEFAULT_YAML_TITLE_SIZE}rem;`
-    );
+  it('ignores an empty background and an invalid size', () => {
+    expect(yamlFormattingValues({ titleBackground: '   ' })).toMatchObject({
+      background: DEFAULT_YAML_TITLE_BACKGROUND,
+    });
+    for (const titleSize of [NaN, 0, -1, Infinity]) {
+      expect(yamlFormattingValues({ titleSize })).toMatchObject({
+        sizeRem: `${DEFAULT_YAML_TITLE_SIZE}rem`,
+      });
+    }
+  });
+});
+
+describe('YAML formatting constants', () => {
+  it('uses a body class the stylesheet can target', () => {
+    expect(YAML_FORMATTING_BODY_CLASS).toBe('sw-yaml-formatting');
   });
 
-  it('keeps the W3C CSS @function helpers (do not strip them)', () => {
-    const css = buildYamlFormattingCss();
-    expect(css).toContain('@function --arrow-gradient(--hue)');
-    expect(css).toContain('@function --dashboard-gradient(--hue)');
-  });
-
-  it('calls the plugin --sw-* helpers, not the retired bare names', () => {
-    const css = buildYamlFormattingCss();
-    expect(css).toContain('--sw-bright(var(--sw-orange))');
-    expect(css).toContain('--arrow-gradient(var(--sw-green))');
-    expect(css).not.toMatch(/--bright\(|--light\(|--dark\(|var\(--green\)/);
-  });
-
-  it('marks the file as plugin-generated', () => {
-    expect(buildYamlFormattingCss()).toContain(YAML_FORMATTING_MARKER);
-  });
-
-  it('is well-formed CSS (balanced braces, no stray opening brace)', () => {
-    const css = buildYamlFormattingCss();
-    const open = (css.match(/\{/g) ?? []).length;
-    const close = (css.match(/\}/g) ?? []).length;
-    expect(open).toBe(close);
-    expect(css).not.toMatch(/\{\s*\{/);
+  it('keeps the marker that identifies the retired snippet', () => {
+    expect(YAML_FORMATTING_MARKER).toBe('Managed by ScholarWeft');
   });
 });

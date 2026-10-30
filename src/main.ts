@@ -326,12 +326,10 @@ export default class ReferenceList extends Plugin {
     // users who installed via BRAT get everything they need automatically.
     await setupAssets(this);
 
-    // Re-assert the YAML-formatting snippet when the addon is on (regenerates
-    // the file if the user deleted it, and keeps it enabled). Never disables it
-    // when the addon is off — that is an explicit choice at the toggle.
-    if (this.settings.yamlFormattingEnabled === true) {
-      await applyYamlFormatting(this, true);
-    }
+    // Apply the YAML addon through the body class, and retire the old
+    // generated snippet if this vault still has one. Always call it — the
+    // migration has to run even when the addon is off.
+    await applyYamlFormatting(this, this.settings.yamlFormattingEnabled === true);
 
     // Register the sidebar view, but tolerate the view type already existing —
     // e.g. the OLD "scholar-weave" plugin (same code, same view type) is still
