@@ -8,7 +8,7 @@
 // and the `%%sw-managed%%` region are refreshed; the user's own properties and
 // writing are preserved.
 
-import { App, Notice, Platform, TFile, normalizePath } from 'obsidian';
+import { App, MarkdownView, Notice, Platform, TFile, normalizePath } from 'obsidian';
 import type ReferenceList from './main';
 import { debugLog } from './helpers';
 import type { ForeignNoteAnswer } from './modals/foreignNoteModal';
@@ -30,11 +30,67 @@ import {
 } from './template/lit-folder';
 export { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
 import { readTemplate } from './template/note-template-io';
-import { readStableKey } from './template/note-format';
+import {
+  captureCursorAnchor,
+  readStableKey,
+  resolveCursorAnchor,
+  type CursorAnchor,
+} from './template/note-format';
 export {
   readTemplate,
   copyDefaultTemplateToVault,
 } from './template/note-template-io';
+
+interface OpenCursorAnchor {
+  view: MarkdownView;
+  anchor: CursorAnchor;
+}
+
+/** Cursors in any open editor showing this note, relative to its body. */
+function captureOpenCursors(
+  app: App,
+  notePath: string,
+  content: string
+): OpenCursorAnchor[] {
+  const out: OpenCursorAnchor[] = [];
+  for (const leaf of app.workspace.getLeavesOfType('markdown')) {
+    const view = leaf.view;
+    if (!(view instanceof MarkdownView) || !view.file) continue;
+    if (normalizePath(view.file.path) !== normalizePath(notePath)) continue;
+    const cursor = view.editor.getCursor();
+    const anchor = captureCursorAnchor(
+      content,
+      cursor.line,
+      cursor.ch,
+      view.editor.getLine(cursor.line)
+    );
+    if (anchor) out.push({ view, anchor });
+  }
+  return out;
+}
+
+/**
+ * Restore the captured cursors after the editor has reloaded the rewritten
+ * file. If the editor still holds different text (the write has not reached it
+ * yet), retry briefly; if it never matches, leave the cursor alone rather than
+ * move it into the wrong place.
+ */
+function restoreOpenCursors(
+  anchors: OpenCursorAnchor[],
+  content: string,
+  attempt = 0
+): void {
+  if (!anchors.length) return;
+  const ready = anchors.filter(({ view }) => view.file && view.editor.getValue() === content);
+  if (ready.length !== anchors.length && attempt < 20) {
+    window.setTimeout(() => restoreOpenCursors(anchors, content, attempt + 1), 25);
+    return;
+  }
+  for (const { view, anchor } of ready) {
+    view.editor.setCursor(resolveCursorAnchor(content, anchor));
+  }
+}
+
 import {
   excerptImageName,
   findPreviousImagePath,
@@ -798,7 +854,12 @@ export async function createOrUpdateOwnNote(
     // (frontmatter) refreshes; fall back to the adapter for an unindexed path.
     const known = app.vault.getAbstractFileByPath(notePath);
     if (known instanceof TFile) {
+      // The user may be typing in this note. Remember the cursor relative to
+      // the BODY (the YAML may grow or shrink) and put it back after Obsidian
+      // has picked up the rewritten file.
+      const anchors = captureOpenCursors(app, notePath, existing ?? '');
       await app.vault.modify(known, content);
+      restoreOpenCursors(anchors, content);
     } else {
       await app.vault.adapter.write(notePath, content);
     }

@@ -8,6 +8,9 @@ import {
   readStableKey,
   hasLegacyKey,
   shouldMigrateKey,
+  bodyStartLine,
+  captureCursorAnchor,
+  resolveCursorAnchor,
 } from '../note-format';
 
 describe('detectNoteFormat()', () => {
@@ -98,5 +101,57 @@ describe('shouldMigrateKey()', () => {
 
   it('does nothing for a note with no legacy key', () => {
     expect(shouldMigrateKey({ title: 'x' }, '')).toBe(false);
+  });
+});
+
+describe('cursor anchors', () => {
+  const before = ['---', 'title: x', '---', '', 'First line', 'Second line', 'Third line'].join(
+    '\n'
+  );
+  const after = [
+    '---',
+    'title: x',
+    'added: y',
+    'tags:',
+    '  - a',
+    '---',
+    '',
+    'First line',
+    'Second line',
+    'Third line',
+  ].join('\n');
+
+  it('finds the first body line after YAML', () => {
+    expect(bodyStartLine(before)).toBe(3);
+    expect(bodyStartLine('First line\nSecond')).toBe(0);
+    expect(bodyStartLine('---\ntitle: x\n')).toBe(0);
+  });
+
+  it('captures a body cursor but not one in the YAML block', () => {
+    expect(captureCursorAnchor(before, 5, 6, 'Second line')).toEqual({
+      lineText: 'Second line',
+      column: 6,
+      bodyLine: 2,
+    });
+    expect(captureCursorAnchor(before, 1, 2, 'title: x')).toBeNull();
+  });
+
+  it('follows the line text when the YAML grows', () => {
+    const anchor = captureCursorAnchor(before, 5, 6, 'Second line')!;
+    expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 8, ch: 6 });
+  });
+
+  it('follows the line text when lines are inserted above it', () => {
+    const anchor = captureCursorAnchor(before, 5, 6, 'Second line')!;
+    const shifted = ['---', 'title: x', '---', '', 'First line', '', 'Inserted', 'Second line'].join(
+      '\n'
+    );
+    expect(resolveCursorAnchor(shifted, anchor)).toEqual({ line: 7, ch: 6 });
+  });
+
+  it('falls back to the body-relative line and clamps the column', () => {
+    const anchor = { lineText: 'never appears', column: 30, bodyLine: 1 };
+    expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 7, ch: 10 });
+    expect(resolveCursorAnchor('', anchor)).toEqual({ line: 0, ch: 0 });
   });
 });

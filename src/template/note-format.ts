@@ -119,3 +119,70 @@ export function noteFormatLabel(format: NoteFormat): string {
       return 'an unrecognised format';
   }
 }
+
+/**
+ * Where a note's body starts: the line after the closing YAML fence, or 0 when
+ * the note has no frontmatter. A re-render can change the number of YAML lines,
+ * so cursor restoration must be relative to this line, not to the file start.
+ */
+export function bodyStartLine(content: string): number {
+  const lines = content.split(/\r?\n/);
+  if (lines[0]?.trim() !== '---') return 0;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === '---') return i + 1;
+  }
+  return 0;
+}
+
+/** A cursor in the body, remembered in a form a rewrite cannot invalidate. */
+export interface CursorAnchor {
+  /** The cursor line's exact text, used to find the line again. */
+  lineText: string;
+  /** The column within that line. */
+  column: number;
+  /** The line's 0-based offset from the first body line. */
+  bodyLine: number;
+}
+
+/** Remember a cursor that is in the body; null for one in the YAML block. */
+export function captureCursorAnchor(
+  content: string,
+  line: number,
+  column: number,
+  lineText: string
+): CursorAnchor | null {
+  const bodyStart = bodyStartLine(content);
+  if (line < bodyStart) return null;
+  return { lineText, column, bodyLine: line - bodyStart };
+}
+
+/**
+ * Map a captured cursor onto the rewritten note. The line's own text wins (it
+ * survives YAML and managed-region changes), with the body-relative line as
+ * the tie-breaker and the fallback; the column is clamped to the line length.
+ */
+export function resolveCursorAnchor(
+  content: string,
+  anchor: CursorAnchor
+): { line: number; ch: number } {
+  const lines = content.split(/\r?\n/);
+  const bodyStart = bodyStartLine(content);
+  const last = Math.max(0, lines.length - 1);
+  const preferred = Math.min(Math.max(bodyStart + anchor.bodyLine, bodyStart), last);
+
+  let target = preferred;
+  if (anchor.lineText) {
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let i = bodyStart; i < lines.length; i++) {
+      if (lines[i] !== anchor.lineText) continue;
+      const distance = Math.abs(i - preferred);
+      if (distance < bestDistance) {
+        target = i;
+        bestDistance = distance;
+      }
+    }
+  }
+
+  const ch = Math.min(anchor.column, lines[target]?.length ?? 0);
+  return { line: target, ch };
+}
