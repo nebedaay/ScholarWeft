@@ -39,6 +39,7 @@ const entry: CachedEntry = {
   publisher: 'Dār al-Jīl',
   'publisher-place': 'Beirut',
   _zoteroKey: 'EKUBHHNW',
+  URL: 'https://example.org/bughyat',
   _extra: '{:original-date:}',
 };
 
@@ -304,6 +305,9 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(out).toContain('publisher: "[[Dār al-Jīl]]"');
     expect(out).toContain('citekey: alsaihBughyatAlmustafid2005');
     expect(out).toContain('zotero-link: zotero://select/library/items/EKUBHHNW');
+    expect(out).toContain(
+      'url: "[https://example.org/bughyat](<https://example.org/bughyat>)"'
+    );
   });
 
   it('groups creators into role-named lists', () => {

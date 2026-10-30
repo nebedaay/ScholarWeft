@@ -56,6 +56,7 @@
 <% add_property('event', item.eventTitle); -%>
 <% add_property('version', item.version); -%>
 <% add_property('doi', item.DOI); -%>
+<% add_property('url', item.url ? `[${item.url}](<${item.url}>)` : null); -%>
 <% add_property('citekey', item.citekey); -%>
 <% add_property('zotero-link', item.backlink); -%>
 <% add_property('sw-zotero-id', item.indexedKey); -%>
