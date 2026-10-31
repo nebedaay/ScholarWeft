@@ -150,6 +150,45 @@ describe('cursor anchors', () => {
   });
 
 
+
+  it('follows the text after the cursor when paragraphs are inserted above it', () => {
+    const original = ['---', 'title: x', '---', '', 'Alpha', '', 'Target paragraph', 'After'].join(
+      '\n'
+    );
+    const inserted = [
+      '---',
+      'title: x',
+      '---',
+      '',
+      'Alpha',
+      '',
+      'Inserted one',
+      'Inserted two',
+      'Inserted three',
+      'Inserted four',
+      'Inserted five',
+      'Inserted six',
+      '',
+      'Target paragraph',
+      'After',
+    ].join('\n');
+    const anchor = captureCursorAnchor(original, 6, 0, 'Target paragraph')!;
+    // Combined context fails because the lines immediately above the cursor
+    // changed; the text after the cursor locates it.
+    expect(resolveCursorAnchor(inserted, anchor)).toEqual({ line: 13, ch: 0 });
+  });
+
+  it('follows the text before the cursor when text after it is inserted', () => {
+    const original = ['---', 'title: x', '---', '', 'Alpha', 'Target paragraph', 'After'].join(
+      '\n'
+    );
+    const inserted = ['---', 'title: x', '---', '', 'Alpha', 'Target paragraph', 'Inserted', 'After'].join(
+      '\n'
+    );
+    const anchor = captureCursorAnchor(original, 5, 0, 'Target paragraph')!;
+    expect(resolveCursorAnchor(inserted, anchor)).toEqual({ line: 5, ch: 0 });
+  });
+
   it('restores a cursor at the start of a paragraph', () => {
     const anchor = captureCursorAnchor(before, 4, 0, 'First line')!;
     expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 7, ch: 0 });

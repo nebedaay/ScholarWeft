@@ -114,24 +114,17 @@ function applyCursor(
   if (currentContent !== content) return;
 
   const target = resolveCursorAnchor(content, anchor);
-  const current = view.editor.getCursor();
-  let currentOffset = -1;
-  try {
-    currentOffset = view.editor.posToOffset(current);
-  } catch {
-    /* editor closing */
-  }
-  const atOld =
-    (current.line === anchor.absoluteLine && current.ch === anchor.absoluteColumn) ||
-    currentOffset === anchor.absoluteOffset;
-  const atTarget = current.line === target.line && current.ch === target.ch;
-  if (attempt === 0 || atOld || atTarget) {
-    view.editor.setCursor(target);
-  }
-  if (attempt < 2) {
+  // Re-assert unconditionally for a moment. Obsidian restores a saved/stale
+  // editor state after the write, and it is not necessarily the cursor position
+  // we captured, so there is nothing reliable to compare against. A keystroke
+  // changes the text and ends this (the guard above); a click within the short
+  // window is the only trade-off.
+  view.editor.setCursor(target);
+  if (attempt < 3) {
+    const delays = [80, 250, 800];
     window.setTimeout(
       () => applyCursor(view, anchor, content, attempt + 1),
-      attempt === 0 ? 100 : 300
+      delays[attempt] ?? 800
     );
   }
 }

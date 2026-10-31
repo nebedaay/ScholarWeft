@@ -217,14 +217,14 @@ export function resolveCursorAnchor(
     offsetOfLine(lines, preferredLine) +
     Math.min(anchor.column, lines[preferredLine]?.length ?? 0);
 
-  const needle = anchor.before + anchor.after;
-  if (needle) {
+  const find = (needle: string, anchorLength: number): number => {
+    if (!needle) return -1;
     let best = -1;
     let from = bodyStartOffset;
     while (true) {
       const index = content.indexOf(needle, from);
       if (index < 0) break;
-      const candidate = index + anchor.before.length;
+      const candidate = index + anchorLength;
       if (
         best < 0 ||
         Math.abs(candidate - preferredOffset) < Math.abs(best - preferredOffset)
@@ -233,21 +233,42 @@ export function resolveCursorAnchor(
       }
       from = index + 1;
     }
-    if (best >= 0) return lineChAt(content, best);
-  }
+    return best;
+  };
 
+  // Both sides together is the strongest anchor.
+  const combined = find(anchor.before + anchor.after, anchor.before.length);
+  if (combined >= 0) return lineChAt(content, combined);
+
+  // Next, the cursor line itself. This is unambiguous when it has text, and it
+  // is what distinguishes "six paragraphs inserted ABOVE me" (the same line
+  // text now sits lower) from "text inserted below me".
   let target = preferredLine;
   if (anchor.lineText) {
     let bestDistance = Number.POSITIVE_INFINITY;
+    let found = false;
     for (let i = bodyStart; i < lines.length; i++) {
       if (lines[i] !== anchor.lineText) continue;
       const distance = Math.abs(i - preferredLine);
       if (distance < bestDistance) {
         target = i;
         bestDistance = distance;
+        found = true;
       }
     }
+    if (found) {
+      return { line: target, ch: Math.min(anchor.column, lines[target].length) };
+    }
   }
+
+  // Only when the line is blank or its text changed: the text on one side of
+  // the cursor may still be intact (notes/annotations added above or below).
+  // Try each side before falling back to the old body-relative line.
+  const beforeOnly = find(anchor.before, anchor.before.length);
+  const afterOnly = beforeOnly < 0 ? find(anchor.after, 0) : -1;
+  const found = beforeOnly >= 0 ? beforeOnly : afterOnly;
+  if (found >= 0) return lineChAt(content, found);
+
   const ch = Math.min(anchor.column, lines[target]?.length ?? 0);
   return { line: target, ch };
 }
