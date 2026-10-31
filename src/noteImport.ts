@@ -92,6 +92,50 @@ interface PendingCursor {
 const pendingCursors = new WeakMap<MarkdownView, PendingCursor>();
 const PENDING_CURSOR_MS = 10 * 60 * 1000;
 
+/**
+ * Set the resolved cursor, then re-assert it briefly: Obsidian's editor reload
+ * can restore the OLD absolute cursor after our first set. Re-assert only while
+ * the cursor is still at one of the stale positions (or already correct), so a
+ * genuine move or keystroke wins.
+ */
+function applyCursor(
+  view: MarkdownView,
+  anchor: CursorAnchor,
+  content: string,
+  attempt = 0
+): void {
+  if (!view.file) return;
+  let currentContent = '';
+  try {
+    currentContent = view.editor.getValue();
+  } catch {
+    return;
+  }
+  if (currentContent !== content) return;
+
+  const target = resolveCursorAnchor(content, anchor);
+  const current = view.editor.getCursor();
+  let currentOffset = -1;
+  try {
+    currentOffset = view.editor.posToOffset(current);
+  } catch {
+    /* editor closing */
+  }
+  const atOld =
+    (current.line === anchor.absoluteLine && current.ch === anchor.absoluteColumn) ||
+    currentOffset === anchor.absoluteOffset;
+  const atTarget = current.line === target.line && current.ch === target.ch;
+  if (attempt === 0 || atOld || atTarget) {
+    view.editor.setCursor(target);
+  }
+  if (attempt < 2) {
+    window.setTimeout(
+      () => applyCursor(view, anchor, content, attempt + 1),
+      attempt === 0 ? 100 : 300
+    );
+  }
+}
+
 function restoreOpenCursors(
   anchors: OpenCursorAnchor[],
   content: string,
@@ -107,7 +151,7 @@ function restoreOpenCursors(
       /* view closing */
     }
     if (ready) {
-      item.view.editor.setCursor(resolveCursorAnchor(content, item.anchor));
+      applyCursor(item.view, item.anchor, content);
     } else {
       waiting.push(item);
     }
@@ -155,7 +199,7 @@ export function restorePendingCursor(view: MarkdownView, attempt = 0): void {
     }
     return;
   }
-  view.editor.setCursor(resolveCursorAnchor(pending.content, pending.anchor));
+  applyCursor(view, pending.anchor, pending.content);
   pendingCursors.delete(view);
 }
 

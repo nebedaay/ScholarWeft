@@ -146,6 +146,11 @@ export interface CursorAnchor {
   column: number;
   /** The line's 0-based offset from the first body line. */
   bodyLine: number;
+  /** The cursor's absolute line/column/offset before the rewrite (detects
+   *  Obsidian's own cursor restoration, which keeps the old position). */
+  absoluteLine: number;
+  absoluteColumn: number;
+  absoluteOffset: number;
 }
 
 const CURSOR_CONTEXT = 60;
@@ -187,6 +192,9 @@ export function captureCursorAnchor(
     lineText,
     column,
     bodyLine: line - bodyStart,
+    absoluteLine: line,
+    absoluteColumn: column,
+    absoluteOffset: offset,
   };
 }
 

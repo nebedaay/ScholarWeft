@@ -173,6 +173,9 @@ describe('cursor anchors', () => {
       lineText: 'never appears',
       column: 30,
       bodyLine: 1,
+      absoluteLine: 99,
+      absoluteColumn: 30,
+      absoluteOffset: 0,
     };
     expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 7, ch: 10 });
     expect(resolveCursorAnchor('', anchor)).toEqual({ line: 0, ch: 0 });
