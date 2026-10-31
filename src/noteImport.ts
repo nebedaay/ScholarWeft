@@ -49,8 +49,7 @@ interface OpenCursorAnchor {
 /** Cursors in any open editor showing this note, relative to its body. */
 function captureOpenCursors(
   app: App,
-  notePath: string,
-  content: string
+  notePath: string
 ): OpenCursorAnchor[] {
   const out: OpenCursorAnchor[] = [];
   for (const leaf of app.workspace.getLeavesOfType('markdown')) {
@@ -58,8 +57,10 @@ function captureOpenCursors(
     if (!(view instanceof MarkdownView) || !view.file) continue;
     if (normalizePath(view.file.path) !== normalizePath(notePath)) continue;
     const cursor = view.editor.getCursor();
+    // Capture from the EDITOR's text, not the last saved file: a background tab
+    // can be a few keystrokes (or a slow autosave) behind.
     const anchor = captureCursorAnchor(
-      content,
+      view.editor.getValue(),
       cursor.line,
       cursor.ch,
       view.editor.getLine(cursor.line)
@@ -924,7 +925,7 @@ export async function createOrUpdateOwnNote(
       // The user may be typing in this note. Remember the cursor relative to
       // the BODY (the YAML may grow or shrink) and put it back after Obsidian
       // has picked up the rewritten file.
-      const anchors = captureOpenCursors(app, notePath, existing ?? '');
+      const anchors = captureOpenCursors(app, notePath);
       await app.vault.modify(known, content);
       restoreOpenCursors(anchors, content);
     } else {

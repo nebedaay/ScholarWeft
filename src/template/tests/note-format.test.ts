@@ -128,7 +128,7 @@ describe('cursor anchors', () => {
   });
 
   it('captures a body cursor but not one in the YAML block', () => {
-    expect(captureCursorAnchor(before, 5, 6, 'Second line')).toEqual({
+    expect(captureCursorAnchor(before, 5, 6, 'Second line')).toMatchObject({
       lineText: 'Second line',
       column: 6,
       bodyLine: 2,
@@ -149,8 +149,31 @@ describe('cursor anchors', () => {
     expect(resolveCursorAnchor(shifted, anchor)).toEqual({ line: 7, ch: 6 });
   });
 
+
+  it('restores a cursor at the start of a paragraph', () => {
+    const anchor = captureCursorAnchor(before, 4, 0, 'First line')!;
+    expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 7, ch: 0 });
+  });
+
+  it('uses the surrounding text when a line text repeats', () => {
+    const repeated = ['---', 'title: x', '---', 'Same', 'middle', 'Same', 'tail'].join('\n');
+    const anchor = captureCursorAnchor(repeated, 5, 2, 'Same')!;
+    const shifted = ['---', 'title: x', 'extra: y', '---', 'Same', 'middle', 'Same', 'tail'].join(
+      '\n'
+    );
+    // The line text alone would be ambiguous; the "middle\nSa" context picks
+    // the second occurrence.
+    expect(resolveCursorAnchor(shifted, anchor)).toEqual({ line: 6, ch: 2 });
+  });
+
   it('falls back to the body-relative line and clamps the column', () => {
-    const anchor = { lineText: 'never appears', column: 30, bodyLine: 1 };
+    const anchor = {
+      before: '',
+      after: '',
+      lineText: 'never appears',
+      column: 30,
+      bodyLine: 1,
+    };
     expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 7, ch: 10 });
     expect(resolveCursorAnchor('', anchor)).toEqual({ line: 0, ch: 0 });
   });
