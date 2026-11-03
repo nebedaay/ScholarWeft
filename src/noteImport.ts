@@ -41,6 +41,7 @@ export {
   copyDefaultTemplateToVault,
 } from './template/note-template-io';
 
+
 interface OpenCursorAnchor {
   view: MarkdownView;
   anchor: CursorAnchor;
@@ -59,13 +60,16 @@ function captureOpenCursors(
     const cursor = view.editor.getCursor();
     // Capture from the EDITOR's text, not the last saved file: a background tab
     // can be a few keystrokes (or a slow autosave) behind.
+    const editorContent = view.editor.getValue();
     const anchor = captureCursorAnchor(
-      view.editor.getValue(),
+      editorContent,
       cursor.line,
       cursor.ch,
       view.editor.getLine(cursor.line)
     );
-    if (anchor) out.push({ view, anchor });
+    if (anchor) {
+      out.push({ view, anchor });
+    }
   }
   return out;
 }
@@ -103,23 +107,40 @@ function applyCursor(
   anchor: CursorAnchor,
   content: string,
   attempt = 0
-): void {
-  if (!view.file) return;
+): boolean {
+  if (!view.file) return false;
   let currentContent = '';
   try {
     currentContent = view.editor.getValue();
   } catch {
-    return;
+    return false;
   }
-  if (currentContent !== content) return;
 
   const target = resolveCursorAnchor(content, anchor);
+  const contentMatches = currentContent === content;
+  let editorLine = '';
+  try {
+    editorLine = view.editor.getLine(target.line) ?? '';
+  } catch {
+    return false;
+  }
+  // A trailing space (or any other whitespace-only difference) can stop the
+  // whole-text equality check forever. If the target LINE is there, the cursor
+  // belongs there; set it even while the editor is otherwise a beat behind.
+  const lineMatches =
+    editorLine === anchor.lineText ||
+    editorLine.trimEnd() === anchor.lineText.trimEnd();
+  if (!contentMatches && !lineMatches) return false;
+
+  const ch = contentMatches
+    ? target.ch
+    : Math.min(target.ch, editorLine.length);
   // Re-assert unconditionally for a moment. Obsidian restores a saved/stale
   // editor state after the write, and it is not necessarily the cursor position
   // we captured, so there is nothing reliable to compare against. A keystroke
-  // changes the text and ends this (the guard above); a click within the short
+  // changes the text and ends this (the checks above); a click within the short
   // window is the only trade-off.
-  view.editor.setCursor(target);
+  view.editor.setCursor({ line: target.line, ch });
   if (attempt < 3) {
     const delays = [80, 250, 800];
     window.setTimeout(
@@ -127,6 +148,7 @@ function applyCursor(
       delays[attempt] ?? 800
     );
   }
+  return true;
 }
 
 function restoreOpenCursors(
@@ -137,27 +159,19 @@ function restoreOpenCursors(
   if (!anchors.length) return;
   const waiting: OpenCursorAnchor[] = [];
   for (const item of anchors) {
-    let ready = false;
-    try {
-      ready = !!item.view.file && item.view.editor.getValue() === content;
-    } catch {
-      /* view closing */
-    }
-    if (ready) {
-      applyCursor(item.view, item.anchor, content);
-    } else {
-      waiting.push(item);
-    }
+    if (!applyCursor(item.view, item.anchor, content)) waiting.push(item);
   }
   if (!waiting.length) return;
-  if (attempt < 20) {
-    window.setTimeout(() => restoreOpenCursors(waiting, content, attempt + 1), 25);
+  if (attempt < 40) {
+    window.setTimeout(() => restoreOpenCursors(waiting, content, attempt + 1), 100);
     return;
   }
   const at = Date.now();
   for (const { view, anchor } of waiting) {
     const path = view.file?.path;
-    if (path) pendingCursors.set(view, { path, content, anchor, at });
+    if (path) {
+      pendingCursors.set(view, { path, content, anchor, at });
+    }
   }
 }
 
@@ -192,8 +206,13 @@ export function restorePendingCursor(view: MarkdownView, attempt = 0): void {
     }
     return;
   }
-  applyCursor(view, pending.anchor, pending.content);
-  pendingCursors.delete(view);
+  if (applyCursor(view, pending.anchor, pending.content)) {
+    pendingCursors.delete(view);
+    return;
+  }
+  if (attempt < 20) {
+    window.setTimeout(() => restorePendingCursor(view, attempt + 1), 25);
+  }
 }
 
 import {

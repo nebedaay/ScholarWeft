@@ -8,6 +8,7 @@ import {
   readStableKey,
   hasLegacyKey,
   shouldMigrateKey,
+  bodyWithoutFrontmatter,
   bodyStartLine,
   captureCursorAnchor,
   resolveCursorAnchor,
@@ -189,6 +190,34 @@ describe('cursor anchors', () => {
     expect(resolveCursorAnchor(inserted, anchor)).toEqual({ line: 5, ch: 0 });
   });
 
+
+  it('keeps the later of two identical lines when the file has a trailing space', () => {
+    const editor = ['---', 'title: x', '---', '', 'ko ko ko', 'middle', 'ko ko ko', 'tail'].join(
+      '\n'
+    );
+    const file = ['---', 'title: x', '---', '', 'ko ko ko', 'middle', 'ko ko ko ', 'tail'].join(
+      '\n'
+    );
+    const anchor = captureCursorAnchor(editor, 6, 8, 'ko ko ko')!;
+    expect(resolveCursorAnchor(file, anchor)).toEqual({ line: 6, ch: 8 });
+  });
+
+
+  it('puts an end-of-line cursor at the NEW end when the line grew', () => {
+    const beforeEnd = ['---', 'title: x', '---', '', 'Target'].join('\n');
+    const afterEnd = ['---', 'title: x', '---', '', 'Target paragraph'].join('\n');
+    const anchor = captureCursorAnchor(beforeEnd, 4, 6, 'Target')!;
+    expect(anchor.atLineEnd).toBe(true);
+    expect(resolveCursorAnchor(afterEnd, anchor)).toEqual({ line: 4, ch: 16 });
+  });
+
+  it('keeps a mid-line cursor at its column', () => {
+    const beforeMid = ['---', 'title: x', '---', '', 'Target paragraph'].join('\n');
+    const anchor = captureCursorAnchor(beforeMid, 4, 3, 'Target paragraph')!;
+    expect(anchor.atLineEnd).toBe(false);
+    expect(resolveCursorAnchor(beforeMid, anchor)).toEqual({ line: 4, ch: 3 });
+  });
+
   it('restores a cursor at the start of a paragraph', () => {
     const anchor = captureCursorAnchor(before, 4, 0, 'First line')!;
     expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 7, ch: 0 });
@@ -215,8 +244,25 @@ describe('cursor anchors', () => {
       absoluteLine: 99,
       absoluteColumn: 30,
       absoluteOffset: 0,
+      atLineEnd: false,
     };
     expect(resolveCursorAnchor(after, anchor)).toEqual({ line: 7, ch: 10 });
     expect(resolveCursorAnchor('', anchor)).toEqual({ line: 0, ch: 0 });
+  });
+});
+
+describe('bodyWithoutFrontmatter()', () => {
+  it('removes YAML frontmatter and keeps the body', () => {
+    expect(bodyWithoutFrontmatter('---\ntitle: x\n---\nBody\n')).toBe('Body\n');
+  });
+
+  it('leaves a note without frontmatter alone', () => {
+    expect(bodyWithoutFrontmatter('Body only\n')).toBe('Body only\n');
+  });
+
+  it('leaves an unterminated fence alone', () => {
+    expect(bodyWithoutFrontmatter('---\ntitle: x\nBody\n')).toBe(
+      '---\ntitle: x\nBody\n'
+    );
   });
 });

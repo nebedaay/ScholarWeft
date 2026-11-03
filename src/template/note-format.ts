@@ -151,6 +151,10 @@ export interface CursorAnchor {
   absoluteLine: number;
   absoluteColumn: number;
   absoluteOffset: number;
+  /** Was the cursor at the end of its line/paragraph? If so, restore it to the
+   *  NEW end when the line grew (e.g. a couple of characters were typed during
+   *  the update) instead of to the old column. */
+  atLineEnd: boolean;
 }
 
 const CURSOR_CONTEXT = 60;
@@ -195,6 +199,7 @@ export function captureCursorAnchor(
     absoluteLine: line,
     absoluteColumn: column,
     absoluteOffset: offset,
+    atLineEnd: column >= lineText.trimEnd().length,
   };
 }
 
@@ -217,6 +222,16 @@ export function resolveCursorAnchor(
     offsetOfLine(lines, preferredLine) +
     Math.min(anchor.column, lines[preferredLine]?.length ?? 0);
 
+  const finalize = (line: number, ch?: number): { line: number; ch: number } => {
+    const text = lines[line] ?? '';
+    return {
+      line,
+      ch: anchor.atLineEnd
+        ? text.trimEnd().length
+        : Math.min(ch ?? anchor.column, text.length),
+    };
+  };
+
   const find = (needle: string, anchorLength: number): number => {
     if (!needle) return -1;
     let best = -1;
@@ -236,19 +251,32 @@ export function resolveCursorAnchor(
     return best;
   };
 
+  // If the text above the cursor did not move, the cursor is still on the same
+  // body-relative line. Check that line first, comparing with trailing
+  // whitespace ignored: a Markdown hard-break space (or a trailing space the
+  // editor trimmed) must not send the search to an earlier duplicate line.
+  const anchorLine = anchor.lineText.trimEnd();
+  const preferredText = lines[preferredLine]?.trimEnd() ?? '';
+  if (anchorLine && preferredText === anchorLine) {
+    return finalize(preferredLine);
+  }
+
   // Both sides together is the strongest anchor.
   const combined = find(anchor.before + anchor.after, anchor.before.length);
-  if (combined >= 0) return lineChAt(content, combined);
+  if (combined >= 0) {
+    const pos = lineChAt(content, combined);
+    return finalize(pos.line, pos.ch);
+  }
 
   // Next, the cursor line itself. This is unambiguous when it has text, and it
   // is what distinguishes "six paragraphs inserted ABOVE me" (the same line
   // text now sits lower) from "text inserted below me".
   let target = preferredLine;
-  if (anchor.lineText) {
+  if (anchorLine) {
     let bestDistance = Number.POSITIVE_INFINITY;
     let found = false;
     for (let i = bodyStart; i < lines.length; i++) {
-      if (lines[i] !== anchor.lineText) continue;
+      if (lines[i].trimEnd() !== anchorLine) continue;
       const distance = Math.abs(i - preferredLine);
       if (distance < bestDistance) {
         target = i;
@@ -256,9 +284,7 @@ export function resolveCursorAnchor(
         found = true;
       }
     }
-    if (found) {
-      return { line: target, ch: Math.min(anchor.column, lines[target].length) };
-    }
+    if (found) return finalize(target);
   }
 
   // Only when the line is blank or its text changed: the text on one side of
@@ -267,8 +293,24 @@ export function resolveCursorAnchor(
   const beforeOnly = find(anchor.before, anchor.before.length);
   const afterOnly = beforeOnly < 0 ? find(anchor.after, 0) : -1;
   const found = beforeOnly >= 0 ? beforeOnly : afterOnly;
-  if (found >= 0) return lineChAt(content, found);
+  if (found >= 0) {
+    const pos = lineChAt(content, found);
+    return finalize(pos.line, pos.ch);
+  }
 
-  const ch = Math.min(anchor.column, lines[target]?.length ?? 0);
-  return { line: target, ch };
+  return finalize(target);
+}
+
+
+/**
+ * The note body without its YAML frontmatter. Citation scanning uses this so a
+ * `[[@citekey]]` in `related`/`sw-related`/other YAML NEVER counts as a
+ * citation — author pages add those links by design, and the missing-note
+ * action must not import works just because an author page links to them.
+ */
+export function bodyWithoutFrontmatter(content: string): string {
+	return content.replace(
+		/^\uFEFF?---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/,
+		''
+	);
 }
