@@ -27,11 +27,25 @@ function cslName(value: unknown): string {
 }
 
 /** A bibliographic reference for the modal prompt, editable by the user. */
-export function workOverviewContext(plugin: ReferenceList, file: TFile): string {
+export async function workOverviewContext(
+  plugin: ReferenceList,
+  file: TFile
+): Promise<string> {
   const frontmatter = plugin.app.metadataCache.getFileCache(file)?.frontmatter as
     | Record<string, unknown>
     | undefined;
   const key = noteCitekey(file, frontmatter);
+  if (key) {
+    try {
+      // Reuse the exporter's CSL reference renderer rather than inventing a
+      // second citation formatter.
+      const rendered = await plugin.bibManager.renderReferenceMarkdown([key]);
+      const reference = rendered.get(key)?.trim();
+      if (reference) return `Reference: ${reference}`;
+    } catch (e) {
+      console.warn('[sw:overview] could not render reference', key, e);
+    }
+  }
   const entry = key ? plugin.bibManager.bibCache.get(key) : undefined;
   const title =
     (typeof entry?.title === 'string' && entry.title.trim()) ||
@@ -57,6 +71,15 @@ export function workOverviewContext(plugin: ReferenceList, file: TFile): string 
   return `Reference: ${parts.join(' ')}`;
 }
 
+/** Render the reference, then open the editable prompt modal. */
+export async function openWorkOverview(
+  plugin: ReferenceList,
+  file: TFile
+): Promise<void> {
+  const context = await workOverviewContext(plugin, file);
+  new WorkOverviewModal(plugin, file, context).open();
+}
+
 /** Generate and insert a work overview using the full editable prompt. */
 export async function generateWorkOverview(
   plugin: ReferenceList,
@@ -79,7 +102,8 @@ export async function generateWorkOverview(
 export class WorkOverviewModal extends Modal {
   constructor(
     private readonly plugin: ReferenceList,
-    private readonly file: TFile
+    private readonly file: TFile,
+    private readonly context: string
   ) {
     super(plugin.app);
   }
@@ -100,7 +124,7 @@ export class WorkOverviewModal extends Modal {
     const instructions =
       (this.plugin.settings.workOverviewPrompt ?? '').trim() ||
       DEFAULT_WORK_OVERVIEW_PROMPT;
-    prompt.value = `${workOverviewContext(this.plugin, this.file)}\n\n${instructions}`;
+    prompt.value = `${this.context}\n\n${instructions}`;
 
     const buttons = this.contentEl.createDiv({ cls: 'modal-button-container' });
     buttons.createEl('button', { text: t('Cancel') }).onclick = () =>

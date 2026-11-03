@@ -52,7 +52,7 @@ This search offers several filters to help you locate the items you want:
 
 ## AI work overview
 
-The optional **Generate work overview** command adds a short AI-written overview to a literature note, using the shared LLM settings under **Settings → ScholarWeft → AI overviews**. It builds a reference from the note’s citekey and library metadata, pre-fills the whole prompt in an editable modal, and inserts the result as an unmanaged **`# Overview (AI generated)`** section at the top of the body. Enable the command with **Enable work overview command** on the AI overviews page.
+The optional **Generate work overview** command adds a short AI-written overview to a literature note, using the shared LLM settings under **Settings → ScholarWeft → AI overviews**. It renders the reference through the same CSL exporter used by full-reference insertions (`bibManager.renderReferenceMarkdown`), pre-fills the whole prompt in an editable modal, and inserts the result as an unmanaged **`# Overview (AI generated)`** section at the top of the body. Enable the command with **Enable work overview command** on the AI overviews page.
 
 ## Literature notes produced by the default template
 

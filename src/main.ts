@@ -78,7 +78,7 @@ import {
   linkAuthorVariant,
 } from './authorVariants';
 import { AuthorOverviewModal } from './authorOverview';
-import { WorkOverviewModal } from './workOverview';
+import { openWorkOverview } from './workOverview';
 import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
@@ -752,7 +752,7 @@ export default class ReferenceList extends Plugin {
         const citekey = typeof fm?.['citekey'] === 'string' ? fm['citekey'].trim() : '';
         if (!citekey && !/^@[^ ]+$/.test(file.basename)) return false;
         if (checking) return true;
-        new WorkOverviewModal(this, file).open();
+        void openWorkOverview(this, file);
         return true;
       },
     });
