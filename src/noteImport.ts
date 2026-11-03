@@ -242,6 +242,7 @@ import {
   writeChildren,
 } from './template/children-cache';
 import { renderNote } from './template/render';
+import { buildAuthorVariantIndex } from './authorVariants';
 
 declare const require: (id: string) => unknown;
 
@@ -718,6 +719,7 @@ export async function createOrUpdateOwnNote(
   // session, and a failure just leaves the property empty.
   await plugin.bibManager?.ensureCollectionsIndex().catch(() => {});
   const collections = plugin.bibManager?.collectionsForEntry(entry) ?? [];
+  const creatorVariants = buildAuthorVariantIndex(plugin).byVariant;
 
   // First pass: no existing note, just to resolve the filename.
   const first = renderNote(entry, children, {
@@ -726,6 +728,7 @@ export async function createOrUpdateOwnNote(
     dataDir,
     imageVaultPath,
     collections,
+    creatorVariants,
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
   });
   const base = (first.fileName || `@${citekey}`).replace(/\.md$/i, '');
@@ -952,6 +955,7 @@ export async function createOrUpdateOwnNote(
     imageVaultPath,
     notePath,
     collections,
+    creatorVariants,
     noteHeadingLevel: plugin.settings.ownNoteNotesHeadingLevel ?? 3,
     existingContent: existing,
     migrateRelated,

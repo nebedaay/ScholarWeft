@@ -41,7 +41,7 @@ export const AUTHOR_OPEN = '%%sw-author-managed%%';
 export const AUTHOR_CLOSE = '%%/sw-author-managed%%';
 
 const PREFERRED_ROLE_ORDER = ['author', 'editor', 'translator'];
-const CSL_CREATOR_ROLES = [
+export const CSL_CREATOR_ROLES = [
 	'author',
 	'editor',
 	'translator',
@@ -614,18 +614,18 @@ const MERGE_SKIP_DIRS = new Set([
 ]);
 
 /** Templates, docs, temp backups and plugin code are not author notes. */
-function isMergeablePath(path: string): boolean {
+export function isMergeablePath(path: string): boolean {
 	const first = normalizePath(path).split('/')[0];
 	return !MERGE_SKIP_DIRS.has(first);
 }
 
-function hasAuthorsUp(app: App, file: TFile): boolean {
+export function hasAuthorsUp(app: App, file: TFile): boolean {
 	const raw = app.metadataCache.getFileCache(file)?.frontmatter?.['up'];
 	const values = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : [];
 	return values.some(
 		(value) =>
 			typeof value === 'string' &&
-			/\[\[\s*Authors\s*\]\]|^\s*Authors\s*$/.test(value)
+			/\[\[\s*Authors?\s*\]\]|^\s*Authors?\s*$/.test(value)
 	);
 }
 
@@ -752,6 +752,28 @@ export async function mergeAuthorCandidates(
 		}
 	}
 	return { merged, moved };
+}
+
+/** Refresh one author page from the loaded library (used by variant linking). */
+export async function refreshAuthorPage(
+	plugin: ReferenceList,
+	file: TFile,
+	variants?: string[]
+): Promise<void> {
+	const app = plugin.app;
+	const current = app.vault.getAbstractFileByPath(file.path);
+	if (!(current instanceof TFile)) return;
+	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
+	const record = index.byDisplay.get(current.basename);
+	if (!record) return;
+	const rendered = await renderAuthorPage(plugin, record, {
+		variants: variants ?? variantsOf(app, current),
+		sourcePath: current.path,
+		index,
+	});
+	const content = await app.vault.read(current);
+	const merged = mergeAuthorContent(content, rendered);
+	if (merged !== content) await app.vault.modify(current, merged);
 }
 
 /**

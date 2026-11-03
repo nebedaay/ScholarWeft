@@ -25,6 +25,8 @@ export interface CreatorFormatOptions {
   roles?: string[];
   /** Property-name suffix. Default `s` (→ `authors`, `editors`). */
   suffix?: string;
+  /** Resolve a plain display name to a complete wikilink (variant support). */
+  resolveLink?: (name: string) => string | null;
 }
 
 export interface CreatorGroup {
@@ -74,8 +76,9 @@ export function groupCreatorsByType(
   const suffix = opts.suffix ?? 's';
   const groups = new Map<string, string[]>();
   const add = (c: NoteContextCreator) => {
-    const name = formatCreator(c, format, link);
-    if (!name) return;
+    const plain = formatCreator(c, format, false);
+    if (!plain) return;
+    const name = link ? (opts.resolveLink?.(plain) ?? `[[${plain}]]`) : plain;
     const values = groups.get(c.role);
     if (values) values.push(name);
     else groups.set(c.role, [name]);
@@ -97,6 +100,8 @@ export interface CreatorNamesOptions {
   roles?: string | string[];
   /** Wrap in `[[…]]`. Default false. */
   link?: boolean;
+  /** Resolve a plain display name to a complete wikilink (variant support). */
+  resolveLink?: (name: string) => string | null;
   /** Token template; see {@link formatCreator}. */
   format?: string;
   /** Separator. Default `, `. */
@@ -115,7 +120,12 @@ export function creatorNames(
     : null;
   const list = roles ? creators.filter((c) => roles.includes(c.role)) : creators;
   return list
-    .map((c) => formatCreator(c, opts.format, opts.link ?? false))
+    .map((c) => {
+      const plain = formatCreator(c, opts.format, false);
+      if (!plain) return '';
+      if (!(opts.link ?? false)) return plain;
+      return opts.resolveLink?.(plain) ?? `[[${plain}]]`;
+    })
     .filter(Boolean)
     .join(opts.join ?? ', ');
 }

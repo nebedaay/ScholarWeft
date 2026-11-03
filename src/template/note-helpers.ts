@@ -17,6 +17,7 @@
 //   creators  creators_by_type(format?, opts?)  → [{ key, values }] for the
 //             template's `for … add_property(g.key, g.values)` loop
 //             creator_names(role?, format?, opts?) → string
+//             creator_link(name) → variant-aware wikilink
 //   notes     zotero_notes({ mode?, level? })
 //   callouts  annotation_callout(annotation, opts?) / callout(opts) /
 //             merge_annotations(annotations)  (the "+" continuation rule; the
@@ -112,6 +113,8 @@ export interface TemplateState {
   fileName: string | null;
   /** True once `zotero_notes()` ran, so callers can detect a missing section. */
   notesRendered: boolean;
+  /** Variant display name → main author note basename. */
+  creatorVariants: ReadonlyMap<string, string>;
 }
 
 /** Optional per-import context attached alongside the note context. */
@@ -120,6 +123,8 @@ export interface TemplateExtras {
   /** Override for deterministic tests. */
   importDate?: string;
   isFirstImport?: boolean;
+  /** Variant display name → main author note basename. */
+  creatorVariants?: ReadonlyMap<string, string>;
 }
 
 const STATE_KEY = '__sw';
@@ -186,6 +191,7 @@ export function prepareTemplateData(
     isFirstImport: extras.isFirstImport !== false,
     fileName: null,
     notesRendered: false,
+    creatorVariants: extras.creatorVariants ?? new Map<string, string>(),
   };
   (ctx as Record<string, unknown>)[STATE_KEY] = state;
   return ctx;
@@ -289,13 +295,25 @@ export class NoteHelpers {
 
   // ── Creators ──
 
+  /** Resolve one creator display name to a wikilink (variant-aware). */
+  creatorLink(ctx: NoteContext, name: string): string {
+    const state = this.stateOf(ctx);
+    const plain = String(name ?? '').trim();
+    if (!plain) return '';
+    const main = state.creatorVariants.get(plain);
+    return main && main !== plain ? `[[${main}|${plain}]]` : `[[${plain}]]`;
+  }
+
   creatorsByType(
     ctx: NoteContext,
     format?: string,
     opts?: CreatorFormatOptions
   ): Array<{ key: string; values: string[] }> {
     const state = this.stateOf(ctx);
-    return groupCreatorsByType(ctx.creators, format ?? state.options.creatorFormat, opts);
+    return groupCreatorsByType(ctx.creators, format ?? state.options.creatorFormat, {
+      ...opts,
+      resolveLink: (name) => this.creatorLink(ctx, name),
+    });
   }
 
   /** Formatted names for ONE Zotero role, for a fixed frontmatter field. */
@@ -309,6 +327,7 @@ export class NoteHelpers {
     const group = groupCreatorsByType(ctx.creators, format ?? state.options.creatorFormat, {
       ...opts,
       roles: [role],
+      resolveLink: (name) => this.creatorLink(ctx, name),
     }).find((g) => g.key === `${role}${opts?.suffix ?? 's'}`);
     return group?.values ?? [];
   }
@@ -325,6 +344,7 @@ export class NoteHelpers {
       ...opts,
       roles,
       format: format ?? opts?.format ?? state.options.creatorFormat,
+      resolveLink: opts?.link ? (name) => this.creatorLink(ctx, name) : undefined,
     });
   }
 

@@ -42,18 +42,34 @@ Author notes are created in the folder set under **Author notes folder**. Leave 
 
 Notes whose filenames do not match an imported display name are left alone. Dictionary/term pages (`term:`) and Midad repository notes (`midad-*` properties, including `Hans Wehr`) are skipped. The merge matches only the imported display name, never the `First Last` alias, so Midad's `Hans Wehr` repository note is not treated as the `Wehr, Hans` author page.
 
-## Variants
+## Author-name variants
 
-Some people publish under more than one name. Put the other names in the **main** note's `variants` property:
+Some people appear in Zotero under more than one name — a fuller form of the given name, a married name, a spelling variant, or an institutional name. Put the alternate creator names in the **main** note's `variants` property:
 
 ```yaml
 variants:
   - "[[Al-Kawlakhī, al-Shaykh Ibrāhīm b. ʿAbdallāh]]"
 ```
 
-The main note then includes those variants' works and tags in its `related` and Publications lists. A variant note can carry `variant-of: "[[Niasse, Ibrahim]]"` to record its main note, but the main note is the one that keeps the biography and merged lists. Creator links still use the literal name; ScholarWeft does not rewrite them.
+`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal. They are not aliases; an entry in `aliases` never becomes a variant.
+
+**Treat this note’s author name as a variant of another author** is available when the current note has `up: "[[Authors]]"`. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
+
+- adds the current note name to the main note's `variants`;
+- adds autocomplete aliases for the variant: the variant itself and its `First Middle Last` form;
+- rewrites creator properties across the vault from `[[Variant]]` to `[[Main, Author|Variant]]`, so the note displays the published variant name but links to the main page;
+- moves the current note to the trash.
+
+Adding a variant to `variants` by hand has the same link and alias effect while Obsidian is running: the plugin notices the new value, adds the generated aliases, and rewrites matching creator properties. The old note is not deleted automatically in that case.
+
+The main note includes the variant's works and tags in its `related` and Publications lists. A variant note may carry `variant-of: "[[Niasse, Ibrahim]]"` to record its main note, but the main note is the one that keeps the biography and merged lists.
+
+`aliases` is still used for display and Obsidian's link autocomplete. The plugin adds the variant forms there for convenience, but it never treats an alias as the definition of a variant. This keeps a display alias such as `First Last` separate from the `variants` list.
+
+New imports use the variant map automatically: `creator_values` and `creators_by_type` write `[[Main|Variant]]` when a creator name is a known variant. Custom Eta templates can call `creator_link(name)` for the same resolution.
 
 ## Commands
 
 - **Create author note** — pick a creator and create/open their page.
 - **Merge existing author notes into the Authors folder** — the one-time tidy-up described above.
+- **Treat this note’s author name as a variant of another author** — available on an author note; link its name to a main author page and move this note to the trash.

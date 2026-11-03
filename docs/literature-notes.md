@@ -233,8 +233,9 @@ When you change the filename, the next **Update this literature note** (or impor
 | `creators_by_type(format?, opts?)` | Returns one group per Zotero `creatorType`, as `[{ key: 'authors', values: ['[[Smith, Jane]]', …] }, …]`. It does **not** write YAML — you loop over it and call `add_property` yourself. |
 | `creator_values(role, format?, opts?)` | The formatted names for **one** role, for a fixed property (e.g. `add_property('editors', creator_values('editor'))`). |
 | `creator_names(role?, format?, opts?)` | A formatted, comma-joined **string** for body use (e.g. an introduction line). |
+| `creator_link(name)` | Resolve one creator display name to a wikilink, following the main author note's `variants` property. A known variant becomes `[[Main, Author|Variant Name]]`; an unknown name becomes `[[Variant Name]]`. |
 
-**Format tokens** (used by all three): `{family}`, `{given}`, `{literal}`, `{role}`, `{fullName}`. The default is `{family}, {given}` for personal names and `{literal}` for institutional ones; an empty token leaves no dangling comma.
+**Format tokens** (used by `creators_by_type`, `creator_values`, and `creator_names`): `{family}`, `{given}`, `{literal}`, `{role}`, `{fullName}`. The default is `{family}, {given}` for personal names and `{literal}` for institutional ones; an empty token leaves no dangling comma.
 
 **`opts`:**
 
@@ -245,6 +246,8 @@ When you change the filename, the next **Update this literature note** (or impor
 | `suffix` | `creators_by_type` | Property-name suffix; default `s` so `author` → `authors`. |
 | `format` | all | The token template (also accepted as the `format` argument). |
 | `join` | `creator_names` | Separator; default `, `. |
+
+`creator_values` and `creators_by_type` automatically use the main author notes' `variants` map, so an imported alternate name appears as `[[Main, Author|Variant]]`. Custom formats that do not produce the exact `Last, First` display name may not resolve; use `creator_link(name)` when you format names yourself.
 
 To add a Zotero role the default template doesn't list, add one line next to the others:
 

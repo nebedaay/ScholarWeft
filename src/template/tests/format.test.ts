@@ -244,6 +244,17 @@ describe('groupCreatorsByType()', () => {
   it('drops creators that format to nothing', () => {
     expect(groupCreatorsByType([creator({ family: '', given: '', literal: null })])).toEqual([]);
   });
+
+  it('resolves a variant name to a link to the main author', () => {
+    expect(
+      groupCreatorsByType([creator()], undefined, {
+        resolveLink: (name) =>
+          name === 'Smith, Jane' ? '[[Main, Author|Smith, Jane]]' : null,
+      })
+    ).toEqual([
+      { key: 'authors', values: ['[[Main, Author|Smith, Jane]]'] },
+    ]);
+  });
 });
 
 describe('creatorNames()', () => {

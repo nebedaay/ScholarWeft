@@ -65,10 +65,16 @@ import { moveNoteIntoFolder, restorePendingCursor } from './noteImport';
 import {
   AuthorSuggestModal,
   buildAuthorIndex,
+  hasAuthorsUp,
   maybeAutoCreateAuthorNote,
   mergeAuthorNotesWithNotice,
   refreshAuthorPagesForCitekey,
 } from './authorNotes';
+import {
+  AuthorVariantTargetModal,
+  AuthorVariantTracker,
+  linkAuthorVariant,
+} from './authorVariants';
 import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
@@ -277,6 +283,7 @@ export default class ReferenceList extends Plugin {
   tooltipManager: TooltipManager;
   bibManager: BibManager;
   private citeSuggest: CiteSuggest;
+  private authorVariantTracker?: AuthorVariantTracker;
   private _pendingCitedKeysIndex?: {
     version?: number;
     mdCount?: number;
@@ -573,6 +580,7 @@ export default class ReferenceList extends Plugin {
       // `initLeaf`: the reference-list leaf is usually restored from the last
       // session, so `initLeaf` returns early and never reaches it.
       void this.runStartupTasks();
+      this.initAuthorVariantTracker();
       this.refreshAnnotationCalloutIcons();
       window.setTimeout(() => this.refreshAnnotationCalloutIcons(), 1500);
     });
@@ -671,6 +679,20 @@ export default class ReferenceList extends Plugin {
       name: t('Merge existing author notes into the Authors folder'),
       callback: () => {
         void mergeAuthorNotesWithNotice(this);
+      },
+    });
+
+    this.addCommand({
+      id: 'link-author-variant',
+      name: t('Treat this note’s author name as a variant of another author'),
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!(file instanceof TFile) || !hasAuthorsUp(this.app, file)) return false;
+        if (checking) return true;
+        new AuthorVariantTargetModal(this, file, (main) => {
+          void linkAuthorVariant(this, file, main);
+        }).open();
+        return true;
       },
     });
 
@@ -1411,6 +1433,31 @@ export default class ReferenceList extends Plugin {
         void refreshAuthorPagesForCitekey(this, key.trim());
       }
     }, 1500);
+  }
+
+  /** Watch author notes for newly added `variants` lists. */
+  private initAuthorVariantTracker(): void {
+    if (this.authorVariantTracker) return;
+    const tracker = new AuthorVariantTracker(this);
+    this.authorVariantTracker = tracker;
+    void tracker.init();
+    this.registerEvent(
+      this.app.metadataCache.on('changed', (file) => tracker.onChange(file))
+    );
+    this.registerEvent(
+      this.app.vault.on('create', (file) => {
+        if (file instanceof TFile) tracker.onChange(file);
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on('delete', (file) => tracker.forget(file.path))
+    );
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        tracker.forget(oldPath);
+        if (file instanceof TFile) tracker.onChange(file);
+      })
+    );
   }
 
   private async runStartupTasks(): Promise<void> {

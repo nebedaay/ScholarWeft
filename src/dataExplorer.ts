@@ -13,6 +13,7 @@ import { buildNoteContextWithChildren } from './template/children';
 import type { CachedEntry } from './template/context';
 import { prepareTemplateData } from './template/note-helpers';
 import { renderNote } from './template/render';
+import { buildAuthorVariantIndex } from './authorVariants';
 import {
   buildExplorerList,
   filterExplorerEntries,
@@ -220,6 +221,7 @@ export class DataExplorerView extends ItemView {
         templateSource,
         groupID,
         dataDir,
+        creatorVariants: buildAuthorVariantIndex(this.plugin).byVariant,
         noteHeadingLevel,
       });
       if (this.selected !== citekey) return;

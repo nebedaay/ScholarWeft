@@ -41,7 +41,8 @@ See [Literature Notes](./literature-notes.md).
 | Command | Scope | Notes |
 |---|---|---|
 | Create author note | — | Pick a creator from the library and create or open their author page |
-| Merge existing author notes into the Authors folder | Vault | Move notes named after a creator, or with `up: "[[Authors]]"`, into the Authors folder and apply the author template (your body text is preserved) |
+| Merge existing author notes into the Authors folder | Vault | Move notes whose filenames exactly match an imported creator display name — two or more words, or one word with `up: "[[Authors]]"` — into the Authors folder and apply the author template |
+| Treat this note’s author name as a variant of another author | Author note | Add this note's name to a main author's `variants`, rewrite creator links to `[[Main\|Variant]]`, and move this note to the trash |
 
 See [Author Notes](./author-notes.md).
 

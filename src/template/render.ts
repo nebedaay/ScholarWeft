@@ -23,6 +23,8 @@ export interface RenderNoteOptions {
   importDate?: string;
   /** Library scope; defaults from the entry. */
   groupID?: number | null;
+  /** Variant display name → main author note basename. */
+  creatorVariants?: ReadonlyMap<string, string>;
   /** Zotero data directory, for attachment paths + excerpt images. */
   dataDir?: string | null;
   /** Zotero `baseAttachmentPath` pref, for `attachments:`-relative files. */
@@ -81,6 +83,7 @@ export function renderNote(
   prepareTemplateData(ctx, {
     options: opts.options,
     importDate: opts.importDate,
+    creatorVariants: opts.creatorVariants,
   });
 
   const engine = makeEta();

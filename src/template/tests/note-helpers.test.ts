@@ -67,6 +67,20 @@ describe('creator helpers', () => {
     const ctx = buildNoteContext(entry);
     expect(helpers.creatorNames(ctx, 'author', '{family}')).toBe('Al-Sāʾiḥ');
   });
+
+  it('resolves a variant creator to the main author link', () => {
+    const ctx = buildNoteContext(entry);
+    const variant = 'Al-Sāʾiḥ, Muḥammad al-ʿArabī b.';
+    prepareTemplateData(ctx, {
+      creatorVariants: new Map([[variant, 'Al-Sāʾiḥ, Muḥammad']]),
+    });
+    expect(helpers.creatorValues(ctx, 'author')).toEqual([
+      '[[Al-Sāʾiḥ, Muḥammad|Al-Sāʾiḥ, Muḥammad al-ʿArabī b.]]',
+    ]);
+    expect(helpers.creatorLink(ctx, variant)).toBe(
+      '[[Al-Sāʾiḥ, Muḥammad|Al-Sāʾiḥ, Muḥammad al-ʿArabī b.]]'
+    );
+  });
 });
 
 describe('derived values', () => {
