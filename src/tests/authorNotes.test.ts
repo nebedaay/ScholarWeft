@@ -227,6 +227,48 @@ describe('mergeAuthorContent()', () => {
     expect(merged).toContain('My own body.');
   });
 
+  it('places Publications after an AI overview and before manual sections', () => {
+    const body = [
+      '# Overview (AI generated)',
+      '',
+      'A generated overview.',
+      '',
+      '# Notes',
+      '',
+      'Manual notes.',
+      '',
+    ].join('\n');
+    const note = `---\nup:\n  - "[[Authors]]"\n---\n${body}`;
+    const renderedNoHeading = rendered.replace('\n# Smith, Jane\n\n', '\n');
+    const merged = mergeAuthorContent(note, renderedNoHeading, 'Smith, Jane');
+    const overview = merged.indexOf('# Overview (AI generated)');
+    const publications = merged.indexOf('%%sw-author-managed%%');
+    const notes = merged.indexOf('# Notes');
+    expect(overview).toBeGreaterThanOrEqual(0);
+    expect(publications).toBeGreaterThan(overview);
+    expect(notes).toBeGreaterThan(publications);
+  });
+
+  it('moves an existing managed region before manual sections', () => {
+    const body = [
+      '# Notes',
+      '',
+      'Manual notes.',
+      '',
+      '%%sw-author-managed%%',
+      '## Publications',
+      '',
+      '[[@old|ref]]',
+      '%%/sw-author-managed%%',
+      '',
+    ].join('\n');
+    const note = `---\nup:\n  - "[[Authors]]"\n---\n${body}`;
+    const merged = mergeAuthorContent(note, rendered, 'Smith, Jane');
+    expect(merged.indexOf('%%sw-author-managed%%')).toBeLessThan(
+      merged.indexOf('# Notes')
+    );
+  });
+
   it('uses the full rendered body for an empty note', () => {
     const empty = '---\nup:\n  - "[[Home]]"\n---\n';
     const merged = mergeAuthorContent(empty, rendered);

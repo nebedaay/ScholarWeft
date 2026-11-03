@@ -462,6 +462,31 @@ function dedupeListProperty(frontmatter: string, key: string): string {
 	return frontmatter.replace(oldBlock, newBlock);
 }
 
+/** Place the managed region after an AI Overview (when present), before user sections. */
+function orderAuthorBody(body: string, region: string): string {
+	const regionRe = new RegExp(
+		`${AUTHOR_OPEN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${AUTHOR_CLOSE.replace(
+			/[.*+?^${}()|[\]\\]/g,
+			'\\$&'
+		)}`
+	);
+	let rest = body.replace(regionRe, '').replace(/^\n+|\n+$/g, '');
+	let before = '';
+	// Keep an AI-generated overview at the top; place Publications immediately
+	// after its section, then the user's Notes and other material.
+	const heading = /^# Overview \(AI generated\)[ \t]*$/m.exec(rest);
+	if (heading && rest.slice(0, heading.index).trim() === '') {
+		const next = /^# /m.exec(rest.slice(heading.index + heading[0].length));
+		const end = next
+			? heading.index + heading[0].length + next.index
+			: rest.length;
+		before = rest.slice(0, end).replace(/\s+$/, '');
+		rest = rest.slice(end).replace(/^\n+/, '');
+	}
+	const parts = [before, region.trim(), rest.trim()].filter(Boolean);
+	return parts.join('\n\n');
+}
+
 /**
  * Merge an existing note's frontmatter and managed Publications region with a
  * freshly rendered author page, preserving the user's own body and properties.
@@ -509,11 +534,7 @@ export function mergeAuthorContent(
 			)}`
 		);
 		const renderedRegion = region.exec(next.body)?.[0] ?? '';
-		if (region.test(body)) {
-			body = body.replace(region, renderedRegion);
-		} else if (renderedRegion) {
-			body = `${body.replace(/\s+$/, '')}\n\n${renderedRegion}\n`;
-		}
+		body = orderAuthorBody(body, renderedRegion);
 	}
 	return joinNote(frontmatter, body);
 }
