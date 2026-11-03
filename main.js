@@ -24534,7 +24534,8 @@ Open **Settings \u2192 ScholarWeft**.
 
 - **Bibliography** \u2014 Zotero is **already switched on** with **My Library** selected. If Zotero isn't running (or the checkbox from Step 2 is off), you'll see **\u201CCannot connect to Zotero\u201D** with a **Retry** button and instructions. Use a \`.bib\` file instead of Zotero? Just turn the Zotero toggle off and add your file under *Bibliography files*.
 - **Literature note import** \u2014 where literature notes live and how they are created. ScholarWeft imports the notes itself using its own rich template. See [Literature Notes](./literature-notes.md).
-- **Author notes** \u2014 creator pages: create one by clicking an unresolved creator link (or with the **Create author note** command), the template and author folder, and a one-time merge of existing author notes. See [Author Notes](./author-notes.md).
+- **Author notes** \u2014 creator pages: create one by clicking an unresolved creator link (or with the **Create author note** command), the template and author folder, author-name variants, and a one-time merge of existing author notes. See [Author Notes](./author-notes.md).
+- **AI overviews** \u2014 optional shared OpenAI-compatible LLM settings and prompts for generating an author or work overview. See [Author Notes](./author-notes.md#ai-author-overview-optional) and [Literature Notes](./literature-notes.md#ai-work-overview).
 - **Addons for displaying and linking notes** \u2014 optional, independent of the import path. **Install the Basic note template and apply it to new notes** (Step 5b) installs the companion plugin (**Templater**) if it isn't there yet. **Format YAML properties** applies its styling directly (no CSS snippet to enable) to make the \`title\`, \`short-title\`, \`up\`, and \`related\` properties stand out, with a colour picker for the title background and a size slider.
 - **Document import/export and compilation** \u2014 if you installed the document tools, each option shows a \u201Cnot found\u201D note until it detects them. ScholarWeft searches for a usable Python automatically (your \`python3\`/conda, or the setup script's \`~/ScholarWeft/venv\`), so **you normally don't have to set anything**. If it still reports Python missing:
   - **Path to Python 3** \u2192 paste your interpreter (e.g. \`~/ScholarWeft/venv/bin/python3\`, or your conda \`python\`)
@@ -24580,16 +24581,18 @@ Open **Settings \u2192 ScholarWeft**.
 
 ## Settings
 
-Settings live under **Settings \u2192 ScholarWeft**, in five pages:
+Settings live under **Settings \u2192 ScholarWeft**, in these pages:
 
 - **Bibliography** \u2014 where your sources come from. See [Bibliography](./bibliography.md) and [Zotero](./zotero.md).
 - **Citation and reference searching and formatting** \u2014 how citations are found (the \`@\` / \`@@\` reference search) and how they and the reference list render inside Obsidian. See [Citations](./citations.md) and [Searching for References](./searching.md).
-- **Literature note import** \u2014 where literature notes live and how they are created. Includes the three automatic-update switches (Zotero changes, citekey changes, template changes). See [Literature Notes](./literature-notes.md).
+- **Literature note import** \u2014 where literature notes live and how they are created, including creating a note when an unresolved \`@citekey\` link is clicked. Includes the three automatic-update switches (Zotero changes, citekey changes, template changes). See [Literature Notes](./literature-notes.md).
+- **Author notes** \u2014 creator pages, templates, variants, and merging existing author notes. See [Author Notes](./author-notes.md).
+- **AI overviews** \u2014 optional shared LLM configuration and prompts for author/work overviews.
 - **Document import/export and compilation** \u2014 tools, templates, and defaults for compiling/exporting. See [Document Import and Export](./import-export.md).
 - **Addons for displaying and linking notes** \u2014 optional add-ons (the Basic note template, and YAML property formatting).
 
 See **[Dependencies](./dependencies.md)** for exactly what needs what. The plugin detects what you have and greys out options that can't run, so you can explore safely.
-`,binary:!1,hash:"ed47441f67ee4c56"},"docs/zotero.md":{content:`# Zotero Integration
+`,binary:!1,hash:"13080604a7887c6c"},"docs/zotero.md":{content:`# Zotero Integration
 
 ScholarWeft can use Zotero as a reference source, resolve and refresh citations, and read citation fields on import. It can also blend Zotero with one or more bibliography files (see [Bibliography](./bibliography.md)).
 

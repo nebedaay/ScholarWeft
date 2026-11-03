@@ -350,7 +350,8 @@ Open **Settings → ScholarWeft**.
 
 - **Bibliography** — Zotero is **already switched on** with **My Library** selected. If Zotero isn't running (or the checkbox from Step 2 is off), you'll see **“Cannot connect to Zotero”** with a **Retry** button and instructions. Use a `.bib` file instead of Zotero? Just turn the Zotero toggle off and add your file under *Bibliography files*.
 - **Literature note import** — where literature notes live and how they are created. ScholarWeft imports the notes itself using its own rich template. See [Literature Notes](./literature-notes.md).
-- **Author notes** — creator pages: create one by clicking an unresolved creator link (or with the **Create author note** command), the template and author folder, and a one-time merge of existing author notes. See [Author Notes](./author-notes.md).
+- **Author notes** — creator pages: create one by clicking an unresolved creator link (or with the **Create author note** command), the template and author folder, author-name variants, and a one-time merge of existing author notes. See [Author Notes](./author-notes.md).
+- **AI overviews** — optional shared OpenAI-compatible LLM settings and prompts for generating an author or work overview. See [Author Notes](./author-notes.md#ai-author-overview-optional) and [Literature Notes](./literature-notes.md#ai-work-overview).
 - **Addons for displaying and linking notes** — optional, independent of the import path. **Install the Basic note template and apply it to new notes** (Step 5b) installs the companion plugin (**Templater**) if it isn't there yet. **Format YAML properties** applies its styling directly (no CSS snippet to enable) to make the `title`, `short-title`, `up`, and `related` properties stand out, with a colour picker for the title background and a size slider.
 - **Document import/export and compilation** — if you installed the document tools, each option shows a “not found” note until it detects them. ScholarWeft searches for a usable Python automatically (your `python3`/conda, or the setup script's `~/ScholarWeft/venv`), so **you normally don't have to set anything**. If it still reports Python missing:
   - **Path to Python 3** → paste your interpreter (e.g. `~/ScholarWeft/venv/bin/python3`, or your conda `python`)
@@ -396,11 +397,13 @@ Open **Settings → ScholarWeft**.
 
 ## Settings
 
-Settings live under **Settings → ScholarWeft**, in five pages:
+Settings live under **Settings → ScholarWeft**, in these pages:
 
 - **Bibliography** — where your sources come from. See [Bibliography](./bibliography.md) and [Zotero](./zotero.md).
 - **Citation and reference searching and formatting** — how citations are found (the `@` / `@@` reference search) and how they and the reference list render inside Obsidian. See [Citations](./citations.md) and [Searching for References](./searching.md).
-- **Literature note import** — where literature notes live and how they are created. Includes the three automatic-update switches (Zotero changes, citekey changes, template changes). See [Literature Notes](./literature-notes.md).
+- **Literature note import** — where literature notes live and how they are created, including creating a note when an unresolved `@citekey` link is clicked. Includes the three automatic-update switches (Zotero changes, citekey changes, template changes). See [Literature Notes](./literature-notes.md).
+- **Author notes** — creator pages, templates, variants, and merging existing author notes. See [Author Notes](./author-notes.md).
+- **AI overviews** — optional shared LLM configuration and prompts for author/work overviews.
 - **Document import/export and compilation** — tools, templates, and defaults for compiling/exporting. See [Document Import and Export](./import-export.md).
 - **Addons for displaying and linking notes** — optional add-ons (the Basic note template, and YAML property formatting).
 
