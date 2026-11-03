@@ -2095,8 +2095,20 @@ body.sw-yaml-formatting .metadata-property[data-property-key^="title"] .metadata
 body.sw-yaml-formatting .metadata-property[data-property-key^="title"] .metadata-property-value,
 body.sw-yaml-formatting .metadata-property[data-property-key^="short-title"] .metadata-property-value,
 body.sw-yaml-formatting .metadata-property[data-property-key^="shorttitle"] .metadata-property-value {
+  --metadata-input-text-color: var(--sw-yaml-title-color);
   color: var(--sw-yaml-title-color);
   background: var(--sw-yaml-title-background);
+}
+
+/* Obsidian paints the inner text editor (and inputs) with an explicit
+   `color: var(--metadata-input-text-color)`, so colouring the container alone
+   leaves the text unchanged. Set the variable above AND repeat the colour on
+   the descendants; the `!important` is needed because the inner rule is more
+   specific than the container rule. */
+body.sw-yaml-formatting .metadata-property[data-property-key^="title"] .metadata-property-value :is(.metadata-input-longtext, .metadata-input-text, .multi-select-pill-content, input, textarea),
+body.sw-yaml-formatting .metadata-property[data-property-key^="short-title"] .metadata-property-value :is(.metadata-input-longtext, .metadata-input-text, .multi-select-pill-content, input, textarea),
+body.sw-yaml-formatting .metadata-property[data-property-key^="shorttitle"] .metadata-property-value :is(.metadata-input-longtext, .metadata-input-text, .multi-select-pill-content, input, textarea) {
+  color: var(--sw-yaml-title-color) !important;
 }
 
 body.sw-yaml-formatting .metadata-property[data-property-key="up"] .multi-select-pill-content::before,

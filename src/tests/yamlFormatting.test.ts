@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   DEFAULT_YAML_TITLE_BACKGROUND,
   DEFAULT_YAML_TITLE_COLOR,
@@ -41,5 +43,16 @@ describe('YAML formatting constants', () => {
 
   it('keeps the marker that identifies the retired snippet', () => {
     expect(YAML_FORMATTING_MARKER).toBe('Managed by ScholarWeft');
+  });
+
+  it('colours the inner metadata editor, not just its container', () => {
+    const css = readFileSync(join(__dirname, '../../styles.css'), 'utf8');
+    // Obsidian's own `.metadata-input-longtext` sets
+    // `color: var(--metadata-input-text-color)`, so the container rule alone
+    // leaves the title text unchanged.
+    expect(css).toContain(
+      '--metadata-input-text-color: var(--sw-yaml-title-color)'
+    );
+    expect(css).toContain('.metadata-input-longtext');
   });
 });
