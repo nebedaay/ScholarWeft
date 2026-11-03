@@ -114,7 +114,7 @@ import {
   type NoteReconcile,
   type ReconcileNote,
 } from 'src/template/note-lookup';
-import { readStableKey } from 'src/template/note-format';
+import { bodyWithoutFrontmatter, readStableKey } from 'src/template/note-format';
 import { setCiteKeyCache } from 'src/editorExtension';
 import equal from 'fast-deep-equal';
 import { t } from 'src/lang/helpers';
@@ -4169,7 +4169,10 @@ export class BibManager {
     const keys = new Set<string>();
     try {
       const content = await this.app.vault.read(file);
-      const segs = getCitationSegments(content, false, true);
+      // Never count YAML links as citations: author pages deliberately put
+      // `[[@citekey]]` in `related`, and that must not trigger note imports.
+      const body = bodyWithoutFrontmatter(content);
+      const segs = getCitationSegments(body, false, true);
       for (const g of segs) {
         for (const s of g) {
           if (s.type === SegmentType.key) keys.add(s.val);

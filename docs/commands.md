@@ -36,6 +36,15 @@ See [Citations](./citations.md) and [Linked Citations](./linked-citations.md).
 
 See [Literature Notes](./literature-notes.md).
 
+## Author notes
+
+| Command | Scope | Notes |
+|---|---|---|
+| Create author note | — | Pick a creator from the library and create or open their author page |
+| Merge existing author notes into the Authors folder | Vault | Move notes named after a creator, or with `up: "[[Authors]]"`, into the Authors folder and apply the author template (your body text is preserved) |
+
+See [Author Notes](./author-notes.md).
+
 ## Document import and export (desktop only)
 
 | Command | Notes |

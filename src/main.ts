@@ -62,6 +62,13 @@ import {
   unmanagedNoteCitekey,
 } from './template/note-lookup';
 import { moveNoteIntoFolder, restorePendingCursor } from './noteImport';
+import {
+  AuthorSuggestModal,
+  buildAuthorIndex,
+  maybeAutoCreateAuthorNote,
+  mergeAuthorNotesWithNotice,
+  refreshAuthorPagesForCitekey,
+} from './authorNotes';
 import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
@@ -649,6 +656,24 @@ export default class ReferenceList extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'create-author-note',
+      name: t('Create author note'),
+      callback: async () => {
+        await this.bibManager.initPromise.promise;
+        const index = buildAuthorIndex(this.bibManager.bibCache.values());
+        new AuthorSuggestModal(this, index).open();
+      },
+    });
+
+    this.addCommand({
+      id: 'merge-author-notes',
+      name: t('Merge existing author notes into the Authors folder'),
+      callback: () => {
+        void mergeAuthorNotesWithNotice(this);
+      },
+    });
+
     // NOTE: "Update all literature notes in the vault" is deliberately NOT a
     // command — it is a button on the Literature note import settings page, so
     // the command list stays focused on per-note actions. Users with auto-update
@@ -961,6 +986,17 @@ export default class ReferenceList extends Plugin {
           true
         )
       )
+    );
+
+    // Clicking an unresolved creator link creates an empty note. Fill it from
+    // the author template (or do nothing outside the author index), then
+    // refresh existing author pages when a literature note is created.
+    this.registerEvent(
+      app.vault.on('create', (file) => {
+        if (!(file instanceof TFile)) return;
+        void maybeAutoCreateAuthorNote(this, file);
+        this.scheduleAuthorPageRefresh(file);
+      })
     );
     this.registerEvent(
       app.vault.on(
@@ -1362,6 +1398,19 @@ export default class ReferenceList extends Plugin {
           .trim();
         if (icon) setIcon(iconEl, icon);
       });
+  }
+
+  /** When a literature note appears, refresh the publications of existing
+   *  author pages that list any of its creators. The metadata cache needs a
+   *  moment to index the new frontmatter. */
+  private scheduleAuthorPageRefresh(file: TFile): void {
+    window.setTimeout(() => {
+      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const key = frontmatter?.['citekey'];
+      if (typeof key === 'string' && key.trim()) {
+        void refreshAuthorPagesForCitekey(this, key.trim());
+      }
+    }, 1500);
   }
 
   private async runStartupTasks(): Promise<void> {

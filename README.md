@@ -23,6 +23,7 @@ Beyond linking your scholarly notes and references, ScholarWeft allows you to ke
 - [Citations and References](./docs/citations.md) — formatting, tooltips, the reference sidebar
 - [Searching for References](./docs/searching.md) — two search levels, how results are matched and ranked, and search tips
 - [Creating Literature Notes from Zotero](./docs/literature-notes.md) — where notes live and how to create them from Zotero items
+- [Author Notes](./docs/author-notes.md) — creator pages from linked citations, with a template, publications and variants
 - [Document Import and Export](./docs/import-export.md) — compile a longer document from a series of notes, export to markdown, DOCX, ODT, PDF
 - [Commands](./docs/commands.md) — the full command list
 - [Mobile](./docs/mobile.md) — iOS/Android behaviour

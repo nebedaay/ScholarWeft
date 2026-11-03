@@ -56,6 +56,10 @@ import type { DepKey } from './dependencies';
 import { openDocs } from './docs';
 import { copyDefaultTemplateToVault } from './noteImport';
 import {
+  copyAuthorTemplateToVault,
+  mergeAuthorNotesWithNotice,
+} from './authorNotes';
+import {
   applyYamlFormatting,
   DEFAULT_YAML_TITLE_BACKGROUND,
   DEFAULT_YAML_TITLE_SIZE,
@@ -127,6 +131,10 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   yamlTitleBackground: DEFAULT_YAML_TITLE_BACKGROUND,
   /** `--title-size` (rem) for the YAML-formatting snippet. */
   yamlTitleSize: DEFAULT_YAML_TITLE_SIZE,
+  autoCreateAuthorNotes: true,
+  authorNoteFolder: 'Authors',
+  useDefaultAuthorTemplate: true,
+  authorTemplatePath: '',
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
    *  fallback. Off by default: opening in Zotero already reveals all
    *  attachments, and the lookup costs per-citekey network time. */
@@ -394,16 +402,27 @@ export interface ReferenceListSettings {
   yamlTitleBackground?: string;
   /** Font size (rem) for the YAML-formatting addon's `--title-size`. */
   yamlTitleSize?: number;
+
+  /** Create an author note when an unresolved creator link is clicked.
+   *  Default true; the page is filled from the author template. */
+  autoCreateAuthorNotes?: boolean;
+  /** Vault folder author notes are created in / moved to (default `Authors`). */
+  authorNoteFolder?: string;
+  /** Render author notes with the bundled template (default true). */
+  useDefaultAuthorTemplate?: boolean;
+  /** Vault-relative custom author template, used when the above is false. */
+  authorTemplatePath?: string;
 }
 
 const BIB_EXTENSIONS = new Set(['bib', 'json', 'yaml', 'yml']);
 
-type SettingsPage = 'home' | 'bibliography' | 'citations' | 'literature-notes' | 'documents' | 'addons';
+type SettingsPage = 'home' | 'bibliography' | 'citations' | 'literature-notes' | 'author-notes' | 'documents' | 'addons';
 
 const PAGE_TITLES: Record<Exclude<SettingsPage, 'home'>, string> = {
   bibliography: 'Bibliography',
   citations: 'Citation and reference searching and formatting',
   'literature-notes': 'Literature note import',
+  'author-notes': 'Author notes',
   documents: 'Document import/export and compilation',
   addons: 'Addons for displaying and linking notes',
 };
@@ -514,6 +533,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       case 'literature-notes':
         this.renderLiteratureNotes(containerEl);
         break;
+      case 'author-notes':
+        this.renderAuthorNotes(containerEl);
+        break;
       case 'documents':
         this.renderDocuments(containerEl);
         break;
@@ -548,6 +570,13 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         page: 'literature-notes',
         name: t('Literature note import'),
         desc: t('How literature notes are imported from Zotero and where to keep them.'),
+      },
+      {
+        page: 'author-notes',
+        name: t('Author notes'),
+        desc: t(
+          'Create an author page by clicking an unresolved creator link, with a template, folder and variants.'
+        ),
       },
       {
         page: 'documents',
@@ -1832,6 +1861,127 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
   }
 
   // ── Document import/export and compilation ──────────────────────────────────
+
+  private renderAuthorNotes(containerEl: HTMLElement): void {
+    const auto = this.plugin.settings.autoCreateAuthorNotes !== false;
+    new Setting(containerEl)
+      .setName(t('Create author notes on link click'))
+      .setDesc(
+        t(
+          'When you click an unresolved author/creator link, fill the new note from the author template and move it to the author folder. Only genuinely empty new notes are touched.'
+        )
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(auto).onChange((value) => {
+          this.plugin.settings.autoCreateAuthorNotes = value;
+          void this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Author notes folder'))
+      .setDesc(
+        t(
+          'Vault folder where author notes are created and where existing author notes are moved. Default: Authors.'
+        )
+      )
+      .addText((text) => {
+        text
+          .setPlaceholder('Authors')
+          .setValue(this.plugin.settings.authorNoteFolder ?? '')
+          .onChange((value) => {
+            this.plugin.settings.authorNoteFolder = value.trim();
+            void this.plugin.saveSettings();
+          });
+        new FolderSuggest(this.app, text.inputEl);
+      });
+
+    const useDefault = this.plugin.settings.useDefaultAuthorTemplate !== false;
+    new Setting(containerEl)
+      .setName(t('Use the default author template'))
+      .setDesc(
+        t(
+          "Render author notes with ScholarWeft's bundled author template. Turn this off to use your own copy (for example one copied with the button below)."
+        )
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(useDefault).onChange((value) => {
+          this.plugin.settings.useDefaultAuthorTemplate = value;
+          void this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (!useDefault) {
+      new Setting(containerEl)
+        .setName(t('Author template file'))
+        .setDesc(
+          t(
+            'Vault file that renders author notes. Pick a copy of the default template, or your own .eta.md file.'
+          )
+        )
+        .addText((text) => {
+          text
+            .setPlaceholder('Templates/author.eta.md')
+            .setValue(this.plugin.settings.authorTemplatePath ?? '')
+            .onChange((value) => {
+              this.plugin.settings.authorTemplatePath = value.trim();
+              void this.plugin.saveSettings();
+            });
+          new NoteTemplateSuggest(this.app, text.inputEl);
+        })
+        .addButton((button) =>
+          button.setButtonText(t('Browse…')).onClick(() => {
+            new NoteTemplatePickerModal(this.app, (path) => {
+              this.plugin.settings.authorTemplatePath = path;
+              void this.plugin.saveSettings();
+              this.display();
+            }).open();
+          })
+        );
+    }
+
+    new Setting(containerEl)
+      .setName(t('Copy the default author template to your vault'))
+      .setDesc(
+        t(
+          'Write a copy of the bundled author template into a folder in your vault so you can edit it. The copy is not overwritten by plugin updates.'
+        )
+      )
+      .addButton((button) =>
+        button.setButtonText(t('Copy template')).onClick(() => {
+          new VaultFolderPickerModal(this.app, (folder) => {
+            void (async () => {
+              const path = await copyAuthorTemplateToVault(this.plugin, folder);
+              if (!path) {
+                new Notice(
+                  'ScholarWeft: could not read the bundled author template.'
+                );
+                return;
+              }
+              new Notice(
+                `ScholarWeft: copied the default author template to “${path}”. Edit the copy to customise it.`,
+                10000
+              );
+              this.display();
+            })();
+          }).open();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Merge existing author notes'))
+      .setDesc(
+        t(
+          'Move every note named after a creator, and every note with up: "[[Authors]]", into the author folder and apply the template. The user’s own body text and properties are preserved.'
+        )
+      )
+      .addButton((button) =>
+        button.setButtonText(t('Merge now')).onClick(() => {
+          void mergeAuthorNotesWithNotice(this.plugin);
+        })
+      );
+  }
 
   private renderDocuments(containerEl: HTMLElement): void {
     renderDependencyNote(
