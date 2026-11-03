@@ -18,6 +18,7 @@ import { join } from 'path';
 import { Eta } from 'eta';
 
 import {
+  authorTemplateData,
   buildAuthorIndex,
   mergeAuthorContent,
   planAuthorNote,
@@ -245,7 +246,7 @@ describe('author template', () => {
       display: 'Smith, Jane',
       alias: 'Jane Smith',
       roles: ['author', 'editor'],
-      related: ['[[@smith2000]]', '[[Islam]]'],
+      related: ['[[@smith2000]]'],
       publications: ['[[@smith2000|ref]]', '[[@smith2001]]'],
       date: '2026-11-02',
     });
@@ -254,10 +255,22 @@ describe('author template', () => {
     expect(out).toContain('  - "Jane Smith"');
     expect(out).toContain('creator-roles:\n  - author\n  - editor');
     expect(out).toContain('  - "[[@smith2000]]"');
-    expect(out).toContain('  - "[[Islam]]"');
+    expect(out).not.toContain('  - "[[Islam]]"');
     expect(out).toContain('[[@smith2000|ref]] [[@smith2001]]');
     expect(out).not.toContain('# Smith, Jane');
     expect(out).toContain('# Publications');
+  });
+
+  it('lists publications, never Zotero tags, in related', () => {
+    const index = buildAuthorIndex(entries);
+    const plugin = {
+      app: { metadataCache: { getFirstLinkpathDest: () => null } },
+      bibManager: { bibCache: new Map(entries.map((entry) => [entry.id, entry])) },
+    } as unknown as Parameters<typeof authorTemplateData>[0];
+    const data = authorTemplateData(plugin, index.get('Smith, Jane')!, [], '', index);
+    expect(data.related).toEqual(['[[@smith2000]]', '[[@smith2001]]']);
+    expect(data.related.join(' ')).not.toContain('Islam');
+    expect(data.related.join(' ')).not.toContain('Sufism');
   });
 
   it('omits aliases for a literal creator', () => {

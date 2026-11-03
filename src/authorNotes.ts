@@ -7,7 +7,9 @@
 // to the configured folder. The same page can also be created from a picker.
 //
 // `variants` on the main note lists other display names for the same person;
-// their works and tags are folded into the main note's related/publications.
+// their works are folded into the main note's related/publications; Zotero
+// item tags are deliberately not written into `related` (they turn an author
+// page into a keyword dump).
 // `variant-of` on a variant note is recognised for identification, but the
 // main note is always the one that carries the biography and the merged list.
 
@@ -155,7 +157,8 @@ function creatorsOf(entry: PartialCSLEntry): CreatorLike[] {
 }
 
 /** Every creator in the loaded library, keyed by the link text the template
- *  writes. Roles/tags/works are merged across entries. */
+ *  writes. Roles/tags/works are merged across entries, but only works are
+ *  written into the author page's `related` property. */
 export function buildAuthorIndex(
 	entries: Iterable<PartialCSLEntry>
 ): AuthorIndex {
@@ -250,11 +253,10 @@ function rolesFor(record: AuthorRecord): string[] {
 }
 
 function relatedLinks(expanded: Expanded): string[] {
-	const links = [
-		...[...expanded.citekeys].map((key) => `[[@${key}]]`),
-		...[...expanded.tags].map((tag) => `[[${tag}]]`),
-	];
-	return [...new Set(links)];
+	// Publications only. Zotero item tags are article keywords and make the
+	// `related` list enormous; they are not author relationships. The record
+	// still indexes tags for other uses, but the page never writes them.
+	return [...new Set([...expanded.citekeys].map((key) => `[[@${key}]]`))];
 }
 
 function publicationLinks(
