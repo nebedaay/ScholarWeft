@@ -51,9 +51,9 @@ variants:
   - "[[Al-Kawlakhī, al-Shaykh Ibrāhīm b. ʿAbdallāh]]"
 ```
 
-`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal. They are not aliases; an entry in `aliases` never becomes a variant.
+`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal. They are not aliases; an entry in `aliases` never becomes a variant. A variant is only used when its name is currently present in the Zotero cache as a creator display or `First Last` alias; other entries are ignored.
 
-**Treat this note’s author name as a variant of another author** is available when the current note has `up: "[[Authors]]"`. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
+**Treat this note’s author name as a variant of another author** is available when the current note has `up: "[[Authors]]"` and its name is in the Zotero cache. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
 
 - adds the current note name to the main note's `variants`;
 - adds autocomplete aliases for the variant: the variant itself and its `First Middle Last` form;
@@ -67,6 +67,8 @@ The main note includes the variant's works and tags in its `related` and Publica
 `aliases` is still used for display and Obsidian's link autocomplete. The plugin adds the variant forms there for convenience, but it never treats an alias as the definition of a variant. This keeps a display alias such as `First Last` separate from the `variants` list.
 
 New imports use the variant map automatically: `creator_values` and `creators_by_type` write `[[Main|Variant]]` when a creator name is a known variant. Custom Eta templates can call `creator_link(name)` for the same resolution.
+
+A periodic check runs at startup and every five minutes. It compares the variant map with the author names currently in the Zotero cache; variants that do not match a cached creator name are ignored. For the variants that remain, it adds missing aliases and rewrites creator links that still point at a variant or its generated `First Middle Last` form. Only variants that are new or changed since the last pass are processed, and Obsidian's metadata cache is used as a prefilter, so notes whose creator fields already point at the main author are never read.
 
 ## Commands
 

@@ -719,7 +719,7 @@ export async function createOrUpdateOwnNote(
   // session, and a failure just leaves the property empty.
   await plugin.bibManager?.ensureCollectionsIndex().catch(() => {});
   const collections = plugin.bibManager?.collectionsForEntry(entry) ?? [];
-  const creatorVariants = buildAuthorVariantIndex(plugin).byVariant;
+  const creatorVariants = buildAuthorVariantIndex(plugin).byLink;
 
   // First pass: no existing note, just to resolve the filename.
   const first = renderNote(entry, children, {

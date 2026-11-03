@@ -221,7 +221,7 @@ export class DataExplorerView extends ItemView {
         templateSource,
         groupID,
         dataDir,
-        creatorVariants: buildAuthorVariantIndex(this.plugin).byVariant,
+        creatorVariants: buildAuthorVariantIndex(this.plugin).byLink,
         noteHeadingLevel,
       });
       if (this.selected !== citekey) return;

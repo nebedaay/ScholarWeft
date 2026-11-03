@@ -24,6 +24,7 @@ import {
 import type ReferenceList from './main';
 import {
   CSL_CREATOR_ROLES,
+  buildAuthorIndex,
   hasAuthorsUp,
   isMergeablePath,
   refreshAuthorPage,
@@ -70,6 +71,24 @@ function frontmatterValues(frontmatter: string | null, key: string): string[] {
   return unique(values.filter(Boolean));
 }
 
+function metadataValues(
+  plugin: ReferenceList,
+  file: TFile,
+  key: string
+): string[] {
+  const frontmatter = plugin.app.metadataCache.getFileCache(file)?.frontmatter as
+    | Record<string, unknown>
+    | undefined;
+  const raw = frontmatter?.[key];
+  const values = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
+  return unique(
+    values
+      .filter((value): value is string => typeof value === 'string')
+      .map(cleanVariantName)
+      .filter(Boolean)
+  );
+}
+
 function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
 }
@@ -83,9 +102,36 @@ export function authorNoteFiles(plugin: ReferenceList): TFile[] {
     .sort((a, b) => a.basename.localeCompare(b.basename));
 }
 
+const AUTHOR_NAME_CACHE_TTL = 60_000;
+const AUTHOR_NAME_CACHE = new WeakMap<
+  ReferenceList,
+  { size: number; at: number; names: Set<string> }
+>();
+
+/** Display and First Last names of every creator currently in the library. */
+function cachedAuthorNames(plugin: ReferenceList): Set<string> {
+  const size = plugin.bibManager.bibCache.size;
+  if (!size) return new Set();
+  const now = Date.now();
+  const cached = AUTHOR_NAME_CACHE.get(plugin);
+  if (cached && cached.size === size && now - cached.at < AUTHOR_NAME_CACHE_TTL) {
+    return cached.names;
+  }
+  const names = new Set<string>();
+  const library = buildAuthorIndex(plugin.bibManager.bibCache.values());
+  for (const record of library.records()) {
+    names.add(record.display);
+    if (record.alias) names.add(record.alias);
+  }
+  AUTHOR_NAME_CACHE.set(plugin, { size, at: now, names });
+  return names;
+}
+
 export class AuthorVariantIndex {
-  /** Variant display name → the main note's basename. */
+  /** Exact variant display name → the main note's basename. */
   readonly byVariant = new Map<string, string>();
+  /** Link names (variant + generated display forms) → main note basename. */
+  readonly byLink = new Map<string, string>();
   /** Main note basename → its variant display names. */
   readonly byMain = new Map<string, string[]>();
   /** Main note basename → its file (for the target picker). */
@@ -100,17 +146,28 @@ export class AuthorVariantIndex {
 export function buildAuthorVariantIndex(plugin: ReferenceList): AuthorVariantIndex {
   const files = authorNoteFiles(plugin);
   const mainNames = new Set(files.map((file) => file.basename));
+  const cachedNames = cachedAuthorNames(plugin);
   const index = new AuthorVariantIndex();
   for (const file of files) {
     const variants = unique(
       variantsOf(plugin.app, file)
         .map(cleanVariantName)
-        .filter((name) => name && name !== file.basename && !mainNames.has(name))
+        .filter(
+          (name) =>
+            name &&
+            name !== file.basename &&
+            !mainNames.has(name) &&
+            cachedNames.has(name)
+        )
     );
     index.byMain.set(file.basename, variants);
     index.files.set(file.basename, file);
     for (const variant of variants) {
       if (!index.byVariant.has(variant)) index.byVariant.set(variant, file.basename);
+      for (const linkName of variantAliases(variant, file.basename)) {
+        if (mainNames.has(linkName) || index.byLink.has(linkName)) continue;
+        index.byLink.set(linkName, file.basename);
+      }
     }
   }
   return index;
@@ -192,6 +249,7 @@ async function addAuthorVariants(
   return unique([...existingVariants, ...newVariants]);
 }
 
+const VARIANT_SYNC_INTERVAL = 5 * 60 * 1000;
 const CREATOR_KEY_EXTRA = new Set(['creator', 'creators']);
 const CREATOR_ROLES = new Set(CSL_CREATOR_ROLES.map((role) => role.toLowerCase()));
 
@@ -215,6 +273,31 @@ function rewriteCreatorLine(
     const shown = (display ?? name).trim() || name;
     return `[[${main}${fragment ?? ''}|${shown}]]`;
   });
+}
+
+function valueHasTarget(value: unknown, targets: ReadonlySet<string>): boolean {
+  const values = Array.isArray(value) ? value : [value];
+  for (const item of values) {
+    if (typeof item !== 'string') continue;
+    const link = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g;
+    for (const match of item.matchAll(link)) {
+      if (targets.has(match[1].trim())) return true;
+    }
+  }
+  return false;
+}
+
+/** Fast in-memory check before reading a note to rewrite it. */
+function frontmatterHasTarget(
+  frontmatter: Record<string, unknown> | undefined,
+  targets: ReadonlySet<string>
+): boolean {
+  if (!frontmatter) return false;
+  for (const [key, value] of Object.entries(frontmatter)) {
+    if (!isCreatorProperty(key)) continue;
+    if (valueHasTarget(value, targets)) return true;
+  }
+  return false;
 }
 
 /**
@@ -252,12 +335,18 @@ export async function rewriteCreatorLinks(
 ): Promise<number> {
   if (!mappings.size) return 0;
   const app = plugin.app;
-  const names = [...mappings.keys()];
+  const targets = new Set(mappings.keys());
   let changed = 0;
   for (const file of app.vault.getMarkdownFiles()) {
     if (opts.skipPaths?.has(file.path) || !isMergeablePath(file.path)) continue;
+    const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter as
+      | Record<string, unknown>
+      | undefined;
+    // Metadata is already in memory. Reading only notes whose creator fields
+    // still point at a variant keeps the periodic pass cheap.
+    if (!frontmatterHasTarget(frontmatter, targets)) continue;
     const content = await app.vault.read(file).catch((): null => null);
-    if (content == null || !names.some((name) => content.includes(name))) continue;
+    if (content == null) continue;
     const result = rewriteCreatorFrontmatter(content, mappings);
     if (!result.changed) continue;
     await app.vault.modify(file, result.content);
@@ -282,6 +371,11 @@ export async function linkAuthorVariant(
   if (!(app.vault.getAbstractFileByPath(main.path) instanceof TFile)) return false;
   const variant = cleanVariantName(current.basename);
   if (!variant) return false;
+  const cachedNames = cachedAuthorNames(plugin);
+  if (!cachedNames.has(variant)) {
+    new Notice(t('This author name is not in the Zotero cache.'), 8000);
+    return false;
+  }
   try {
     const allVariants = await addAuthorVariants(plugin, main, [variant], {
       addVariants: true,
@@ -289,7 +383,9 @@ export async function linkAuthorVariant(
     await refreshAuthorPage(plugin, main, allVariants);
     await rewriteCreatorLinks(
       plugin,
-      new Map([[variant, main.basename]]),
+      new Map(
+        variantAliases(variant, main.basename).map((name) => [name, main.basename])
+      ),
       { skipPaths: new Set([current.path, main.path]) }
     );
     await app.fileManager.trashFile(current);
@@ -318,7 +414,7 @@ export class AuthorVariantTargetModal extends FuzzySuggestModal<TFile> {
     super(plugin.app);
     const index = buildAuthorVariantIndex(plugin);
     this.items = authorNoteFiles(plugin).filter(
-      (file) => file.path !== current.path && !index.byVariant.has(file.basename)
+      (file) => file.path !== current.path && !index.byLink.has(file.basename)
     );
     this.setPlaceholder(t('Choose the main author note'));
     this.setInstructions([
@@ -356,8 +452,13 @@ export class AuthorVariantTargetModal extends FuzzySuggestModal<TFile> {
 export class AuthorVariantTracker {
   private readonly known = new Map<string, Set<string>>();
   private readonly timers = new Map<string, number>();
+  /** The variant → main map applied on the previous pass. */
+  private lastLinks = new Map<string, string>();
 
   constructor(private readonly plugin: ReferenceList) {}
+
+  private syncing = false;
+  private intervalId?: number;
 
   async init(): Promise<void> {
     this.known.clear();
@@ -366,6 +467,87 @@ export class AuthorVariantTracker {
         file.path,
         new Set(variantsOf(this.plugin.app, file).map(cleanVariantName).filter(Boolean))
       );
+    }
+    this.startPeriodic();
+    // The author cache may still be loading when layout is ready. Run again
+    // once it has names to match against.
+    void this.plugin.bibManager.initPromise.promise
+      .then(() => this.sync())
+      .catch(() => {});
+    await this.sync();
+  }
+
+  /** Periodic consistency pass: aliases, creator links, and cache names. */
+  startPeriodic(): void {
+    if (this.intervalId !== undefined) return;
+    this.intervalId = this.plugin.registerInterval(
+      window.setInterval(() => {
+        void this.sync();
+      }, VARIANT_SYNC_INTERVAL)
+    );
+  }
+
+  async sync(): Promise<void> {
+    if (this.syncing) return;
+    this.syncing = true;
+    try {
+      const index = buildAuthorVariantIndex(this.plugin);
+      const current = index.byLink;
+      if (!current.size) {
+        this.lastLinks.clear();
+        return;
+      }
+
+      // Compare the CURRENT variant map with the one applied last time. Only
+      // entries that are new or changed need a vault pass; unchanged variants
+      // cost no file reads at all.
+      const changed = new Map<string, string>();
+      for (const [name, mainName] of current) {
+        if (this.lastLinks.get(name) !== mainName) {
+          changed.set(name, mainName);
+        }
+      }
+      if (!changed.size) {
+        this.lastLinks = new Map(current);
+        return;
+      }
+
+      const changedMains = new Set(changed.values());
+      await this.ensureAliases(index, changedMains);
+      await rewriteCreatorLinks(this.plugin, changed);
+      this.lastLinks = new Map(current);
+    } catch (e) {
+      console.warn('[sw:author] author variant sync failed', e);
+    } finally {
+      this.syncing = false;
+    }
+  }
+
+  /** Add aliases for the changed main notes only. */
+  private async ensureAliases(
+    index: AuthorVariantIndex,
+    mainNames: ReadonlySet<string>
+  ): Promise<void> {
+    for (const mainName of mainNames) {
+      const variants = index.byMain.get(mainName);
+      const file = index.files.get(mainName);
+      if (!variants?.length || !file) continue;
+      const existing = new Set(metadataValues(this.plugin, file, 'aliases'));
+      let missing = false;
+      for (const variant of variants) {
+        for (const alias of variantAliases(variant, mainName)) {
+          if (!existing.has(alias)) {
+            missing = true;
+            break;
+          }
+        }
+        if (missing) break;
+      }
+      if (missing) {
+        await addAuthorVariants(this.plugin, file, variants, {
+          addVariants: false,
+        });
+      }
     }
   }
 
@@ -409,16 +591,26 @@ export class AuthorVariantTracker {
 
   private async apply(main: TFile, variants: string[]): Promise<void> {
     try {
+      const cachedNames = cachedAuthorNames(this.plugin);
+      const accepted = variants.filter((variant) => cachedNames.has(variant));
+      if (!accepted.length) return;
       // The user already wrote the variants; add only their derived aliases.
-      const allVariants = await addAuthorVariants(this.plugin, main, variants, {
+      const allVariants = await addAuthorVariants(this.plugin, main, accepted, {
         addVariants: false,
       });
       await refreshAuthorPage(this.plugin, main, allVariants);
-      await rewriteCreatorLinks(
-        this.plugin,
-        new Map(variants.map((variant) => [variant, main.basename])),
-        { skipPaths: new Set([main.path]) }
-      );
+      const mappings = new Map<string, string>();
+      for (const variant of accepted) {
+        for (const name of variantAliases(variant, main.basename)) {
+          mappings.set(name, main.basename);
+        }
+      }
+      await rewriteCreatorLinks(this.plugin, mappings, {
+        skipPaths: new Set([main.path]),
+      });
+      for (const [name, mainName] of mappings) {
+        this.lastLinks.set(name, mainName);
+      }
     } catch (e) {
       console.warn('[sw:author] could not apply author variants', main.path, e);
     }

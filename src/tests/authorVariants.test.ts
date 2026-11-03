@@ -74,4 +74,18 @@ describe('rewriteCreatorFrontmatter()', () => {
     expect(result.changed).toBe(false);
     expect(result.content).toBe(note);
   });
+
+  it('rewrites a generated First Middle Last display form too', () => {
+    const withDisplayForm = note.replace(
+      '- "[[Smith, John Middle]]"',
+      '- "[[John Middle Smith]]"'
+    );
+    const result = rewriteCreatorFrontmatter(
+      withDisplayForm,
+      new Map([['John Middle Smith', 'Smith, John']])
+    );
+    expect(result.content).toContain(
+      '  - "[[Smith, John|John Middle Smith]]"'
+    );
+  });
 });
