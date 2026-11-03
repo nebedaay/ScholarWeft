@@ -690,6 +690,7 @@ export default class ReferenceList extends Plugin {
         const recent = this.app.workspace.getMostRecentLeaf()?.view;
         const file =
           this.app.workspace.getActiveFile() ??
+          this.app.workspace.activeEditor?.file ??
           active?.file ??
           (recent instanceof MarkdownView ? recent.file : null);
         if (!(file instanceof TFile) || !hasAuthorsUp(this.app, file)) return false;
