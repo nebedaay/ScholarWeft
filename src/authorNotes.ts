@@ -857,6 +857,41 @@ export function authorWorksForPage(
 	return works.sort((a, b) => rank(a) - rank(b)).slice(0, 2);
 }
 
+const UNASSIGNED_UP_RE = /\[\[\s*Unassigned\s*\]\]|^\s*Unassigned\s*$/i;
+
+/**
+ * Templater's basic note template creates every note with
+ * `up: "[[Unassigned]]"`. Once a note is clearly an author note (it has
+ * `up: "[[Authors]]"`), that placeholder is redundant and pollutes the graph,
+ * so remove only Unassigned while preserving every other up value.
+ */
+export async function stripUnassignedFromAuthorNote(
+	plugin: ReferenceList,
+	file: TFile
+): Promise<boolean> {
+	const app = plugin.app;
+	const current = app.vault.getAbstractFileByPath(file.path);
+	if (!(current instanceof TFile) || !hasAuthorsUp(app, current)) return false;
+	const raw = app.metadataCache.getFileCache(current)?.frontmatter?.['up'];
+	const values = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : [];
+	if (!values.some((value) => typeof value === 'string' && UNASSIGNED_UP_RE.test(value))) {
+		return false;
+	}
+	let changed = false;
+	await app.fileManager.processFrontMatter(current, (frontmatter) => {
+		const existing = frontmatter['up'];
+		const list = typeof existing === 'string' ? [existing] : Array.isArray(existing) ? existing : [];
+		const kept = list.filter(
+			(value) => !(typeof value === 'string' && UNASSIGNED_UP_RE.test(value))
+		);
+		if (kept.length !== list.length) {
+			frontmatter['up'] = kept;
+			changed = true;
+		}
+	});
+	return changed;
+}
+
 /** Give a promoted author note the template block if it has none yet. */
 export async function ensureAuthorNoteMaterial(
 	plugin: ReferenceList,
@@ -866,8 +901,10 @@ export async function ensureAuthorNoteMaterial(
 	const current = app.vault.getAbstractFileByPath(file.path);
 	if (!(current instanceof TFile) || !isMergeablePath(current.path)) return;
 	const content = await app.vault.read(current).catch(() => '');
-	if (content.includes(AUTHOR_OPEN)) return;
-	await refreshAuthorPage(plugin, current);
+	if (!content.includes(AUTHOR_OPEN)) {
+		await refreshAuthorPage(plugin, current);
+	}
+	await stripUnassignedFromAuthorNote(plugin, current);
 }
 
 /** Refresh one author page from the loaded library (used by variant linking). */

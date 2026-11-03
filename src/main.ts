@@ -71,6 +71,7 @@ import {
   ensureAuthorNoteMaterial,
   refreshAuthorPagesForCitekey,
   refreshAuthorPagesForEntries,
+  stripUnassignedFromAuthorNote,
 } from './authorNotes';
 import {
   AuthorVariantTargetModal,
@@ -1079,6 +1080,11 @@ export default class ReferenceList extends Plugin {
         if (!(file instanceof TFile)) return;
         void maybeImportClickedCitekey(this, file);
         void maybeAutoCreateAuthorNote(this, file);
+        // Templater may apply its basic-note template after the author page is
+        // created. Clean the redundant Unassigned placeholder once it settles.
+        window.setTimeout(() => {
+          void stripUnassignedFromAuthorNote(this, file);
+        }, 1500);
         this.scheduleAuthorPageRefresh(file);
       })
     );

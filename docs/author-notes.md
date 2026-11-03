@@ -9,6 +9,8 @@ ScholarWeft can turn a creator link into an author note. The literature-note tem
 
 Only a genuinely empty new note is filled. If Obsidian's new-note template (Templater or the Basic note template) filled the file first, ScholarWeft replaces it when the file has no body; anything you have written is never overwritten.
 
+Templater's basic-note template may also add `up: "[[Unassigned]]"` to a new note. When the note is an author note (`up` includes `Authors`), ScholarWeft removes only that placeholder and preserves all other `up` values.
+
 ## What the page contains
 
 The default template writes:
