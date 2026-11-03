@@ -48,10 +48,10 @@ Some people appear in Zotero under more than one name — a fuller form of the g
 
 ```yaml
 variants:
-  - "[[Al-Kawlakhī, al-Shaykh Ibrāhīm b. ʿAbdallāh]]"
+  - Al-Kawlakhī, al-Shaykh Ibrāhīm b. ʿAbdallāh
 ```
 
-`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal. They are not aliases; an entry in `aliases` never becomes a variant. A variant is only used when its name is currently present in the Zotero cache as a creator display or `First Last` alias; other entries are ignored.
+`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal — written as plain text, not wikilinks. They are not aliases; an entry in `aliases` never becomes a variant. A variant is only used when its name is currently present in the Zotero cache as a creator display or `First Last` alias; other entries are ignored.
 
 **Link author name as a variant** is available when the current note has `up: "[[Authors]]"` and its name is in the Zotero cache. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
 

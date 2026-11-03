@@ -47,31 +47,38 @@ export function cleanVariantName(raw: unknown): string {
   return value;
 }
 
-/** Values of a frontmatter list/scalar, read from the raw YAML (not stale cache). */
-function frontmatterValues(frontmatter: string | null, key: string): string[] {
+/** Raw values of a frontmatter list/scalar (links and quotes kept). */
+function frontmatterRawValues(frontmatter: string | null, key: string): string[] {
   if (!frontmatter) return [];
   const prop = parseFrontmatter(frontmatter).find((entry) => entry.key === key);
   if (!prop) return [];
   const values: string[] = [];
   for (const line of prop.lines.slice(1)) {
     const item = /^\s*-\s*(.*?)\s*$/.exec(line);
-    if (item) values.push(cleanVariantName(item[1]));
+    if (item) values.push(item[1]);
   }
   if (!values.length) {
     const inline = /^[^:]+:\s*(.*)$/.exec(prop.lines[0]);
     const raw = (inline?.[1] ?? '').trim();
     if (raw.startsWith('[') && raw.endsWith(']')) {
-      for (const item of raw.slice(1, -1).split(',')) {
-        values.push(cleanVariantName(item));
-      }
+      for (const item of raw.slice(1, -1).split(',')) values.push(item.trim());
     } else if (raw) {
-      values.push(cleanVariantName(raw));
+      values.push(raw);
     }
   }
-  return unique(values.filter(Boolean));
+  return values;
 }
 
-function metadataValues(
+/** Values of a frontmatter list/scalar, as clean display names. */
+function frontmatterValues(frontmatter: string | null, key: string): string[] {
+  return unique(
+    frontmatterRawValues(frontmatter, key)
+      .map(cleanVariantName)
+      .filter(Boolean)
+  );
+}
+
+function metadataRawValues(
   plugin: ReferenceList,
   file: TFile,
   key: string
@@ -81,9 +88,16 @@ function metadataValues(
     | undefined;
   const raw = frontmatter?.[key];
   const values = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
+  return values.filter((value): value is string => typeof value === 'string');
+}
+
+function metadataValues(
+  plugin: ReferenceList,
+  file: TFile,
+  key: string
+): string[] {
   return unique(
-    values
-      .filter((value): value is string => typeof value === 'string')
+    metadataRawValues(plugin, file, key)
       .map(cleanVariantName)
       .filter(Boolean)
   );
@@ -206,6 +220,8 @@ async function addAuthorVariants(
   const prior = splitNote(content);
   const cleaned = unique(variants.map(cleanVariantName));
   const existingVariants = frontmatterValues(prior.frontmatter, 'variants');
+  const rawVariants = frontmatterRawValues(prior.frontmatter, 'variants');
+  const normalizeVariants = rawVariants.some((value) => value.includes('[['));
   const newVariants = opts.addVariants
     ? cleaned.filter((variant) => !existingVariants.includes(variant))
     : [];
@@ -218,19 +234,17 @@ async function addAuthorVariants(
     }
   }
 
-  if (!newVariants.length && !newAliases.length) {
+  if (!newVariants.length && !newAliases.length && !normalizeVariants) {
     return unique([...existingVariants, ...newVariants]);
   }
   const specs: YamlFieldSpec[] = [];
-  if (newVariants.length) {
+  if (newVariants.length || normalizeVariants) {
     specs.push({
       key: 'variants',
       merge: 'replace',
       lines: serializeProperty(
         'variants',
-        unique([...existingVariants, ...newVariants]).map(
-          (variant) => `[[${variant}]]`
-        )
+        unique([...existingVariants, ...newVariants])
       ),
     });
   }
@@ -492,6 +506,7 @@ export class AuthorVariantTracker {
     this.syncing = true;
     try {
       const index = buildAuthorVariantIndex(this.plugin);
+      await this.normalizeVariantFormatting(index);
       const current = index.byLink;
       if (!current.size) {
         this.lastLinks.clear();
@@ -514,12 +529,33 @@ export class AuthorVariantTracker {
 
       const changedMains = new Set(changed.values());
       await this.ensureAliases(index, changedMains);
+      for (const mainName of changedMains) {
+        const file = index.files.get(mainName);
+        if (file) {
+          await refreshAuthorPage(
+            this.plugin,
+            file,
+            index.byMain.get(mainName) ?? []
+          );
+        }
+      }
       await rewriteCreatorLinks(this.plugin, changed);
       this.lastLinks = new Map(current);
     } catch (e) {
       console.warn('[sw:author] author variant sync failed', e);
     } finally {
       this.syncing = false;
+    }
+  }
+
+  /** Convert older `variants: [[Name]]` entries to plain text once. */
+  private async normalizeVariantFormatting(index: AuthorVariantIndex): Promise<void> {
+    for (const [mainName, variants] of index.byMain) {
+      const file = index.files.get(mainName);
+      if (!file || !variants.length) continue;
+      const raw = metadataRawValues(this.plugin, file, 'variants');
+      if (!raw.some((value) => value.includes('[['))) continue;
+      await addAuthorVariants(this.plugin, file, variants, { addVariants: false });
     }
   }
 
