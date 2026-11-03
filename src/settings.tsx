@@ -2091,7 +2091,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Author overview prompt'))
       .setDesc(
         t(
-          'Instructions sent to the model. ScholarWeft prepends the author name and one or two works from your library.'
+          'Default instructions for the model. The Generate modal pre-fills the full prompt, including the author name and one or two library works, and you can edit all of it before sending.'
         )
       )
       .addTextArea((text) => {

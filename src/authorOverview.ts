@@ -61,10 +61,8 @@ export function withAuthorOverview(note: string, text: string): string {
 export async function generateAuthorOverview(
   plugin: ReferenceList,
   file: TFile,
-  instructions: string
+  prompt: string
 ): Promise<void> {
-  const context = authorOverviewContext(plugin, file);
-  const prompt = `${context}\n\n${instructions.trim()}`;
   const text = await completeOpenAiCompatible(
     {
       baseUrl: plugin.settings.llmBaseUrl ?? '',
@@ -89,17 +87,20 @@ export class AuthorOverviewModal extends Modal {
   onOpen(): void {
     this.titleEl.setText(t('Generate author overview'));
     this.contentEl.createEl('p', {
-      text: authorOverviewContext(this.plugin, this.file),
+      text: t(
+        'The whole prompt is editable. Change the author name or works below if the library context is not quite right.'
+      ),
       cls: 'setting-item-description',
     });
 
     const prompt = this.contentEl.createEl('textarea', {
       cls: 'sw-author-overview-prompt',
     });
-    prompt.rows = 7;
-    prompt.value =
+    prompt.rows = 10;
+    const instructions =
       (this.plugin.settings.authorOverviewPrompt ?? '').trim() ||
       DEFAULT_AUTHOR_OVERVIEW_PROMPT;
+    prompt.value = `${authorOverviewContext(this.plugin, this.file)}\n\n${instructions}`;
 
     const buttons = this.contentEl.createDiv({ cls: 'modal-button-container' });
     buttons.createEl('button', { text: t('Cancel') }).onclick = () =>

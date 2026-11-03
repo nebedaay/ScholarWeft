@@ -79,9 +79,9 @@ Settings:
 - **LLM base URL** — an OpenAI-compatible endpoint. The default is Gemini’s `https://generativelanguage.googleapis.com/v1beta/openai`.
 - **LLM model** — default `gemini-3.1-flash-lite`.
 - **LLM API key** — stored in this vault’s plugin settings.
-- **Author overview prompt** — instructions for the model. The default asks for about 100 words identifying the author and summarizing their written work, school of thought, and contribution to their fields.
+- **Author overview prompt** — the default instructions used to pre-fill the modal. The default asks for about 100 words identifying the author and summarizing their written work, school of thought, and contribution to their fields. The full pre-filled prompt is editable for each run; edits there are not saved back to settings.
 
-The command is available on notes with `up: "[[Authors]]"`. It builds context from the author note name, its variants, and one or two works from your library (a book if available, otherwise an article or chapter), then prepends the user prompt. If the note title is a 2–4-letter all-caps acronym (for example `BN`), the note title is not sent as the author name; the variants are used instead. The generated text is inserted at the beginning of the note body as:
+The command is available on notes with `up: "[[Authors]]"`. It builds context from the author note name, its variants, and one or two works from your library (a book if available, otherwise an article or chapter), then opens a modal with the **entire prompt** pre-filled. The author name, works, and instructions can all be edited before generation. If the note title is a 2–4-letter all-caps acronym (for example `BN`), the note title is not sent as the author name; the variants are used instead. The generated text is inserted at the beginning of the note body as:
 
 ```markdown
 # Overview (AI generated)
