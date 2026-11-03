@@ -50,6 +50,10 @@ This search offers several filters to help you locate the items you want:
   - **Order** the results by the search ranking, author/title/year, or date added. Your last search, add target, and ordering are remembered for next time.
   - You can select results individually by clicking each row, or take them all with **Select all results**; re-importing an existing item merges into its note rather than duplicating it. A single imported note opens (turn that off with **Open a single imported note**); citations never open anything.
 
+## AI work overview
+
+The optional **Generate work overview** command adds a short AI-written overview to a literature note, using the shared LLM settings under **Settings → ScholarWeft → AI overviews**. It builds a reference from the note’s citekey and library metadata, pre-fills the whole prompt in an editable modal, and inserts the result as an unmanaged **`# Overview (AI generated)`** section at the top of the body. Enable the command with **Enable work overview command** on the AI overviews page.
+
 ## Literature notes produced by the default template
 
 ScholarWeft’s default template is carefully crafted to allow you to curate your Zotero items and annotate attachments with your interlinked Obsidian thought universe in mind. Knowing how ScholarWeft renders Zotero items and annotations will help you develop useful literature notes that are instantly connected with your Obsidian thought network.

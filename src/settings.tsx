@@ -60,6 +60,7 @@ import {
   mergeAuthorNotesWithNotice,
 } from './authorNotes';
 import { DEFAULT_AUTHOR_OVERVIEW_PROMPT } from './authorOverview';
+import { DEFAULT_WORK_OVERVIEW_PROMPT } from './workOverview';
 import {
   applyYamlFormatting,
   DEFAULT_YAML_TITLE_BACKGROUND,
@@ -142,6 +143,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   llmApiKey: '',
   llmModel: 'gemini-3.1-flash-lite',
   authorOverviewPrompt: DEFAULT_AUTHOR_OVERVIEW_PROMPT,
+  workOverviewEnabled: false,
+  workOverviewPrompt: DEFAULT_WORK_OVERVIEW_PROMPT,
   useDefaultAuthorTemplate: true,
   authorTemplatePath: '',
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
@@ -432,6 +435,10 @@ export interface ReferenceListSettings {
   llmModel?: string;
   /** Default instructions for the generated author overview. */
   authorOverviewPrompt?: string;
+  /** Enable the optional LLM work-overview command. */
+  workOverviewEnabled?: boolean;
+  /** Default instructions for the generated work overview. */
+  workOverviewPrompt?: string;
   /** Render author notes with the bundled template (default true). */
   useDefaultAuthorTemplate?: boolean;
   /** Vault-relative custom author template, used when the above is false. */
@@ -440,13 +447,22 @@ export interface ReferenceListSettings {
 
 const BIB_EXTENSIONS = new Set(['bib', 'json', 'yaml', 'yml']);
 
-type SettingsPage = 'home' | 'bibliography' | 'citations' | 'literature-notes' | 'author-notes' | 'documents' | 'addons';
+type SettingsPage =
+  | 'home'
+  | 'bibliography'
+  | 'citations'
+  | 'literature-notes'
+  | 'author-notes'
+  | 'ai-overviews'
+  | 'documents'
+  | 'addons';
 
 const PAGE_TITLES: Record<Exclude<SettingsPage, 'home'>, string> = {
   bibliography: 'Bibliography',
   citations: 'Citation and reference searching and formatting',
   'literature-notes': 'Literature note import',
   'author-notes': 'Author notes',
+  'ai-overviews': 'AI overviews',
   documents: 'Document import/export and compilation',
   addons: 'Addons for displaying and linking notes',
 };
@@ -560,6 +576,9 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       case 'author-notes':
         this.renderAuthorNotes(containerEl);
         break;
+      case 'ai-overviews':
+        this.renderAiOverviews(containerEl);
+        break;
       case 'documents':
         this.renderDocuments(containerEl);
         break;
@@ -601,6 +620,11 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         desc: t(
           'Create an author page by clicking an unresolved creator link, with a template, folder and variants.'
         ),
+      },
+      {
+        page: 'ai-overviews',
+        name: t('AI overviews'),
+        desc: t('Optional OpenAI-compatible LLM settings and prompts for author and work overviews.'),
       },
       {
         page: 'documents',
@@ -2022,22 +2046,16 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl).setName(t('AI author overview')).setHeading();
-    new Setting(containerEl)
-      .setName(t('Enable author overview command'))
-      .setDesc(
-        t(
-          'Show “Generate author overview” on notes with up: "[[Authors]]". The command asks an OpenAI-compatible model for a short author blurb and inserts it under “# Overview (AI generated)”.'
-        )
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.authorOverviewEnabled === true)
-          .onChange(async (value) => {
-            this.plugin.settings.authorOverviewEnabled = value;
-            await this.plugin.saveSettings();
-          })
-      );
+  }
+
+  private renderAiOverviews(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName(t('LLM overviews')).setHeading();
+    containerEl.createEl('p', {
+      cls: 'setting-item-description',
+      text: t(
+        'These settings are shared by the optional author- and work-overview commands. API keys are stored in this vault’s plugin settings.'
+      ),
+    });
 
     new Setting(containerEl)
       .setName(t('LLM base URL'))
@@ -2087,6 +2105,23 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         text.inputEl.type = 'password';
       });
 
+    new Setting(containerEl).setName(t('Author overview')).setHeading();
+    new Setting(containerEl)
+      .setName(t('Enable author overview command'))
+      .setDesc(
+        t(
+          'Show “Generate author overview” on notes with up: "[[Authors]]". The command inserts an “# Overview (AI generated)” section.'
+        )
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.authorOverviewEnabled === true)
+          .onChange(async (value) => {
+            this.plugin.settings.authorOverviewEnabled = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
     new Setting(containerEl)
       .setName(t('Author overview prompt'))
       .setDesc(
@@ -2103,6 +2138,43 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           )
           .onChange(async (value) => {
             this.plugin.settings.authorOverviewPrompt = value;
+            await this.plugin.saveSettings();
+          });
+        text.inputEl.rows = 6;
+      });
+
+    new Setting(containerEl).setName(t('Work overview')).setHeading();
+    new Setting(containerEl)
+      .setName(t('Enable work overview command'))
+      .setDesc(
+        t(
+          'Show “Generate work overview” on literature notes. The command inserts an “# Overview (AI generated)” section.'
+        )
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.workOverviewEnabled === true)
+          .onChange(async (value) => {
+            this.plugin.settings.workOverviewEnabled = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Work overview prompt'))
+      .setDesc(
+        t(
+          'Default instructions for the model. The Generate modal pre-fills the reference, and you can edit the whole prompt before sending.'
+        )
+      )
+      .addTextArea((text) => {
+        text
+          .setPlaceholder(DEFAULT_WORK_OVERVIEW_PROMPT)
+          .setValue(
+            this.plugin.settings.workOverviewPrompt ?? DEFAULT_WORK_OVERVIEW_PROMPT
+          )
+          .onChange(async (value) => {
+            this.plugin.settings.workOverviewPrompt = value;
             await this.plugin.saveSettings();
           });
         text.inputEl.rows = 6;

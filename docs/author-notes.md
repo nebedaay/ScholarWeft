@@ -73,9 +73,9 @@ A periodic check runs at startup and every five minutes. It compares the variant
 
 ## AI author overview (optional)
 
-The **Generate author overview** command adds a short AI-written background section to an author note. It is off by default; enable it under **Settings → ScholarWeft → Author notes → AI author overview**.
+The **Generate author overview** command adds a short AI-written background section to an author note. It is off by default; enable it under **Settings → ScholarWeft → AI overviews**.
 
-Settings:
+Settings on the shared **AI overviews** page:
 
 - **LLM base URL** — an OpenAI-compatible endpoint. The default is Gemini’s `https://generativelanguage.googleapis.com/v1beta/openai`.
 - **LLM model** — default `gemini-3.1-flash-lite`.

@@ -78,6 +78,7 @@ import {
   linkAuthorVariant,
 } from './authorVariants';
 import { AuthorOverviewModal } from './authorOverview';
+import { WorkOverviewModal } from './workOverview';
 import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
@@ -730,6 +731,28 @@ export default class ReferenceList extends Plugin {
         if (!(file instanceof TFile) || !hasAuthorsUp(this.app, file)) return false;
         if (checking) return true;
         new AuthorOverviewModal(this, file).open();
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: 'generate-work-overview',
+      name: t('Generate work overview'),
+      checkCallback: (checking) => {
+        if (this.settings.workOverviewEnabled !== true) return false;
+        const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const recent = this.app.workspace.getMostRecentLeaf()?.view;
+        const file =
+          this.app.workspace.getActiveFile() ??
+          this.app.workspace.activeEditor?.file ??
+          active?.file ??
+          (recent instanceof MarkdownView ? recent.file : null);
+        if (!(file instanceof TFile)) return false;
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        const citekey = typeof fm?.['citekey'] === 'string' ? fm['citekey'].trim() : '';
+        if (!citekey && !/^@[^ ]+$/.test(file.basename)) return false;
+        if (checking) return true;
+        new WorkOverviewModal(this, file).open();
         return true;
       },
     });
