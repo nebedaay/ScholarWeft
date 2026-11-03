@@ -1610,7 +1610,21 @@ export default class ReferenceList extends Plugin {
     if (typeof stable === 'string' && stable) {
       citekey = this.findCitekeyByStableKey(stable);
       if (!citekey) {
-        return { ok: false, reason: `item ${stable} is not in the loaded library` };
+        // The item key can change when a note is re-created/retransliterated
+        // (Midad does this). The note's own citekey is still a reliable
+        // identity, so fall back to it and adopt the note in place.
+        const byCitekey =
+          typeof fm?.['citekey'] === 'string' ? fm['citekey'].trim() : '';
+        const candidate = byCitekey || unmanagedNoteCitekey(file.basename, fm);
+        if (!candidate || !this.bibManager.bibCache?.has(candidate)) {
+          return {
+            ok: false,
+            reason: `item ${stable} is not in the loaded library`,
+          };
+        }
+        citekey = candidate;
+        adoptPath = file.path;
+        forceAdopt = true;
       }
     } else {
       // No identity property: another plugin's note (Zotero Integration writes
