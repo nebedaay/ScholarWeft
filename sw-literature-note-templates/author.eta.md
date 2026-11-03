@@ -11,6 +11,7 @@
 ---
 up:
   - "[[Authors]]"
+title: <%= JSON.stringify(alias || display) %>
 <% if (alias) { -%>
 aliases:
   - <%= JSON.stringify(alias) %>
@@ -32,11 +33,9 @@ related: []
 <% } -%>
 variants: []
 ---
-# <%= display %>
-
 %%sw-author-managed%%
 <% if (publications.length) { -%>
-## Publications
+# Publications
 
 <%= publications.join(' ') %>
 <% } -%>

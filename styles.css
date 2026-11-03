@@ -2127,3 +2127,13 @@ body.sw-yaml-formatting .metadata-property[data-property-key="child"] .multi-sel
   background-image: --sw-arrow-gradient(var(--sw-blue));
   rotate: 180deg;
 }
+
+/* Author-overview prompt: use the full modal width instead of the browser's
+   default narrow textarea. */
+.sw-author-overview-prompt {
+  display: block;
+  width: 100%;
+  min-height: 16em;
+  box-sizing: border-box;
+  resize: vertical;
+}

@@ -10,8 +10,13 @@ import { completeOpenAiCompatible } from './llm';
 import { joinNote, splitNote } from './template/merge';
 import { t } from './lang/helpers';
 
-export const DEFAULT_AUTHOR_OVERVIEW_PROMPT =
-  'Generate a blurb, about 100 words, identifying this author and summarizing their written work, school of thought, and contribution to their field(s).';
+export const DEFAULT_AUTHOR_OVERVIEW_PROMPT = `Generate a blurb in markdown format, about 80 words, identifying this author and summarizing their work and contribution. Tone: scholarly, analytical, concrete, factual, and balanced. Identify the institution, movement, and/or school of thought they're associated with; theoretical influences; their best-known written work (not necessarily those listed above); contribution to their field(s); and peer reception. If this is an important historical figure, you may mention important works that discuss or respond to them.
+
+Below the summary, add a subsection:
+
+## Relevant links
+
+and a bullet list of 2–4 of the top online resources about the author, such as a Wikipedia page and/or non-paywalled scholarly overviews of their work.`;
 
 export const AUTHOR_OVERVIEW_HEADING = '# Overview (AI generated)';
 
@@ -22,7 +27,9 @@ export function isAcronymTitle(title: string): boolean {
 
 /** Context prefixed to the user's prompt so the model knows who is meant. */
 export function authorOverviewContext(plugin: ReferenceList, file: TFile): string {
-  const variants = variantsOf(plugin.app, file);
+  // The prompt only needs a couple of alternate names; the full variants list
+  // is still used for works/publications.
+  const variants = variantsOf(plugin.app, file).slice(0, 2);
   const works = authorWorksForPage(plugin, file);
   const acronym = isAcronymTitle(file.basename);
   const names = acronym

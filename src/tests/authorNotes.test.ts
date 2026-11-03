@@ -209,6 +209,23 @@ describe('mergeAuthorContent()', () => {
     expect(merged.match(/Jane Smith/g)).toHaveLength(1);
   });
 
+  it('removes an old template H1 author heading when present', () => {
+    const old = [
+      '---',
+      'up:',
+      '  - "[[Authors]]"',
+      '---',
+      '# Smith, Jane',
+      '',
+      'My own body.',
+      '',
+    ].join('\n');
+    const renderedNoHeading = rendered.replace('\n# Smith, Jane\n\n', '\n');
+    const merged = mergeAuthorContent(old, renderedNoHeading, 'Smith, Jane');
+    expect(merged).not.toContain('# Smith, Jane');
+    expect(merged).toContain('My own body.');
+  });
+
   it('uses the full rendered body for an empty note', () => {
     const empty = '---\nup:\n  - "[[Home]]"\n---\n';
     const merged = mergeAuthorContent(empty, rendered);
@@ -233,12 +250,14 @@ describe('author template', () => {
       date: '2026-11-02',
     });
     expect(out).toContain('  - "[[Authors]]"');
+    expect(out).toContain('title: "Jane Smith"');
     expect(out).toContain('  - "Jane Smith"');
     expect(out).toContain('creator-roles:\n  - author\n  - editor');
     expect(out).toContain('  - "[[@smith2000]]"');
     expect(out).toContain('  - "[[Islam]]"');
     expect(out).toContain('[[@smith2000|ref]] [[@smith2001]]');
-    expect(out).toContain('# Smith, Jane');
+    expect(out).not.toContain('# Smith, Jane');
+    expect(out).toContain('# Publications');
   });
 
   it('omits aliases for a literal creator', () => {
@@ -251,6 +270,7 @@ describe('author template', () => {
       date: '2026-11-02',
     });
     expect(out).not.toContain('aliases:');
+    expect(out).toContain('title: "An Institute"');
     expect(out).toContain('related: []');
   });
 });

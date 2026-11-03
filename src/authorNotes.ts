@@ -466,7 +466,8 @@ function dedupeListProperty(frontmatter: string, key: string): string {
  */
 export function mergeAuthorContent(
 	existing: string,
-	rendered: string
+	rendered: string,
+	display?: string
 ): string {
 	const prior = splitNote(existing);
 	const next = splitNote(rendered);
@@ -486,6 +487,16 @@ export function mergeAuthorContent(
 	}
 
 	let body = prior.body;
+	if (display) {
+		const escaped = display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		const oldHeading = new RegExp(
+			`^(?:\\s*\\n)*#\\s+${escaped}[ \\t]*(?:\\n|$)`
+		);
+		const stillHasHeading = new RegExp(`^#\\s+${escaped}\\s*$`, 'm');
+		if (oldHeading.test(body) && !stillHasHeading.test(next.body)) {
+			body = body.replace(oldHeading, '');
+		}
+	}
 	if (!body.trim()) {
 		body = next.body;
 	} else {
@@ -556,7 +567,7 @@ export async function createAuthorPage(
 			} else {
 				const content =
 					existing instanceof TFile
-						? mergeAuthorContent(await app.vault.read(existing), rendered)
+						? mergeAuthorContent(await app.vault.read(existing), rendered, record.display)
 						: rendered;
 				await app.vault.modify(opened, content);
 			}
@@ -571,7 +582,7 @@ export async function createAuthorPage(
 	}
 
 	if (existing instanceof TFile) {
-		const merged = mergeAuthorContent(await app.vault.read(existing), rendered);
+		const merged = mergeAuthorContent(await app.vault.read(existing), rendered, record.display);
 		await app.vault.modify(existing, merged);
 		if (opts.open) await openFile(plugin, existing);
 		return existing;
@@ -748,7 +759,7 @@ export async function mergeAuthorCandidates(
 			});
 			const current = await app.vault.read(file);
 			const content = current.trim()
-				? mergeAuthorContent(current, rendered)
+				? mergeAuthorContent(current, rendered, candidate.record.display)
 				: rendered;
 			await app.vault.modify(file, content);
 			merged++;
@@ -878,7 +889,7 @@ export async function refreshAuthorPage(
 		index,
 	});
 	const content = await app.vault.read(current);
-	const merged = mergeAuthorContent(content, rendered);
+	const merged = mergeAuthorContent(content, rendered, record.display);
 	if (merged !== content) await app.vault.modify(current, merged);
 }
 
@@ -928,7 +939,7 @@ export async function refreshAuthorPagesForEntries(
 			index,
 		});
 		const content = await app.vault.read(child);
-		const merged = mergeAuthorContent(content, rendered);
+		const merged = mergeAuthorContent(content, rendered, record.display);
 		if (merged !== content) await app.vault.modify(child, merged);
 	}
 }

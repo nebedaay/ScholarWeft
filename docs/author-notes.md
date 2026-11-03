@@ -14,11 +14,12 @@ Only a genuinely empty new note is filled. If Obsidian's new-note template (Temp
 The default template writes:
 
 - `up: "[[Authors]]"`;
+- `title: "First Last"` — the author name in normal display order; the SW YAML style addon renders it large. There is no separate H1 author-name heading;
 - `aliases: "First Last"` for a two-part name (`Last, First` is the note title and link target);
 - `creator-roles` — every role the person has in your library (author, editor, translator, …);
 - `related` — `[[@citekey]]` for every work that lists the person as a creator, plus the works' tags as `[[tag]]` links;
 - `variants: []` — see below;
-- a `## Publications` managed region with a contiguous reference run of the works that have **literature notes**: `[[@key1|ref]] [[@key2]] …`. Each entry links to its literature note, but the link inherits the note's text colour and has no underline or theme link styling. Works without a note are not listed.
+- a `# Publications` managed region with a contiguous reference run of the works that have **literature notes**: `[[@key1|ref]] [[@key2]] …`. Each entry links to its literature note, but the link inherits the note's text colour and has no underline or theme link styling. Works without a note are not listed.
 
 The `related` property is refreshed when the Zotero library gains or changes an item, even if no literature note exists yet. The Publications region is updated when a literature note is imported, so it grows as you import more of the person's works. Existing `related` entries are preserved and new links are appended without duplicates; the whole property is never replaced. The `related` YAML links are deliberately not citations: ScholarWeft strips frontmatter before scanning for citations, so adding an author page never imports works by itself. Only the body Publications run is a citation list, and it contains already-imported works.
 
@@ -36,7 +37,7 @@ The copy is not overwritten by plugin updates. The template uses Eta, like the l
 
 Author notes are created in the folder set under **Author notes folder**. Leave it blank for `<literature notes folder>/Authors` (for example `_2 Bibliographic notes/Authors`).
 
-`up: "[[Authors]]"` still marks a note as an author note, but it is not enough by itself to merge a note whose filename does not match an imported creator display. The main note's filename does not have to be a Zotero creator name: if it has `up: "[[Authors]]"` and at least one `variants` entry matching a cached creator, it is treated as an author note and its variants' works populate `related` and `## Publications`. Opening or editing a promoted note adds the template block if it is missing.
+`up: "[[Authors]]"` still marks a note as an author note, but it is not enough by itself to merge a note whose filename does not match an imported creator display. The main note's filename does not have to be a Zotero creator name: if it has `up: "[[Authors]]"` and at least one `variants` entry matching a cached creator, it is treated as an author note and its variants' works populate `related` and `# Publications`. Opening or editing a promoted note adds the template block if it is missing.
 
 **Merge existing author notes** compares each note's filename with the exact display name ScholarWeft imports for a creator in your library: `Last, First`, or a literal name such as `One Long Author Name`. A filename of two or more words merges when it matches. A one-word filename merges only when it also has `up: "[[Authors]]"`. The merge applies the template and updates the managed fields and the Publications region; your own body text and properties are preserved.
 
@@ -79,7 +80,7 @@ Settings:
 - **LLM base URL** — an OpenAI-compatible endpoint. The default is Gemini’s `https://generativelanguage.googleapis.com/v1beta/openai`.
 - **LLM model** — default `gemini-3.1-flash-lite`.
 - **LLM API key** — stored in this vault’s plugin settings.
-- **Author overview prompt** — the default instructions used to pre-fill the modal. The default asks for about 100 words identifying the author and summarizing their written work, school of thought, and contribution to their fields. The full pre-filled prompt is editable for each run; edits there are not saved back to settings.
+- **Author overview prompt** — the default instructions used to pre-fill the modal. The default asks for an 80-word markdown blurb, plus a `## Relevant links` list of 2–4 online resources. The full prompt is editable in the Generate modal. The full pre-filled prompt is editable for each run; edits there are not saved back to settings.
 
 The command is available on notes with `up: "[[Authors]]"`. It builds context from the author note name, its variants, and one or two works from your library (a book if available, otherwise an article or chapter), then opens a modal with the **entire prompt** pre-filled. The author name, works, and instructions can all be edited before generation. If the note title is a 2–4-letter all-caps acronym (for example `BN`), the note title is not sent as the author name; the variants are used instead. The generated text is inserted at the beginning of the note body as:
 
