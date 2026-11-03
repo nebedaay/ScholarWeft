@@ -684,9 +684,11 @@ export default class ReferenceList extends Plugin {
 
     this.addCommand({
       id: 'link-author-variant',
-      name: t('Treat this note’s author name as a variant of another author'),
+      name: t('Link author name as a variant'),
       checkCallback: (checking) => {
-        const file = this.app.workspace.getActiveFile();
+        const file =
+          this.app.workspace.getActiveFile() ??
+          this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
         if (!(file instanceof TFile) || !hasAuthorsUp(this.app, file)) return false;
         if (checking) return true;
         new AuthorVariantTargetModal(this, file, (main) => {

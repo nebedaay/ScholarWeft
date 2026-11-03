@@ -366,7 +366,7 @@ export default {
   'No author notes to merge.': 'No author notes to merge.',
   'Merge now': 'Merge now',
   'Create author note': 'Create author note',
-  'Treat this note’s author name as a variant of another author': 'Treat this note’s author name as a variant of another author',
+  'Link author name as a variant': 'Link author name as a variant',
   'This author name is not in the Zotero cache.': 'This author name is not in the Zotero cache.',
   'Choose the main author note': 'Choose the main author note',
   'link this name as a variant and move this note to trash': 'link this name as a variant and move this note to trash',

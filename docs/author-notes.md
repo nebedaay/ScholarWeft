@@ -53,7 +53,7 @@ variants:
 
 `variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal. They are not aliases; an entry in `aliases` never becomes a variant. A variant is only used when its name is currently present in the Zotero cache as a creator display or `First Last` alias; other entries are ignored.
 
-**Treat this note’s author name as a variant of another author** is available when the current note has `up: "[[Authors]]"` and its name is in the Zotero cache. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
+**Link author name as a variant** is available when the current note has `up: "[[Authors]]"` and its name is in the Zotero cache. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
 
 - adds the current note name to the main note's `variants`;
 - adds autocomplete aliases for the variant: the variant itself and its `First Middle Last` form;
@@ -74,4 +74,4 @@ A periodic check runs at startup and every five minutes. It compares the variant
 
 - **Create author note** — pick a creator and create/open their page.
 - **Merge existing author notes into the Authors folder** — the one-time tidy-up described above.
-- **Treat this note’s author name as a variant of another author** — available on an author note; link its name to a main author page and move this note to the trash.
+- **Link author name as a variant** — available on an author note; link its name to a main author page and move this note to the trash.
