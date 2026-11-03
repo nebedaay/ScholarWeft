@@ -576,7 +576,7 @@ export async function maybeAutoCreateAuthorNote(
 	file: TFile
 ): Promise<void> {
 	if (plugin.settings.autoCreateAuthorNotes !== true) return;
-	if (file.extension !== 'md') return;
+	if (file.extension !== 'md' || !isMergeablePath(file.path)) return;
 	try {
 		await plugin.bibManager.initPromise.promise;
 	} catch {
@@ -598,6 +598,23 @@ export async function maybeAutoCreateAuthorNote(
 		replaceTemplate: true,
 		index,
 	});
+}
+
+const MERGE_SKIP_DIRS = new Set([
+	'tmp',
+	'.obsidian',
+	'.git',
+	'node_modules',
+	'docs',
+	'src',
+	'Templates',
+	'install',
+]);
+
+/** Templates, docs, temp backups and plugin code are not author notes. */
+function isMergeablePath(path: string): boolean {
+	const first = normalizePath(path).split('/')[0];
+	return !MERGE_SKIP_DIRS.has(first);
 }
 
 function hasAuthorsUp(app: App, file: TFile): boolean {
@@ -640,9 +657,12 @@ export async function mergeExistingAuthorNotes(
 		// Another plugin (auto-note-mover, Templater) can move the just-created
 		// note while this loop runs. Re-fetch and skip a path that has gone,
 		// and never let one bad file abort the whole merge.
+		if (!isMergeablePath(listed.path)) continue;
 		const file = app.vault.getAbstractFileByPath(listed.path);
 		if (!(file instanceof TFile)) continue;
 		if (file.basename === 'Authors') continue; // the MOC, not a person
+		// Concept/dictionary pages can carry up: Authors without being people.
+		if (app.metadataCache.getFileCache(file)?.frontmatter?.['term']) continue;
 		try {
 			const record =
 				index.get(file.basename) ??
