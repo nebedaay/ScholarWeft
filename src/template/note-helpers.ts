@@ -57,6 +57,7 @@ import {
   type YamlPropertyOptions,
   type YamlValue,
 } from './yaml';
+import { normalizeAuthorName } from '../authorName';
 import type {
   NoteContext,
   NoteContextAnnotation,
@@ -300,7 +301,9 @@ export class NoteHelpers {
     const state = this.stateOf(ctx);
     const plain = String(name ?? '').trim();
     if (!plain) return '';
-    const main = state.creatorVariants.get(plain);
+    const main =
+      state.creatorVariants.get(plain) ??
+      state.creatorVariants.get(normalizeAuthorName(plain));
     return main && main !== plain ? `[[${main}|${plain}]]` : `[[${plain}]]`;
   }
 

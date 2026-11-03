@@ -38,6 +38,7 @@ import {
   type YamlFieldSpec,
 } from './template/yaml';
 import { t } from './lang/helpers';
+import { normalizeAuthorName } from './authorName';
 
 /** Normalise a frontmatter variant value to the display name it names. */
 export function cleanVariantName(raw: unknown): string {
@@ -138,9 +139,10 @@ function cachedAuthorNames(plugin: ReferenceList): Set<string> {
   const names = new Set<string>();
   const library = buildAuthorIndex(plugin.bibManager.bibCache.values());
   for (const record of library.records()) {
-    names.add(record.display);
-    if (record.alias) names.add(record.alias);
+    names.add(normalizeAuthorName(record.display));
+    if (record.alias) names.add(normalizeAuthorName(record.alias));
   }
+  names.delete('');
   AUTHOR_NAME_CACHE.set(plugin, { size, at: now, names });
   return names;
 }
@@ -148,7 +150,7 @@ function cachedAuthorNames(plugin: ReferenceList): Set<string> {
 export class AuthorVariantIndex {
   /** Exact variant display name → the main note's basename. */
   readonly byVariant = new Map<string, string>();
-  /** Link names (variant + generated display forms) → main note basename. */
+  /** Normalized link name (variant + generated display forms) → main note. */
   readonly byLink = new Map<string, string>();
   /** Main note basename → its variant display names. */
   readonly byMain = new Map<string, string[]>();
@@ -166,6 +168,7 @@ export function buildAuthorVariantIndex(plugin: ReferenceList): AuthorVariantInd
   const mainNames = new Set(files.map((file) => file.basename));
   const cachedNames = cachedAuthorNames(plugin);
   const index = new AuthorVariantIndex();
+  const ambiguousLinks = new Set<string>();
   for (const file of files) {
     const variants = unique(
       variantsOf(plugin.app, file)
@@ -175,7 +178,7 @@ export function buildAuthorVariantIndex(plugin: ReferenceList): AuthorVariantInd
             name &&
             name !== file.basename &&
             !mainNames.has(name) &&
-            cachedNames.has(name)
+            cachedNames.has(normalizeAuthorName(name))
         )
     );
     index.byMain.set(file.basename, variants);
@@ -183,8 +186,16 @@ export function buildAuthorVariantIndex(plugin: ReferenceList): AuthorVariantInd
     for (const variant of variants) {
       if (!index.byVariant.has(variant)) index.byVariant.set(variant, file.basename);
       for (const linkName of variantAliases(variant, file.basename)) {
-        if (mainNames.has(linkName) || index.byLink.has(linkName)) continue;
-        index.byLink.set(linkName, file.basename);
+        const normalized = normalizeAuthorName(linkName);
+        if (!normalized || mainNames.has(linkName)) continue;
+        if (ambiguousLinks.has(normalized)) continue;
+        const prior = index.byLink.get(normalized);
+        if (prior && prior !== file.basename) {
+          index.byLink.delete(normalized);
+          ambiguousLinks.add(normalized);
+          continue;
+        }
+        index.byLink.set(normalized, file.basename);
       }
     }
   }
@@ -292,7 +303,8 @@ function rewriteCreatorLine(
     const name = (hash === -1 ? targetPart : targetPart.slice(0, hash)).trim();
     const fragment = hash === -1 ? '' : targetPart.slice(hash);
     const display = pipe === -1 ? undefined : inner.slice(pipe + 1).trim();
-    const main = mappings.get(name);
+    const main =
+      mappings.get(name) ?? mappings.get(normalizeAuthorName(name));
     if (!main) return whole;
     const shown = (display ?? name).trim() || name;
     return `[[${main}${fragment}|${shown}]]`;
@@ -306,7 +318,7 @@ function valueHasTarget(value: unknown, targets: ReadonlySet<string>): boolean {
     const link = /\[\[([\s\S]*?)\]\]/g;
     for (const match of item.matchAll(link)) {
       const target = match[1].split('|')[0].split('#')[0].trim();
-      if (targets.has(target)) return true;
+      if (targets.has(normalizeAuthorName(target))) return true;
     }
   }
   return false;
@@ -360,7 +372,9 @@ export async function rewriteCreatorLinks(
 ): Promise<number> {
   if (!mappings.size) return 0;
   const app = plugin.app;
-  const targets = new Set(mappings.keys());
+  const targets = new Set(
+    [...mappings.keys()].map(normalizeAuthorName).filter(Boolean)
+  );
   let changed = 0;
   for (const file of app.vault.getMarkdownFiles()) {
     if (opts.skipPaths?.has(file.path) || !isMergeablePath(file.path)) continue;
@@ -434,7 +448,9 @@ export class AuthorVariantTargetModal extends FuzzySuggestModal<TFile> {
     super(plugin.app);
     const index = buildAuthorVariantIndex(plugin);
     this.items = authorNoteFiles(plugin).filter(
-      (file) => file.path !== current.path && !index.byLink.has(file.basename)
+      (file) =>
+        file.path !== current.path &&
+        !index.byLink.has(normalizeAuthorName(file.basename))
     );
     this.setPlaceholder(t('Choose the main author note'));
     this.setInstructions([
@@ -645,7 +661,9 @@ export class AuthorVariantTracker {
   private async apply(main: TFile, variants: string[]): Promise<void> {
     try {
       const cachedNames = cachedAuthorNames(this.plugin);
-      const accepted = variants.filter((variant) => cachedNames.has(variant));
+      const accepted = variants.filter((variant) =>
+        cachedNames.has(normalizeAuthorName(variant))
+      );
       // Add aliases only for cache-known variants, but still materialize the
       // author template for a note whose variants are deliberate local names.
       const allVariants = await addAuthorVariants(this.plugin, main, accepted, {

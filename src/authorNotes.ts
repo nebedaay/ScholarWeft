@@ -35,6 +35,7 @@ import {
 } from './template/merge';
 import { t } from './lang/helpers';
 import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
+import { normalizeAuthorName } from './authorName';
 
 export const AUTHOR_TEMPLATE_ASSET = 'sw-literature-note-templates/author.eta.md';
 export const AUTHOR_OPEN = '%%sw-author-managed%%';
@@ -94,9 +95,14 @@ export interface AuthorRecord {
 export class AuthorIndex {
 	readonly byDisplay = new Map<string, AuthorRecord>();
 	readonly byAlias = new Map<string, AuthorRecord>();
+	/** Normalized display/alias → record; null means two different records collide. */
+	readonly byNormalized = new Map<string, AuthorRecord | null>();
 
 	get(name: string): AuthorRecord | undefined {
-		return this.byDisplay.get(name) ?? this.byAlias.get(name);
+		const exact = this.byDisplay.get(name) ?? this.byAlias.get(name);
+		if (exact) return exact;
+		const normalized = this.byNormalized.get(normalizeAuthorName(name));
+		return normalized ?? undefined;
 	}
 
 	records(): AuthorRecord[] {
@@ -178,6 +184,16 @@ export function buildAuthorIndex(
 				};
 				index.byDisplay.set(display, record);
 				if (alias && !index.byAlias.has(alias)) index.byAlias.set(alias, record);
+				for (const key of [display, alias]) {
+					if (!key) continue;
+					const normalized = normalizeAuthorName(key);
+					if (!normalized) continue;
+					const prior = index.byNormalized.get(normalized);
+					index.byNormalized.set(
+						normalized,
+						prior && prior !== record ? null : record
+					);
+				}
 			}
 			record.roles.add(creator.role);
 			record.citekeys.add(citekey);
@@ -855,9 +871,17 @@ export async function refreshAuthorPagesForEntries(
 		const record = recordForAuthorNote(child.basename, index, variants);
 		if (!record) continue;
 		const names = new Set(
-			[record.display, record.alias ?? '', ...variants].filter(Boolean)
+			[record.display, record.alias ?? '', ...variants]
+				.filter(Boolean)
+				.map(normalizeAuthorName)
 		);
-		if (![...creators].some((name) => names.has(name))) continue;
+		if (
+			![...creators]
+				.map(normalizeAuthorName)
+				.some((name) => names.has(name))
+		) {
+			continue;
+		}
 		const rendered = await renderAuthorPage(plugin, record, {
 			variants,
 			sourcePath: child.path,
