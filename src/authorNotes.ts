@@ -754,6 +754,40 @@ export async function mergeAuthorCandidates(
 	return { merged, moved };
 }
 
+/**
+ * A main author note may deliberately have a non-Zotero title (e.g. BN.md)
+ * while its `variants` carry the imported creator names. Build a record for
+ * that case so the variant works can still populate related/publications.
+ */
+function recordForAuthorNote(
+	display: string,
+	index: AuthorIndex,
+	variants: string[]
+): AuthorRecord | null {
+	const exact = index.byDisplay.get(display);
+	if (exact) return exact;
+	if (!variants.length) return null;
+	const comma = display.indexOf(',');
+	const family = comma === -1 ? display : display.slice(0, comma).trim();
+	const given = comma === -1 ? '' : display.slice(comma + 1).trim();
+	const record: AuthorRecord = {
+		display,
+		alias: family && given ? `${given} ${family}` : null,
+		family,
+		given,
+		literal: comma === -1 ? display : '',
+		roles: new Set(),
+		citekeys: new Set(),
+		tags: new Set(),
+	};
+	for (const name of variants) {
+		const variant = index.get(name);
+		if (!variant) continue;
+		for (const role of variant.roles) record.roles.add(role);
+	}
+	return record;
+}
+
 /** Refresh one author page from the loaded library (used by variant linking). */
 export async function refreshAuthorPage(
 	plugin: ReferenceList,
@@ -764,10 +798,11 @@ export async function refreshAuthorPage(
 	const current = app.vault.getAbstractFileByPath(file.path);
 	if (!(current instanceof TFile)) return;
 	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
-	const record = index.byDisplay.get(current.basename);
+	const variantsForPage = variants ?? variantsOf(app, current);
+	const record = recordForAuthorNote(current.basename, index, variantsForPage);
 	if (!record) return;
 	const rendered = await renderAuthorPage(plugin, record, {
-		variants: variants ?? variantsOf(app, current),
+		variants: variantsForPage,
 		sourcePath: current.path,
 		index,
 	});
@@ -795,15 +830,15 @@ export async function refreshAuthorPagesForEntries(
 	}
 	if (!creators.size) return;
 
-	const folder = authorFolderPath(plugin);
-	const dir = app.vault.getAbstractFileByPath(folder);
-	if (!(dir instanceof TFolder)) return;
-
-	for (const child of dir.children) {
-		if (!(child instanceof TFile) || child.extension !== 'md') continue;
-		const record = index.byDisplay.get(child.basename);
-		if (!record) continue;
+	// Author notes are not necessarily in the Authors folder: an existing
+	// people note (BN.md) can be promoted by adding up: "[[Authors]]".
+	const notes = app.vault
+		.getMarkdownFiles()
+		.filter((file) => isMergeablePath(file.path) && hasAuthorsUp(app, file));
+	for (const child of notes) {
 		const variants = variantsOf(app, child);
+		const record = recordForAuthorNote(child.basename, index, variants);
+		if (!record) continue;
 		const names = new Set(
 			[record.display, record.alias ?? '', ...variants].filter(Boolean)
 		);

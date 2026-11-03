@@ -20,7 +20,7 @@ The default template writes:
 - `variants: []` — see below;
 - a `## Publications` managed region with a contiguous reference run of the works that have **literature notes**: `[[@key1|ref]] [[@key2]] …`. Works without a note are not listed.
 
-The `related` property is refreshed when the Zotero library gains or changes an item, even if no literature note exists yet. The Publications region is updated when a literature note is imported, so it grows as you import more of the person's works. The `related` YAML links are deliberately not citations: ScholarWeft strips frontmatter before scanning for citations, so adding an author page never imports works by itself. Only the body Publications run is a citation list, and it contains already-imported works.
+The `related` property is refreshed when the Zotero library gains or changes an item, even if no literature note exists yet. The Publications region is updated when a literature note is imported, so it grows as you import more of the person's works. Existing `related` entries are preserved and new links are appended without duplicates; the whole property is never replaced. The `related` YAML links are deliberately not citations: ScholarWeft strips frontmatter before scanning for citations, so adding an author page never imports works by itself. Only the body Publications run is a citation list, and it contains already-imported works.
 
 ## Customising the template
 
@@ -36,7 +36,7 @@ The copy is not overwritten by plugin updates. The template uses Eta, like the l
 
 Author notes are created in the folder set under **Author notes folder**. Leave it blank for `<literature notes folder>/Authors` (for example `_2 Bibliographic notes/Authors`).
 
-`up: "[[Authors]]"` still marks a note as an author note, but it is not enough by itself to merge a note whose filename does not match an imported creator display.
+`up: "[[Authors]]"` still marks a note as an author note, but it is not enough by itself to merge a note whose filename does not match an imported creator display. The main note's filename does not have to be a Zotero creator name: if it has `up: "[[Authors]]"` and at least one `variants` entry matching a cached creator, it is treated as an author note and its variants' works populate `related` and `## Publications`.
 
 **Merge existing author notes** compares each note's filename with the exact display name ScholarWeft imports for a creator in your library: `Last, First`, or a literal name such as `One Long Author Name`. A filename of two or more words merges when it matches. A one-word filename merges only when it also has `up: "[[Authors]]"`. The merge applies the template and updates the managed fields and the Publications region; your own body text and properties are preserved.
 
