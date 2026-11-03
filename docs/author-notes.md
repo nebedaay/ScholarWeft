@@ -20,7 +20,7 @@ The default template writes:
 - `variants: []` — see below;
 - a `## Publications` managed region with a contiguous reference run of the works that have **literature notes**: `[[@key1|ref]] [[@key2]] …`. Works without a note are not listed.
 
-The Publications region is updated when a literature note is imported, so it grows as you import more of the person's works. The `related` YAML links are deliberately not citations: ScholarWeft strips frontmatter before scanning for citations, so adding an author page never imports works by itself. Only the body Publications run is a citation list, and it contains already-imported works.
+The `related` property is refreshed when the Zotero library gains or changes an item, even if no literature note exists yet. The Publications region is updated when a literature note is imported, so it grows as you import more of the person's works. The `related` YAML links are deliberately not citations: ScholarWeft strips frontmatter before scanning for citations, so adding an author page never imports works by itself. Only the body Publications run is a citation list, and it contains already-imported works.
 
 ## Customising the template
 

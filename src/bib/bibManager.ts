@@ -1911,6 +1911,12 @@ export class BibManager {
         }
       }
 
+      // A new Zotero item should appear immediately in the `related` property
+      // of its creators' author pages, even before a literature note exists.
+      if (modifiedEntries.size) {
+        this.plugin.refreshAuthorPagesForEntries(modifiedEntries.values());
+      }
+
       // Persist citekey renames detected by THIS diff (old cache vs fresh
       // fetch, matched by `_zoteroKey`). The cache is overwritten below, so this
       // is the last moment the old key exists for a cite-only key; the pending

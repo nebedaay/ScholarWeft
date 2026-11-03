@@ -69,6 +69,7 @@ import {
   maybeAutoCreateAuthorNote,
   mergeAuthorNotesWithNotice,
   refreshAuthorPagesForCitekey,
+  refreshAuthorPagesForEntries,
 } from './authorNotes';
 import {
   AuthorVariantTargetModal,
@@ -1439,6 +1440,15 @@ export default class ReferenceList extends Plugin {
         void refreshAuthorPagesForCitekey(this, key.trim());
       }
     }, 1500);
+  }
+
+  /** Let BibManager refresh author pages after a Zotero library load/change. */
+  refreshAuthorPagesForEntries(
+    entries: Iterable<import('./bib/types').PartialCSLEntry>
+  ): void {
+    void refreshAuthorPagesForEntries(this, entries).catch((e) =>
+      console.warn('[sw:author] author-page refresh failed', e)
+    );
   }
 
   /** Watch author notes for newly added `variants` lists. */

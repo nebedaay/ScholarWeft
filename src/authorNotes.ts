@@ -777,18 +777,24 @@ export async function refreshAuthorPage(
 }
 
 /**
- * Refresh existing author pages when a literature note is imported: only pages
- * whose creator (or a listed variant) appears in the new note are touched.
+ * Refresh author pages affected by one or more Zotero entries. Used both when
+ * literature notes are imported and when the Zotero library adds or changes
+ * items, so `related` picks up works without literature notes and
+ * `Publications` picks up newly imported ones.
  */
-export async function refreshAuthorPagesForCitekey(
+export async function refreshAuthorPagesForEntries(
 	plugin: ReferenceList,
-	citekey: string
+	entries: Iterable<PartialCSLEntry>
 ): Promise<void> {
 	const app = plugin.app;
-	const entry = plugin.bibManager.bibCache.get(citekey);
-	if (!entry) return;
 	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
-	const creators = creatorsOf(entry).map(displayOf);
+	const creators = new Set<string>();
+	for (const entry of entries) {
+		if (!entry) continue;
+		for (const name of creatorsOf(entry).map(displayOf)) creators.add(name);
+	}
+	if (!creators.size) return;
+
 	const folder = authorFolderPath(plugin);
 	const dir = app.vault.getAbstractFileByPath(folder);
 	if (!(dir instanceof TFolder)) return;
@@ -798,8 +804,10 @@ export async function refreshAuthorPagesForCitekey(
 		const record = index.byDisplay.get(child.basename);
 		if (!record) continue;
 		const variants = variantsOf(app, child);
-		const names = new Set([record.display, ...variants]);
-		if (!creators.some((name) => names.has(name))) continue;
+		const names = new Set(
+			[record.display, record.alias ?? '', ...variants].filter(Boolean)
+		);
+		if (![...creators].some((name) => names.has(name))) continue;
 		const rendered = await renderAuthorPage(plugin, record, {
 			variants,
 			sourcePath: child.path,
@@ -809,6 +817,16 @@ export async function refreshAuthorPagesForCitekey(
 		const merged = mergeAuthorContent(content, rendered);
 		if (merged !== content) await app.vault.modify(child, merged);
 	}
+}
+
+/** Refresh author pages touched by one imported literature note. */
+export async function refreshAuthorPagesForCitekey(
+	plugin: ReferenceList,
+	citekey: string
+): Promise<void> {
+	const entry = plugin.bibManager.bibCache.get(citekey);
+	if (!entry) return;
+	await refreshAuthorPagesForEntries(plugin, [entry]);
 }
 
 export class AuthorSuggestModal extends FuzzySuggestModal<AuthorRecord> {
