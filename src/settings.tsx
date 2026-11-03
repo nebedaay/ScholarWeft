@@ -132,7 +132,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   /** `--title-size` (rem) for the YAML-formatting snippet. */
   yamlTitleSize: DEFAULT_YAML_TITLE_SIZE,
   autoCreateAuthorNotes: true,
-  authorNoteFolder: 'Authors',
+  authorNoteFolder: '',
+  authorNoteFolderMigrated: false,
   useDefaultAuthorTemplate: true,
   authorTemplatePath: '',
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
@@ -406,8 +407,11 @@ export interface ReferenceListSettings {
   /** Create an author note when an unresolved creator link is clicked.
    *  Default true; the page is filled from the author template. */
   autoCreateAuthorNotes?: boolean;
-  /** Vault folder author notes are created in / moved to (default `Authors`). */
+  /** Vault folder author notes are created in / moved to. Blank = the
+   *  literature notes folder + `Authors`. */
   authorNoteFolder?: string;
+  /** One-time migration from the old literal `Authors` default. */
+  authorNoteFolderMigrated?: boolean;
   /** Render author notes with the bundled template (default true). */
   useDefaultAuthorTemplate?: boolean;
   /** Vault-relative custom author template, used when the above is false. */
@@ -1882,12 +1886,12 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Author notes folder'))
       .setDesc(
         t(
-          'Vault folder where author notes are created and where existing author notes are moved. Default: Authors.'
+          'Vault folder where author notes are created and where existing author notes are moved. Leave blank to use your literature notes folder + “Authors” (for example “_2 Bibliographic notes/Authors”).'
         )
       )
       .addText((text) => {
         text
-          .setPlaceholder('Authors')
+          .setPlaceholder('Default: your literature notes folder + Authors')
           .setValue(this.plugin.settings.authorNoteFolder ?? '')
           .onChange((value) => {
             this.plugin.settings.authorNoteFolder = value.trim();

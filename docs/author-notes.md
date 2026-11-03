@@ -4,7 +4,7 @@ ScholarWeft can turn a creator link into an author note. The literature-note tem
 
 ## Creating an author note
 
-- **Click an unresolved creator link.** Obsidian creates the empty note; ScholarWeft fills it from the author template and moves it to the **Authors** folder. This is on by default — turn it off under **Settings → ScholarWeft → Author notes → Create author notes on link click**.
+- **Click an unresolved creator link.** Obsidian creates the empty note; ScholarWeft fills it from the author template and moves it to the **Authors** subfolder of your literature notes folder (for example `_2 Bibliographic notes/Authors`). This is on by default — turn it off under **Settings → ScholarWeft → Author notes → Create author notes on link click**.
 - **Run “Create author note”** from the command palette. A searchable list of every creator in your library appears; pick one to create (or open) its page. Use this for a creator that is not linked anywhere yet.
 
 Only a genuinely empty new note is filled. If Obsidian's new-note template (Templater or the Basic note template) filled the file first, ScholarWeft replaces it when the file has no body; anything you have written is never overwritten.
@@ -34,7 +34,7 @@ The copy is not overwritten by plugin updates. The template uses Eta, like the l
 
 ## The Authors folder
 
-Author notes are created in the folder set under **Author notes folder** (default `Authors`). **Merge existing author notes** moves every note that is named after a creator, or that has `up: "[[Authors]]"`, into that folder and applies the template. It adds the managed fields and the Publications region; your own body text and properties are preserved.
+Author notes are created in the folder set under **Author notes folder**. Leave it blank for `<literature notes folder>/Authors` (for example `_2 Bibliographic notes/Authors`). **Merge existing author notes** moves every note that is named after a creator, or that has `up: "[[Authors]]"`, into that folder and applies the template. It adds the managed fields and the Publications region; your own body text and properties are preserved.
 
 ## Variants
 

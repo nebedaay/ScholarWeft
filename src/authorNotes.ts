@@ -34,6 +34,7 @@ import {
 	splitNote,
 } from './template/merge';
 import { t } from './lang/helpers';
+import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
 
 export const AUTHOR_TEMPLATE_ASSET = 'sw-literature-note-templates/author.eta.md';
 export const AUTHOR_OPEN = '%%sw-author-managed%%';
@@ -270,10 +271,11 @@ export function authorTemplateData(
 	plugin: ReferenceList,
 	record: AuthorRecord,
 	variants: string[] = [],
-	sourcePath = ''
+	sourcePath = '',
+	index?: AuthorIndex
 ): AuthorTemplateData {
-	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
-	const expanded = expandedRecord(record, index, variants);
+	const idx = index ?? buildAuthorIndex(plugin.bibManager.bibCache.values());
+	const expanded = expandedRecord(record, idx, variants);
 	return {
 		display: record.display,
 		alias: record.alias,
@@ -321,7 +323,11 @@ export async function readAuthorTemplate(
 export async function renderAuthorPage(
 	plugin: ReferenceList,
 	record: AuthorRecord,
-	opts: { variants?: string[]; sourcePath?: string } = {}
+	opts: {
+		variants?: string[];
+		sourcePath?: string;
+		index?: AuthorIndex;
+	} = {}
 ): Promise<string> {
 	const template =
 		(await readAuthorTemplate(plugin)) ??
@@ -341,7 +347,8 @@ export async function renderAuthorPage(
 		plugin,
 		record,
 		opts.variants ?? [],
-		opts.sourcePath ?? ''
+		opts.sourcePath ?? '',
+		opts.index
 	);
 	try {
 		return new Eta({ autoEscape: false, useWith: true, autoTrim: false }).renderString(template, data);
@@ -351,10 +358,23 @@ export async function renderAuthorPage(
 	}
 }
 
+/**
+ * The author folder: the explicit setting when set, otherwise
+ * `<literature notes folder>/Authors`. A blank literature-note folder uses the
+ * plugin's own default.
+ */
+export function authorFolderPath(plugin: ReferenceList): string {
+	const custom = (plugin.settings.authorNoteFolder ?? '').trim();
+	if (custom) return normalizePath(custom);
+	const literature =
+		(plugin.settings.literatureNoteFolder ?? '').trim() ||
+		DEFAULT_LITERATURE_NOTE_FOLDER;
+	return normalizePath(`${literature}/Authors`);
+}
+
 async function ensureAuthorFolder(plugin: ReferenceList): Promise<string> {
 	const app = plugin.app;
-	const raw = (plugin.settings.authorNoteFolder ?? '').trim() || 'Authors';
-	const path = normalizePath(raw);
+	const path = authorFolderPath(plugin);
 	const existing = app.vault.getAbstractFileByPath(path);
 	if (existing instanceof TFolder) return path;
 	if (existing) return '';
@@ -392,6 +412,37 @@ async function openFile(plugin: ReferenceList, file: TFile): Promise<void> {
 }
 
 /**
+ * A list property can end up with the same value written once unquoted and once
+ * quoted (a hand-written alias vs the template's JSON-quoted one). Collapse by
+ * the decoded value, keeping the first line's style.
+ */
+function dedupeListProperty(frontmatter: string, key: string): string {
+	const prop = parseFrontmatter(frontmatter).find((p) => p.key === key);
+	if (!prop || prop.lines.length < 2) return frontmatter;
+	const seen = new Set<string>();
+	const kept: string[] = [prop.lines[0]];
+	for (const line of prop.lines.slice(1)) {
+		const raw = line.replace(/^\s*-\s*/, '').trim();
+		let value = raw;
+		try {
+			if (raw.startsWith('"')) value = String(JSON.parse(raw));
+			else if (raw.startsWith("'") && raw.endsWith("'")) {
+				value = raw.slice(1, -1).replace(/\\'/g, "'");
+			}
+		} catch {
+			/* keep the raw text */
+		}
+		value = value.trim();
+		if (!value || seen.has(value)) continue;
+		seen.add(value);
+		kept.push(line);
+	}
+	const oldBlock = prop.lines.join('\n');
+	const newBlock = kept.join('\n');
+	return frontmatter.replace(oldBlock, newBlock);
+}
+
+/**
  * Merge an existing note's frontmatter and managed Publications region with a
  * freshly rendered author page, preserving the user's own body and properties.
  */
@@ -411,7 +462,10 @@ export function mergeAuthorContent(
 			lines: prop.lines,
 		})
 	);
-	const frontmatter = mergeFrontmatter(prior.frontmatter, specs);
+	let frontmatter = mergeFrontmatter(prior.frontmatter, specs);
+	for (const key of ['up', 'aliases', 'related', 'creator-roles']) {
+		frontmatter = dedupeListProperty(frontmatter, key);
+	}
 
 	let body = prior.body;
 	if (!body.trim()) {
@@ -445,6 +499,7 @@ export async function createAuthorPage(
 		 *  the Basic note template) instead of merging its fields into the
 		 *  author page. Used for the click-created empty note. */
 		replaceTemplate?: boolean;
+		index?: AuthorIndex;
 	} = {}
 ): Promise<TFile | null> {
 	const app = plugin.app;
@@ -462,38 +517,39 @@ export async function createAuthorPage(
 	const rendered = await renderAuthorPage(plugin, record, {
 		variants,
 		sourcePath,
+		index: opts.index,
 	});
 
 	if (opts.file instanceof TFile) {
-		if (existing instanceof TFile && existing.path !== opts.file.path) {
+		const opened = app.vault.getAbstractFileByPath(opts.file.path);
+		if (!(opened instanceof TFile)) return null;
+		if (existing instanceof TFile && existing.path !== opened.path) {
 			if (opts.open) await openFile(plugin, existing);
 			return existing;
 		}
-		const current = await app.vault.read(opts.file).catch(() => '');
-		if (current.trim()) {
-			// A generic new-note template can fill the just-created file first.
-			// Replace it only when it has NO body; real writing is never touched.
-			const body = splitNote(current).body;
-			if (!opts.replaceTemplate || body.trim()) return opts.file;
-			await app.vault.modify(opts.file, rendered);
-		} else {
-			const content =
-				existing instanceof TFile
-					? mergeAuthorContent(await app.vault.read(existing), rendered)
-					: rendered;
-			await app.vault.modify(opts.file, content);
-		}
-		if (
-			normalizePath(opts.file.path) !== target &&
-			!(existing instanceof TFile)
-		) {
-			try {
-				await app.fileManager.renameFile(opts.file, target);
-			} catch (e) {
-				console.warn('[sw:author] could not move author page', e);
+		try {
+			const current = await app.vault.read(opened);
+			if (current.trim()) {
+				// A generic new-note template can fill the just-created file first.
+				// Replace it only when it has NO body; real writing is never touched.
+				const body = splitNote(current).body;
+				if (!opts.replaceTemplate || body.trim()) return opened;
+				await app.vault.modify(opened, rendered);
+			} else {
+				const content =
+					existing instanceof TFile
+						? mergeAuthorContent(await app.vault.read(existing), rendered)
+						: rendered;
+				await app.vault.modify(opened, content);
 			}
+			if (normalizePath(opened.path) !== target && !(existing instanceof TFile)) {
+				await app.fileManager.renameFile(opened, target);
+			}
+			return opened;
+		} catch (e) {
+			console.warn('[sw:author] could not fill author page', opts.file.path, e);
+			return null;
 		}
-		return opts.file;
 	}
 
 	if (existing instanceof TFile) {
@@ -526,14 +582,22 @@ export async function maybeAutoCreateAuthorNote(
 	} catch {
 		return;
 	}
-	const content = await plugin.app.vault.read(file).catch(() => '');
+	// auto-note-mover/Templater may have moved the just-created file while we
+	// waited for the library; use the current object at that path.
+	const current = plugin.app.vault.getAbstractFileByPath(file.path);
+	if (!(current instanceof TFile)) return;
+	const content = await plugin.app.vault.read(current).catch(() => '');
 	// Only a genuinely empty note: never overwrite Templater/other template
 	// output, frontmatter, or anything the user has started typing.
 	if (content.trim()) return;
 	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
-	const record = index.get(file.basename);
+	const record = index.get(current.basename);
 	if (!record) return;
-	await createAuthorPage(plugin, record, { file, replaceTemplate: true });
+	await createAuthorPage(plugin, record, {
+		file: current,
+		replaceTemplate: true,
+		index,
+	});
 }
 
 function hasAuthorsUp(app: App, file: TFile): boolean {
@@ -572,36 +636,48 @@ export async function mergeExistingAuthorNotes(
 	let merged = 0;
 	let moved = 0;
 
-	for (const file of app.vault.getMarkdownFiles()) {
+	for (const listed of app.vault.getMarkdownFiles()) {
+		// Another plugin (auto-note-mover, Templater) can move the just-created
+		// note while this loop runs. Re-fetch and skip a path that has gone,
+		// and never let one bad file abort the whole merge.
+		const file = app.vault.getAbstractFileByPath(listed.path);
+		if (!(file instanceof TFile)) continue;
 		if (file.basename === 'Authors') continue; // the MOC, not a person
-		const record =
-			index.get(file.basename) ??
-			(hasAuthorsUp(app, file) ? recordFromDisplay(file.basename) : null);
-		if (!record) continue;
+		try {
+			const record =
+				index.get(file.basename) ??
+				(hasAuthorsUp(app, file) ? recordFromDisplay(file.basename) : null);
+			if (!record) continue;
 
-		const target = normalizePath(
-			`${folder ? `${folder}/` : ''}${fileSafe(record.display)}.md`
-		);
-		const variants = variantsOf(app, file);
-		const rendered = await renderAuthorPage(plugin, record, {
-			variants,
-			sourcePath: file.path,
-		});
-		const current = await app.vault.read(file);
-		const content = current.trim()
-			? mergeAuthorContent(current, rendered)
-			: rendered;
-		await app.vault.modify(file, content);
-		merged++;
-		if (file.path !== target) {
-			if (!(app.vault.getAbstractFileByPath(target) instanceof TFile)) {
-				try {
-					await app.fileManager.renameFile(file, target);
-					moved++;
-				} catch (e) {
-					console.warn('[sw:author] could not move author note', e);
+			const target = normalizePath(
+				`${folder ? `${folder}/` : ''}${fileSafe(record.display)}.md`
+			);
+			const variants = variantsOf(app, file);
+			const rendered = await renderAuthorPage(plugin, record, {
+				variants,
+				sourcePath: file.path,
+			});
+			const current = await app.vault.read(file);
+			const content = current.trim()
+				? mergeAuthorContent(current, rendered)
+				: rendered;
+			await app.vault.modify(file, content);
+			merged++;
+			if (file.path !== target) {
+				if (!(app.vault.getAbstractFileByPath(target) instanceof TFile)) {
+					try {
+						// The basename is unchanged, so no wikilink needs updating.
+						// A direct adapter rename avoids Obsidian's whole-vault link
+						// rewrite (which made a 40-note merge take minutes).
+						await app.vault.adapter.rename(file.path, target);
+						moved++;
+					} catch (e) {
+						console.warn('[sw:author] could not move author note', e);
+					}
 				}
 			}
+		} catch (e) {
+			console.warn('[sw:author] skipped author note during merge', file.path, e);
 		}
 	}
 	return { merged, moved };
@@ -620,8 +696,8 @@ export async function refreshAuthorPagesForCitekey(
 	if (!entry) return;
 	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
 	const creators = creatorsOf(entry).map(displayOf);
-	const folder = (plugin.settings.authorNoteFolder ?? '').trim() || 'Authors';
-	const dir = app.vault.getAbstractFileByPath(normalizePath(folder));
+	const folder = authorFolderPath(plugin);
+	const dir = app.vault.getAbstractFileByPath(folder);
 	if (!(dir instanceof TFolder)) return;
 
 	for (const child of dir.children) {
@@ -634,6 +710,7 @@ export async function refreshAuthorPagesForCitekey(
 		const rendered = await renderAuthorPage(plugin, record, {
 			variants,
 			sourcePath: child.path,
+			index,
 		});
 		const content = await app.vault.read(child);
 		const merged = mergeAuthorContent(content, rendered);
@@ -661,7 +738,7 @@ export class AuthorSuggestModal extends FuzzySuggestModal<AuthorRecord> {
 	}
 
 	onChooseItem(record: AuthorRecord): void {
-		void createAuthorPage(this.plugin, record, { open: true });
+		void createAuthorPage(this.plugin, record, { open: true, index: this.index });
 	}
 }
 

@@ -139,6 +139,14 @@ describe('mergeAuthorContent()', () => {
     expect(merged).not.toContain('[[@old|ref]]');
   });
 
+
+  it('collapses an alias already present unquoted and quoted', () => {
+    const unquoted = existing.replace('  - "Existing"', '  - Existing');
+    const merged = mergeAuthorContent(unquoted, rendered);
+    expect(merged.match(/Existing/g)).toHaveLength(1);
+    expect(merged.match(/Jane Smith/g)).toHaveLength(1);
+  });
+
   it('uses the full rendered body for an empty note', () => {
     const empty = '---\nup:\n  - "[[Home]]"\n---\n';
     const merged = mergeAuthorContent(empty, rendered);

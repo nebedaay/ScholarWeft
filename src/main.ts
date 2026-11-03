@@ -2383,7 +2383,16 @@ export default class ReferenceList extends Plugin {
       saved.missingLinkedNoteAction = 'onInsert';
     }
 
+    // The author folder used to default to a literal `Authors`. It now defaults
+    // to <literature notes folder>/Authors; migrate the old default once.
+    const migrateAuthorFolder = saved.authorNoteFolderMigrated !== true;
+    if (migrateAuthorFolder) {
+      if ((saved.authorNoteFolder ?? '') === 'Authors') saved.authorNoteFolder = '';
+      saved.authorNoteFolderMigrated = true;
+    }
+
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    if (migrateAuthorFolder) await this.saveSettings();
   }
 
   // Keep CiteSuggest in the right place in Obsidian's shared EditorSuggest
