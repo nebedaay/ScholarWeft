@@ -1977,7 +1977,7 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
       .setName(t('Merge existing author notes'))
       .setDesc(
         t(
-          'Move every note named after a creator, and every note with up: "[[Authors]]", into the author folder and apply the template. The user’s own body text and properties are preserved.'
+          'Move notes whose filename exactly matches a creator\'s imported display name — two or more words, or one word with up: "[[Authors]]" — into the author folder and apply the template. Notes that do not match are left alone; term and Midad pages are skipped. Body text and user properties are preserved.'
         )
       )
       .addButton((button) =>

@@ -18,6 +18,7 @@ import { Eta } from 'eta';
 import {
   buildAuthorIndex,
   mergeAuthorContent,
+  planAuthorNote,
 } from '../authorNotes';
 import type { PartialCSLEntry } from '../bib/types';
 
@@ -41,6 +42,16 @@ const entries: PartialCSLEntry[] = [
     id: 'institute2000',
     title: 'An institutional work',
     _creators: [{ role: 'author', literal: 'An Institute' }],
+  },
+  {
+    id: 'wehr',
+    title: 'A dictionary',
+    _creators: [{ role: 'author', family: 'Wehr', given: 'Hans' }],
+  },
+  {
+    id: 'youtube',
+    title: 'A video',
+    _creators: [{ role: 'author', literal: 'kashf' }],
   },
 ];
 
@@ -72,6 +83,54 @@ describe('buildAuthorIndex()', () => {
     expect(record.alias).toBe('John Doe');
     expect([...record.citekeys]).toEqual(['smith2000']);
     expect(record.roles.has('editor')).toBe(true);
+  });
+});
+
+describe('planAuthorNote()', () => {
+  const index = buildAuthorIndex(entries);
+  const classify = (
+    basename: string,
+    frontmatter: Record<string, unknown> | undefined,
+    up = false
+  ) => planAuthorNote({ basename, frontmatter, up, index });
+
+  it('merges a multi-word exact creator name without up: Authors', () => {
+    expect(classify('Smith, Jane', {}, false)).not.toBeNull();
+    expect(classify('Wehr, Hans', {}, false)).not.toBeNull();
+  });
+
+  it('merges a multi-word literal creator name', () => {
+    expect(classify('An Institute', {}, false)).not.toBeNull();
+  });
+
+  it('merges a one-word exact creator only with up: Authors', () => {
+    expect(classify('kashf', {}, false)).toBeNull();
+    expect(classify('kashf', { up: ['[[Authors]]'] }, true)).not.toBeNull();
+  });
+
+  it('never matches the First Last alias', () => {
+    expect(classify('Hans Wehr', { up: ['[[Authors]]'] }, true)).toBeNull();
+  });
+
+  it('ignores a title with an extra comma', () => {
+    expect(classify('Smith, Jane, Jr.', {}, false)).toBeNull();
+  });
+
+  it('ignores unrelated notes', () => {
+    expect(classify('Nobody, Unrelated', {}, false)).toBeNull();
+    expect(classify('A Note', {}, false)).toBeNull();
+  });
+
+  it('ignores Midad repository notes', () => {
+    expect(
+      classify('Hans Wehr', {
+        'midad-up': ['[[Midad Arabic Sources]]'],
+      })
+    ).toBeNull();
+  });
+
+  it('ignores dictionary/term pages', () => {
+    expect(classify('kashf', { term: 'kashf' }, true)).toBeNull();
   });
 });
 

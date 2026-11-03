@@ -1,10 +1,10 @@
 # Author notes
 
-ScholarWeft can turn a creator link into an author note. The literature-note template writes creators as `[[Last, First]]` (or a literal name such as `[[An Institute]]`), and clicking an unresolved one creates a note with a template, an alias, and the works that mention that person.
+ScholarWeft can turn a creator link into an author note. The literature-note template writes creators as `[[Last, First]]` (or a literal name such as `[[An Institute]]`), and clicking an unresolved two-part creator link creates a note with a template, an alias, and the works that mention that person.
 
 ## Creating an author note
 
-- **Click an unresolved creator link.** Obsidian creates the empty note; ScholarWeft fills it from the author template and moves it to the **Authors** subfolder of your literature notes folder (for example `_2 Bibliographic notes/Authors`). This is on by default — turn it off under **Settings → ScholarWeft → Author notes → Create author notes on link click**.
+- **Click an unresolved creator link.** Obsidian creates the empty note; ScholarWeft fills it from the author template and moves it to the **Authors** subfolder of your literature notes folder (for example `_2 Bibliographic notes/Authors`). This is on by default — turn it off under **Settings → ScholarWeft → Author notes → Create author notes on link click**. Only an exact `Last, First` display name for a two-part creator is filled automatically. A literal creator (for example a YouTube username), a `First Last` alias, or any other name is left for the **Create author note** command, so a similarly named note is never claimed by accident.
 - **Run “Create author note”** from the command palette. A searchable list of every creator in your library appears; pick one to create (or open) its page. Use this for a creator that is not linked anywhere yet.
 
 Only a genuinely empty new note is filled. If Obsidian's new-note template (Templater or the Basic note template) filled the file first, ScholarWeft replaces it when the file has no body; anything you have written is never overwritten.
@@ -34,7 +34,13 @@ The copy is not overwritten by plugin updates. The template uses Eta, like the l
 
 ## The Authors folder
 
-Author notes are created in the folder set under **Author notes folder**. Leave it blank for `<literature notes folder>/Authors` (for example `_2 Bibliographic notes/Authors`). **Merge existing author notes** moves every note that is named after a creator, or that has `up: "[[Authors]]"`, into that folder and applies the template. It adds the managed fields and the Publications region; your own body text and properties are preserved.
+Author notes are created in the folder set under **Author notes folder**. Leave it blank for `<literature notes folder>/Authors` (for example `_2 Bibliographic notes/Authors`).
+
+`up: "[[Authors]]"` still marks a note as an author note, but it is not enough by itself to merge a note whose filename does not match an imported creator display.
+
+**Merge existing author notes** compares each note's filename with the exact display name ScholarWeft imports for a creator in your library: `Last, First`, or a literal name such as `One Long Author Name`. A filename of two or more words merges when it matches. A one-word filename merges only when it also has `up: "[[Authors]]"`. The merge applies the template and updates the managed fields and the Publications region; your own body text and properties are preserved.
+
+Notes whose filenames do not match an imported display name are left alone. Dictionary/term pages (`term:`) and Midad repository notes (`midad-*` properties, including `Hans Wehr`) are skipped. The merge matches only the imported display name, never the `First Last` alias, so Midad's `Hans Wehr` repository note is not treated as the `Wehr, Hans` author page.
 
 ## Variants
 

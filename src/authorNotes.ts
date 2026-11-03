@@ -591,8 +591,10 @@ export async function maybeAutoCreateAuthorNote(
 	// output, frontmatter, or anything the user has started typing.
 	if (content.trim()) return;
 	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
-	const record = index.get(current.basename);
-	if (!record) return;
+	// Only the exact display name (Last, First) of a two-part creator. Not an
+	// alias (Midad's "Hans Wehr") and not a literal creator (a YouTube user).
+	const record = index.byDisplay.get(current.basename);
+	if (!record || record.literal || !record.given) return;
 	await createAuthorPage(plugin, record, {
 		file: current,
 		replaceTemplate: true,
@@ -627,25 +629,85 @@ function hasAuthorsUp(app: App, file: TFile): boolean {
 	);
 }
 
-function recordFromDisplay(display: string): AuthorRecord {
-	const comma = display.indexOf(',');
-	const family = comma === -1 ? display : display.slice(0, comma).trim();
-	const given = comma === -1 ? '' : display.slice(comma + 1).trim();
-	return {
-		display,
-		alias: family && given ? `${given} ${family}` : null,
-		family,
-		given,
-		literal: comma === -1 ? display : '',
-		roles: new Set(),
-		citekeys: new Set(),
-		tags: new Set(),
-	};
+export interface AuthorMergeCandidate {
+	file: TFile;
+	record: AuthorRecord;
 }
 
-/** Move/merge every existing author note into the Authors folder. */
-export async function mergeExistingAuthorNotes(
-	plugin: ReferenceList
+/** A name is a strong author signal when it has at least two words. */
+function wordCount(name: string): number {
+	return name.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/**
+ * Decide whether a note is a merge candidate.
+ *
+ * The decisive test is the filename: it must equal the exact display form of
+ * a creator in the library (`Last, First`, or a literal such as `One Long
+ * Author Name`). A two-word-or-longer match is enough by itself. A one-word
+ * name is merged only when it also has `up: "[[Authors]]"`, because a single
+ * word is otherwise too easy to collide with an ordinary note. Aliases are
+ * deliberately excluded: Midad's `Hans Wehr` must never become `Wehr, Hans`.
+ */
+export function planAuthorNote(input: {
+	basename: string;
+	frontmatter: Record<string, unknown> | undefined;
+	up: boolean;
+	index: AuthorIndex;
+}): AuthorRecord | null {
+	const { basename, frontmatter, up, index } = input;
+	// Dictionary/term pages and Midad's generated repository notes are not
+	// author notes, even when a creator shares their name.
+	if (frontmatter?.['term']) return null;
+	if (
+		frontmatter &&
+		Object.keys(frontmatter).some((key) => key.startsWith('midad-'))
+	) {
+		return null;
+	}
+	if (basename === 'Authors') return null;
+
+	const record = index.byDisplay.get(basename); // exact display, NOT an alias
+	if (!record) return null;
+	if (wordCount(basename) >= 2) return record;
+	return up ? record : null;
+}
+
+function planForFile(
+	app: App,
+	index: AuthorIndex,
+	file: TFile
+): AuthorRecord | null {
+	const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter as
+		| Record<string, unknown>
+		| undefined;
+	return planAuthorNote({
+		basename: file.basename,
+		frontmatter,
+		up: hasAuthorsUp(app, file),
+		index,
+	});
+}
+
+/** Return every note that should be merged into an author page. */
+export function planAuthorMerge(plugin: ReferenceList): AuthorMergeCandidate[] {
+	const app = plugin.app;
+	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
+	const candidates: AuthorMergeCandidate[] = [];
+	for (const listed of app.vault.getMarkdownFiles()) {
+		if (!isMergeablePath(listed.path)) continue;
+		const file = app.vault.getAbstractFileByPath(listed.path);
+		if (!(file instanceof TFile)) continue;
+		const record = planForFile(app, index, file);
+		if (record) candidates.push({ file, record });
+	}
+	return candidates;
+}
+
+/** Merge selected candidates; the index is built once for all of them. */
+export async function mergeAuthorCandidates(
+	plugin: ReferenceList,
+	candidates: AuthorMergeCandidate[]
 ): Promise<{ merged: number; moved: number }> {
 	const app = plugin.app;
 	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
@@ -653,29 +715,18 @@ export async function mergeExistingAuthorNotes(
 	let merged = 0;
 	let moved = 0;
 
-	for (const listed of app.vault.getMarkdownFiles()) {
-		// Another plugin (auto-note-mover, Templater) can move the just-created
-		// note while this loop runs. Re-fetch and skip a path that has gone,
-		// and never let one bad file abort the whole merge.
-		if (!isMergeablePath(listed.path)) continue;
-		const file = app.vault.getAbstractFileByPath(listed.path);
+	for (const candidate of candidates) {
+		const file = app.vault.getAbstractFileByPath(candidate.file.path);
 		if (!(file instanceof TFile)) continue;
-		if (file.basename === 'Authors') continue; // the MOC, not a person
-		// Concept/dictionary pages can carry up: Authors without being people.
-		if (app.metadataCache.getFileCache(file)?.frontmatter?.['term']) continue;
 		try {
-			const record =
-				index.get(file.basename) ??
-				(hasAuthorsUp(app, file) ? recordFromDisplay(file.basename) : null);
-			if (!record) continue;
-
 			const target = normalizePath(
-				`${folder ? `${folder}/` : ''}${fileSafe(record.display)}.md`
+				`${folder ? `${folder}/` : ''}${fileSafe(candidate.record.display)}.md`
 			);
 			const variants = variantsOf(app, file);
-			const rendered = await renderAuthorPage(plugin, record, {
+			const rendered = await renderAuthorPage(plugin, candidate.record, {
 				variants,
 				sourcePath: file.path,
+				index,
 			});
 			const current = await app.vault.read(file);
 			const content = current.trim()
@@ -722,7 +773,7 @@ export async function refreshAuthorPagesForCitekey(
 
 	for (const child of dir.children) {
 		if (!(child instanceof TFile) || child.extension !== 'md') continue;
-		const record = index.get(child.basename);
+		const record = index.byDisplay.get(child.basename);
 		if (!record) continue;
 		const variants = variantsOf(app, child);
 		const names = new Set([record.display, ...variants]);
@@ -791,9 +842,15 @@ export async function copyAuthorTemplateToVault(
 export async function mergeAuthorNotesWithNotice(
 	plugin: ReferenceList
 ): Promise<void> {
+	const candidates = planAuthorMerge(plugin);
+	if (!candidates.length) {
+		new Notice(t('No author notes to merge.'), 6000);
+		return;
+	}
+
 	const notice = new Notice(t('Merging author notes…'), 0);
 	try {
-		const { merged, moved } = await mergeExistingAuthorNotes(plugin);
+		const { merged, moved } = await mergeAuthorCandidates(plugin, candidates);
 		notice.hide();
 		new Notice(
 			t('Merged {merged} author notes ({moved} moved to the Authors folder).')
