@@ -364,6 +364,9 @@ export default class ReferenceList extends Plugin {
       this.app.workspace.on('file-open', (file) => {
         if (file instanceof TFile && hasAuthorsUp(this.app, file)) {
           void ensureAuthorNoteMaterial(this, file);
+          // Opening the main note is a natural moment to apply any variants
+          // that were added while another plugin/older build was active.
+          void this.authorVariantTracker?.sync();
         }
       })
     );
