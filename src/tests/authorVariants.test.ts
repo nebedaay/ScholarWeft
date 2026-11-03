@@ -24,6 +24,9 @@ describe('author variant names', () => {
       'Smith, John Middle'
     );
     expect(cleanVariantName('  Smith, John Middle  ')).toBe('Smith, John Middle');
+    expect(
+      cleanVariantName('[[Inyās [Niasse] al-Kawlakhī, Ibrāhīm]]')
+    ).toBe('Inyās [Niasse] al-Kawlakhī, Ibrāhīm');
   });
 
   it('adds the variant and its First Last autocomplete alias', () => {
@@ -73,6 +76,25 @@ describe('rewriteCreatorFrontmatter()', () => {
     const result = rewriteCreatorFrontmatter(note, new Map());
     expect(result.changed).toBe(false);
     expect(result.content).toBe(note);
+  });
+
+  it('rewrites a creator name containing square brackets', () => {
+    const bracketed = [
+      '---',
+      'authors:',
+      '  - "[[Inyās [Niasse] al-Kawlakhī, Ibrāhīm]]"',
+      '---',
+      'Body.',
+      '',
+    ].join('\n');
+    const result = rewriteCreatorFrontmatter(
+      bracketed,
+      new Map([['Inyās [Niasse] al-Kawlakhī, Ibrāhīm', 'BN']])
+    );
+    expect(result.changed).toBe(true);
+    expect(result.content).toContain(
+      '  - "[[BN|Inyās [Niasse] al-Kawlakhī, Ibrāhīm]]"'
+    );
   });
 
   it('rewrites a generated First Middle Last display form too', () => {

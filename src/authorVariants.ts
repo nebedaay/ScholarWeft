@@ -43,8 +43,10 @@ import { t } from './lang/helpers';
 export function cleanVariantName(raw: unknown): string {
   if (typeof raw !== 'string') return '';
   let value = raw.trim();
-  const link = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/.exec(value);
-  if (link) value = link[1];
+  const link = /\[\[([\s\S]*?)\]\]/.exec(value);
+  if (link) {
+    value = link[1].split('|')[0].split('#')[0];
+  }
   value = value.replace(/^["']|["']$/g, '').trim();
   return value;
 }
@@ -283,13 +285,17 @@ function rewriteCreatorLine(
   line: string,
   mappings: ReadonlyMap<string, string>
 ): string {
-  const link = /\[\[([^\]|#]+)(#[^\]|]+)?(?:\|([^\]]+))?\]\]/g;
-  return line.replace(link, (whole, target: string, fragment?: string, display?: string) => {
-    const name = target.trim();
+  return line.replace(/\[\[([\s\S]*?)\]\]/g, (whole, inner: string) => {
+    const pipe = inner.indexOf('|');
+    const targetPart = (pipe === -1 ? inner : inner.slice(0, pipe)).trim();
+    const hash = targetPart.indexOf('#');
+    const name = (hash === -1 ? targetPart : targetPart.slice(0, hash)).trim();
+    const fragment = hash === -1 ? '' : targetPart.slice(hash);
+    const display = pipe === -1 ? undefined : inner.slice(pipe + 1).trim();
     const main = mappings.get(name);
     if (!main) return whole;
     const shown = (display ?? name).trim() || name;
-    return `[[${main}${fragment ?? ''}|${shown}]]`;
+    return `[[${main}${fragment}|${shown}]]`;
   });
 }
 
@@ -297,9 +303,10 @@ function valueHasTarget(value: unknown, targets: ReadonlySet<string>): boolean {
   const values = Array.isArray(value) ? value : [value];
   for (const item of values) {
     if (typeof item !== 'string') continue;
-    const link = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g;
+    const link = /\[\[([\s\S]*?)\]\]/g;
     for (const match of item.matchAll(link)) {
-      if (targets.has(match[1].trim())) return true;
+      const target = match[1].split('|')[0].split('#')[0].trim();
+      if (targets.has(target)) return true;
     }
   }
   return false;

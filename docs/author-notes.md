@@ -51,7 +51,7 @@ variants:
   - Al-Kawlakhī, al-Shaykh Ibrāhīm b. ʿAbdallāh
 ```
 
-`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal — written as plain text, not wikilinks. They are not aliases; an entry in `aliases` never becomes a variant. For link rewriting and template resolution, a variant is used only when its name is currently present in the Zotero cache as a creator display or `First Last` alias; non-matching variants are still retained in the main note (and the note is still given author-template material), but they cannot resolve works that are not in the cache.
+`variants` is the source of truth. Values are exact creator display names (square brackets in a name are preserved as part of the name) — `Last, First`, `Last, First Middle`, or a multi-word literal — written as plain text, not wikilinks. They are not aliases; an entry in `aliases` never becomes a variant. For link rewriting and template resolution, a variant is used only when its name is currently present in the Zotero cache as a creator display or `First Last` alias; non-matching variants are still retained in the main note (and the note is still given author-template material), but they cannot resolve works that are not in the cache.
 
 **Link author name as a variant** is available when the current note has `up: "[[Authors]]"`; its name does not have to be in the Zotero cache. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
 

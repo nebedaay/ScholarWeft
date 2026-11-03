@@ -195,8 +195,10 @@ export function variantsOf(app: App, file: TFile): string[] {
 	const out: string[] = [];
 	for (const value of values) {
 		if (typeof value !== 'string') continue;
-		const links = [...value.matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)];
-		if (links.length) out.push(...links.map((m) => m[1].trim()));
+		const links = [...value.matchAll(/\[\[([\s\S]*?)\]\]/g)];
+		if (links.length) {
+			out.push(...links.map((m) => m[1].split('|')[0].split('#')[0].trim()));
+		}
 		else if (value.trim()) out.push(value.trim());
 	}
 	return [...new Set(out)];
