@@ -46,7 +46,7 @@
 <% add_property('publication', item.containerTitle ? wikilink(item.containerTitle) : null); -%>
 <% add_property('place', item.place); -%>
 <% add_property('publisher', item.publisher ? wikilink(item.publisher) : null); -%>
-<% add_property('volumes', item.numberOfVolumes); -%>
+<% add_property('volumes', item.numberOfVolumes && !Number.isNaN(Number(item.numberOfVolumes)) ? Number(item.numberOfVolumes) : item.numberOfVolumes); -%>
 <% add_property('number', item.number); -%>
 <% add_property('genre', item.genre); -%>
 <% add_property('authority', item.authority); -%>

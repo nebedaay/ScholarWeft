@@ -97,6 +97,25 @@ describe('rewriteCreatorFrontmatter()', () => {
     );
   });
 
+  it('rewrites a name that starts with a square-bracketed surname', () => {
+    const bracketFirst = [
+      '---',
+      'authors:',
+      '  - "[[[Niasse], Ibrāhīm b. ʿAbd Allāh]]"',
+      '---',
+      'Body.',
+      '',
+    ].join('\n');
+    const result = rewriteCreatorFrontmatter(
+      bracketFirst,
+      new Map([['[Niasse], Ibrāhīm b. ʿAbd Allāh', 'BN']])
+    );
+    expect(result.changed).toBe(true);
+    expect(result.content).toContain(
+      '  - "[[BN|[Niasse], Ibrāhīm b. ʿAbd Allāh]]"'
+    );
+  });
+
   it('rewrites a generated First Middle Last display form too', () => {
     const withDisplayForm = note.replace(
       '- "[[Smith, John Middle]]"',

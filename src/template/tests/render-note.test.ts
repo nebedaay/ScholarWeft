@@ -393,7 +393,7 @@ describe('sw-note.eta.md — end-to-end render', () => {
     expect(richOut).toContain('abstract: Abstract text');
     expect(richOut).toContain('series: "[[Series]]"');
     expect(richOut).toContain('series-number: "5"');
-    expect(richOut).toContain('volumes: "3"');
+    expect(richOut).toContain('volumes: 3');
 
     const at = (key: string) => richOut.indexOf(`\n${key}:`);
     expect(at('authors')).toBeLessThan(at('editors'));
