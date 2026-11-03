@@ -788,6 +788,19 @@ function recordForAuthorNote(
 	return record;
 }
 
+/** Give a promoted author note the template block if it has none yet. */
+export async function ensureAuthorNoteMaterial(
+	plugin: ReferenceList,
+	file: TFile
+): Promise<void> {
+	const app = plugin.app;
+	const current = app.vault.getAbstractFileByPath(file.path);
+	if (!(current instanceof TFile) || !isMergeablePath(current.path)) return;
+	const content = await app.vault.read(current).catch(() => '');
+	if (content.includes(AUTHOR_OPEN)) return;
+	await refreshAuthorPage(plugin, current);
+}
+
 /** Refresh one author page from the loaded library (used by variant linking). */
 export async function refreshAuthorPage(
 	plugin: ReferenceList,

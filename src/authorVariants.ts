@@ -23,10 +23,12 @@ import {
 
 import type ReferenceList from './main';
 import {
+  AUTHOR_OPEN,
   CSL_CREATOR_ROLES,
   buildAuthorIndex,
   hasAuthorsUp,
   isMergeablePath,
+  ensureAuthorNoteMaterial,
   refreshAuthorPage,
   variantsOf,
 } from './authorNotes';
@@ -387,11 +389,6 @@ export async function linkAuthorVariant(
   if (!(app.vault.getAbstractFileByPath(main.path) instanceof TFile)) return false;
   const variant = cleanVariantName(current.basename);
   if (!variant) return false;
-  const cachedNames = cachedAuthorNames(plugin);
-  if (!cachedNames.has(variant)) {
-    new Notice(t('This author name is not in the Zotero cache.'), 8000);
-    return false;
-  }
   try {
     const allVariants = await addAuthorVariants(plugin, main, [variant], {
       addVariants: true,
@@ -509,6 +506,9 @@ export class AuthorVariantTracker {
     try {
       const index = buildAuthorVariantIndex(this.plugin);
       await this.normalizeVariantFormatting();
+      for (const file of authorNoteFiles(this.plugin)) {
+        await ensureAuthorNoteMaterial(this.plugin, file);
+      }
       const current = index.byLink;
       if (!current.size) {
         this.lastLinks.clear();
@@ -619,6 +619,11 @@ export class AuthorVariantTracker {
         .map(cleanVariantName)
         .filter((name) => name && name !== current.basename)
     );
+    // An existing note promoted by adding up: Authors and variants still needs
+    // the author template block, not just link rewrites.
+    if (!(await app.vault.read(current)).includes(AUTHOR_OPEN)) {
+      await refreshAuthorPage(this.plugin, current, variants);
+    }
     const prior = this.known.get(current.path);
     if (!prior) {
       this.known.set(current.path, new Set(variants));
@@ -634,8 +639,8 @@ export class AuthorVariantTracker {
     try {
       const cachedNames = cachedAuthorNames(this.plugin);
       const accepted = variants.filter((variant) => cachedNames.has(variant));
-      if (!accepted.length) return;
-      // The user already wrote the variants; add only their derived aliases.
+      // Add aliases only for cache-known variants, but still materialize the
+      // author template for a note whose variants are deliberate local names.
       const allVariants = await addAuthorVariants(this.plugin, main, accepted, {
         addVariants: false,
       });
@@ -646,11 +651,13 @@ export class AuthorVariantTracker {
           mappings.set(name, main.basename);
         }
       }
-      await rewriteCreatorLinks(this.plugin, mappings, {
-        skipPaths: new Set([main.path]),
-      });
-      for (const [name, mainName] of mappings) {
-        this.lastLinks.set(name, mainName);
+      if (mappings.size) {
+        await rewriteCreatorLinks(this.plugin, mappings, {
+          skipPaths: new Set([main.path]),
+        });
+        for (const [name, mainName] of mappings) {
+          this.lastLinks.set(name, mainName);
+        }
       }
     } catch (e) {
       console.warn('[sw:author] could not apply author variants', main.path, e);

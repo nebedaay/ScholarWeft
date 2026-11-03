@@ -68,6 +68,7 @@ import {
   hasAuthorsUp,
   maybeAutoCreateAuthorNote,
   mergeAuthorNotesWithNotice,
+  ensureAuthorNoteMaterial,
   refreshAuthorPagesForCitekey,
   refreshAuthorPagesForEntries,
 } from './authorNotes';
@@ -357,6 +358,13 @@ export default class ReferenceList extends Plugin {
       this.app.workspace.on('file-open', () => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (view) restorePendingCursor(view);
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => {
+        if (file instanceof TFile && hasAuthorsUp(this.app, file)) {
+          void ensureAuthorNoteMaterial(this, file);
+        }
       })
     );
 

@@ -36,7 +36,7 @@ The copy is not overwritten by plugin updates. The template uses Eta, like the l
 
 Author notes are created in the folder set under **Author notes folder**. Leave it blank for `<literature notes folder>/Authors` (for example `_2 Bibliographic notes/Authors`).
 
-`up: "[[Authors]]"` still marks a note as an author note, but it is not enough by itself to merge a note whose filename does not match an imported creator display. The main note's filename does not have to be a Zotero creator name: if it has `up: "[[Authors]]"` and at least one `variants` entry matching a cached creator, it is treated as an author note and its variants' works populate `related` and `## Publications`.
+`up: "[[Authors]]"` still marks a note as an author note, but it is not enough by itself to merge a note whose filename does not match an imported creator display. The main note's filename does not have to be a Zotero creator name: if it has `up: "[[Authors]]"` and at least one `variants` entry matching a cached creator, it is treated as an author note and its variants' works populate `related` and `## Publications`. Opening or editing a promoted note adds the template block if it is missing.
 
 **Merge existing author notes** compares each note's filename with the exact display name ScholarWeft imports for a creator in your library: `Last, First`, or a literal name such as `One Long Author Name`. A filename of two or more words merges when it matches. A one-word filename merges only when it also has `up: "[[Authors]]"`. The merge applies the template and updates the managed fields and the Publications region; your own body text and properties are preserved.
 
@@ -51,9 +51,9 @@ variants:
   - Al-Kawlakhī, al-Shaykh Ibrāhīm b. ʿAbdallāh
 ```
 
-`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal — written as plain text, not wikilinks. They are not aliases; an entry in `aliases` never becomes a variant. A variant is only used when its name is currently present in the Zotero cache as a creator display or `First Last` alias; other entries are ignored.
+`variants` is the source of truth. Values are exact creator display names — `Last, First`, `Last, First Middle`, or a multi-word literal — written as plain text, not wikilinks. They are not aliases; an entry in `aliases` never becomes a variant. For link rewriting and template resolution, a variant is used only when its name is currently present in the Zotero cache as a creator display or `First Last` alias; non-matching variants are still retained in the main note (and the note is still given author-template material), but they cannot resolve works that are not in the cache.
 
-**Link author name as a variant** is available when the current note has `up: "[[Authors]]"` and its name is in the Zotero cache. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
+**Link author name as a variant** is available when the current note has `up: "[[Authors]]"`; its name does not have to be in the Zotero cache. It opens a searchable picker prefilled with the current note name; choose the main author. The command then:
 
 - adds the current note name to the main note's `variants`;
 - adds autocomplete aliases for the variant: the variant itself and its `First Middle Last` form;
