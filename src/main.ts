@@ -61,7 +61,7 @@ import {
   stableKeyGroupID,
   unmanagedNoteCitekey,
 } from './template/note-lookup';
-import { moveNoteIntoFolder, restorePendingCursor } from './noteImport';
+import { maybeImportClickedCitekey, moveNoteIntoFolder, restorePendingCursor } from './noteImport';
 import {
   AuthorSuggestModal,
   buildAuthorIndex,
@@ -1031,6 +1031,7 @@ export default class ReferenceList extends Plugin {
     this.registerEvent(
       app.vault.on('create', (file) => {
         if (!(file instanceof TFile)) return;
+        void maybeImportClickedCitekey(this, file);
         void maybeAutoCreateAuthorNote(this, file);
         this.scheduleAuthorPageRefresh(file);
       })

@@ -297,6 +297,8 @@ export default {
   'Update citekeys automatically': 'Update citekeys automatically',
   'Update notes when the template changes':
     'Update notes when the template changes',
+  'Import literature note when clicking an unresolved @citekey link': 'Import literature note when clicking an unresolved @citekey link',
+  'When you click an unresolved [[@citekey]] link, import that item from Zotero and replace the empty link stub with the literature note. Only empty @citekey notes are affected.': 'When you click an unresolved [[@citekey]] link, import that item from Zotero and replace the empty link stub with the literature note. Only empty @citekey notes are affected.',
   'Insert literature notes for linked citations':
     'Insert literature notes for linked citations',
   'What to do when a linked citation ([[@key]]) has no literature note yet. Notes are created quietly from Zotero — never opened.':

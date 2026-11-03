@@ -103,6 +103,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   ownNoteImageFolder: 'Attachments',
   /** Open the note when exactly ONE literature note is imported (default on). */
   openImportedNote: true,
+  /** Import a literature note when an unresolved [[@citekey]] link is clicked. */
+  importLitNoteOnLinkClick: true,
   /** How missing literature notes for linked citations are filled in:
    *  `all` / `onInsert` / `never` (default). */
   missingLinkedNoteAction: 'never',
@@ -317,6 +319,8 @@ export interface ReferenceListSettings {
    * migrated to `onInsert` on load.
    */
   missingLinkedNoteAction?: MissingLinkedNoteAction;
+  /** Import a literature note when an unresolved [[@citekey]] link is clicked. */
+  importLitNoteOnLinkClick?: boolean;
   /** @deprecated superseded by `missingLinkedNoteAction`. */
   addNoteForLinkedCitations?: boolean;
   /**
@@ -1366,6 +1370,22 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           'never'
         );
       });
+
+    new Setting(containerEl)
+      .setName(t('Import literature note when clicking an unresolved @citekey link'))
+      .setDesc(
+        t(
+          'When you click an unresolved [[@citekey]] link, import that item from Zotero and replace the empty link stub with the literature note. Only empty @citekey notes are affected.'
+        )
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.importLitNoteOnLinkClick !== false)
+          .onChange(async (value) => {
+            this.plugin.settings.importLitNoteOnLinkClick = value;
+            await this.plugin.saveSettings();
+          })
+      );
 
 
     // Folder where ScholarWeft's own notes go: shown with the own import (the

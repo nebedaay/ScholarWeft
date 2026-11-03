@@ -233,6 +233,7 @@ import {
   type ZotLitHandling,
 } from './template/note-lookup';
 import {
+  splitNote,
   substantiveContentDiffers,
   type NotesReimport,
 } from './template/merge';
@@ -435,6 +436,65 @@ function recordedCitekeyFor(app: App, notePath: string): string | null {
  * unchanged) path. If the destination already exists, the note is left where it
  * is — never overwrite.
  */
+/**
+ * Clicking an unresolved `[[@citekey]]` creates an empty `@citekey.md`. If that
+ * citekey exists in the loaded Zotero cache, replace the stub with the real
+ * literature note. This is deliberately create-only: an existing note (or any
+ * non-empty file) is never touched.
+ */
+export async function maybeImportClickedCitekey(
+  plugin: ReferenceList,
+  file: TFile
+): Promise<void> {
+  if (plugin.settings.importLitNoteOnLinkClick === false) return;
+  if (file.extension !== 'md' || !file.basename.startsWith('@')) return;
+  const key = file.basename.slice(1).trim();
+  if (!key) return;
+
+  const app = plugin.app;
+  const content = await app.vault.read(file).catch((): null => null);
+  if (content == null || splitNote(content).body.trim()) return;
+
+  try {
+    await plugin.bibManager.initPromise.promise;
+  } catch {
+    return;
+  }
+  if (!plugin.bibManager.bibCache.has(key)) return;
+
+  // If another note already owns this citekey, open it instead of importing.
+  const existing = app.vault
+    .getMarkdownFiles()
+    .find(
+      (candidate) =>
+        candidate.path !== file.path &&
+        (candidate.basename === `@${key}` || candidate.basename === key)
+    );
+  if (existing) {
+    try {
+      await app.fileManager.trashFile(file);
+    } catch {
+      /* leave the empty stub if it cannot be trashed */
+    }
+    await app.workspace.openLinkText(existing.path, '', false);
+    return;
+  }
+
+  // Remove the empty stub first, then create in the configured literature-note
+  // folder. createLiteratureNote opens the real note for the user.
+  try {
+    await app.fileManager.trashFile(file);
+  } catch {
+    await app.vault.delete(file, true);
+  }
+  const result = await plugin.bibManager.createLiteratureNote(key, file, {
+    open: true,
+  });
+  if (!result.ok) {
+    console.warn('[sw:import] could not import clicked citekey', key);
+  }
+}
+
 export async function moveNoteIntoFolder(
   app: App,
   notePath: string,
