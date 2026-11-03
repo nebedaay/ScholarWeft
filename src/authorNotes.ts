@@ -873,12 +873,17 @@ export async function stripUnassignedFromAuthorNote(
 ): Promise<boolean> {
 	const app = plugin.app;
 	const current = app.vault.getAbstractFileByPath(file.path);
-	if (!(current instanceof TFile) || !hasAuthorsUp(app, current)) return false;
-	const raw = app.metadataCache.getFileCache(current)?.frontmatter?.['up'];
-	const values = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : [];
-	if (!values.some((value) => typeof value === 'string' && UNASSIGNED_UP_RE.test(value))) {
-		return false;
-	}
+	if (!(current instanceof TFile)) return false;
+	// Read the raw frontmatter rather than relying on the metadata cache: the
+	// Templater write and the create event can race, and a stale cache would
+	// otherwise make this a no-op.
+	const content = await app.vault.read(current).catch(() => '');
+	const prior = splitNote(content);
+	if (!prior.frontmatter) return false;
+	const upBlock = parseFrontmatter(prior.frontmatter).find((prop) => prop.key === 'up');
+	const upText = upBlock?.lines.join('\n') ?? '';
+	if (!/\[\[\s*Authors?\s*\]\]/i.test(upText)) return false;
+	if (!/Unassigned/i.test(upText)) return false;
 	let changed = false;
 	await app.fileManager.processFrontMatter(current, (frontmatter) => {
 		const existing = frontmatter['up'];

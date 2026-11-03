@@ -1063,6 +1063,17 @@ export default class ReferenceList extends Plugin {
           async (file) => {
             if (!(file instanceof TFile)) return;
             await this.bibManager.updateCitedKeysIndex(file);
+            const up = this.app.metadataCache.getFileCache(file)?.frontmatter?.['up'];
+            const upValues = typeof up === 'string' ? [up] : Array.isArray(up) ? up : [];
+            if (
+              upValues.some(
+                (value) =>
+                  typeof value === 'string' &&
+                  /Unassigned|Authors?/i.test(value)
+              )
+            ) {
+              void stripUnassignedFromAuthorNote(this, file);
+            }
             this.persistCitedKeysIndex();
             this.persistRenderedCache();
           },
@@ -1082,9 +1093,11 @@ export default class ReferenceList extends Plugin {
         void maybeAutoCreateAuthorNote(this, file);
         // Templater may apply its basic-note template after the author page is
         // created. Clean the redundant Unassigned placeholder once it settles.
-        window.setTimeout(() => {
-          void stripUnassignedFromAuthorNote(this, file);
-        }, 1500);
+        for (const delay of [300, 1500, 3500, 7000]) {
+          window.setTimeout(() => {
+            void stripUnassignedFromAuthorNote(this, file);
+          }, delay);
+        }
         this.scheduleAuthorPageRefresh(file);
       })
     );
