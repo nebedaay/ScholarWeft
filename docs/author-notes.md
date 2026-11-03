@@ -45,6 +45,8 @@ Author notes are created in the folder set under **Author notes folder**. Leave 
 
 Notes whose filenames do not match an imported display name are left alone. Dictionary/term pages (`term:`) and Midad repository notes (`midad-*` properties, including `Hans Wehr`) are skipped. The merge matches only the imported display name, never the `First Last` alias, so Midad's `Hans Wehr` repository note is not treated as the `Wehr, Hans` author page.
 
+ScholarWeft also tidies template-only duplicates. If a note with `up: "[[Authors]]"` sits outside the Authors folder and a same-named author page already exists inside it, the outside copy is removed only when its body is just the managed template output — no AI overview and no text you added. A duplicate that contains an overview or user content is left alone.
+
 ## Author-name variants
 
 Some people appear in Zotero under more than one name — a fuller form of the given name, a married name, a spelling variant, or an institutional name. Put the alternate creator names in the **main** note's `variants` property:

@@ -330,11 +330,14 @@ export default {
   'Optional add-ons that help your notes display and link consistently. Neither needs an external tool.':
     'Optional add-ons that help your notes display and link consistently. Neither needs an external tool.',
   'Format YAML properties': 'Format YAML properties',
-  'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.':
-    'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Writes and enables a CSS snippet; turn it off to disable the snippet.',
+  'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Applied directly by the plugin; turn it off to remove the styling.':
+    'Makes the title, short-title, up, and related properties stand out in the Properties view (a larger, highlighted title; arrows on the up/related pills). Applied directly by the plugin; turn it off to remove the styling.',
   'Title background': 'Title background',
   'Colour behind the title and short-title property values.':
     'Colour behind the title and short-title property values.',
+  'Title colour': 'Title colour',
+  'Colour of the title and short-title text. Use a light colour for a dark background.':
+    'Colour of the title and short-title text. Use a light colour for a dark background.',
   'Title size': 'Title size',
   'Font size of the title property value, in rem (1rem = the body text size).':
     'Font size of the title property value, in rem (1rem = the body text size).',

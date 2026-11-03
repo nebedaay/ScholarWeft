@@ -1,21 +1,19 @@
-ScholarWeft 0.5.7 adds author-note pages and optional AI overviews, plus literature-note and reference improvements.
+ScholarWeft 0.5.8 is a follow-up to 0.5.7: it fixes author-note cleanup and placement, removes Zotero tags from author `related` lists, and adds a title text colour for the YAML formatting addon.
 
 ### Author notes
 
-Creator links in literature notes can now become real author pages. Clicking an unresolved `[[Last, First]]` link fills an empty note from the author template; existing notes can be merged into the Authors folder with **Merge existing author notes**. Author pages now use a `title: "First Last"` property instead of an H1 author-name heading, and their managed bibliography section is `# Publications`. Entries in that section link to their literature notes while keeping the note's normal text formatting rather than the theme's link colour and underline.
+The `Unassigned` placeholder that Templater's basic note template adds is now removed reliably after the template settles, so a new author note no longer keeps an `up: "[[Unassigned]]"` entry. The cleanup retries as the file is written instead of racing the create event.
 
-**Link author name as a variant** connects an alternate creator name to a main author page. It adds the name to the main note's plain-text `variants`, generates convenient aliases, rewrites creator links to `[[Main|Variant]]`, and moves the old author note to the trash. Variants and creator names are matched with punctuation, spacing, case, diacritics and ʿayn/hamza normalization; name order remains significant. New Zotero items update author `related` properties, while imported literature notes update the Publications list, without replacing existing related material. A main author page no longer needs to match a Zotero creator name if its variants do, so existing people notes such as `BN` can be promoted with `up: "[[Authors]]"`.
+Author pages now migrate once to the default section order: `# Overview (AI generated)` first, then `# Publications`, then your own sections. A new **Place new Publications sections** setting controls where a first-time `# Publications` region goes — after the AI overview (default), at the top, or at the end. Existing regions are left where you put them and are not moved on later updates; only a first insertion and the one-time migration use the setting.
 
-### AI overviews
+Template-only duplicates are tidied up. If a note with `up: "[[Authors]]"` sits outside the Authors folder and a same-named author page already exists inside it, the outside copy is removed only when its body contains nothing but the managed template output. A duplicate with an AI overview or your own text is preserved.
 
-A new **AI overviews** settings page holds the shared OpenAI-compatible LLM configuration: base URL, model (default `gemini-3.1-flash-lite`), API key, and independent enable/prompt settings for author and work overviews. The default author prompt asks for an 80-word scholarly blurb plus relevant links; the default work prompt asks for a 50-word overview and builds its reference through ScholarWeft's existing CSL reference renderer. Both commands open a modal containing the entire editable prompt, including the author/works or work reference, and insert an unmanaged `# Overview (AI generated)` section at the top of the note.
+The author `related` list now contains only the works that list the person as a creator. Zotero item tags are deliberately not copied into it, so article keywords no longer turn the list into a keyword dump.
 
-### Literature notes and references
+### YAML properties
 
-Clicking an unresolved `[[@citekey]]` now imports the matching item and replaces the empty link stub, when the citekey exists in the loaded Zotero cache. Literature-note updates can recover when a Zotero item was re-created and its stable item key changed, by falling back to the note's own citekey. Numeric `volumes` values are written as numbers rather than quoted strings, avoiding Obsidian's property warning.
+The **Format YAML properties** addon has a new **Title colour** picker for the title and short-title text. It is separate from the title background, so a light text colour can be used on a dark background. The colour is applied to the inner metadata editor as well as its container, which is where Obsidian actually paints the text.
 
-### Settings
+### Documentation
 
-The new **AI overviews** page sits alongside **Author notes** and **Literature note import**. Author-note link creation, the author folder, template, merge, and variant controls remain on **Author notes**; literature-note import, the new unresolved-citekey import toggle, and automatic update controls remain on **Literature note import**.
-
-The documentation and release notes have been updated for the new pages, commands, and template output.
+The [author notes](https://github.com/nebedaay/ScholarWeft/blob/main/docs/author-notes.md) and [setup](https://github.com/nebedaay/ScholarWeft/blob/main/docs/setup.md) guides describe the new placement setting, the title colour control, and the duplicate cleanup.
