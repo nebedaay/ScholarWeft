@@ -58,6 +58,7 @@ import { copyDefaultTemplateToVault } from './noteImport';
 import {
   copyAuthorTemplateToVault,
   mergeAuthorNotesWithNotice,
+  type AuthorSectionPlacement,
 } from './authorNotes';
 import { DEFAULT_AUTHOR_OVERVIEW_PROMPT } from './authorOverview';
 import { DEFAULT_WORK_OVERVIEW_PROMPT } from './workOverview';
@@ -138,6 +139,8 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   autoCreateAuthorNotes: true,
   authorNoteFolder: '',
   authorNoteFolderMigrated: false,
+  authorPublicationsPlacement: 'after-overview',
+  authorSectionOrderMigrated: false,
   authorOverviewEnabled: false,
   llmBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
   llmApiKey: '',
@@ -425,6 +428,10 @@ export interface ReferenceListSettings {
   authorNoteFolder?: string;
   /** One-time migration from the old literal `Authors` default. */
   authorNoteFolderMigrated?: boolean;
+  /** Where a newly inserted Publications region is placed. */
+  authorPublicationsPlacement?: AuthorSectionPlacement;
+  /** Internal one-time migration marker for existing section order. */
+  authorSectionOrderMigrated?: boolean;
   /** Enable the optional LLM author-overview command. */
   authorOverviewEnabled?: boolean;
   /** OpenAI-compatible API base URL. */
@@ -2046,6 +2053,27 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
         })
       );
 
+    new Setting(containerEl)
+      .setName(t('Place new Publications sections'))
+      .setDesc(
+        t(
+          'Where a newly inserted # Publications region goes: after the AI overview, at the top, or at the end. Existing regions are left where they are; only first insertion and the one-time migration use this setting.'
+        )
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption(t('After the AI overview (default)'), 'after-overview')
+          .addOption(t('At the top'), 'top')
+          .addOption(t('At the end'), 'end')
+          .setValue(
+            this.plugin.settings.authorPublicationsPlacement ?? 'after-overview'
+          )
+          .onChange(async (value) => {
+            this.plugin.settings.authorPublicationsPlacement =
+              value as AuthorSectionPlacement;
+            await this.plugin.saveSettings();
+          })
+      );
   }
 
   private renderAiOverviews(containerEl: HTMLElement): void {

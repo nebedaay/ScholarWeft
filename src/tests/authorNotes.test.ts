@@ -249,7 +249,7 @@ describe('mergeAuthorContent()', () => {
     expect(notes).toBeGreaterThan(publications);
   });
 
-  it('moves an existing managed region before manual sections', () => {
+  it('leaves an existing managed region where the user placed it by default', () => {
     const body = [
       '# Notes',
       '',
@@ -264,6 +264,29 @@ describe('mergeAuthorContent()', () => {
     ].join('\n');
     const note = `---\nup:\n  - "[[Authors]]"\n---\n${body}`;
     const merged = mergeAuthorContent(note, rendered, 'Smith, Jane');
+    expect(merged.indexOf('%%sw-author-managed%%')).toBeGreaterThan(
+      merged.indexOf('# Notes')
+    );
+  });
+
+  it('can reorder an existing region for the one-time migration', () => {
+    const body = [
+      '# Notes',
+      '',
+      'Manual notes.',
+      '',
+      '%%sw-author-managed%%',
+      '## Publications',
+      '',
+      '[[@old|ref]]',
+      '%%/sw-author-managed%%',
+      '',
+    ].join('\n');
+    const note = `---\nup:\n  - "[[Authors]]"\n---\n${body}`;
+    const merged = mergeAuthorContent(note, rendered, 'Smith, Jane', {
+      reorderExisting: true,
+      placement: 'after-overview',
+    });
     expect(merged.indexOf('%%sw-author-managed%%')).toBeLessThan(
       merged.indexOf('# Notes')
     );

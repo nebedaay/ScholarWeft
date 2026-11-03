@@ -462,8 +462,14 @@ function dedupeListProperty(frontmatter: string, key: string): string {
 	return frontmatter.replace(oldBlock, newBlock);
 }
 
-/** Place the managed region after an AI Overview (when present), before user sections. */
-function orderAuthorBody(body: string, region: string): string {
+export type AuthorSectionPlacement = 'after-overview' | 'top' | 'end';
+
+/** Place a managed region according to the insertion preference. */
+function orderAuthorBody(
+	body: string,
+	region: string,
+	placement: AuthorSectionPlacement = 'after-overview'
+): string {
 	const regionRe = new RegExp(
 		`${AUTHOR_OPEN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${AUTHOR_CLOSE.replace(
 			/[.*+?^${}()|[\]\\]/g,
@@ -483,6 +489,8 @@ function orderAuthorBody(body: string, region: string): string {
 		before = rest.slice(0, end).replace(/\s+$/, '');
 		rest = rest.slice(end).replace(/^\n+/, '');
 	}
+	if (placement === 'top') return [region.trim(), before, rest].filter(Boolean).join('\n\n');
+	if (placement === 'end') return [before, rest, region.trim()].filter(Boolean).join('\n\n');
 	const parts = [before, region.trim(), rest.trim()].filter(Boolean);
 	return parts.join('\n\n');
 }
@@ -494,7 +502,8 @@ function orderAuthorBody(body: string, region: string): string {
 export function mergeAuthorContent(
 	existing: string,
 	rendered: string,
-	display?: string
+	display?: string,
+	opts: { placement?: AuthorSectionPlacement; reorderExisting?: boolean } = {}
 ): string {
 	const prior = splitNote(existing);
 	const next = splitNote(rendered);
@@ -534,7 +543,13 @@ export function mergeAuthorContent(
 			)}`
 		);
 		const renderedRegion = region.exec(next.body)?.[0] ?? '';
-		body = orderAuthorBody(body, renderedRegion);
+		if (region.test(body)) {
+			body = opts.reorderExisting
+				? orderAuthorBody(body, renderedRegion, opts.placement)
+				: body.replace(region, renderedRegion);
+		} else if (renderedRegion) {
+			body = orderAuthorBody(body, renderedRegion, opts.placement);
+		}
 	}
 	return joinNote(frontmatter, body);
 }
@@ -590,7 +605,9 @@ export async function createAuthorPage(
 			} else {
 				const content =
 					existing instanceof TFile
-						? mergeAuthorContent(await app.vault.read(existing), rendered, record.display)
+						? mergeAuthorContent(await app.vault.read(existing), rendered, record.display, {
+							placement: plugin.settings.authorPublicationsPlacement,
+						})
 						: rendered;
 				await app.vault.modify(opened, content);
 			}
@@ -605,7 +622,9 @@ export async function createAuthorPage(
 	}
 
 	if (existing instanceof TFile) {
-		const merged = mergeAuthorContent(await app.vault.read(existing), rendered, record.display);
+		const merged = mergeAuthorContent(await app.vault.read(existing), rendered, record.display, {
+							placement: plugin.settings.authorPublicationsPlacement,
+						});
 		await app.vault.modify(existing, merged);
 		if (opts.open) await openFile(plugin, existing);
 		return existing;
@@ -782,7 +801,9 @@ export async function mergeAuthorCandidates(
 			});
 			const current = await app.vault.read(file);
 			const content = current.trim()
-				? mergeAuthorContent(current, rendered, candidate.record.display)
+				? mergeAuthorContent(current, rendered, candidate.record.display, {
+					placement: plugin.settings.authorPublicationsPlacement,
+				})
 				: rendered;
 			await app.vault.modify(file, content);
 			merged++;
@@ -920,6 +941,84 @@ export async function stripUnassignedFromAuthorNote(
 	return changed;
 }
 
+/** Remove a template-only duplicate of an author note that already exists in the Authors folder. */
+export async function dedupeAuthorNote(
+	plugin: ReferenceList,
+	file: TFile
+): Promise<boolean> {
+	const app = plugin.app;
+	const current = app.vault.getAbstractFileByPath(file.path);
+	if (!(current instanceof TFile) || !hasAuthorsUp(app, current)) return false;
+	const folder = authorFolderPath(plugin);
+	if (!folder || current.path.startsWith(`${folder}/`)) return false;
+	const targetPath = normalizePath(`${folder}/${current.name}`);
+	const target = app.vault.getAbstractFileByPath(targetPath);
+	if (!(target instanceof TFile)) {
+		// No conflict: let the normal author-page flow move it if appropriate.
+		return false;
+	}
+	if (!hasAuthorsUp(app, target)) return false;
+	const content = await app.vault.read(current).catch(() => '');
+	const body = splitNote(content).body;
+	const withoutRegion = body
+		.replace(
+			new RegExp(
+				`${AUTHOR_OPEN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${AUTHOR_CLOSE.replace(
+					/[.*+?^${}()|[\]\\]/g,
+					'\\$&'
+				)}`
+			),
+			''
+		)
+		.trim();
+	// Keep a duplicate with an AI overview or any real user body; delete only
+	// pure template output (the common Templater/second-stub duplicate).
+	if (withoutRegion) return false;
+	try {
+		if (app.workspace.getActiveFile()?.path === current.path) {
+			await app.workspace.openLinkText(targetPath, '', false);
+		}
+		await app.fileManager.trashFile(current);
+		return true;
+	} catch (e) {
+		console.warn('[sw:author] could not remove duplicate author note', current.path, e);
+		return false;
+	}
+}
+
+/** One-time migration of old managed-region placement; never reorders again. */
+export async function migrateAuthorSectionOrder(
+	plugin: ReferenceList
+): Promise<void> {
+	if (plugin.settings.authorSectionOrderMigrated) return;
+	const app = plugin.app;
+	const placement = plugin.settings.authorPublicationsPlacement ?? 'after-overview';
+	const regionRe = new RegExp(
+		`${AUTHOR_OPEN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]*?${AUTHOR_CLOSE.replace(
+			/[.*+?^${}()|[\]\\]/g,
+			'\\$&'
+		)}`
+	);
+	for (const file of app.vault.getMarkdownFiles()) {
+		if (!isMergeablePath(file.path) || !hasAuthorsUp(app, file)) continue;
+		try {
+			const content = await app.vault.read(file);
+			const prior = splitNote(content);
+			if (!prior.frontmatter) continue;
+			const region = regionRe.exec(prior.body)?.[0];
+			if (!region) continue;
+			const body = orderAuthorBody(prior.body, region, placement);
+			if (body !== prior.body) {
+				await app.vault.modify(file, joinNote(prior.frontmatter, body));
+			}
+		} catch (e) {
+			console.warn('[sw:author] could not migrate author section order', file.path, e);
+		}
+	}
+	plugin.settings.authorSectionOrderMigrated = true;
+	await plugin.saveSettings();
+}
+
 /** Give a promoted author note the template block if it has none yet. */
 export async function ensureAuthorNoteMaterial(
 	plugin: ReferenceList,
@@ -928,6 +1027,7 @@ export async function ensureAuthorNoteMaterial(
 	const app = plugin.app;
 	const current = app.vault.getAbstractFileByPath(file.path);
 	if (!(current instanceof TFile) || !isMergeablePath(current.path)) return;
+	if (await dedupeAuthorNote(plugin, current)) return;
 	const content = await app.vault.read(current).catch(() => '');
 	if (!content.includes(AUTHOR_OPEN)) {
 		await refreshAuthorPage(plugin, current);
@@ -954,7 +1054,9 @@ export async function refreshAuthorPage(
 		index,
 	});
 	const content = await app.vault.read(current);
-	const merged = mergeAuthorContent(content, rendered, record.display);
+	const merged = mergeAuthorContent(content, rendered, record.display, {
+		placement: plugin.settings.authorPublicationsPlacement,
+	});
 	if (merged !== content) await app.vault.modify(current, merged);
 }
 
@@ -1004,7 +1106,9 @@ export async function refreshAuthorPagesForEntries(
 			index,
 		});
 		const content = await app.vault.read(child);
-		const merged = mergeAuthorContent(content, rendered, record.display);
+		const merged = mergeAuthorContent(content, rendered, record.display, {
+		placement: plugin.settings.authorPublicationsPlacement,
+	});
 		if (merged !== content) await app.vault.modify(child, merged);
 	}
 }

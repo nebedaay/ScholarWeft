@@ -26,6 +26,7 @@ import {
   AUTHOR_OPEN,
   CSL_CREATOR_ROLES,
   buildAuthorIndex,
+  migrateAuthorSectionOrder,
   hasAuthorsUp,
   isMergeablePath,
   ensureAuthorNoteMaterial,
@@ -497,6 +498,7 @@ export class AuthorVariantTracker {
   private intervalId?: number;
 
   async init(): Promise<void> {
+    await migrateAuthorSectionOrder(this.plugin);
     this.known.clear();
     for (const file of authorNoteFiles(this.plugin)) {
       this.known.set(

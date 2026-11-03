@@ -70,6 +70,7 @@ import {
   mergeAuthorNotesWithNotice,
   ensureAuthorNoteMaterial,
   refreshAuthorPagesForCitekey,
+  dedupeAuthorNote,
   refreshAuthorPagesForEntries,
   stripUnassignedFromAuthorNote,
 } from './authorNotes';
@@ -1096,6 +1097,11 @@ export default class ReferenceList extends Plugin {
         for (const delay of [300, 1500, 3500, 7000]) {
           window.setTimeout(() => {
             void stripUnassignedFromAuthorNote(this, file);
+          }, delay);
+        }
+        for (const delay of [1800, 4000, 8000]) {
+          window.setTimeout(() => {
+            void dedupeAuthorNote(this, file);
           }, delay);
         }
         this.scheduleAuthorPageRefresh(file);
