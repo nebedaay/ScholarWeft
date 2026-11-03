@@ -43,7 +43,7 @@ See [Literature Notes](./literature-notes.md).
 | Create author note | — | Pick a creator from the library and create or open their author page |
 | Merge existing author notes into the Authors folder | Vault | Move notes whose filenames exactly match an imported creator display name — two or more words, or one word with `up: "[[Authors]]"` — into the Authors folder and apply the author template |
 | Generate work overview | Literature note | Optional LLM-written `# Overview (AI generated)` section; enable it on the AI overviews settings page |
-| Generate author overview | Author note | Optional LLM-written `# Overview (AI generated)` section; enable it on the Author notes settings page |
+| Generate author overview | Author note | Optional LLM-written `# Overview (AI generated)` section; enable it on the AI overviews settings page |
 | Link author name as a variant | Author note | Add this note's name to a main author's `variants`, rewrite creator links to `[[Main\|Variant]]`, and move this note to the trash |
 
 See [Author Notes](./author-notes.md).
