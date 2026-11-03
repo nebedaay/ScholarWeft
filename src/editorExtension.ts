@@ -150,13 +150,43 @@ class CiteWidget extends WidgetType {
 
       // Content (rendered value / reference entries / per-member split) comes
       // from the SHARED `citationRender` module — identical to reading mode.
+      const referenceLinks = this.cite.reference
+        ? this.cite.citations.map(
+            (c) =>
+              getLitNoteForCitekey(c.id, this.sourcePath ?? '', this.app)
+                ?.linkText ?? null
+          )
+        : undefined;
       span.appendChild(
         renderCitationContent({
           cite: this.cite,
           referenceHtml: this.referenceHtml,
+          referenceLinks,
           memberStates: this.memberStates,
         })
       );
+
+      // Reference entries are wrapped in internal-link anchors by the shared
+      // renderer. CM removes the widget on mousedown, so handle navigation here
+      // just as the citation click handler does.
+      if (this.cite.reference) {
+        span.addEventListener('mousedown', (evt) => {
+          if (evt.button !== 0) return;
+          const target = evt.target;
+          if (!(target instanceof HTMLElement)) return;
+          const anchor = target.closest('a.sw-reference-link');
+          const linkText = anchor?.getAttribute('data-href');
+          if (!linkText) return;
+          const newPane = Keymap.isModEvent(evt);
+          window.setTimeout(() => {
+            void this.app.workspace.openLinkText(
+              linkText,
+              this.sourcePath ?? '',
+              newPane
+            );
+          }, 0);
+        });
+      }
     });
   }
 

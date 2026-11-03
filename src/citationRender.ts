@@ -46,6 +46,8 @@ export interface CitationContentOptions {
    * cached HTML strings. Either may be missing (renders the citekey).
    */
   referenceHtml?: (string | Element | null | undefined)[];
+  /** Per-entry literature-note link target, parallel to `citations`. */
+  referenceLinks?: (string | null | undefined)[];
   /** Multi-work container: per-member classes. */
   memberStates?: MemberState[];
   /** Reading mode only: the raw source text to fall back to when
@@ -87,7 +89,16 @@ export function renderCitationContent(
         item.classList.add('is-unresolved');
         item.textContent = c.id;
       }
-      frag.appendChild(item);
+      const link = opts.referenceLinks?.[i];
+      if (link) {
+        const anchor = createEl('a', { cls: 'internal-link sw-reference-link' });
+        anchor.setAttribute('data-href', link);
+        anchor.setAttribute('href', link);
+        anchor.appendChild(item);
+        frag.appendChild(anchor);
+      } else {
+        frag.appendChild(item);
+      }
     });
     return frag;
   }

@@ -105,6 +105,23 @@ describe('renderCitationContent', () => {
     expect(entries[1].querySelector('.csl-entry')?.textContent).toBe('Entry B.');
   });
 
+  it('wraps reference entries with literature-note links when supplied', () => {
+    const frag = renderCitationContent({
+      cite: cite({ reference: true, citations: [{ id: 'a' }, { id: 'b' }] }),
+      referenceHtml: [
+        '<div class="csl-entry">Entry A.</div>',
+        '<div class="csl-entry">Entry B.</div>',
+      ],
+      referenceLinks: ['@a', null],
+    });
+    const span = document.createElement('span');
+    span.appendChild(frag);
+    const anchor = span.querySelector('a.sw-reference-link');
+    expect(anchor?.getAttribute('data-href')).toBe('@a');
+    expect(anchor?.querySelector('.csl-entry')?.textContent).toBe('Entry A.');
+    expect(span.querySelectorAll('a.sw-reference-link').length).toBe(1);
+  });
+
   it('accepts Element entries (reading mode) and marks missing ones unresolved', () => {
     const el = document.createElement('div');
     el.className = 'csl-entry';

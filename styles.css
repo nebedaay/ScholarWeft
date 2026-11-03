@@ -369,6 +369,17 @@ body {
 p.sw-reference-paragraph {
   line-height: 0;
 }
+
+/* Reference entries can link to their literature notes, but the link is a
+   navigation affordance, not visible link formatting: inherit the note's text
+   colour and suppress the theme underline/colour. */
+.sw-reference a.sw-reference-link,
+.sw-reference a.sw-reference-link:hover {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: var(--cursor-link);
+}
 .sw-reference-entry {
   display: block;
   /* Slightly smaller than the surrounding note text, with the body of each

@@ -74,6 +74,7 @@ function buildCitationSpan(
 
   // Reference groups resolve each entry's `.csl-entry` from the bibliography.
   let referenceHtml: (Element | null)[] | undefined;
+  let referenceLinks: (string | null)[] | undefined;
   if (rendered.reference) {
     const abstract = plugin.app?.vault?.getAbstractFileByPath?.(ctx.sourcePath);
     const file =
@@ -81,18 +82,23 @@ function buildCitationSpan(
     referenceHtml = rendered.citations.map((c) =>
       file ? plugin.bibManager.getBibForCiteKey(file, c.id) : null
     );
+    referenceLinks = rendered.citations.map((c) =>
+      getLitNoteForCitekey(c.id, ctx.sourcePath, plugin.app)?.linkText ?? null
+    );
   }
 
   span.appendChild(
     renderCitationContent({
       cite: rendered,
       referenceHtml,
+      referenceLinks,
       sourceText,
       useSourceText: !plugin.settings.renderCitationsReadingMode,
     })
   );
 
-  // Reference insertions are not links and carry no tooltip.
+  // Citations link/tooltip; reference entries get their own per-entry link
+  // wrappers (when a literature note exists) from renderCitationContent.
   if (!rendered.reference) {
     // If "link citations to literature notes" is on, wrap the content in an
     // <a class="internal-link"> so Obsidian's own reading-mode click handler
