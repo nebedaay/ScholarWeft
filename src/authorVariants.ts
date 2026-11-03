@@ -210,7 +210,7 @@ async function addAuthorVariants(
   plugin: ReferenceList,
   main: TFile,
   variants: string[],
-  opts: { addVariants: boolean }
+  opts: { addVariants: boolean; addAliases?: boolean }
 ): Promise<string[]> {
   const app = plugin.app;
   const file = app.vault.getAbstractFileByPath(main.path);
@@ -228,9 +228,11 @@ async function addAuthorVariants(
 
   const existingAliases = frontmatterValues(prior.frontmatter, 'aliases');
   const newAliases: string[] = [];
-  for (const variant of cleaned) {
-    for (const alias of variantAliases(variant, file.basename)) {
-      if (!existingAliases.includes(alias)) newAliases.push(alias);
+  if (opts.addAliases !== false) {
+    for (const variant of cleaned) {
+      for (const alias of variantAliases(variant, file.basename)) {
+        if (!existingAliases.includes(alias)) newAliases.push(alias);
+      }
     }
   }
 
@@ -506,7 +508,7 @@ export class AuthorVariantTracker {
     this.syncing = true;
     try {
       const index = buildAuthorVariantIndex(this.plugin);
-      await this.normalizeVariantFormatting(index);
+      await this.normalizeVariantFormatting();
       const current = index.byLink;
       if (!current.size) {
         this.lastLinks.clear();
@@ -549,13 +551,16 @@ export class AuthorVariantTracker {
   }
 
   /** Convert older `variants: [[Name]]` entries to plain text once. */
-  private async normalizeVariantFormatting(index: AuthorVariantIndex): Promise<void> {
-    for (const [mainName, variants] of index.byMain) {
-      const file = index.files.get(mainName);
-      if (!file || !variants.length) continue;
+  private async normalizeVariantFormatting(): Promise<void> {
+    for (const file of authorNoteFiles(this.plugin)) {
       const raw = metadataRawValues(this.plugin, file, 'variants');
       if (!raw.some((value) => value.includes('[['))) continue;
-      await addAuthorVariants(this.plugin, file, variants, { addVariants: false });
+      const variants = unique(raw.map(cleanVariantName).filter(Boolean));
+      if (!variants.length) continue;
+      await addAuthorVariants(this.plugin, file, variants, {
+        addVariants: false,
+        addAliases: false,
+      });
     }
   }
 
