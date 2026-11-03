@@ -485,7 +485,7 @@ export async function maybeImportClickedCitekey(
   try {
     await app.fileManager.trashFile(file);
   } catch {
-    await app.vault.delete(file, true);
+    /* leave the empty stub if it cannot be trashed */
   }
   const result = await plugin.bibManager.createLiteratureNote(key, file, {
     open: true,

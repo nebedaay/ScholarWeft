@@ -6,6 +6,8 @@ jest.mock(
     TFolder: class {},
     Notice: class {},
     FuzzySuggestModal: class {},
+    Modal: class {},
+    requestUrl: jest.fn(),
     normalizePath: (path: string) => path,
   }),
   { virtual: true }
@@ -20,6 +22,7 @@ import {
   mergeAuthorContent,
   planAuthorNote,
 } from '../authorNotes';
+import { withAuthorOverview } from '../authorOverview';
 import type { PartialCSLEntry } from '../bib/types';
 
 const entries: PartialCSLEntry[] = [
@@ -249,5 +252,35 @@ describe('author template', () => {
     });
     expect(out).not.toContain('aliases:');
     expect(out).toContain('related: []');
+  });
+});
+
+describe('withAuthorOverview()', () => {
+  it('puts a generated overview at the top of the body and preserves YAML', () => {
+    const note = ['---', 'title: Test', '---', 'User body.', ''].join('\n');
+    const out = withAuthorOverview(note, 'A generated blurb.');
+    expect(out).toContain('---\ntitle: Test\n---');
+    expect(out).toContain(
+      '# Overview (AI generated)\n\nA generated blurb.\n\nUser body.'
+    );
+  });
+
+  it('replaces an earlier AI overview without duplicating it', () => {
+    const note = [
+      '---',
+      'title: Test',
+      '---',
+      '# Overview (AI generated)',
+      '',
+      'Old text.',
+      '',
+      '# Life',
+      'Body.',
+      '',
+    ].join('\n');
+    const out = withAuthorOverview(note, 'New text.');
+    expect(out).toContain('# Overview (AI generated)\n\nNew text.\n');
+    expect(out).not.toContain('Old text.');
+    expect(out).toContain('# Life\nBody.');
   });
 });

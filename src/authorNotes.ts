@@ -806,6 +806,46 @@ function recordForAuthorNote(
 	return record;
 }
 
+export interface AuthorOverviewWork {
+	title: string;
+	type: string;
+}
+
+/** Works by this author page, with books preferred for the LLM context. */
+export function authorWorksForPage(
+	plugin: ReferenceList,
+	file: TFile
+): AuthorOverviewWork[] {
+	const index = buildAuthorIndex(plugin.bibManager.bibCache.values());
+	const variants = variantsOf(plugin.app, file);
+	const record = recordForAuthorNote(file.basename, index, variants);
+	if (!record) return [];
+	const keys = new Set(record.citekeys);
+	for (const name of variants) {
+		const variant = index.get(name);
+		if (!variant) continue;
+		for (const key of variant.citekeys) keys.add(key);
+	}
+	const works: AuthorOverviewWork[] = [];
+	const seen = new Set<string>();
+	for (const key of keys) {
+		const entry = plugin.bibManager.bibCache.get(key);
+		if (!entry || typeof entry.title !== 'string' || !entry.title.trim()) continue;
+		if (seen.has(entry.title)) continue;
+		seen.add(entry.title);
+		works.push({
+			title: entry.title.trim(),
+			type: typeof entry.type === 'string' ? entry.type : '',
+		});
+	}
+	const rank = (work: AuthorOverviewWork): number => {
+		if (/book|monograph|collection/i.test(work.type)) return 0;
+		if (/chapter|article|paper|conference/i.test(work.type)) return 1;
+		return 2;
+	};
+	return works.sort((a, b) => rank(a) - rank(b)).slice(0, 2);
+}
+
 /** Give a promoted author note the template block if it has none yet. */
 export async function ensureAuthorNoteMaterial(
 	plugin: ReferenceList,

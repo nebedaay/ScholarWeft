@@ -59,6 +59,7 @@ import {
   copyAuthorTemplateToVault,
   mergeAuthorNotesWithNotice,
 } from './authorNotes';
+import { DEFAULT_AUTHOR_OVERVIEW_PROMPT } from './authorOverview';
 import {
   applyYamlFormatting,
   DEFAULT_YAML_TITLE_BACKGROUND,
@@ -136,6 +137,11 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   autoCreateAuthorNotes: true,
   authorNoteFolder: '',
   authorNoteFolderMigrated: false,
+  authorOverviewEnabled: false,
+  llmBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  llmApiKey: '',
+  llmModel: 'gemini-3.1-flash-lite',
+  authorOverviewPrompt: DEFAULT_AUTHOR_OVERVIEW_PROMPT,
   useDefaultAuthorTemplate: true,
   authorTemplatePath: '',
   /** Show per-entry PDF-open icons in the bibliography + tooltip link
@@ -416,6 +422,16 @@ export interface ReferenceListSettings {
   authorNoteFolder?: string;
   /** One-time migration from the old literal `Authors` default. */
   authorNoteFolderMigrated?: boolean;
+  /** Enable the optional LLM author-overview command. */
+  authorOverviewEnabled?: boolean;
+  /** OpenAI-compatible API base URL. */
+  llmBaseUrl?: string;
+  /** API key for the auto-overview LLM (stored in plugin settings). */
+  llmApiKey?: string;
+  /** Model id, e.g. gemini-3.1-flash-lite. */
+  llmModel?: string;
+  /** Default instructions for the generated author overview. */
+  authorOverviewPrompt?: string;
   /** Render author notes with the bundled template (default true). */
   useDefaultAuthorTemplate?: boolean;
   /** Vault-relative custom author template, used when the above is false. */
@@ -2005,6 +2021,92 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           void mergeAuthorNotesWithNotice(this.plugin);
         })
       );
+
+    new Setting(containerEl).setName(t('AI author overview')).setHeading();
+    new Setting(containerEl)
+      .setName(t('Enable author overview command'))
+      .setDesc(
+        t(
+          'Show “Generate author overview” on notes with up: "[[Authors]]". The command asks an OpenAI-compatible model for a short author blurb and inserts it under “# Overview (AI generated)”.'
+        )
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.authorOverviewEnabled === true)
+          .onChange(async (value) => {
+            this.plugin.settings.authorOverviewEnabled = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('LLM base URL'))
+      .setDesc(
+        t(
+          'OpenAI-compatible API base URL. The default is Gemini’s OpenAI-compatible endpoint.'
+        )
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder('https://generativelanguage.googleapis.com/v1beta/openai')
+          .setValue(this.plugin.settings.llmBaseUrl ?? '')
+          .onChange(async (value) => {
+            this.plugin.settings.llmBaseUrl = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('LLM model'))
+      .setDesc(t('Model id, for example gemini-3.1-flash-lite.'))
+      .addText((text) =>
+        text
+          .setPlaceholder('gemini-3.1-flash-lite')
+          .setValue(this.plugin.settings.llmModel ?? '')
+          .onChange(async (value) => {
+            this.plugin.settings.llmModel = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('LLM API key'))
+      .setDesc(
+        t(
+          'API key for the selected OpenAI-compatible provider. It is stored in this vault’s plugin settings.'
+        )
+      )
+      .addText((text) => {
+        text
+          .setPlaceholder('API key')
+          .setValue(this.plugin.settings.llmApiKey ?? '')
+          .onChange(async (value) => {
+            this.plugin.settings.llmApiKey = value.trim();
+            await this.plugin.saveSettings();
+          });
+        text.inputEl.type = 'password';
+      });
+
+    new Setting(containerEl)
+      .setName(t('Author overview prompt'))
+      .setDesc(
+        t(
+          'Instructions sent to the model. ScholarWeft prepends the author name and one or two works from your library.'
+        )
+      )
+      .addTextArea((text) => {
+        text
+          .setPlaceholder(DEFAULT_AUTHOR_OVERVIEW_PROMPT)
+          .setValue(
+            this.plugin.settings.authorOverviewPrompt ??
+              DEFAULT_AUTHOR_OVERVIEW_PROMPT
+          )
+          .onChange(async (value) => {
+            this.plugin.settings.authorOverviewPrompt = value;
+            await this.plugin.saveSettings();
+          });
+        text.inputEl.rows = 6;
+      });
   }
 
   private renderDocuments(containerEl: HTMLElement): void {

@@ -77,6 +77,7 @@ import {
   AuthorVariantTracker,
   linkAuthorVariant,
 } from './authorVariants';
+import { AuthorOverviewModal } from './authorOverview';
 import { indexedKeyFor } from './template/context';
 import type { NonSwNotesChoice } from './modals/nonSwNotesModal';
 import { ConflictModal } from './modals/conflictModal';
@@ -710,6 +711,25 @@ export default class ReferenceList extends Plugin {
         new AuthorVariantTargetModal(this, file, (main) => {
           void linkAuthorVariant(this, file, main);
         }).open();
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: 'generate-author-overview',
+      name: t('Generate author overview'),
+      checkCallback: (checking) => {
+        if (this.settings.authorOverviewEnabled !== true) return false;
+        const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const recent = this.app.workspace.getMostRecentLeaf()?.view;
+        const file =
+          this.app.workspace.getActiveFile() ??
+          this.app.workspace.activeEditor?.file ??
+          active?.file ??
+          (recent instanceof MarkdownView ? recent.file : null);
+        if (!(file instanceof TFile) || !hasAuthorsUp(this.app, file)) return false;
+        if (checking) return true;
+        new AuthorOverviewModal(this, file).open();
         return true;
       },
     });

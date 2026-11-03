@@ -70,8 +70,30 @@ New imports use the variant map automatically: `creator_values` and `creators_by
 
 A periodic check runs at startup and every five minutes. It compares the variant map with the author names currently in the Zotero cache; variants that do not match a cached creator name are ignored. For the variants that remain, it adds missing aliases and rewrites creator links that still point at a variant or its generated `First Middle Last` form. Only variants that are new or changed since the last pass are processed, and Obsidian's metadata cache is used as a prefilter, so notes whose creator fields already point at the main author are never read.
 
+## AI author overview (optional)
+
+The **Generate author overview** command adds a short AI-written background section to an author note. It is off by default; enable it under **Settings → ScholarWeft → Author notes → AI author overview**.
+
+Settings:
+
+- **LLM base URL** — an OpenAI-compatible endpoint. The default is Gemini’s `https://generativelanguage.googleapis.com/v1beta/openai`.
+- **LLM model** — default `gemini-3.1-flash-lite`.
+- **LLM API key** — stored in this vault’s plugin settings.
+- **Author overview prompt** — instructions for the model. The default asks for about 100 words identifying the author and summarizing their written work, school of thought, and contribution to their fields.
+
+The command is available on notes with `up: "[[Authors]]"`. It builds context from the author note name, its variants, and one or two works from your library (a book if available, otherwise an article or chapter), then prepends the user prompt. The generated text is inserted at the beginning of the note body as:
+
+```markdown
+# Overview (AI generated)
+
+…
+```
+
+This section is **not managed**: it is written once and the user can edit or remove it. Running the command again replaces that section.
+
 ## Commands
 
+- **Generate author overview** — add the optional AI background section to an author note.
 - **Create author note** — pick a creator and create/open their page.
 - **Merge existing author notes into the Authors folder** — the one-time tidy-up described above.
 - **Link author name as a variant** — available on an author note; link its name to a main author page and move this note to the trash.
