@@ -22,7 +22,7 @@ import {
   mergeAuthorContent,
   planAuthorNote,
 } from '../authorNotes';
-import { withAuthorOverview } from '../authorOverview';
+import { isAcronymTitle, withAuthorOverview } from '../authorOverview';
 import type { PartialCSLEntry } from '../bib/types';
 
 const entries: PartialCSLEntry[] = [
@@ -282,5 +282,14 @@ describe('withAuthorOverview()', () => {
     expect(out).toContain('# Overview (AI generated)\n\nNew text.\n');
     expect(out).not.toContain('Old text.');
     expect(out).toContain('# Life\nBody.');
+  });
+});
+
+describe('isAcronymTitle()', () => {
+  it('recognizes 2–4 all-caps note titles', () => {
+    expect(isAcronymTitle('BN')).toBe(true);
+    expect(isAcronymTitle('ABCD')).toBe(true);
+    expect(isAcronymTitle('B')).toBe(false);
+    expect(isAcronymTitle('Berger, Peter')).toBe(false);
   });
 });

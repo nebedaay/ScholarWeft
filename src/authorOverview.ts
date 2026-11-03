@@ -15,17 +15,30 @@ export const DEFAULT_AUTHOR_OVERVIEW_PROMPT =
 
 export const AUTHOR_OVERVIEW_HEADING = '# Overview (AI generated)';
 
+/** A short all-caps note title is treated as a local acronym, not a name. */
+export function isAcronymTitle(title: string): boolean {
+  return /^[A-Z]{2,4}$/.test(title.trim());
+}
+
 /** Context prefixed to the user's prompt so the model knows who is meant. */
 export function authorOverviewContext(plugin: ReferenceList, file: TFile): string {
   const variants = variantsOf(plugin.app, file);
   const works = authorWorksForPage(plugin, file);
-  const aliases = variants.length
-    ? ` (also published as ${variants.join(', ')})`
+  const acronym = isAcronymTitle(file.basename);
+  const names = acronym
+    ? [...new Set(variants)]
+    : [...new Set([file.basename, ...variants])];
+  // If an acronym note has no variants, there is nothing better to send; keep
+  // the title as a last resort rather than an empty name.
+  const primary = names[0] ?? file.basename;
+  const aliases = names.slice(1);
+  const aliasText = aliases.length
+    ? ` (also published as ${aliases.join(', ')})`
     : '';
   const titles = works.length
     ? `, author of ${works.map((work) => `“${work.title}”`).join(' and ')}`
     : '';
-  return `Author name: ${file.basename}${aliases}${titles}.`;
+  return `Author name: ${primary}${aliasText}${titles}.`;
 }
 
 /** Put the overview at the top of the body, replacing an earlier AI overview. */

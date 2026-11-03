@@ -81,7 +81,7 @@ Settings:
 - **LLM API key** — stored in this vault’s plugin settings.
 - **Author overview prompt** — instructions for the model. The default asks for about 100 words identifying the author and summarizing their written work, school of thought, and contribution to their fields.
 
-The command is available on notes with `up: "[[Authors]]"`. It builds context from the author note name, its variants, and one or two works from your library (a book if available, otherwise an article or chapter), then prepends the user prompt. The generated text is inserted at the beginning of the note body as:
+The command is available on notes with `up: "[[Authors]]"`. It builds context from the author note name, its variants, and one or two works from your library (a book if available, otherwise an article or chapter), then prepends the user prompt. If the note title is a 2–4-letter all-caps acronym (for example `BN`), the note title is not sent as the author name; the variants are used instead. The generated text is inserted at the beginning of the note body as:
 
 ```markdown
 # Overview (AI generated)
