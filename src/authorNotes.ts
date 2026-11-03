@@ -625,7 +625,7 @@ export function hasAuthorsUp(app: App, file: TFile): boolean {
 	return values.some(
 		(value) =>
 			typeof value === 'string' &&
-			/\[\[\s*Authors?\s*\]\]|^\s*Authors?\s*$/.test(value)
+			/\[\[\s*Authors?\s*\]\]|^\s*Authors?\s*$/i.test(value)
 	);
 }
 
