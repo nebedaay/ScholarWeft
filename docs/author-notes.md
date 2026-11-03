@@ -19,7 +19,7 @@ The default template writes:
 - `title: "First Last"` — the author name in normal display order; the SW YAML style addon renders it large. There is no separate H1 author-name heading;
 - `aliases: "First Last"` for a two-part name (`Last, First` is the note title and link target);
 - `creator-roles` — every role the person has in your library (author, editor, translator, …);
-- `related` — `[[@citekey]]` for every work that lists the person as a creator, plus the works' tags as `[[tag]]` links;
+- `related` — `[[@citekey]]` for every work that lists the person as a creator. Zotero item tags are deliberately not included: article keywords would turn the list into a keyword dump;
 - `variants: []` — see below;
 - a `# Publications` managed region with a contiguous reference run of the works that have **literature notes**: `[[@key1|ref]] [[@key2]] …`. Each entry links to its literature note, but the link inherits the note's text colour and has no underline or theme link styling. Works without a note are not listed.
 
@@ -65,7 +65,7 @@ variants:
 
 Adding a variant to `variants` by hand has the same link and alias effect while Obsidian is running: the plugin notices the new value, adds the generated aliases, and rewrites matching creator properties. The old note is not deleted automatically in that case.
 
-The main note includes the variant's works and tags in its `related` and Publications lists. A variant note may carry `variant-of: "[[Niasse, Ibrahim]]"` to record its main note, but the main note is the one that keeps the biography and merged lists.
+The main note includes the variant's works in its `related` and Publications lists; Zotero tags are not added. A variant note may carry `variant-of: "[[Niasse, Ibrahim]]"` to record its main note, but the main note is the one that keeps the biography and merged lists.
 
 `aliases` is still used for display and Obsidian's link autocomplete. The plugin adds the variant forms there for convenience, but it never treats an alias as the definition of a variant. This keeps a display alias such as `First Last` separate from the `variants` list.
 
