@@ -23,11 +23,14 @@ export const YAML_FORMATTING_SNIPPET_ID = 'sw-yaml-formatting';
 export const YAML_FORMATTING_MARKER = 'Managed by ScholarWeft';
 
 export const DEFAULT_YAML_TITLE_BACKGROUND = '#ffee99';
+export const DEFAULT_YAML_TITLE_COLOR = '#000000';
 export const DEFAULT_YAML_TITLE_SIZE = 2;
 
 export interface YamlFormattingOptions {
   /** CSS colour for `--sw-yaml-title-background`. Default `#ffee99`. */
   titleBackground?: string;
+  /** CSS colour for `--sw-yaml-title-color`. Default `#000000`. */
+  titleColor?: string;
   /** Font size for `--sw-yaml-title-size`, in rem. Default `2`. */
   titleSize?: number;
 }
@@ -35,14 +38,16 @@ export interface YamlFormattingOptions {
 /** Normalise the setting values to the strings written to the body. */
 export function yamlFormattingValues(
   opts: YamlFormattingOptions = {}
-): { background: string; sizeRem: string } {
+): { background: string; color: string; sizeRem: string } {
   const background =
     (opts.titleBackground ?? '').trim() || DEFAULT_YAML_TITLE_BACKGROUND;
+  const color =
+    (opts.titleColor ?? '').trim() || DEFAULT_YAML_TITLE_COLOR;
   const size =
     Number.isFinite(opts.titleSize) && (opts.titleSize as number) > 0
       ? (opts.titleSize as number)
       : DEFAULT_YAML_TITLE_SIZE;
-  return { background, sizeRem: `${size}rem` };
+  return { background, color, sizeRem: `${size}rem` };
 }
 
 /** Every document (main window and pop-outs) the Properties view can live in. */
@@ -97,8 +102,9 @@ export async function applyYamlFormatting(
 ): Promise<void> {
   await retireLegacySnippet(plugin);
 
-  const { background, sizeRem } = yamlFormattingValues({
+  const { background, color, sizeRem } = yamlFormattingValues({
     titleBackground: plugin.settings.yamlTitleBackground,
+    titleColor: plugin.settings.yamlTitleColor,
     titleSize: plugin.settings.yamlTitleSize,
   });
 
@@ -107,9 +113,11 @@ export async function applyYamlFormatting(
     body.classList.toggle(YAML_FORMATTING_BODY_CLASS, enabled);
     if (enabled) {
       body.style.setProperty('--sw-yaml-title-background', background);
+      body.style.setProperty('--sw-yaml-title-color', color);
       body.style.setProperty('--sw-yaml-title-size', sizeRem);
     } else {
       body.style.removeProperty('--sw-yaml-title-background');
+      body.style.removeProperty('--sw-yaml-title-color');
       body.style.removeProperty('--sw-yaml-title-size');
     }
   }

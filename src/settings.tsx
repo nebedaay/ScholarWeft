@@ -65,6 +65,7 @@ import { DEFAULT_WORK_OVERVIEW_PROMPT } from './workOverview';
 import {
   applyYamlFormatting,
   DEFAULT_YAML_TITLE_BACKGROUND,
+  DEFAULT_YAML_TITLE_COLOR,
   DEFAULT_YAML_TITLE_SIZE,
 } from './yamlFormatting';
 import { DEFAULT_LITERATURE_NOTE_FOLDER } from './template/lit-folder';
@@ -134,6 +135,7 @@ export const DEFAULT_SETTINGS: ReferenceListSettings = {
   yamlFormattingEnabled: false,
   /** `--title-background` for the YAML-formatting snippet. */
   yamlTitleBackground: DEFAULT_YAML_TITLE_BACKGROUND,
+  yamlTitleColor: DEFAULT_YAML_TITLE_COLOR,
   /** `--title-size` (rem) for the YAML-formatting snippet. */
   yamlTitleSize: DEFAULT_YAML_TITLE_SIZE,
   autoCreateAuthorNotes: true,
@@ -417,6 +419,8 @@ export interface ReferenceListSettings {
   yamlFormattingEnabled?: boolean;
   /** CSS colour for the YAML-formatting addon's `--title-background`. */
   yamlTitleBackground?: string;
+  /** CSS colour for the YAML-formatting addon's title text. */
+  yamlTitleColor?: string;
   /** Font size (rem) for the YAML-formatting addon's `--title-size`. */
   yamlTitleSize?: number;
 
@@ -1725,6 +1729,21 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
           )
           .onChange(async (value) => {
             this.plugin.settings.yamlTitleBackground = value;
+            await this.plugin.saveSettings();
+            await applyYamlFormatting(this.plugin, true);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t('Title colour'))
+      .setDesc(t('Colour of the title and short-title text. Use a light colour for a dark background.'))
+      .addColorPicker((picker) =>
+        picker
+          .setValue(
+            this.plugin.settings.yamlTitleColor ?? DEFAULT_YAML_TITLE_COLOR
+          )
+          .onChange(async (value) => {
+            this.plugin.settings.yamlTitleColor = value;
             await this.plugin.saveSettings();
             await applyYamlFormatting(this.plugin, true);
           })

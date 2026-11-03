@@ -1,5 +1,6 @@
 import {
   DEFAULT_YAML_TITLE_BACKGROUND,
+  DEFAULT_YAML_TITLE_COLOR,
   DEFAULT_YAML_TITLE_SIZE,
   YAML_FORMATTING_BODY_CLASS,
   YAML_FORMATTING_MARKER,
@@ -9,13 +10,14 @@ import {
 describe('yamlFormattingValues()', () => {
   it('uses the configured background and size', () => {
     expect(
-      yamlFormattingValues({ titleBackground: '#123456', titleSize: 1.5 })
-    ).toEqual({ background: '#123456', sizeRem: '1.5rem' });
+      yamlFormattingValues({ titleBackground: '#123456', titleColor: '#ffffff', titleSize: 1.5 })
+    ).toEqual({ background: '#123456', color: '#ffffff', sizeRem: '1.5rem' });
   });
 
   it('falls back to the defaults', () => {
     expect(yamlFormattingValues()).toEqual({
       background: DEFAULT_YAML_TITLE_BACKGROUND,
+      color: DEFAULT_YAML_TITLE_COLOR,
       sizeRem: `${DEFAULT_YAML_TITLE_SIZE}rem`,
     });
   });
