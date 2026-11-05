@@ -94,11 +94,10 @@ describe('derived values', () => {
     expect(helpers.shortTitle(ctx)).toBe('Short');
   });
 
-  it('builds aliases in the Zotero-Integration shape', () => {
+  it('builds only the default alias in the Zotero-Integration shape', () => {
     const ctx = buildNoteContext(entry);
     expect(helpers.aliases(ctx)).toEqual([
       'Al-Sāʾiḥ - 2005 - Bughyat al-mustafīd li-sharḥ munyat al-murīd',
-      'Bughyat al-mustafīd li-sharḥ munyat al-murīd',
     ]);
   });
 

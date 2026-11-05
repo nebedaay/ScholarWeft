@@ -290,7 +290,7 @@ The **Child-note heading level** setting supplies the default `level`, so a temp
 | `import_date()` | Today's date (`YYYY-MM-DD`). |
 | `is_first_import()` | `true` on a first import, `false` when re-importing an existing note. |
 | `short_title()` | The item's short title, else the title up to its first `:`. |
-| `aliases()` | The default `aliases:` list (`Author - year - Short Title`, then the full title, then the short title). |
+| `aliases()` | The default `aliases:` list, with one entry: `Author - year - Short Title` (or the title when there is no creator). Add further aliases by hand if you want them. |
 | `related_links()` | Zotero's tags and Related items as `[[…]]` links (for `sw-related:`). |
 | `collection_links()` | The item's Zotero collections as `[[…]]` links (for `zotero-collections:`). |
 | `attachment_links()` | Attachments as `[filename](zotero link)` entries. |

@@ -493,9 +493,12 @@ export class NoteHelpers {
   }
 
   /**
-   * Frontmatter aliases, Zotero-Integration style: `<first author>[- et al.]
-   * - <year> - <short title>`, then the full title, then the short title when
-   * it differs.
+   * The default frontmatter alias, Zotero-Integration style:
+   * `<first author>[- et al.] - <year> - <short title>`.
+   *
+   * One alias is enough for link autocomplete; keeping the full title and the
+   * short title as extra aliases multiplies the alias index across a large
+   * library. A reader who wants a different alias can add it by hand.
    */
   aliases(ctx: NoteContext): string[] {
     const title = ctx.title ?? '';
@@ -517,7 +520,7 @@ export class NoteHelpers {
     }
     if (title) out.push(title);
     if (short && short !== title) out.push(short);
-    return [...new Set(out)];
+    return [...new Set(out)].slice(0, 1);
   }
 
   /**
