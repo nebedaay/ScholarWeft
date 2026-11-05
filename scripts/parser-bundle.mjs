@@ -5257,7 +5257,11 @@ function combineLocators(label, locator, suffix, locale = "en-US") {
   if (pageIdx - volIdx !== 1)
     return null;
   const combined = `${romanToArabic(all[volIdx].value)}:${all[pageIdx].value}`;
-  const enDash = (v) => v.replace(/(?<=[\p{L}\p{N}])-(?=[\p{L}\p{N}])/gu, "\u2013");
+  const isWordChar = (c) => /^[\p{L}\p{N}]$/u.test(c);
+  const enDash = (v) => {
+    const chars = Array.from(v);
+    return chars.map((c, i) => c === "-" && i > 0 && i < chars.length - 1 && isWordChar(chars[i - 1]) && isWordChar(chars[i + 1]) ? "\u2013" : c).join("");
+  };
   const others = all.filter((_, i) => i !== volIdx && i !== pageIdx);
   const text = others.map((p) => p.label ? `${p.label} ${enDash(p.value)}` : enDash(p.value)).join(", ");
   const newSuffix = (text ? ", " + text : "") + parsed.tail;
@@ -5293,9 +5297,41 @@ function romanToArabic(s) {
   }
   return String(total);
 }
+function isOmitAuthorAlias(alias) {
+  return /^\s*-\s*$/.test(alias);
+}
+function stripCompactNarrative(alias) {
+  const out = [];
+  const map = [];
+  let dashSrc = -1;
+  let last = 0;
+  const re = /(^|[\s,;({])@-(?=$|[\s,;.)}\]])/g;
+  let m;
+  while (m = re.exec(alias)) {
+    const at = m.index + m[1].length;
+    for (let i = last; i < at; i++) {
+      out.push(alias[i]);
+      map.push(i);
+    }
+    out.push("@");
+    map.push(at);
+    if (dashSrc < 0)
+      dashSrc = at + 1;
+    last = at + 2;
+  }
+  for (let i = last; i < alias.length; i++) {
+    out.push(alias[i]);
+    map.push(i);
+  }
+  return { text: out.join(""), map, dashSrc };
+}
 function expandAlias(alias, linkKey) {
-  const expanded = alias.replace(/@[^\s,;{]*/g, "@" + linkKey);
-  return expanded.replace(/(^|[\s,({])(?:vols?|volumes?|vv?|bd|bde|band|bind|tomes?|tom)\.?\s*([IVXLCDM]+|\d+),\s*p{1,2}\.?\s*([^\s}]+)/gi, (_m, pre, vol, page) => `${pre}${romanToArabic(vol)}:${page}`);
+  if (isOmitAuthorAlias(alias))
+    return `-@${linkKey}`;
+  const compact = stripCompactNarrative(alias);
+  const expanded = compact.text.replace(/@[^\s,;{]*/g, "@" + linkKey);
+  const combined = expanded.replace(/(^|[\s,({])(?:vols?|volumes?|vv?|bd|bde|band|bind|tomes?|tom)\.?\s*([IVXLCDM]+|\d+),\s*p{1,2}\.?\s*([^\s}]+)/gi, (_m, pre, vol, page) => `${pre}${romanToArabic(vol)}:${page}`);
+  return compact.dashSrc >= 0 ? `${combined.replace(/\s*-\s*$/, "")} -` : combined;
 }
 var containerMemberRe = /\[\[@([^|\]\s]+)(?:\|([\s\S]*?))?\]\]|\[@([^\]\s,;]+)([^\]]*)\]/g;
 function mergeContainerExpression(containerText) {
@@ -5363,19 +5399,36 @@ function transformLinkAliases(str, linkCiteKey) {
       push(str[i], i);
   };
   const emitExpanded = (alias, key, aliasStart) => {
+    if (isOmitAuthorAlias(alias)) {
+      const dash = Math.max(0, alias.indexOf("-"));
+      push("-", aliasStart + dash);
+      push("@", aliasStart + dash);
+      for (let n = 0; n < key.length; n++) {
+        push(key[n], aliasStart + dash + n);
+      }
+      return;
+    }
+    const compact = stripCompactNarrative(alias);
     const tokenRe = /@[^\s,;{]*/g;
     let cursor = 0;
     let tm;
-    while (tm = tokenRe.exec(alias)) {
-      for (let k = cursor; k < tm.index; k++)
-        push(alias[k], aliasStart + k);
-      push("@", aliasStart + tm.index);
-      for (let n = 0; n < key.length; n++)
+    while (tm = tokenRe.exec(compact.text)) {
+      for (let k = cursor; k < tm.index; k++) {
+        push(compact.text[k], aliasStart + compact.map[k]);
+      }
+      push("@", aliasStart + compact.map[tm.index]);
+      for (let n = 0; n < key.length; n++) {
         push(key[n], aliasStart + tm.index + n);
+      }
       cursor = tm.index + tm[0].length;
     }
-    for (let k = cursor; k < alias.length; k++)
-      push(alias[k], aliasStart + k);
+    for (let k = cursor; k < compact.text.length; k++) {
+      push(compact.text[k], aliasStart + compact.map[k]);
+    }
+    if (compact.dashSrc >= 0 && !/\s-\s*$/.test(alias)) {
+      push(" ", aliasStart + compact.dashSrc);
+      push("-", aliasStart + compact.dashSrc);
+    }
   };
   const specialRe = new RegExp("\\[\\[@([^|\\]\\s]+)\\|([\\s\\S]*?)\\]\\]|\\[\\[@([^|\\]\\s]+)\\]\\]", "g");
   const bracketContainers = [];
@@ -5493,11 +5546,36 @@ function transformLinkAliases(str, linkCiteKey) {
     containerIdx++;
   }
   if (linkCiteKey) {
+    if (/^\s*\[?\s*-\s*\]?\s*$/.test(str)) {
+      const dash = Math.max(0, str.indexOf("-"));
+      for (let k = 0; k < str.length; k++) {
+        if (k === dash) {
+          push("-", k);
+          push("@", k);
+          for (let n = 0; n < linkCiteKey.length; n++)
+            push(linkCiteKey[n], k);
+        } else {
+          push(str[k], k);
+        }
+      }
+      return { text: out.join(""), map, referenceRanges };
+    }
+    let narrativeDash = -1;
     let i = last;
     while (i < str.length) {
       if (str[i] === "@") {
-        const token = /^@[^\s,;\]\[]*/.exec(str.slice(i));
+        const token = /^@[^\s,;[\]]*/.exec(str.slice(i));
         if (token) {
+          if (token[0] === "@-" && (i + 2 >= str.length || /[\s,;.)}\]]/.test(str[i + 2]))) {
+            push("@", i);
+            for (let n = 0; n < linkCiteKey.length; n++) {
+              push(linkCiteKey[n], i + 1 + n);
+            }
+            if (narrativeDash < 0)
+              narrativeDash = i + 1;
+            i += 2;
+            continue;
+          }
           push("@", i);
           for (let n = 0; n < linkCiteKey.length; n++)
             push(linkCiteKey[n], i + 1 + n);
@@ -5507,6 +5585,11 @@ function transformLinkAliases(str, linkCiteKey) {
       }
       push(str[i], i);
       i++;
+    }
+    if (narrativeDash >= 0 && !/\s-\s*$/.test(str)) {
+      const at = str.endsWith("]") && out[out.length - 1] === "]" ? out.length - 1 : out.length;
+      out.splice(at, 0, " ", "-");
+      map.splice(at, 0, narrativeDash, narrativeDash);
     }
     return { text: out.join(""), map, referenceRanges };
   }
@@ -5942,6 +6025,7 @@ export {
   getCitationSegments,
   getCitations,
   getSegmentData,
+  isOmitAuthorAlias,
   isVolumeLabel,
   mergeCompoundCitations,
   mergeContainerExpression,

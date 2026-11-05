@@ -310,8 +310,8 @@ export default {
   "Don't insert missing literature notes for linked citations":
     "Don't insert missing literature notes for linked citations",
   'Update all literature notes': 'Update all literature notes',
-  'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.':
-    'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.',
+  'Re-render every literature note from its Zotero item, fetching current annotations and attachments. Only the managed frontmatter fields and the annotations region change. This can take a while for a large library.':
+    'Re-render every literature note from its Zotero item, fetching current annotations and attachments. Only the managed frontmatter fields and the annotations region change. This can take a while for a large library.',
   'Update all notes': 'Update all notes',
   'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.':
     'When the literature-note template changes, update every note that was rendered with the old template. Leave both unselected and you will be asked the first time it happens.',

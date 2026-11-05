@@ -15,12 +15,16 @@ Linked citation        Rendered as              Pandoc equivalent
 [[@key]]               (Author Year)            [@key]
 [[@key|@]]             (Author Year)            [@key]
 [[@key|@ -]]           Author (Year)            @key (narrative)
+[[@key|@-]]            Author (Year)            @key (narrative shorthand)
 [[@key|-@]]            (Year)                   [-@key] (no author)
+[[@key|-]]             (Year)                   [-@key] (no-author shorthand)
 [[@key|see @, p. 6]]   (see Author Year, p. 6)  [see @key, p. 6]
 [[@key|-@, p. 6]]      (Year, p. 6)             [-@key, p. 6]
 [[@a]] [[@b]]          (A Year; B Year)         [@a; @b] (several)
 [ [[@a]]; [[@b]] ]     (A Year; B Year)         [@a; @b] (several)
 ```
+
+The space before the narrative dash is optional: `[[@key|@-]]` is the same as `[[@key|@ -]]`, and it also works with a locator (`[[@key|@-, p. 6]]`). A lone `-` is shorthand for `-@`, so `[[@key|-]]` suppresses the author just like `[[@key|-@]]`. For a suppressed-author citation with a locator, use `[[@key|-@, p. 6]]`.
 
 Inside an alias, `@` is a proxy for the link’s own citekey. The convert commands translate between linked and pandoc forms losslessly.
 

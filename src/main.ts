@@ -1783,7 +1783,10 @@ export default class ReferenceList extends Plugin {
   private async updateActiveLiteratureNote(): Promise<void> {
     const file = this.app.workspace.getActiveFile();
     if (!file) return;
-    const ok = await this.updateLiteratureNote(file);
+    // A user-requested update must consult Zotero, not the fetched-children
+    // cache: annotation EDITS/DELETIONS do not bump the parent item's version,
+    // so a cache hit would replay the old annotation list forever.
+    const ok = await this.updateLiteratureNote(file, { skipChildCache: true });
     new Notice(
       ok
         ? `Updated ${file.basename}.`
@@ -1804,9 +1807,10 @@ export default class ReferenceList extends Plugin {
   /**
    * Re-render EVERY literature note (a vault-wide maintenance action). Exposed
    * for the button on the Literature note import settings page — deliberately
-   * NOT a command, to keep the command list focused on per-note actions. With
-   * auto-update on it is rarely needed; unchanged items are served from the
-   * children cache, so it is fast when nothing changed.
+   * NOT a command, to keep the command list focused on per-note actions. This
+   * is the explicit repair path, so it bypasses the fetched-children cache:
+   * annotation deletions do not bump the parent item's version, and a cached
+   * snapshot would otherwise keep showing the removed annotation.
    */
   async updateAllLiteratureNotes(): Promise<void> {
     const files = this.app.vault.getMarkdownFiles().filter((f) => {
@@ -1829,7 +1833,9 @@ export default class ReferenceList extends Plugin {
     const startedAt = Date.now();
     for (const file of files) {
       processed++;
-      const res = await this.updateLiteratureNoteResult(file);
+      const res = await this.updateLiteratureNoteResult(file, {
+        skipChildCache: true,
+      });
       // A note whose re-render is identical (res.changed === false) is left
       // untouched and is not counted as updated.
       if (res.ok && res.changed !== false) {

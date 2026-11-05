@@ -825,13 +825,62 @@ function romanToArabic(s: string): string {
 }
 
 /**
+ * `-` by itself is the compact omit-author alias: `[[@key|-]]` is equivalent
+ * to `[[@key|-@]]`. It is deliberately exact so a literal dash with other text
+ * (`- see also`) is not swallowed.
+ */
+export function isOmitAuthorAlias(alias: string): boolean {
+  return /^\s*-\s*$/.test(alias);
+}
+
+/**
+ * Remove a standalone `@-` token (the compact narrative flag) from an alias,
+ * while retaining a source map for the emitted characters. The removed dash's
+ * original position is returned so callers can append the parser's trailing
+ * ` -` flag at the end of the expanded text.
+ *
+ * `@-` is only recognised as the flag when it stands alone (followed by the
+ * end of the alias or a delimiter). That leaves aliases such as `@-foo` alone:
+ * they are ordinary proxy tokens whose body is replaced by the link key.
+ */
+function stripCompactNarrative(alias: string): {
+  text: string;
+  map: number[];
+  dashSrc: number;
+} {
+  const out: string[] = [];
+  const map: number[] = [];
+  let dashSrc = -1;
+  let last = 0;
+  const re = /(^|[\s,;({])@-(?=$|[\s,;.)}\]])/g;
+  let m: RegExpExecArray;
+  while ((m = re.exec(alias))) {
+    const at = m.index + m[1].length;
+    for (let i = last; i < at; i++) {
+      out.push(alias[i]);
+      map.push(i);
+    }
+    out.push('@');
+    map.push(at);
+    if (dashSrc < 0) dashSrc = at + 1;
+    last = at + 2;
+  }
+  for (let i = last; i < alias.length; i++) {
+    out.push(alias[i]);
+    map.push(i);
+  }
+  return { text: out.join(''), map, dashSrc };
+}
+
+/**
  * Expand an alias string the same way the pandoc export filter does: every
  * '@'-token is replaced by the link's own citekey. A bare '@' (followed by a
  * delimiter such as space, ',', ';', or the end of the alias) is the shorthand
  * proxy and also expands — unambiguous because citekeys always have letters
  * after the '@'. A trailing whitespace-separated '-' (the author-in-text flag)
  * is deliberately kept in the text so the state machine can see it and mark
- * the citation as narrative (composite).
+ * the citation as narrative (composite). The compact `@-` form is normalised
+ * to that trailing flag; a lone `-` is the compact `-@` (suppress-author) form.
  *
  * Multi-part locators of the form `vol. X, p. Y` (or `pp. Y-Z`) are combined
  * into the single Chicago-style locator `X:Y` — Zotero allows only ONE locator
@@ -844,25 +893,38 @@ function romanToArabic(s: string): string {
  *   '@other, p. 5'    ->  '@key, p. 5'   (link key wins over alias keys)
  *   '@, vol. I, p. 113' -> '@key, 1:113'  (combined Chicago locator)
  *   '@key -'          ->  '@key -'       (flag survives for getCitations)
+ *   '@-'              ->  '@key -'       (compact narrative flag)
  *   '-@key'           ->  '-@key'        (suppressed author survives)
+ *   '-'               ->  '-@key'        (compact suppress-author alias)
  */
 export function expandAlias(alias: string, linkKey: string): string {
+  // `-` alone is the omit-author shortcut for `-@`.
+  if (isOmitAuthorAlias(alias)) return `-@${linkKey}`;
+
+  // A standalone `@-` is the compact narrative flag. Remove the dash before
+  // expanding the proxy, then append the flag after locator combination so it
+  // ends up at the end of the suffix (`@-, p. 6` -> `@key, 6 -`), where
+  // getCitations looks for it.
+  const compact = stripCompactNarrative(alias);
   // Replace every `@`-token with the link key. `{` is EXCLUDED from the token
   // body, so a brace immediately after the proxy survives and becomes a
   // forced-locator block: `@{vol. 2, p. 41-43}` → `@key{vol. 2, p. 41-43}`
   // (the proxy expands, the braces stay). The old `@[^\s,;]*` consumed the `{`
   // and left a stray `}`. A bare `@{}` likewise becomes `@key{}`.
-  const expanded = alias.replace(/@[^\s,;{]*/g, '@' + linkKey);
+  const expanded = compact.text.replace(/@[^\s,;{]*/g, '@' + linkKey);
   // Combine "vol. X, p. Y" / "vol. X, pp. Y-Z" into "X:Y" / "X:Y-Z".
   // Handles both arabic and roman volume numerals (roman → arabic). EVERY
   // volume synonym (vol./vols./volume/volumes/v./vv./bd./Bd./band/bind/tome)
   // is accepted so the alias and segment paths agree (see isVolumeLabel).
   // The page capture stops at `}` so a forced-locator block isn't overrun.
-  return expanded.replace(
+  const combined = expanded.replace(
     /(^|[\s,({])(?:vols?|volumes?|vv?|bd|bde|band|bind|tomes?|tom)\.?\s*([IVXLCDM]+|\d+),\s*p{1,2}\.?\s*([^\s}]+)/gi,
     (_m, pre: string, vol: string, page: string) =>
       `${pre}${romanToArabic(vol)}:${page}`
   );
+  return compact.dashSrc >= 0
+    ? `${combined.replace(/\s*-\s*$/, '')} -`
+    : combined;
 }
 
 export interface ContainerMember {
@@ -1022,18 +1084,40 @@ function transformLinkAliases(
   // by '@' + linkKey, mapping each emitted character back to the alias
   // position it came from.
   const emitExpanded = (alias: string, key: string, aliasStart: number) => {
-    // Same token rule as `expandAlias`: `{` is excluded so a brace directly
-    // after the proxy survives as a forced-locator block.
+    // `-` alone is the omit-author shortcut for `-@`.
+    if (isOmitAuthorAlias(alias)) {
+      const dash = Math.max(0, alias.indexOf('-'));
+      push('-', aliasStart + dash);
+      push('@', aliasStart + dash);
+      for (let n = 0; n < key.length; n++) {
+        push(key[n], aliasStart + dash + n);
+      }
+      return;
+    }
+
+    // Same token rule as `expandAlias`, with the compact `@-` narrative flag
+    // removed before expansion and appended at the end (see expandAlias).
+    const compact = stripCompactNarrative(alias);
     const tokenRe = /@[^\s,;{]*/g;
     let cursor = 0;
     let tm: RegExpExecArray;
-    while ((tm = tokenRe.exec(alias))) {
-      for (let k = cursor; k < tm.index; k++) push(alias[k], aliasStart + k);
-      push('@', aliasStart + tm.index);
-      for (let n = 0; n < key.length; n++) push(key[n], aliasStart + tm.index + n);
+    while ((tm = tokenRe.exec(compact.text))) {
+      for (let k = cursor; k < tm.index; k++) {
+        push(compact.text[k], aliasStart + compact.map[k]);
+      }
+      push('@', aliasStart + compact.map[tm.index]);
+      for (let n = 0; n < key.length; n++) {
+        push(key[n], aliasStart + tm.index + n);
+      }
       cursor = tm.index + tm[0].length;
     }
-    for (let k = cursor; k < alias.length; k++) push(alias[k], aliasStart + k);
+    for (let k = cursor; k < compact.text.length; k++) {
+      push(compact.text[k], aliasStart + compact.map[k]);
+    }
+    if (compact.dashSrc >= 0 && !/\s-\s*$/.test(alias)) {
+      push(' ', aliasStart + compact.dashSrc);
+      push('-', aliasStart + compact.dashSrc);
+    }
   };
 
   const specialRe = new RegExp(
@@ -1213,6 +1297,23 @@ function transformLinkAliases(
 
   // Bare-text expansion (reading mode: content is just the anchor text)
   if (linkCiteKey) {
+    // A bare `-` (perhaps inside the reading-mode brackets, `[-]`) is the
+    // omit-author shortcut for `-@`.
+    if (/^\s*\[?\s*-\s*\]?\s*$/.test(str)) {
+      const dash = Math.max(0, str.indexOf('-'));
+      for (let k = 0; k < str.length; k++) {
+        if (k === dash) {
+          push('-', k);
+          push('@', k);
+          for (let n = 0; n < linkCiteKey.length; n++) push(linkCiteKey[n], k);
+        } else {
+          push(str[k], k);
+        }
+      }
+      return { text: out.join(''), map, referenceRanges };
+    }
+
+    let narrativeDash = -1;
     let i = last;
     while (i < str.length) {
       if (str[i] === '@') {
@@ -1221,6 +1322,22 @@ function transformLinkAliases(
         // closing bracket and break the citation.
         const token = /^@[^\s,;[\]]*/.exec(str.slice(i));
         if (token) {
+          // Compact narrative `@-`: expand the proxy and remember the dash so
+          // it can be placed at the end of the citation, where the parser's
+          // narrative flag is expected. (`@-` must be standalone; `@-foo` is
+          // an ordinary proxy token and is expanded normally.)
+          if (
+            token[0] === '@-' &&
+            (i + 2 >= str.length || /[\s,;.)}\]]/.test(str[i + 2]))
+          ) {
+            push('@', i);
+            for (let n = 0; n < linkCiteKey.length; n++) {
+              push(linkCiteKey[n], i + 1 + n);
+            }
+            if (narrativeDash < 0) narrativeDash = i + 1;
+            i += 2;
+            continue;
+          }
           push('@', i);
           // Map the key characters to the original positions AFTER the '@'
           // (the token body). Mapping them at 'i + n' (over the '@') made the
@@ -1234,6 +1351,16 @@ function transformLinkAliases(
       }
       push(str[i], i);
       i++;
+    }
+    if (narrativeDash >= 0 && !/\s-\s*$/.test(str)) {
+      // If the anchor text includes the citation's closing bracket, keep the
+      // flag inside it. Otherwise append it (bare `@-` anchor text).
+      const at =
+        str.endsWith(']') && out[out.length - 1] === ']'
+          ? out.length - 1
+          : out.length;
+      out.splice(at, 0, ' ', '-');
+      map.splice(at, 0, narrativeDash, narrativeDash);
     }
     return { text: out.join(''), map, referenceRanges };
   }

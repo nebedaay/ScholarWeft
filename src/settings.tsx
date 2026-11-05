@@ -1366,13 +1366,13 @@ export class ReferenceListSettingsTab extends PluginSettingTab {
 
     // Vault-wide maintenance: re-render every literature note. A BUTTON here
     // rather than a command, so the command list stays focused on per-note
-    // actions. Rarely needed with auto-update on; fast when nothing changed,
-    // since unchanged items come from the fetched-children cache.
+    // actions. This is the explicit repair path, so it refetches children and
+    // catches annotation deletions that the incremental sync cannot see.
     new Setting(containerEl)
       .setName(t('Update all literature notes'))
       .setDesc(
         t(
-          'Re-render every literature note from its Zotero item. Only the managed frontmatter fields and the annotations region change. Unchanged items are not re-fetched, so this is quick when nothing has changed.'
+          'Re-render every literature note from its Zotero item, fetching current annotations and attachments. Only the managed frontmatter fields and the annotations region change. This can take a while for a large library.'
         )
       )
       .addButton((btn) =>

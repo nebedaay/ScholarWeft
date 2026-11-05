@@ -685,6 +685,46 @@ describe('getCitationSegments(expandLinkAliases = true)', () => {
       ],
     ]));
 
+  it('accepts @- without a space as the narrative flag', () => {
+    const segs = getCitationSegments('[[@key|@-]]', false, true);
+    expect(getCitations(segs[0]).citations).toEqual([
+      { id: 'key', composite: true },
+    ]);
+  });
+
+  it('accepts @- with a locator and keeps the narrative flag', () => {
+    const segs = getCitationSegments('[[@key|@-, p. 6]]', false, true);
+    expect(getCitations(segs[0]).citations).toEqual([
+      { id: 'key', locator: '6', label: 'page', composite: true },
+    ]);
+  });
+
+  it('accepts a lone - as the omit-author shortcut', () => {
+    const segs = getCitationSegments('[[@key|-]]', false, true);
+    expect(getCitations(segs[0]).citations).toEqual([
+      { id: 'key', 'suppress-author': true },
+    ]);
+  });
+
+  it('expands both compact aliases', () => {
+    expect(expandAlias('@-', 'key')).toBe('@key -');
+    expect(expandAlias('@-, p. 6', 'key')).toBe('@key, p. 6 -');
+    expect(expandAlias('-', 'key')).toBe('-@key');
+    // `@-foo` is an ordinary proxy token, not the narrative flag.
+    expect(expandAlias('@-foo', 'key')).toBe('@key');
+  });
+
+  it('marks compact @- and a lone - in reading mode', () => {
+    const narrative = getCitationSegments('[@-]', false, true, 'key');
+    expect(getCitations(narrative[0]).citations).toEqual([
+      { id: 'key', composite: true },
+    ]);
+    const omitted = getCitationSegments('[-]', false, true, 'key');
+    expect(getCitations(omitted[0]).citations).toEqual([
+      { id: 'key', 'suppress-author': true },
+    ]);
+  });
+
   it('merges a multi-work container into one citation group', () =>
     expect(getCitationSegments('[ [[@key]]; [[@key2]] ]', false, true)).toEqual(
       [

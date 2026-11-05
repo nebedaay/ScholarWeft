@@ -14,7 +14,9 @@
  *   [[@key|Smith's work]]       -> Smith's work [@key]   (pure text label)
  *   [ [[@a]]; [[@b]] ]          -> [@a; @b]              (container)
  *   [[@key|@key -]]             -> @key                  (narrative / author-in-text)
+ *   [[@key|@-]]                 -> @key                  (compact narrative)
  *   [[@key|-@key]]              -> [-@key]               (suppress author)
+ *   [[@key|-]]                  -> [-@key]               (compact suppress author)
  *
  * Non-citation wikilinks ([[note name]]) are left untouched.
  */
@@ -22,6 +24,7 @@ import {
   expandAlias,
   getCitationSegments,
   getCitations,
+  isOmitAuthorAlias,
   mergeContainerExpression,
 } from './parser/parser';
 import { convertLinksToPandoc } from './parser/compound';
@@ -35,8 +38,9 @@ const SPECIAL_RE = new RegExp(
 
 /**
  * The plugin's author-in-text flag: a trailing whitespace-separated '-' in an
- * alias means "narrative" (author in text). Live preview drops the dash and
- * renders it as narrative — `[[@key|@ -]]` shows "Ahrens (2022)". Pandoc
+ * alias means "narrative" (author in text); the compact `[[@key|@-]]` form is
+ * normalised to the same trailing flag by `expandAlias`. Live preview drops the
+ * dash and renders it as narrative — `[[@key|@ -]]` shows "Ahrens (2022)". Pandoc
  * expresses narrative as `@key` OUTSIDE the brackets (AuthorInText), so the
  * dash must be consumed and the brackets dropped; emitting it literally as
  * `[@key -]` renders the dash as a suffix ("(Ahrens 2022 -)").
@@ -198,7 +202,7 @@ export function defaultStandalone(m: RegExpExecArray): string {
   const key = m[1] ?? m[3];
   const alias = m[2];
   const aliasText = alias ?? '@' + key;
-  if (alias !== undefined && !/@/.test(alias)) {
+  if (alias !== undefined && !/@/.test(alias) && !isOmitAuthorAlias(alias)) {
     return alias + ' [@' + key + ']';
   }
   const a = splitAuthorInText(expandAlias(aliasText, key));

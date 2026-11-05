@@ -18,11 +18,13 @@ describe('rewriteLinkedToPandoc()', () => {
 
   it('converts the narrative form to a bare @key', () => {
     expect(r('[[@key|@ -]] argues')).toBe('@key argues');
+    expect(r('[[@key|@-]] argues')).toBe('@key argues');
   });
 
   it('keeps prefix / suffix and suppress-author forms', () => {
     expect(r('[[@key|see @, p. 6]]')).toBe('[see @key, p. 6]');
     expect(r('[[@key|-@, p. 6]]')).toBe('[-@key, p. 6]');
+    expect(r('[[@key|-]]')).toBe('[-@key]');
   });
 
   it('converts a container to ONE compound citation', () => {

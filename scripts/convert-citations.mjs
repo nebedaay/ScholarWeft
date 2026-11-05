@@ -23,7 +23,9 @@
  *   [ see also [[@a]]; [[@b]] ] -> [see also @a; @b]
  *   [ [[@a]]; [@b, p. 5] ]      -> [@a; @b, p. 5]    (mixed members)
  *   [[@key|@key -]]             -> @key              (narrative / author-in-text)
+ *   [[@key|@-]]                 -> @key              (compact narrative)
  *   [[@key|-@key]]              -> [-@key]           (suppress author)
+ *   [[@key|-]]                  -> [-@key]           (compact suppress author)
  *
  * Non-citation wikilinks [[note name]] are left untouched.
  *
@@ -49,8 +51,9 @@ const LINK_RE =
 
 /**
  * The plugin's author-in-text flag: a trailing whitespace-separated '-' in an
- * alias means "narrative" (author in text). Live preview drops the dash and
- * renders it as narrative — `[[@key|@ -]]` shows "Ahrens (2022)". Pandoc
+ * alias means "narrative" (author in text); the compact `[[@key|@-]]` form is
+ * normalised to the same trailing flag by `expandAlias`. Live preview drops the
+ * dash and renders it as narrative — `[[@key|@ -]]` shows "Ahrens (2022)". Pandoc
  * expresses narrative as `@key` OUTSIDE the brackets (AuthorInText), so the
  * dash must be consumed and the brackets dropped; emitting it literally as
  * `[@key -]` renders the dash as a suffix ("(Ahrens 2022 -)").
@@ -192,11 +195,17 @@ function rewriteContainers(str) {
     const key = m[1] ?? m[3];
     const alias = m[2];
     const aliasText = alias ?? '@' + key;
-    if (alias !== undefined && !/@/.test(alias)) {
+    if (
+      alias !== undefined &&
+      !/@/.test(alias) &&
+      !/^\s*-\s*$/.test(alias)
+    ) {
       // Pure text label (no citation material): in Obsidian this stays a
       // simple link to the literature note ("Smith’s work"); in an exported
       // document the reader cannot follow the wikilink, so the citation must
       // be attached: "Smith’s work [@key]" → renders "Smith’s work (2021)".
+      // A lone `-` is NOT a label: it is the omit-author shortcut, handled by
+      // expandAlias as `-@key`.
       out += alias + ' [@' + key + ']';
     } else {
       // Citation material (or plain [[@key]]): emit the expanded citation. A
