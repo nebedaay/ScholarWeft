@@ -846,8 +846,18 @@ export async function fetchChildDeltaNative(
   libraryID: number,
   since: number
 ): Promise<{
-  attachments: Array<{ key: string; parentItem: string; dateModified: string }>;
-  annotations: Array<{ key: string; parentItem: string; dateModified: string }>;
+  attachments: Array<{
+    key: string;
+    parentItem: string;
+    dateModified: string;
+    lastRead: number | null;
+  }>;
+  annotations: Array<{
+    key: string;
+    parentItem: string;
+    dateModified: string;
+    lastRead: number | null;
+  }>;
   version: number;
 } | null> {
   if (!(await isZoteroRunningNative(port))) return null;
@@ -856,22 +866,39 @@ export async function fetchChildDeltaNative(
     const ann = await fetchItemsSinceNative(port, libraryID, 'annotation', since);
     const toItem = (
       it: ZoteroItem
-    ): { key: string; parentItem: string; dateModified: string } | null => {
+    ): {
+      key: string;
+      parentItem: string;
+      dateModified: string;
+      lastRead: number | null;
+    } | null => {
       const key = String(it?.key ?? it?.data?.key ?? '');
       const parentItem = String(it?.data?.parentItem ?? '');
       const dateModified = String(it?.data?.dateModified ?? '');
-      return key ? { key, parentItem, dateModified } : null;
+      const lastRead =
+        typeof it?.data?.lastRead === 'number' ? it.data.lastRead : null;
+      return key ? { key, parentItem, dateModified, lastRead } : null;
     };
     return {
       attachments: att.items
         .map(toItem)
         .filter(
-          (x): x is { key: string; parentItem: string; dateModified: string } => !!x
+          (x): x is {
+            key: string;
+            parentItem: string;
+            dateModified: string;
+            lastRead: number | null;
+          } => !!x
         ),
       annotations: ann.items
         .map(toItem)
         .filter(
-          (x): x is { key: string; parentItem: string; dateModified: string } => !!x
+          (x): x is {
+            key: string;
+            parentItem: string;
+            dateModified: string;
+            lastRead: number | null;
+          } => !!x
         ),
       version: Math.max(att.version, ann.version),
     };

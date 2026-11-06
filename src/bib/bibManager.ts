@@ -3599,6 +3599,7 @@ export class BibManager {
     key: string,
     parentItem: string,
     dateModified: string | undefined,
+    lastRead: number | null | undefined,
     groupID: number
   ): boolean {
     if (!dateModified) return true;
@@ -3611,11 +3612,21 @@ export class BibManager {
       this.childrenCache,
       stableKeyFor(itemKey, groupID)
     );
-    if (!cached) return true;
+    if (!cached) {
+      // A non-null `lastRead` is what Zotero writes when a PDF is opened. It can
+      // arrive before the note's children snapshot exists (a fresh import, or an
+      // evicted cache), and there is then no `dateModified` to compare against.
+      // Treat it as non-substantive rather than rewriting the note just because
+      // the attachment was viewed.
+      return !(kind === 'attachment' && typeof lastRead === 'number');
+    }
     const list = (kind === 'attachment' ? cached.attachments : cached.annotations) ?? [];
     const prev = (list as ZoteroItem[]).find(
       (c) => String(c?.key ?? c?.data?.key ?? '') === key
     );
+    // The attachment is absent from the cached snapshot (first render after it
+    // was added): `lastRead` still means this delta is only a PDF-open bump.
+    if (!prev && kind === 'attachment' && typeof lastRead === 'number') return false;
     const prevModified = prev?.data?.dateModified;
     if (typeof prevModified !== 'string' || !prevModified) return true;
     return prevModified !== dateModified;
@@ -3656,6 +3667,7 @@ export class BibManager {
           a.key,
           a.parentItem,
           a.dateModified,
+          a.lastRead,
           group.id
         ),
       }));
@@ -3666,6 +3678,7 @@ export class BibManager {
           an.key,
           an.parentItem,
           an.dateModified,
+          an.lastRead,
           group.id
         ),
       }));

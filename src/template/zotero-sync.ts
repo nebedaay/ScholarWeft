@@ -21,6 +21,12 @@ export interface ChildDeltaItem {
    *  is opened), which changes nothing the note imports. */
   dateModified?: string;
   /**
+   * Zotero's `lastRead` timestamp for an attachment. A non-null value is a
+   * strong signal that an attachment delta is just "the PDF was opened", even
+   * when the fetched-children cache has no snapshot to compare against.
+   */
+  lastRead?: number | null;
+  /**
    * `false` when the caller has established this delta is NOT substantive (the
    * child's `dateModified` matches the cached snapshot). It still refreshes the
    * attachment→item map, but must not mark the item changed.

@@ -78,6 +78,8 @@ export interface ZoteroItemData {
   contentType?: string;
   /** Attachment path as the native API reports it (often absent locally). */
   path?: string;
+  /** Last time Zotero opened this attachment (Unix seconds); null if never. */
+  lastRead?: number | null;
   /** Zotero's `relations` map (used to find related items). */
   relations?: Record<string, unknown>;
   /** A child note's HTML body. */
