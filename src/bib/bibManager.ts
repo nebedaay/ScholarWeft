@@ -1838,17 +1838,17 @@ export class BibManager {
     return removed;
   }
 
-  async refreshGlobalZBib() {
+  async refreshGlobalZBib(opts: { forceFull?: boolean } = {}): Promise<boolean> {
     // Guard against concurrent executions. CiteSuggest calls this on every @
     // keystroke (rate-limited to 30 s) AND main.ts fires it unawaited at
     // startup — without the guard both can be in flight simultaneously,
     // causing duplicate fuse._docs entries and doubled suggestions.
-    if (this._isRefreshingZBib) return;
+    if (this._isRefreshingZBib) return false;
     this._isRefreshingZBib = true;
 
     try {
       const { settings } = this.plugin;
-      if (!settings.zoteroGroups?.length) return;
+      if (!settings.zoteroGroups?.length) return false;
 
       const adapter = this.getZoteroAdapter();
       const modifiedEntries: Map<string, PartialCSLEntry> = new Map();
@@ -1860,7 +1860,7 @@ export class BibManager {
           const res = await adapter.refreshBib(
             '',
             group.id,
-            group.libraryVersion ?? 0,
+            opts.forceFull ? 0 : (group.libraryVersion ?? 0),
             group.lastUpdate
           );
 
@@ -1970,6 +1970,7 @@ export class BibManager {
       // Reconcile the vault's literature notes against the refreshed library,
       // matching each note to its item by stable `zotero-key`.
       this.plugin.scheduleCitekeyReconcile();
+      return modifiedEntries.size > 0 || fullRebuilt;
     } finally {
       this._isRefreshingZBib = false;
     }

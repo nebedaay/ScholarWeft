@@ -1381,8 +1381,7 @@ export default class ReferenceList extends Plugin {
                 }
               }
 
-              void this.bibManager.reinit(true);
-              await this.bibManager.initPromise.promise;
+              await this.refreshBibliography();
               void this.processReferences();
             })
         );
@@ -2705,6 +2704,8 @@ export default class ReferenceList extends Plugin {
   private _lastRefocusRefreshAt = 0;
   /** Timestamp of the last time the app window was seen unfocused/hidden. */
   private _lastAwayAt = 0;
+  /** One-shot retry for a focus event that fires before document.hasFocus(). */
+  private _refocusRetry: number | null = null;
 
   /**
    * Refresh the Zotero library after Obsidian regains focus.
@@ -2719,20 +2720,67 @@ export default class ReferenceList extends Plugin {
     if (this.settings.pullFromZotero === false) return;
 
     const away = this._lastAwayAt;
-    this._lastAwayAt = 0;
     const now = Date.now();
+    const hasFocus = document.hasFocus();
+    if (!hasFocus) {
+      // A window `focus` event can arrive a moment before Chromium reports
+      // `document.hasFocus()`. Keep the recorded absence and probe once after
+      // the event loop has settled; do not clear it and lose the refresh.
+      if (away && this._refocusRetry == null) {
+        this._refocusRetry = window.setTimeout(() => {
+          this._refocusRetry = null;
+          this.refreshOnAppRefocus();
+        }, 300);
+      }
+      return;
+    }
+    if (this._refocusRetry != null) {
+      window.clearTimeout(this._refocusRetry);
+      this._refocusRetry = null;
+    }
     if (
       !shouldRefreshOnRefocus({
-        hasFocus: document.hasFocus(),
+        hasFocus,
         awayAt: away,
         lastRefreshAt: this._lastRefocusRefreshAt,
         now,
       })
     ) {
+      // Focused, but the absence was too short or this is inside the throttle
+      // window: this trip cannot have changed anything. Drop the absence.
+      this._lastAwayAt = 0;
       return;
     }
+    this._lastAwayAt = 0;
     this._lastRefocusRefreshAt = now;
     void this.bibManager.refreshGlobalZBib().catch(console.error);
+  }
+
+  /**
+   * Explicit "Refresh bibliography": keep the loaded library available and
+   * incrementally merge Zotero's delta. A full `loadAllSources` clears
+   * `bibCache` first, which is why the old button made search return nothing
+   * until the whole library came back. Full reloads are still used when .bib
+   * files are configured (those are not part of the Zotero delta).
+   */
+  private async refreshBibliography(): Promise<void> {
+    const bibManager = this.bibManager;
+    const hasBibFiles = (this.settings.bibliographyPaths?.length ?? 0) > 0;
+    if (this.settings.pullFromZotero && !hasBibFiles) {
+      const changed = await bibManager.refreshGlobalZBib();
+      // Rebuild the CSL engine over the updated cache; do NOT clear bibCache.
+      await bibManager.reinit(false);
+      if (!changed) {
+        // The delta found nothing, but the user explicitly asked for a refresh
+        // (often because a just-added item is missing). Retry as a full fetch;
+        // it still swaps into the existing cache rather than clearing it.
+        const full = await bibManager.refreshGlobalZBib({ forceFull: true });
+        if (full) await bibManager.reinit(false);
+      }
+      return;
+    }
+    await bibManager.reinit(true);
+    await bibManager.initPromise.promise;
   }
 
   /** One-time `related` → `sw-related` bookkeeping (see related-migration.ts). */
