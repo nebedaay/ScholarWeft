@@ -33,6 +33,7 @@ import type { CollectionNode } from '../template/collections';
 import { excerptsForResult } from '../template/search-excerpt';
 import { appendHighlighted, highlightMatchesIn } from '../template/highlight';
 import { formatImportSummary } from '../template/import-summary';
+import { insertsNoteOnInsertion } from '../template/missing-notes';
 import { setModalTitle } from './modalTitle';
 
 /**
@@ -994,6 +995,14 @@ export class AddLiteratureNotesModal extends Modal {
     if (!this.selected.size) return;
     const citekeys = [...this.selected];
     const mode = this.addTarget;
+    // A citation insertion honours the same "create a literature note when a
+    // linked citation is inserted" preference as the @ popup. `both` always
+    // creates the notes the user explicitly asked for.
+    const linked = this.plugin.settings.renderLinkCitations !== false;
+    const autoCreate =
+      mode === 'citations' &&
+      linked &&
+      insertsNoteOnInsertion(this.plugin.settings.missingLinkedNoteAction);
     this.close();
     // Insert citations first, while the editor still holds the caret position
     // the user left it at (note creation never moves it, but this is the
@@ -1001,7 +1010,7 @@ export class AddLiteratureNotesModal extends Modal {
     if (mode === 'citations' || mode === 'both') {
       this.insertCitations(citekeys);
     }
-    if (mode !== 'notes' && mode !== 'both') return;
+    if (mode !== 'notes' && mode !== 'both' && !autoCreate) return;
 
     const source = this.sourceFile();
     if (!source) {
@@ -1010,13 +1019,22 @@ export class AddLiteratureNotesModal extends Modal {
     }
     const progress = new Notice(`Creating literature notes… 0/${citekeys.length}`, 0);
     // Open the note when the user asked for exactly one (and the setting allows).
+    // The citation-only path is the quiet background path, like the @ popup.
     const open =
-      citekeys.length === 1 && this.plugin.settings.openImportedNote !== false;
+      !autoCreate &&
+      citekeys.length === 1 &&
+      this.plugin.settings.openImportedNote !== false;
     const createdKeys: string[] = [];
     for (const ck of citekeys) {
       try {
-        await this.plugin.bibManager.createLiteratureNote(ck, source, { open });
-        createdKeys.push(ck);
+        if (autoCreate) {
+          if (await this.plugin.bibManager.ensureLitNoteForCitekey(ck, source)) {
+            createdKeys.push(ck);
+          }
+        } else {
+          await this.plugin.bibManager.createLiteratureNote(ck, source, { open });
+          createdKeys.push(ck);
+        }
       } catch (e) {
         console.warn('[sw:add-notes] failed for', ck, e);
       }
